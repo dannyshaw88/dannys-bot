@@ -716,6 +716,7 @@ type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number; simPhoneNumbers?: Record<string, string> };
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up";
+  devicePersonality?: DevicePersonality;
   motherCodeOverrides?: {
     globalDwell?: { minMs: number; maxMs: number };
     accountSwitching?: { minMs: number; maxMs: number };
@@ -726,6 +727,13 @@ type DevicePrefs = {
   swipePersonalityOverrides?: Record<string, { weightMin: number; weightMax: number; durationMinMs: number; durationMaxMs: number }>;
   typingSpeedProfile?: { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
   swipeGesture?: { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY?: number; startJitterMaxY?: number; pauseMinMs?: number; pauseMaxMs?: number; settleMinMs?: number; settleMaxMs?: number };
+};
+type DevicePersonality = {
+  engagement: number;
+  consumption: number;
+  attention: number;
+  discovery: number;
+  actionVariety: number;
 };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
@@ -3281,6 +3289,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
+  const isDevicePersonality = (value: unknown): value is DevicePersonality => {
+    if (!value || typeof value !== "object") return false;
+    return ["engagement", "consumption", "attention", "discovery", "actionVariety"]
+      .every(key => Number.isInteger((value as any)[key]) && (value as any)[key] >= 0 && (value as any)[key] <= 4);
+  };
+  const randomDevicePersonality = (): DevicePersonality => ({
+    engagement: Math.floor(Math.random() * 5),
+    consumption: Math.floor(Math.random() * 5),
+    attention: Math.floor(Math.random() * 5),
+    discovery: Math.floor(Math.random() * 5),
+    actionVariety: Math.floor(Math.random() * 5),
+  });
+  const ensureDevicePersonality = (serial: string, regenerate = false): DevicePersonality => {
+    const cfg = loadInstanceConfigs();
+    const current = cfg[serial]?.devicePrefs?.devicePersonality;
+    if (!regenerate && isDevicePersonality(current)) return current;
+    const next = randomDevicePersonality();
+    cfg[serial] = {
+      ...cfg[serial],
+      devicePrefs: { ...cfg[serial]?.devicePrefs, devicePersonality: next },
+    };
+    saveInstanceConfigs(cfg);
+    logger.info({ serial, personality: next, regenerate }, "[device-personality] resolved persistent device profile");
+    return next;
+  };
+
   // ── Per-device prefs (hardware-level, not per-slot) ────────────────────────
   // Stored separately from automation settings so they can never be
   // accidentally overwritten by an autosave of the automation panel.
@@ -3293,6 +3327,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const allowed = z.object({
         dismissDirection: z.enum(["auto", "left", "up"]).optional(),
+        regeneratePersonality: z.boolean().optional(),
+        devicePersonality: z.object({
+          engagement: z.number().int().min(0).max(4),
+          consumption: z.number().int().min(0).max(4),
+          attention: z.number().int().min(0).max(4),
+          discovery: z.number().int().min(0).max(4),
+          actionVariety: z.number().int().min(0).max(4),
+        }).optional(),
         motherCodeOverrides: z.object({
           globalDwell: z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) }).optional(),
           accountSwitching: z.object({ minMs: z.number().finite().min(0), maxMs: z.number().finite().min(0) }).optional(),
@@ -3338,16 +3380,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }).optional(),
       }).parse(req.body);
       const cfg = loadInstanceConfigs();
+      const nextPersonality = allowed.regeneratePersonality
+        ? ensureDevicePersonality(serial, true)
+        : allowed.devicePersonality;
+      const { regeneratePersonality: _regeneratePersonality, devicePersonality: _devicePersonality, ...persistedAllowed } = allowed;
       cfg[serial] = {
         ...cfg[serial],
         devicePrefs: {
           ...cfg[serial]?.devicePrefs,
-          ...allowed,
+          ...persistedAllowed,
+          ...(nextPersonality ? { devicePersonality: nextPersonality } : {}),
           ...(allowed.swipeGesture ? { swipeGesture: allowed.swipeGesture } : {}),
         },
       };
       saveInstanceConfigs(cfg);
-      res.json({ ok: true });
+      res.json({ ok: true, devicePersonality: cfg[serial].devicePrefs?.devicePersonality ?? null });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
@@ -4121,6 +4168,76 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }, "[mother-code] resolved per-device personality");
     }
     return personality;
+  };
+  const applyDevicePersonality = <T extends Record<string, any>>(serial: string, input: T): T => {
+    const profile = ensureDevicePersonality(serial);
+    const result = { ...input };
+    const clampPct = (value: number) => Math.max(0, Math.min(100, value));
+    const adjustRange = (minKey: string, maxKey: string, offset: number, scale = 1) => {
+      const min = Number(result[minKey]);
+      const max = Number(result[maxKey]);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || Math.max(min, max) <= 0) return;
+      result[minKey] = clampPct(Math.min(min, max) * scale + offset);
+      result[maxKey] = clampPct(Math.max(min, max) * scale + offset);
+    };
+    const engagementOffset = [-8, -3, 0, 12, 24][profile.engagement];
+    const actionScale = [0.55, 0.78, 1, 1.12, 1.25][profile.actionVariety];
+    const discoveryOffset = [-5, -2, 0, 6, 12][profile.discovery];
+    const volumeScale = [0.60, 0.80, 1, 1.25, 1.55][profile.consumption];
+    const attentionScale = [0.78, 0.90, 1, 1.15, 1.30][profile.attention];
+
+    for (const [minKey, maxKey] of [
+      ["likePercentMin", "likePercentMax"],
+      ["viewStoriesLikePercentMin", "viewStoriesLikePercentMax"],
+      ["viewReelsLikePercentMin", "viewReelsLikePercentMax"],
+      ["viewExploreLikePercentMin", "viewExploreLikePercentMax"],
+    ]) adjustRange(minKey, maxKey, engagementOffset, actionScale);
+    for (const [minKey, maxKey] of [
+      ["shareFeedPercentMin", "shareFeedPercentMax"],
+      ["shareDmPercentMin", "shareDmPercentMax"],
+      ["savePercentMin", "savePercentMax"],
+      ["viewStoriesShareDmPercentMin", "viewStoriesShareDmPercentMax"],
+      ["viewStoriesCommentPercentMin", "viewStoriesCommentPercentMax"],
+      ["viewReelsShareFeedPercentMin", "viewReelsShareFeedPercentMax"],
+      ["viewReelsShareDmPercentMin", "viewReelsShareDmPercentMax"],
+      ["viewReelsSavePercentMin", "viewReelsSavePercentMax"],
+      ["viewExploreShareFeedPercentMin", "viewExploreShareFeedPercentMax"],
+      ["viewExploreShareDmPercentMin", "viewExploreShareDmPercentMax"],
+      ["viewExploreSavePercentMin", "viewExploreSavePercentMax"],
+    ]) adjustRange(minKey, maxKey, 0, actionScale);
+    for (const [minKey, maxKey] of [
+      ["clickAuthorPercentMin", "clickAuthorPercentMax"],
+      ["clickHashtagPercentMin", "clickHashtagPercentMax"],
+      ["viewStoriesClickAuthorPercentMin", "viewStoriesClickAuthorPercentMax"],
+      ["viewReelsClickAuthorPercentMin", "viewReelsClickAuthorPercentMax"],
+      ["viewExploreClickPostPctMin", "viewExploreClickPostPctMax"],
+      ["viewExploreClickAuthorPercentMin", "viewExploreClickAuthorPercentMax"],
+    ]) adjustRange(minKey, maxKey, discoveryOffset, actionScale);
+    for (const [minKey, maxKey] of [
+      ["feedScrollMin", "feedScrollMax"],
+      ["viewStoriesSlidesMin", "viewStoriesSlidesMax"],
+      ["viewReelsScrollMin", "viewReelsScrollMax"],
+      ["viewExploreScrollMin", "viewExploreScrollMax"],
+      ["checkDmScrollMin", "checkDmScrollMax"],
+    ]) {
+      const min = Number(result[minKey]);
+      const max = Number(result[maxKey]);
+      if (Number.isFinite(min) && Number.isFinite(max) && Math.max(min, max) > 0) {
+        result[minKey] = Math.max(0, Math.round(Math.min(min, max) * volumeScale));
+        result[maxKey] = Math.max(result[minKey], Math.round(Math.max(min, max) * volumeScale));
+      }
+    }
+    if (Number.isFinite(result.actionDelayMin)) result.actionDelayMin = Math.max(0, result.actionDelayMin * attentionScale);
+    if (Number.isFinite(result.actionDelayMax)) result.actionDelayMax = Math.max(result.actionDelayMin ?? 0, result.actionDelayMax * attentionScale);
+    if (Number.isFinite(result.viewExploreActionDelayMin)) result.viewExploreActionDelayMin = Math.max(0, result.viewExploreActionDelayMin * attentionScale);
+    if (Number.isFinite(result.viewExploreActionDelayMax)) result.viewExploreActionDelayMax = Math.max(result.viewExploreActionDelayMin ?? 0, result.viewExploreActionDelayMax * attentionScale);
+    logger.info({
+      serial,
+      personality: profile,
+      likeRange: [result.likePercentMin, result.likePercentMax],
+      feedScrollRange: [result.feedScrollMin, result.feedScrollMax],
+    }, "[device-personality] applied bounded runtime adjustments");
+    return result;
   };
   const effectiveTypingProfile = (serial: string) => {
     const profile = loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile;
@@ -12229,7 +12346,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         ...savedSlotSettings,
         ...parsedCycle,
       });
-      const effectiveSettings: any = effectiveCycle.settings;
+      const effectiveSettings: any = applyDevicePersonality(serial, effectiveCycle.settings);
       const {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
         airplaneWaitMinSec, airplaneWaitMaxSec,

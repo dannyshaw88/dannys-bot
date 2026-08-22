@@ -9171,6 +9171,23 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   const [motherOverrides, setMotherOverrides] = React.useState<MotherOverrides>(defaultMotherOverrides);
   const motherOverridesRef = React.useRef(motherOverrides);
   React.useEffect(() => { motherOverridesRef.current = motherOverrides; }, [motherOverrides]);
+  type DevicePersonality = {
+    engagement: number;
+    consumption: number;
+    attention: number;
+    discovery: number;
+    actionVariety: number;
+  };
+  const personalityChoices = [
+    ["engagement", "Engagement Threshold", ["Very selective", "Selective", "Balanced", "Open", "Highly expressive"]],
+    ["consumption", "Consumption Volume", ["Light", "Moderate", "Balanced", "Active", "High volume"]],
+    ["attention", "Attention Style", ["Skimmer", "Casual viewer", "Steady viewer", "Focused viewer", "Immersive viewer"]],
+    ["discovery", "Discovery Curiosity", ["Home-focused", "Occasional explorer", "Balanced browser", "Curious explorer", "Social navigator"]],
+    ["actionVariety", "Action Variety", ["Mostly passive", "Likes-focused", "Balanced actions", "Social actions", "Highly varied"]],
+  ] as const;
+  const defaultDevicePersonality: DevicePersonality = { engagement: 2, consumption: 2, attention: 2, discovery: 2, actionVariety: 2 };
+  const [devicePersonality, setDevicePersonality] = React.useState<DevicePersonality>(defaultDevicePersonality);
+  const [personalitySaving, setPersonalitySaving] = React.useState(false);
   const [swipeResolution, setSwipeResolution] = React.useState({ w: 1080, h: 2400 });
   const [swipeSaving, setSwipeSaving] = React.useState(false);
   const [swipeTesting, setSwipeTesting] = React.useState(false);
@@ -9212,6 +9229,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         });
         if (d.typingSpeedProfile) setTypingSpeedProfile({ minMs: 80, maxMs: 220, errorPercentMin: 0, errorPercentMax: 0, dwellMinMs: 40, dwellMaxMs: 80, hesitationMinMs: 250, hesitationMaxMs: 650, ...d.typingSpeedProfile });
         if (d.swipePersonalityOverrides) setSwipePersonalityOverrides({ ...defaultSwipePersonalityOverrides, ...d.swipePersonalityOverrides });
+        if (d.devicePersonality) setDevicePersonality({ ...defaultDevicePersonality, ...d.devicePersonality });
         if (d.motherCodeOverrides) setMotherOverrides({
           globalDwell: d.motherCodeOverrides.globalDwell ?? defaultMotherOverrides.globalDwell,
           perTool: d.motherCodeOverrides.perTool ?? defaultMotherOverrides.perTool,
@@ -9258,6 +9276,19 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ swipePersonalityOverrides: next }),
     }).catch(() => {});
+  };
+  const saveDevicePersonality = async (next: DevicePersonality, regenerate = false) => {
+    if (!serial) return;
+    setPersonalitySaving(true);
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(regenerate ? { regeneratePersonality: true } : { devicePersonality: next }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.devicePersonality) setDevicePersonality(data.devicePersonality);
+      else if (!regenerate) setDevicePersonality(next);
+    } finally { setPersonalitySaving(false); }
   };
 
   const updateSwipeFromPointer = (event: React.PointerEvent<SVGSVGElement>) => {
@@ -9581,6 +9612,43 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
+
+      {/* ── Device Personality ───────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Device Personality</p>
+            <p className="text-xs text-muted-foreground">
+              One persistent five-part behaviour mix shared by every account slot on this device. Trust Scores remain the baseline.
+            </p>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={() => saveDevicePersonality(devicePersonality, true)} disabled={!serial || personalitySaving}>
+            {personalitySaving ? "Saving…" : "Regenerate"}
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {personalityChoices.map(([key, label, options]) => (
+            <label key={key} className="text-xs text-muted-foreground">
+              <span className="block mb-1">{label}</span>
+              <select
+                value={devicePersonality[key]}
+                onChange={e => {
+                  const next = { ...devicePersonality, [key]: Number(e.target.value) };
+                  setDevicePersonality(next);
+                  void saveDevicePersonality(next);
+                }}
+                disabled={!serial || personalitySaving}
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+              >
+                {options.map((option, index) => <option key={option} value={index}>{option}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          This changes action rates, browsing volume, attention, discovery, and session rhythm. It does not rewrite Swipe Gesture or Typing Speed Profile calibration.
+        </p>
+      </div>
 
       {/* ── Typing Speed Profile ─────────────────────────────────────── */}
       <div className="bg-card border border-primary/30 rounded-xl p-5 space-y-3">
