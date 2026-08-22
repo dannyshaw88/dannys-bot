@@ -8393,6 +8393,41 @@ export async function dismissInstagramAccountRestriction(
 }
 
 /**
+ * Dismiss Instagram's "Get the Instagram tablet app" education dialog.
+ *
+ * Random Actions may safely open the top-level "Instagram for tablets" row
+ * under Settings and activity. That row opens a QR-code modal whose only
+ * exit is the text-labelled "Finished" control. Never tap Finished globally:
+ * the dialog marker and the exact live Finished node must both be present.
+ */
+export async function dismissInstagramTabletAppPopup(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+
+  const lower = xml.toLowerCase();
+  const isTabletDialog =
+    lower.includes("get the instagram tablet app") ||
+    (lower.includes("instagram tablet app") && lower.includes("qr code"));
+  if (!isTabletDialog) return false;
+
+  const finished = _findElem(xml, "Finished");
+  if (!finished) {
+    onLog?.("Visit Settings: tablet-app popup detected, but Finished was not exposed");
+    return false;
+  }
+
+  onLog?.(`Visit Settings: tablet-app popup detected — tapping Finished at (${finished.x},${finished.y})`);
+  await _adbTapAsync(adb, serial, finished.x, finished.y);
+  await _sleep(500);
+  return true;
+}
+
+/**
  * Switches the active Instagram account to the one matching `username` by
  * triggering Instagram's built-in account switcher:
  *   1. Tap the profile tab once to open the active account profile

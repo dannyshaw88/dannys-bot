@@ -10174,6 +10174,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     await sleepOrAbort(serial, 1200 + Math.round(Math.random() * 600));
     onLog?.(`Visit Settings: ✓ tapped one setting row (${settingsRow.label})`);
 
+    // The "Instagram for tablets" row opens a QR-code education modal rather
+    // than a normal settings page. Dismiss it only when its tablet-app marker
+    // and the exact live Finished control are both present.
+    const tabletPopupDismissed = await android.dismissInstagramTabletAppPopup(
+      serial,
+      message => onLog?.(message),
+    ).catch(() => false);
+    if (tabletPopupDismissed) {
+      onLog?.("Visit Settings: ✓ tablet-app popup dismissed");
+    }
+
     // 5. Either scroll once then Back, or Back immediately. There is never a
     // second setting/subsetting tap in this flow.
     const { w, h } = getScreenSize(serial);
