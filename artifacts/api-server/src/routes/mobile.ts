@@ -13675,14 +13675,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             reelsLikes = reelsResult.likes;
             steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares, ${reelsResult.saves} saves)`);
             tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
-            // Reels owns one deterministic exit action: tap the leftmost
-            // Instagram bottom-navigation slot. Do not resolve labels or
-            // resource IDs; those can identify the wrong node on variant
-            // accessibility trees.
+             // Reels owns one deterministic exit action: tap the leftmost
+             // Instagram bottom-navigation slot. Try the shared visual Home
+             // detector first; it checks both normal and inverted polarity.
+             // If the icon is not visually matchable in the viewer, the slot
+             // itself remains the authoritative target.
             tLog("▶ View Reels — exiting full-screen viewer via Home tab…");
-            const homeTab = await android.getBottomLeftHomeFallback(serial);
-            await android.tap(serial, homeTab.x, homeTab.y);
-            tLog(`▶ View Reels — tapped Home tab at (${homeTab.x},${homeTab.y})`);
+             const detectedHome = await android.findHomeTab(serial).catch(() => null);
+             const homeTab = detectedHome ?? await android.getBottomLeftHomeFallback(serial);
+             const homeTapSource = detectedHome ? "dual-polarity visual match" : "bottom-left navigation slot";
+             await android.tap(serial, homeTab.x, homeTab.y, "manual");
+             tLog(`▶ View Reels — tapped Home tab at (${homeTab.x},${homeTab.y}) via ${homeTapSource}`);
           } else if (!viewReelsEnabled) {
             steps.push("reels(skipped — View Reels disabled)");
             tLog("▶ View Reels disabled — skipping reels");
