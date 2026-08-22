@@ -5529,7 +5529,7 @@ export async function clearInstagramSearchBar(
   await _sleep(200);
 }
 
-type SearchFieldVisualMatch = { x: number; y: number; score: number; template: string };
+type SearchFieldVisualMatch = { x: number; y: number; template: string };
 type SearchFieldReference = { name: string; width: number; height: number; gray: Buffer };
 
 /**
@@ -5550,10 +5550,10 @@ async function findInstagramSearchFieldByPixelsInternal(
   if (!screen || screen.channels < 3) return null;
   if (!followSearchReferences) {
     const names = [
+      // This lookup happens before the field is tapped. Only compare the two
+      // normal, untouched reference images; tapped/target states can match
+      // unrelated text or grid content more strongly.
       "V1_1787004021661.jpg", "V2_1787004021661.jpg",
-      "V1_1787004422194.jpg", "V1-TAPPED-FIELD_1787004428397.jpg",
-      "V1-WITH-TARGET_1787004431727.jpg", "V2_1787004435387.jpg",
-      "V2-TAPPED-FIELD_1787004440073.jpg", "V2-WITH-TARGET_1787004444586.jpg",
     ];
     const referenceRoots = [
       path.resolve(process.cwd(), "attached_assets"),
@@ -5584,32 +5584,12 @@ async function findInstagramSearchFieldByPixelsInternal(
   for (let i = 0, p = 0; i < screenGray.length; i++, p += screen.channels) {
     screenGray[i] = Math.round((screen.pixels[p] + screen.pixels[p + 1] + screen.pixels[p + 2]) / 3);
   }
-  let best: SearchFieldVisualMatch | null = null;
-  // Use the proven View Feed heart matcher exactly: same scale cadence,
-  // normalized correlation, and acceptance gate. The search field is only
-  // searched in the top 20% of the screen, where Instagram renders it.
+  let best: (SearchFieldVisualMatch & { distance: number }) | null = null;
+  // Match the reference directly by absolute grayscale pixel distance. The
+  // field is always in the top 15%; limiting the search to that strip prevents
+  // the feed from becoming a competing match.
   const scales = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7];
-  type RefStats = { sum: number; sum2: number; count: number };
-  const statsCache = new Map<string, RefStats>();
-  const getRefStats = (refIndex: number, sampleStep: number): RefStats => {
-    const key = `${refIndex}:${sampleStep}`;
-    const cached = statsCache.get(key);
-    if (cached) return cached;
-    const ref = refs[refIndex];
-    let sum = 0, sum2 = 0, count = 0;
-    for (let ty = 0; ty < ref.height; ty += sampleStep) {
-      for (let tx = 0; tx < ref.width; tx += sampleStep) {
-        const value = ref.gray[ty * ref.width + tx];
-        sum += value;
-        sum2 += value * value;
-        count++;
-      }
-    }
-    const result = { sum, sum2, count };
-    statsCache.set(key, result);
-    return result;
-  };
-  const scoreAt = (
+  const distanceAt = (
     refIndex: number,
     scale: number,
     x: number,
@@ -5619,74 +5599,47 @@ async function findInstagramSearchFieldByPixelsInternal(
     const ref = refs[refIndex];
     const tw = Math.round(ref.width * scale);
     const th = Math.round(ref.height * scale);
-    const refStats = getRefStats(refIndex, sampleStep);
-    let screenSum = 0, screenSum2 = 0, cross = 0;
+    let total = 0;
+    let count = 0;
     for (let ty = 0; ty < ref.height; ty += sampleStep) {
       const sy = y + Math.min(th - 1, Math.round(ty * scale));
       for (let tx = 0; tx < ref.width; tx += sampleStep) {
         const sx = x + Math.min(tw - 1, Math.round(tx * scale));
-        const value = screenGray[sy * screen.width + sx];
-        screenSum += value;
-        screenSum2 += value * value;
-        cross += value * ref.gray[ty * ref.width + tx];
+        total += Math.abs(screenGray[sy * screen.width + sx] - ref.gray[ty * ref.width + tx]);
+        count++;
       }
     }
-    const screenMean = screenSum / refStats.count;
-    const refMean = refStats.sum / refStats.count;
-    const screenVariance = Math.max(1, screenSum2 / refStats.count - screenMean * screenMean);
-    const refVariance = Math.max(1, refStats.sum2 / refStats.count - refMean * refMean);
-    const covariance = cross / refStats.count - screenMean * refMean;
-    return 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
+    return total / Math.max(1, count);
   };
-  const consider = (refIndex: number, scale: number, x: number, y: number, sampleStep: number) => {
+  const consider = (refIndex: number, scale: number, x: number, y: number) => {
     const ref = refs[refIndex];
     const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
     if (x < 0 || y < 0 || x + tw > screen.width || y + th > screen.height) return;
-    const score = scoreAt(refIndex, scale, x, y, sampleStep);
-    if (score > (best?.score ?? 0.5)) {
-      best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, template: ref.name };
+    const distance = distanceAt(refIndex, scale, x, y, 3);
+    if (!best || distance < best.distance) {
+      best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), distance, template: ref.name };
     }
   };
 
-  // Coarse pass: sample fewer positions and pixels to find the correct
-  // reference/scale/region.  The old implementation performed a full
-  // normalized-correlation calculation at every 3px position for every
-  // template and scale, which took 20–30 seconds on the device PC.
+  // Scan the top 15% at the reference's native scale first, then the known
+  // device scale variants. Four-pixel movement is enough to locate the bar;
+  // the returned point is always the matched rectangle's centre.
   for (let refIndex = 0; refIndex < refs.length; refIndex++) {
     const ref = refs[refIndex];
     for (const scale of scales) {
       const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
       if (tw < 100 || th < 25 || tw > screen.width || th >= Math.round(screen.height * 0.45)) continue;
-      const topLimit = Math.round(screen.height * 0.20);
-      for (let y = 0; y <= topLimit - th; y += 8) {
-        for (let x = 0; x <= screen.width - tw; x += 8) {
-          consider(refIndex, scale, x, y, 4);
+      const topLimit = Math.round(screen.height * 0.15);
+      for (let y = 0; y <= topLimit - th; y += 4) {
+        for (let x = 0; x <= screen.width - tw; x += 4) {
+          consider(refIndex, scale, x, y);
         }
         await new Promise<void>(resolve => setImmediate(resolve));
       }
     }
   }
-
-  // Precision pass: retain the same normalized-correlation score, but only
-  // inspect a small neighborhood around the coarse winner.
   if (best) {
-    const coarse = best;
-    for (let refIndex = 0; refIndex < refs.length; refIndex++) {
-      const ref = refs[refIndex];
-      for (const scale of scales) {
-        const tw = Math.round(ref.width * scale), th = Math.round(ref.height * scale);
-        if (tw < 100 || th < 25 || tw > screen.width || th >= Math.round(screen.height * 0.45)) continue;
-        const coarseX = Math.round(coarse.x - tw / 2), coarseY = Math.round(coarse.y - th / 2);
-        for (let y = coarseY - 12; y <= coarseY + 12; y += 2) {
-          for (let x = coarseX - 12; x <= coarseX + 12; x += 2) {
-            consider(refIndex, scale, x, y, 2);
-          }
-        }
-      }
-    }
-  }
-  if (best) {
-    onLog?.(`Follow: visual search field matched ${best.template} at (${best.x}, ${best.y}) score=${best.score.toFixed(3)}`);
+    onLog?.(`Follow: reference search field matched ${best.template} — tapping centre at (${best.x}, ${best.y})`);
     return best;
   }
   onLog?.("Follow: no visual search-field candidate was available");
