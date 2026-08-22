@@ -8109,6 +8109,16 @@ export type DeviceProps = {
   userAgent: string;
 };
 
+/** Return Android's effective density without running the full device probe. */
+export async function getDeviceDensity(serial: string): Promise<number> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const output = await runAdb(adb, ["-s", serial, "shell", "wm", "density"], 4000);
+  const match = output.match(/(?:Override|Physical)?\s*density:\s*(\d+)/i);
+  const density = match ? Number(match[1]) : 160;
+  return Number.isFinite(density) && density > 0 ? density : 160;
+}
+
 export async function getDeviceProps(serial: string): Promise<DeviceProps> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");

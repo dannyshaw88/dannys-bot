@@ -10216,8 +10216,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Instagram/Xiaomi build it fails to recognize the visible header arrow.
     // The Settings header back control is the first button in the upper-left
     // corner, so use that position directly and exactly once.
-    const topLeftBackX = Math.max(1, Math.round(w * 0.05));
-    const topLeftBackY = Math.max(1, Math.round(h * 0.05));
+    const density = await android.getDeviceDensity(serial).catch(() => 160);
+    const dp = density / 160;
+    // Fixed Android header position: 24dp from the left edge and 24dp below
+    // the status-bar/header boundary. This is not screen-percentage targeting;
+    // density scaling keeps the same physical control position across devices.
+    const topLeftBackX = Math.max(1, Math.round(24 * dp));
+    const topLeftBackY = Math.max(1, Math.round(48 * dp));
     await android.tap(serial, topLeftBackX, topLeftBackY);
     await sleepOrAbort(serial, 800);
     onLog?.(`Visit Settings: ✓ tapped upper-left Back button at (${topLeftBackX},${topLeftBackY})`);
