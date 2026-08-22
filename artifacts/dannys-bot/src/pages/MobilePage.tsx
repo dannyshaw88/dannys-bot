@@ -8116,6 +8116,110 @@ const SLOT_PERSONALITY_TRAITS = [
   { key: "actionVariety", label: "Actions", options: ["Passive", "Likes-focused", "Balanced", "Social", "Varied"], icon: Sparkles, color: "text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30" },
 ] as const;
 
+const personalityMultiplier = (value: number | undefined) => [0.75, 0.9, 1, 1.1, 1.25][value ?? 2] ?? 1;
+const attentionTimingMultiplier = (value: number | undefined) => [1.08, 1.04, 1, 0.96, 0.92][value ?? 2] ?? 1;
+
+function PersonalityImpactSummary({ settings, personality }: { settings: AutomationSettingsData; personality?: SlotPersonality }) {
+  if (!personality) return null;
+  const effective = (min: number, max: number, scale: number) =>
+    `${Math.round(min * scale)}%–${Math.round(max * scale)}%`;
+  const engagement = personalityMultiplier(personality.engagement);
+  const action = personalityMultiplier(personality.actionVariety);
+  const discovery = personalityMultiplier(personality.discovery) * action;
+  const volume = personalityMultiplier(personality.consumption);
+  const attention = attentionTimingMultiplier(personality.attention);
+  const groups = [
+    { label: "Likes", value: effective(settings.likePercentMin, settings.likePercentMax, engagement * action), active: personality.engagement !== 2 || personality.actionVariety !== 2 },
+    { label: "Scroll / view volume", value: `${Math.round(settings.feedScrollMin * volume)}–${Math.round(settings.feedScrollMax * volume)}`, active: personality.consumption !== 2 },
+    { label: "Discovery clicks", value: effective(settings.clickAuthorPercentMin, settings.clickAuthorPercentMax, discovery), active: personality.discovery !== 2 || personality.actionVariety !== 2 },
+    { label: "Action delay", value: `${Math.round(settings.actionDelayMin * attention)}–${Math.round(settings.actionDelayMax * attention)} sec`, active: personality.attention !== 2 },
+  ].filter(group => group.active);
+  if (!groups.length) return null;
+  return (
+    <div className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50/70 px-3 py-2 dark:border-red-900/60 dark:bg-red-950/20">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300">Personality-adjusted HST values</p>
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+        {groups.map(group => <span key={group.label} className="text-xs text-red-700 dark:text-red-300"><b>{group.label}:</b> {group.value}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function AccountGesturesPanel({ serial, username, personality, onBack }: {
+  serial: string;
+  username: string;
+  personality?: SlotPersonality;
+  onBack: () => void;
+}) {
+  const [prefs, setPrefs] = useState<any>(null);
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, { cache: "no-store" })
+      .then(r => r.json()).then(data => { if (active) setPrefs(data); }).catch(() => {});
+    return () => { active = false; };
+  }, [serial]);
+  const attention = attentionTimingMultiplier(personality?.attention);
+  const gesture = prefs?.swipeGesture;
+  const typing = prefs?.typingSpeedProfile;
+  const mother = prefs?.motherCodeOverrides?.globalDwell;
+  const swipeModes = prefs?.swipePersonalityOverrides ?? {};
+  const red = "font-semibold text-red-600 dark:text-red-400";
+  const scaled = (value: unknown) => Number.isFinite(Number(value)) ? Math.round(Number(value) * attention) : "—";
+  return (
+    <div className="h-full overflow-y-auto p-6 space-y-5">
+      <div className="flex items-center gap-3">
+        <Button type="button" variant="outline" size="sm" onClick={onBack}>← Accounts</Button>
+        <div>
+          <h2 className="text-lg font-bold">Gestures · {username || "Account slot"}</h2>
+          <p className="text-xs text-muted-foreground">Device baseline with this account’s personality-adjusted values in red.</p>
+        </div>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <h3 className="font-semibold">Keyboard</h3>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {[
+              ["Typing speed min", typing?.minMs, scaled(typing?.minMs), "ms"],
+              ["Typing speed max", typing?.maxMs, scaled(typing?.maxMs), "ms"],
+              ["Dwell min", typing?.dwellMinMs, scaled(typing?.dwellMinMs), "ms"],
+              ["Dwell max", typing?.dwellMaxMs, scaled(typing?.dwellMaxMs), "ms"],
+              ["Hesitation min", typing?.hesitationMinMs, scaled(typing?.hesitationMinMs), "ms"],
+              ["Hesitation max", typing?.hesitationMaxMs, scaled(typing?.hesitationMaxMs), "ms"],
+            ].map(([label, base, value, unit]) => <div key={String(label)} className="rounded border border-border/60 p-2"><span className="text-muted-foreground">{label}</span><div>{base ?? "—"}{unit} <span className={personality?.attention !== 2 ? red : ""}>→ {value}{unit}</span></div></div>)}
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <h3 className="font-semibold">Swipe Gesture</h3>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {[
+              ["Duration min", gesture?.durationMinMs, scaled(gesture?.durationMinMs), "ms"],
+              ["Duration max", gesture?.durationMaxMs, scaled(gesture?.durationMaxMs), "ms"],
+              ["Pause min", gesture?.pauseMinMs, scaled(gesture?.pauseMinMs), "ms"],
+              ["Pause max", gesture?.pauseMaxMs, scaled(gesture?.pauseMaxMs), "ms"],
+              ["Settle min", gesture?.settleMinMs, scaled(gesture?.settleMinMs), "ms"],
+              ["Settle max", gesture?.settleMaxMs, scaled(gesture?.settleMaxMs), "ms"],
+            ].map(([label, base, value, unit]) => <div key={String(label)} className="rounded border border-border/60 p-2"><span className="text-muted-foreground">{label}</span><div>{base ?? "—"}{unit} <span className={personality?.attention !== 2 ? red : ""}>→ {value}{unit}</span></div></div>)}
+          </div>
+          <p className="text-[11px] text-muted-foreground">Coordinates remain device-calibrated; personality changes timing only.</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <h3 className="font-semibold">Gesture Personality</h3>
+          <div className="grid gap-2 text-xs">
+            {Object.entries(swipeModes).map(([mode, value]: [string, any]) => <div key={mode} className="flex items-center justify-between rounded border border-border/60 p-2"><span className="capitalize">{mode.replace(/([A-Z])/g, " $1")}</span><span>{value?.weightMin ?? "—"}–{value?.weightMax ?? "—"} weight · <span className={personality?.attention !== 2 ? red : ""}>{scaled(value?.durationMinMs)}–{scaled(value?.durationMaxMs)} ms</span></span></div>)}
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <h3 className="font-semibold">Mother Code timing</h3>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded border border-border/60 p-2"><span className="text-muted-foreground">Global dwell min</span><div>{mother?.minMs ?? "—"} ms <span className={personality?.attention !== 2 ? red : ""}>→ {scaled(mother?.minMs)} ms</span></div></div>
+            <div className="rounded border border-border/60 p-2"><span className="text-muted-foreground">Global dwell max</span><div>{mother?.maxMs ?? "—"} ms <span className={personality?.attention !== 2 ? red : ""}>→ {scaled(mother?.maxMs)} ms</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Per-slot Human Session Tool view ─────────────────────────────────────────
 // Always mounted so the automation hook's run-loop persists even when the
 // user is viewing the slot list or a different tab.
@@ -8139,6 +8243,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   slotIdx: number;
   slotId: string;
   slotUsername: string;
+  slotPersonality?: SlotPersonality;
   slotUsernames?: string[];
   addLog: (msg: string) => void;
   onBack: () => void;
@@ -8156,7 +8261,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   isActive?: boolean;
   sharedScrollTopRef?: React.MutableRefObject<number>;
 }>(function SlotHumanSessionView(
-  { phone, slotIdx, slotId, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
+  { phone, slotIdx, slotId, slotUsername, slotPersonality, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
   ref,
 ) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig, isActive, slotId);
@@ -8248,6 +8353,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
           SLOT {slotIdx + 2}
         </Button>
       </div>
+      <PersonalityImpactSummary settings={automation.settings} personality={slotPersonality} />
        <div className="flex-1 min-h-0">
         {isActive && (
           <AutomationSettingsPanel
@@ -8455,6 +8561,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   // initialSlot lets the Dashboard (or any deep-link) open a specific slot's
   // Human Session Tool directly on mount (e.g. ?slot=0 in the URL).
   const [openSlotTool,      setOpenSlotTool]      = useState<number | null>(initialSlot ?? null);
+  const [openGesturesSlot,  setOpenGesturesSlot]  = useState<number | null>(null);
   const [openPhoneAppsTool,  setOpenPhoneAppsTool]  = useState(false);
   const [phoneAppsEnabled,   setPhoneAppsEnabled]   = useState(false);
   const [phoneAppsNextRunAt, setPhoneAppsNextRunAt] = useState<number | null>(null);
@@ -8796,13 +8903,14 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           means automation run-loop timers survive transient USB poll flickers
           where the targeted serial temporarily disappears from the device list. */}
       {slots.map((slot, i) => (
-        <div key={`hst-${slot.slotId}`} className={phone && openSlotTool === i ? "h-full" : "hidden"}>
+        <div key={`hst-${slot.slotId}`} className={phone && openSlotTool === i && openGesturesSlot === null ? "h-full" : "hidden"}>
           <SlotHumanSessionView
             ref={el => { slotHandleRefs.current[i] = el; }}
             phone={phone}
             slotIdx={i}
             slotId={slot.slotId}
             slotUsername={slots[i]?.username ?? ""}
+            slotPersonality={slot.personality ? { ...slot.personality, ...slot.personalityOverrides } : undefined}
             slotUsernames={slots.map(s => s.username)}
             addLog={addLog}
             onBack={() => setOpenSlotTool(null)}
@@ -8822,6 +8930,18 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           />
         </div>
       ))}
+
+      {phone && openGesturesSlot !== null && slots[openGesturesSlot] && (
+        <AccountGesturesPanel
+          serial={phone.serial}
+          username={slots[openGesturesSlot].username}
+          personality={slots[openGesturesSlot].personality ? {
+            ...slots[openGesturesSlot].personality,
+            ...slots[openGesturesSlot].personalityOverrides,
+          } : undefined}
+          onBack={() => setOpenGesturesSlot(null)}
+        />
+      )}
 
       {/* No-phone placeholder — shown while the USB poll hasn't returned the
           targeted serial yet (transient flicker).  Hidden once phone connects. */}
@@ -8851,7 +8971,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       </div>
 
       {/* Slot list — hidden when any tool view is open or phone is null */}
-      <div className={phone && openSlotTool === null && !openPhoneAppsTool ? "h-full overflow-y-auto p-6 space-y-6" : "hidden"}>
+      <div className={phone && openSlotTool === null && openGesturesSlot === null && !openPhoneAppsTool ? "h-full overflow-y-auto p-6 space-y-6" : "hidden"}>
 
         {/* ── Mobile Phone Apps ─────────────────────────────────────────── */}
         <MobilePhoneApps
@@ -9103,6 +9223,9 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 <div style={{ display: "flex", alignSelf: "flex-end", height: "36px", gap: "8px" }}>
                   <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />
                    <TrustScoreCountdown serial={phone?.serial ?? ""} slotIdx={i} slotId={slot.slotId} />
+                   <Button type="button" variant="outline" size="sm" className="h-full px-3 text-xs font-semibold text-violet-700 border-violet-300 hover:bg-violet-50 dark:text-violet-300 dark:border-violet-700 dark:hover:bg-violet-950/40" onClick={() => setOpenGesturesSlot(i)}>
+                     Gestures
+                   </Button>
                 </div>
               </div>
 
