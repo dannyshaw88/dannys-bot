@@ -3546,7 +3546,7 @@ const MAX_HST_ACCOUNT_SLOTS = 10;
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void) => Promise<boolean>, releaseSlot?: (idx: number, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig, isActive = false) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void) => Promise<boolean>, releaseSlot?: (idx: number, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig, isActive = false, slotId?: string) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -3768,7 +3768,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       setHydrated(true);
       hydratedRef.current = true;
     };
-    const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx ?? 0}/automation-state?${hydrateCacheKey}`;
+    const slotIdentityQuery = slotId ? `&slotId=${encodeURIComponent(slotId)}` : "";
+    const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx ?? 0}/automation-state?${hydrateCacheKey}${slotIdentityQuery}`;
     const hydrate = () => {
       fetch(stateUrl, { cache: "no-store" })
         .then(r => r.ok ? r.json() : null)
@@ -3787,7 +3788,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             return;
           }
           const settingsUrl = slotIdx !== undefined
-            ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings?${hydrateCacheKey}`
+             ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings?${hydrateCacheKey}${slotIdentityQuery}`
             : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings?${hydrateCacheKey}`;
           const response = await fetch(settingsUrl, { cache: "no-store" });
           if (!response.ok) throw new Error("settings request failed");
@@ -3812,7 +3813,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       window.clearTimeout(hydrationTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedKey, phone?.serial, slotIdx, refreshKey, invalidHstSlot, isActive]);
+  }, [connectedKey, phone?.serial, slotIdx, slotId, refreshKey, invalidHstSlot, isActive]);
 
   // Pause every slot immediately when the live ADB state becomes offline (or
   // unauthorized). This is separate from the scheduling effect because that
@@ -3920,8 +3921,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const toSaveStr = JSON.stringify(toSave);
     if (toSaveStr === lastSavedRef.current) return; // nothing actually changed
     const t = setTimeout(() => {
+      const slotIdentityQuery = slotId ? `?slotId=${encodeURIComponent(slotId)}` : "";
       const saveUrl = slotIdx !== undefined
-        ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`
+        ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotIdentityQuery}`
         : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
       fetch(saveUrl, {
         method: "POST",
@@ -3937,7 +3939,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         .catch((e: any) => setSaveError(e?.message ?? "Couldn't reach the server"));
     }, 500);
     return () => clearTimeout(t);
-  }, [settings, phone?.serial, slotIdx]);
+  }, [settings, phone?.serial, slotIdx, slotId]);
 
   // While the master toggle is on, repeatedly run the full automation
   // cycle (power on → open Instagram → scroll/like with the configured
@@ -8135,6 +8137,7 @@ type SlotHumanSessionHandle = {
 const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   phone: UsbPhone | null;
   slotIdx: number;
+  slotId: string;
   slotUsername: string;
   slotUsernames?: string[];
   addLog: (msg: string) => void;
@@ -8153,10 +8156,10 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   isActive?: boolean;
   sharedScrollTopRef?: React.MutableRefObject<number>;
 }>(function SlotHumanSessionView(
-  { phone, slotIdx, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
+  { phone, slotIdx, slotId, slotUsername, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
   ref,
 ) {
-  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig, isActive);
+  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig, isActive, slotId);
   const isFirst = slotIdx === 0;
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
@@ -8798,6 +8801,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             ref={el => { slotHandleRefs.current[i] = el; }}
             phone={phone}
             slotIdx={i}
+            slotId={slot.slotId}
             slotUsername={slots[i]?.username ?? ""}
             slotUsernames={slots.map(s => s.username)}
             addLog={addLog}

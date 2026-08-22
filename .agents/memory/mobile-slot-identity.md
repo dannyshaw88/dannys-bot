@@ -7,4 +7,4 @@ Every device account slot has an opaque persisted `slotId`. Account-owned state 
 
 **Why:** Numeric slot keys caused Trust Score assignments, timers, and automation settings to transfer from a deleted account to the next account.
 
-**How to apply:** Keep index-based URLs only as a lookup layer; resolve the current slot to `slotId`, persist generated IDs during legacy migration, and use stable React keys for mounted per-account components.
+**How to apply:** Keep index-based URLs only as a lookup layer; resolve the current slot to `slotId`, persist generated IDs during legacy migration, use stable React keys for mounted per-account components, and include the ID in HST state/settings requests during deletion compaction races.

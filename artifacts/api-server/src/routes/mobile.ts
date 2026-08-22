@@ -2462,14 +2462,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     `trust_score_mobile_settings_${trustScoreId}`;
   const trustScoreDurationKey = (trustScoreId: string) =>
     `trust_score_duration_hours_${trustScoreId}`;
-  const accountSlotId = (serial: string, slotIdx: number): string => {
+  const accountSlotId = (serial: string, slotIdx: number, requestedSlotId?: string): string => {
+    if (requestedSlotId && requestedSlotId.length >= 8) {
+      const matchingSlot = loadInstanceConfigs()[serial]?.account?.slots?.find(
+        slot => slot.slotId === requestedSlotId,
+      );
+      if (matchingSlot) return requestedSlotId;
+    }
     const slot = loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx];
     return typeof slot?.slotId === "string" && slot.slotId.length >= 8
       ? slot.slotId
       : `legacy-index-${slotIdx}`;
   };
-  const slotAutomationKey = (serial: string, slotIdx: number) =>
-    accountSlotId(serial, slotIdx);
+  const slotAutomationKey = (serial: string, slotIdx: number, requestedSlotId?: string) =>
+    accountSlotId(serial, slotIdx, requestedSlotId);
   const trustScoreAssignmentKey = (serial: string, slotIdx: number) =>
     `mobile_trust_score_${serial}_${accountSlotId(serial, slotIdx)}`;
   const trustScoreTimerKey = (serial: string, slotIdx: number) =>
@@ -2880,8 +2886,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return;
       }
       const serial = p(req, "serial");
+      const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId : undefined;
       const cfg = loadInstanceConfigs();
-      const saved = cfg[serial]?.slotAutomation?.[slotAutomationKey(serial, slotIdx)]
+      const saved = cfg[serial]?.slotAutomation?.[slotAutomationKey(serial, slotIdx, requestedSlotId)]
         ?? cfg[serial]?.slotAutomation?.[String(slotIdx)]
         ?? {};
       res.json({ enabled: saved.enabled === true });
@@ -2895,6 +2902,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (slotIdx === null) { res.status(400).json({ error: "Invalid slot index" }); return; }
       const cfg = loadInstanceConfigs();
       const serial = p(req, "serial");
+      const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId : undefined;
       const defaults: AutomationSettings = {
         enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
         feedEnabled: true, storiesEnabled: true,
@@ -3023,7 +3031,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         postStoryAddLink: false, postStoryLinkUrl: "",
         dismissDirection: "auto" as const,
       };
-      const saved = cfg[serial]?.slotAutomation?.[slotAutomationKey(serial, slotIdx)]
+      const saved = cfg[serial]?.slotAutomation?.[slotAutomationKey(serial, slotIdx, requestedSlotId)]
         ?? cfg[serial]?.slotAutomation?.[String(slotIdx)];
       const merged: Record<string, any> = {
         ...defaults,
@@ -3070,7 +3078,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // payload on top of the existing values — not replace everything.
       // Also provide hard-coded fallbacks for the few schema fields that have
       // no zod .default() so a brand-new slot never fails validation.
-      const stableKey = slotAutomationKey(serial, slotIdx);
+      const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId : undefined;
+      const stableKey = slotAutomationKey(serial, slotIdx, requestedSlotId);
       const existing = cfg[serial]?.slotAutomation?.[stableKey]
         ?? cfg[serial]?.slotAutomation?.[String(slotIdx)] ?? {};
       const base: Record<string, any> = {
