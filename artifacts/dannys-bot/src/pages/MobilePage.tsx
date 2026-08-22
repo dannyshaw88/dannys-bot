@@ -9278,9 +9278,6 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 <div style={{ display: "flex", alignSelf: "flex-end", height: "36px", gap: "8px" }}>
                   <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />
                    <TrustScoreCountdown serial={phone?.serial ?? ""} slotIdx={i} slotId={slot.slotId} />
-                   <Button type="button" variant="outline" size="sm" className="h-full px-3 text-xs font-semibold text-violet-700 border-violet-300 hover:bg-violet-50 dark:text-violet-300 dark:border-violet-700 dark:hover:bg-violet-950/40" onClick={() => setOpenGesturesSlot(i)}>
-                     Gestures
-                   </Button>
                 </div>
               </div>
 
@@ -9312,6 +9309,15 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                   </label>
                   );
                 })}
+                 <Button
+                   type="button"
+                   variant="outline"
+                   size="sm"
+                   onClick={() => setOpenGesturesSlot(i)}
+                   className="h-7 shrink-0 px-2.5 text-xs font-semibold text-violet-700 border-violet-300 hover:bg-violet-50 dark:text-violet-300 dark:border-violet-700 dark:hover:bg-violet-950/40"
+                 >
+                   Gestures
+                 </Button>
                 <Button
                   type="button"
                   size="sm"
