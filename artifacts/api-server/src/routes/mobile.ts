@@ -13187,11 +13187,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
            // account's home feed, and ads-choice / interstitial dialogs can
            // reappear for accounts that haven't accepted them yet.
            await sleepOrAbort(serial, 1500);
-           const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-           if (postSwitchPopup) {
-             tLog(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
-             await sleepOrAbort(serial, 500);
-          }
+            const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+            if (postSwitchPopup) {
+              tLog(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
+              await sleepOrAbort(serial, 500);
+            }
+            // Selecting an account can leave Instagram on that account's
+            // Profile page. Never let the next Feed swipe run on a profile
+            // grid, where the same calibrated drag can open a post/account.
+            // Home must be positively detected; no coordinate fallback is safe.
+            const switchedHomeTab = await android.findHomeTab(serial).catch(() => null);
+            if (!switchedHomeTab) {
+              tLog("✗ Account switch completed, but Home icon was not confirmed — stopping before tools");
+              steps.push("home-navigation(aborted — Home icon not confirmed after account switch)");
+              throw new Error("Account switch completed but Instagram Home was not confirmed");
+            }
+            tLog(`▶ Account switch: tapping confirmed Home tab at (${switchedHomeTab.x}, ${switchedHomeTab.y}) before tools`);
+            await android.tap(serial, switchedHomeTab.x, switchedHomeTab.y, "bot");
+            await sleepOrAbort(serial, 700);
          } else {
             tLog("[TRACE] step-1 account-switch: failed");
            tLog(`✗ Account switch to @${resolvedSlotUsername} failed — continuing with tools`);
