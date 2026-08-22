@@ -69,6 +69,8 @@ let serverProc: ChildProcess | null = null;
 let serverExited = true;
 let serverExitCode: number | null = null;
 let serverExitSignal: NodeJS.Signals | null = null;
+let serverRestartTimer: NodeJS.Timeout | null = null;
+let serverRestartAttempts = 0;
 let databaseDirWatcher: fs.FSWatcher | null = null;
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -336,6 +338,7 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
       EQUINOX_DATA_DIR: getUserDataPath(),
     },
   });
+  const child = serverProc;
   serverExited = false;
   serverExitCode = null;
   serverExitSignal = null;
@@ -377,6 +380,7 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
     logStream.write(`[${new Date().toISOString()}] [DB-WATCH] failed path=${dbPath} error=${String(error)}\n`);
   }
   serverProc.on("exit", (code, signal) => {
+    const isCurrentChild = serverProc === child;
     serverExited = true;
     serverExitCode = code;
     serverExitSignal = signal;
@@ -401,6 +405,27 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
     databaseDirWatcher?.close();
     databaseDirWatcher = null;
     logStream.end();
+
+    // A packaged API exit must not take down the whole desktop application.
+    // Only restart the exact child that died; a late exit event from an older
+    // process must never replace a healthy newer child.  Shutdown and backup
+    // restore set isQuitting before stopping the server and are intentionally
+    // excluded.
+    if (isCurrentChild && !isQuitting && code !== 0 && serverRestartAttempts < 3) {
+      serverRestartAttempts += 1;
+      const attempt = serverRestartAttempts;
+      appendToMainLog(`API CHILD UNEXPECTED EXIT — scheduling restart attempt ${attempt}/3 code=${code ?? "null"} signal=${signal ?? "null"}`);
+      if (serverRestartTimer) clearTimeout(serverRestartTimer);
+      serverRestartTimer = setTimeout(() => {
+        serverRestartTimer = null;
+        if (isQuitting || serverProc !== child) return;
+        appendToMainLog(`API CHILD RESTARTING attempt ${attempt}/3`);
+        startServer(serverPort, logPath, ebIpcPort);
+      }, 1500);
+    } else if (isCurrentChild && code === 0) {
+      // A cleanly exited child should not consume the crash-retry budget.
+      serverRestartAttempts = 0;
+    }
   });
   serverProc.on("close", (code, signal) => {
     appendToMainLog(`API CHILD CLOSED apiPid=${serverProc?.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"}`);

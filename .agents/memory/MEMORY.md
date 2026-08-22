@@ -116,3 +116,4 @@
 - [Account-slot personality baseline](slot-personality-baseline.md) — derive unique slot behaviour from device calibration and Trust Score, with bounded persistent overlays
 - [Mobile personality hydration](mobile-personality-hydration.md) — account response mappers must preserve persisted personality fields or restart renders Auto despite correct storage
 - [Double-tap media bounds](double-tap-media-bounds.md) — automated double-taps require confirmed media bounds; missing bounds must never fall back to the action row
+- [Electron API child recovery](electron-api-child-recovery.md) — unexpected API exits need bounded, identity-safe restart while normal shutdown remains excluded
