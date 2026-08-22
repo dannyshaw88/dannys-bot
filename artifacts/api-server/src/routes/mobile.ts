@@ -8117,13 +8117,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         // ── Ad detection — skip all actions for sponsored reels ──────────────
         // Instagram labels sponsored reels with text="Ad" or content-desc="Ad"
-        // (sometimes "Sponsored"/"Advert"). Reuse the last dump from the
-        // player-ready poll above — no extra dump cost. Quoted attribute
-        // matching prevents false positives on "Add", "Adidas", etc.
+        // (sometimes "Sponsored"/"Advert"). Some builds expose only the
+        // sponsored CTA controls ("Get offer", "Not interested", and
+        // "Interested") while omitting the standalone Ad label. Reuse the last
+        // dump from the player-ready poll above — no extra dump cost. Quoted
+        // attribute matching prevents false positives on words like "Add".
         const isReelAd =
           lastPollXml.includes('text="Ad"')        || lastPollXml.includes('content-desc="Ad"') ||
           lastPollXml.includes('text="Sponsored"') || lastPollXml.includes('content-desc="Sponsored"') ||
-          lastPollXml.includes('text="Advert"')    || lastPollXml.includes('content-desc="Advert"');
+          lastPollXml.includes('text="Advert"')    || lastPollXml.includes('content-desc="Advert"') ||
+          lastPollXml.includes('text="Get offer"') || lastPollXml.includes('content-desc="Get offer"') ||
+          lastPollXml.includes('text="Not interested"') || lastPollXml.includes('content-desc="Not interested"') ||
+          lastPollXml.includes('text="Interested"') || lastPollXml.includes('content-desc="Interested"');
         if (isReelAd) {
           onLog?.(`Reel ${i + 1}/${totalReels}: ad post detected — skipping all actions`);
         } else {
