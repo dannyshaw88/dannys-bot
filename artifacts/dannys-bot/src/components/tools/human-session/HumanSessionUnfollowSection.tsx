@@ -1,0 +1,4 @@
+import type { ReactNode } from "react";
+import type { Profile, Tool } from "@shared/schema";
+import { UnfollowToolPanel } from "@/components/tools/UnfollowToolPanel";
+export function HumanSessionUnfollowSection({tool,profile,settings,children}:{tool:Tool;profile:Profile;settings:Record<string,any>;children?:ReactNode}) { if (children) return <>{children}</>; return <div className="mt-[25px] border border-border rounded-xl overflow-hidden">{tool.enabled&&<div className="p-4"><UnfollowToolPanel tool={tool} profile={profile} hideEnableToggle skipChanceMin={settings.unfollowSkipMin??0} skipChanceMax={settings.unfollowSkipMax??0}/></div>}</div>; }

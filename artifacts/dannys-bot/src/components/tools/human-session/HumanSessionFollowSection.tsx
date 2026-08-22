@@ -1,0 +1,9 @@
+import type { Dispatch, SetStateAction, ReactNode } from "react";
+import type { Profile, Tool } from "@shared/schema";
+import { ToolConfigPanel } from "@/components/tools/ToolConfigPanel";
+import { NumField } from "@/components/ui/num-field";
+import { UserPlus } from "lucide-react";
+export function HumanSessionFollowSection({tool,profile,settings,setSettings,update,children}:{tool:Tool;profile:Profile;settings:Record<string,any>;setSettings:Dispatch<SetStateAction<Record<string,any>>>;update:(value:boolean)=>void;children?:ReactNode}) {
+ if (children) return <>{children}</>;
+ return <div className="mt-[25px] border border-border rounded-xl overflow-hidden"><div className="flex items-center gap-2 px-4 py-3 bg-cyan-500"><UserPlus className="w-8 h-8 text-white"/><h4 className="font-bold text-[19px] text-white">Follow Tool</h4><input type="checkbox" id={`ft-enabled-${tool.id}`} checked={tool.enabled} onChange={e=>update(e.target.checked)} className="w-3.5 h-3.5 accent-white"/><label htmlFor={`ft-enabled-${tool.id}`} className="text-sm text-white">{tool.enabled?"ACTIVE":"STOPPED"}</label><div className="ml-auto flex gap-2"><NumField min={0} max={100} className="w-14 h-7 text-xs" value={settings.followOrderMin??0} onChange={v=>setSettings({...settings,followOrderMin:v})}/><NumField min={0} max={100} className="w-14 h-7 text-xs" value={settings.followOrderMax??0} onChange={v=>setSettings({...settings,followOrderMax:v})}/></div></div>{tool.enabled&&<div className="p-4"><ToolConfigPanel tool={tool} profile={profile} hideEnableToggle skipChanceMin={settings.followSkipMin??0} skipChanceMax={settings.followSkipMax??0}/></div>}</div>;
+}

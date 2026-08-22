@@ -29,6 +29,17 @@ import { HumanSessionFeedSection } from "@/components/tools/human-session/HumanS
 import { HumanSessionExploreSection } from "@/components/tools/human-session/HumanSessionExploreSection";
 import { HumanSessionWebBrowsingSection } from "@/components/tools/human-session/HumanSessionWebBrowsingSection";
 import { HumanSessionRandomActionsSection } from "@/components/tools/human-session/HumanSessionRandomActionsSection";
+import { HumanSessionViewReelsSection } from "@/components/tools/human-session/HumanSessionViewReelsSection";
+import { HumanSessionCheckStoriesSection } from "@/components/tools/human-session/HumanSessionCheckStoriesSection";
+import { HumanSessionCheckInboxSection } from "@/components/tools/human-session/HumanSessionCheckInboxSection";
+import { HumanSessionFollowSection } from "@/components/tools/human-session/HumanSessionFollowSection";
+import { HumanSessionFollowSettingsSection } from "@/components/tools/human-session/HumanSessionFollowSettingsSection";
+import { HumanSessionUnfollowSection } from "@/components/tools/human-session/HumanSessionUnfollowSection";
+import { HumanSessionContactSection } from "@/components/tools/human-session/HumanSessionContactSection";
+import { HumanSessionMakePostSection } from "@/components/tools/human-session/HumanSessionMakePostSection";
+import { HumanSessionProfilePictureSection } from "@/components/tools/human-session/HumanSessionProfilePictureSection";
+import { HumanSessionBioSection } from "@/components/tools/human-session/HumanSessionBioSection";
+import { HumanSessionRepostSection } from "@/components/tools/human-session/HumanSessionRepostSection";
 
 interface HumanSessionPanelProps {
   tool: Tool;
@@ -933,10 +944,17 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
 
             <HumanSessionExploreSection settings={settings} setSettings={setSettings} />
 
+            <HumanSessionProfilePictureSection>
+            <HumanSessionBioSection>
             <HumanSessionRandomActionsSection settings={settings} setSettings={setSettings} />
+            </HumanSessionBioSection>
+            </HumanSessionProfilePictureSection>
+            <HumanSessionViewReelsSection settings={settings} setSettings={setSettings} pctInputs={pctInputs} />
+            <HumanSessionCheckStoriesSection settings={settings} setSettings={setSettings} pctInputs={pctInputs} />
+            <HumanSessionCheckInboxSection settings={settings} setSettings={setSettings} />
 
             {/* ── View Reels ── */}
-            <div className="px-4 py-3 space-y-2">
+            <div className="hidden px-4 py-3 space-y-2">
               {/* Title row */}
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2.5">
@@ -1014,7 +1032,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
 
             {/* ── Check Stories from Timeline ── */}
-            <div className="px-4 py-3 space-y-2">
+            <div className="hidden px-4 py-3 space-y-2">
               {/* Title row — checkbox + label + ORDER/SKIP on right */}
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -1109,7 +1127,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
 
             {/* ── Check Inbox ── */}
-            <div className="px-4 py-3 space-y-2">
+            <div className="hidden px-4 py-3 space-y-2">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <input type="checkbox" id="checkDmEnabled"
@@ -1166,6 +1184,8 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>
 
             {/* ── Make a Post ── */}
+            <HumanSessionMakePostSection settings={settings} setSettings={setSettings} />
+            <HumanSessionRepostSection />
             <div className="px-4 py-3 space-y-3">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1627,19 +1647,18 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
             </div>
           </div>{/* end Source 2 border */}
-
-
+            </div>
 
         </div>
       </div>
 
-          </div>
           )}{/* end emulationGroupEnabled conditional + divide-y */}
         </div>{/* end EMULATION rounded-xl */}
       </div>{/* end EMULATION outer */}
 
       {/* ── Follow Tool (embedded) ────────────────────────────── */}
-      {followTool && (
+      <HumanSessionFollowSettingsSection>
+      {followTool && <HumanSessionFollowSection tool={followTool} profile={profile} settings={settings} setSettings={setSettings} update={(enabled) => embeddedUpdateTool.mutate({ id: followTool.id, profileId: followTool.profileId, enabled })}>
         <div className="mt-[25px]">
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center border-b border-border">
@@ -1689,10 +1708,11 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>}
           </div>
         </div>
-      )}
+      </HumanSessionFollowSection>}
+      </HumanSessionFollowSettingsSection>
 
       {/* ── Unfollow Tool (embedded) ──────────────────────────── */}
-      {unfollowTool && (
+      {unfollowTool && <HumanSessionUnfollowSection tool={unfollowTool} profile={profile} settings={settings}>
         <div className="mt-[25px]">
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center border-b border-border">
@@ -1742,10 +1762,10 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>}
           </div>
         </div>
-      )}
+      </HumanSessionUnfollowSection>}
 
       {/* ── Contact Tool (embedded) ───────────────────────────── */}
-      {contactTool && (
+      {contactTool && <HumanSessionContactSection tool={contactTool} profile={profile}>
         <div className="mt-[25px]">
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="flex items-center border-b border-border">
@@ -1795,7 +1815,7 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
             </div>}
           </div>
         </div>
-      )}
+      </HumanSessionContactSection>}
 
       <HumanSessionWebBrowsingSection
         settings={settings}
