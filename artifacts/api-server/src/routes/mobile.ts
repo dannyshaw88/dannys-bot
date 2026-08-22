@@ -3834,11 +3834,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }).refine(value => value.regenerate || value.personality, "Personality is required").parse(req.body);
       const cfg = loadInstanceConfigs();
       const slots = [...(cfg[serial]?.account?.slots ?? [])];
-      const requestedSlotIdx = parsed.slotId
+      // Prefer the stable identity, but tolerate a stale account save from
+      // the UI by falling back to the visible position. The Personality
+      // action must not fail just because the account credentials and slot
+      // metadata were saved in separate debounced requests.
+      let requestedSlotIdx = parsed.slotId
         ? slots.findIndex(slot => slot.slotId === parsed.slotId)
-        : slotIdx;
+        : -1;
+      if (requestedSlotIdx < 0 && slots[slotIdx]) requestedSlotIdx = slotIdx;
+      // A newly rendered slot can briefly exist in the UI before its account
+      // save reaches disk. Create only that empty slot record, preserving the
+      // requested stable ID; the normal account save will fill its fields.
+      if (requestedSlotIdx < 0 && slots.length === 0 && parsed.slotId) {
+        requestedSlotIdx = slotIdx;
+        slots[requestedSlotIdx] = { slotId: parsed.slotId, username: "", password: "" };
+      }
       if (requestedSlotIdx < 0 || !slots[requestedSlotIdx]) {
-        res.status(404).json({ error: "Account slot not found" });
+        logger.warn({ serial, slotIdx, requestedSlotId: parsed.slotId, savedSlotCount: slots.length }, "[slot-personality] account slot unavailable");
+        res.status(404).json({ error: "Account slot not found; save the account slot first and try again" });
         return;
       }
       const personality = parsed.regenerate
