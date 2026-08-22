@@ -3742,6 +3742,67 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // No upper-bound cap — users can add as many slots as they need via the UI
     slots: z.array(deviceSlotSchema).min(0),
   });
+  const slotPersonalityKey = (serial: string, slotId: string) =>
+    `mobile_slot_personality_${serial}_${slotId}`;
+  const slotPersonalityOverridesKey = (serial: string, slotId: string) =>
+    `mobile_slot_personality_overrides_${serial}_${slotId}`;
+  const parseStoredPersonality = (value: string | undefined): DevicePersonality | undefined => {
+    if (!value) return undefined;
+    try {
+      const parsed = JSON.parse(value);
+      return isDevicePersonality(parsed) ? parsed : undefined;
+    } catch { return undefined; }
+  };
+  const parseStoredPersonalityOverrides = (value: string | undefined): Partial<DevicePersonality> | undefined => {
+    if (!value) return undefined;
+    try {
+      const parsed = JSON.parse(value);
+      if (!parsed || typeof parsed !== "object") return undefined;
+      const allowed = ["engagement", "consumption", "attention", "discovery", "actionVariety"];
+      const result: Partial<DevicePersonality> = {};
+      for (const key of allowed) {
+        if (Number.isInteger(parsed[key]) && parsed[key] >= 0 && parsed[key] <= 4) {
+          (result as any)[key] = parsed[key];
+        }
+      }
+      return result;
+    } catch { return undefined; }
+  };
+  const loadSlotPersonalityFromDatabase = async (serial: string, slots: DeviceSlot[]): Promise<DeviceSlot[]> => {
+    const settings = await storage.getGlobalSettings();
+    return slots.map(slot => {
+      if (!slot.slotId) return slot;
+      const personality = parseStoredPersonality(settings[slotPersonalityKey(serial, slot.slotId)]);
+      const personalityOverrides = parseStoredPersonalityOverrides(
+        settings[slotPersonalityOverridesKey(serial, slot.slotId)],
+      );
+      return {
+        ...slot,
+        ...(personality ? { personality } : {}),
+        ...(personalityOverrides ? { personalityOverrides } : {}),
+      };
+    });
+  };
+  const persistSlotPersonalityToDatabase = async (serial: string, slot: DeviceSlot): Promise<void> => {
+    if (!slot.slotId) return;
+    if (slot.personality && isDevicePersonality(slot.personality)) {
+      await storage.setGlobalSetting(slotPersonalityKey(serial, slot.slotId), JSON.stringify(slot.personality));
+    }
+    if (slot.personalityOverrides && typeof slot.personalityOverrides === "object") {
+      await storage.setGlobalSetting(
+        slotPersonalityOverridesKey(serial, slot.slotId),
+        JSON.stringify(slot.personalityOverrides),
+      );
+    } else {
+      await storage.deleteGlobalSetting(slotPersonalityOverridesKey(serial, slot.slotId));
+    }
+  };
+  const deleteSlotPersonalityFromDatabase = async (serial: string, slotId: string): Promise<void> => {
+    await Promise.all([
+      storage.deleteGlobalSetting(slotPersonalityKey(serial, slotId)),
+      storage.deleteGlobalSetting(slotPersonalityOverridesKey(serial, slotId)),
+    ]);
+  };
   const emptySlots = (): DeviceSlot[] => Array.from({ length: SLOT_COUNT }, () => ({ username: "", password: "" }));
   const migrateAccount = (raw: any): DeviceAccount => {
     if (raw && Array.isArray(raw.slots)) {
@@ -3763,18 +3824,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     return { slots: emptySlots() };
   };
-  app.get("/api/mobile/devices/:serial/account", (req: Request, res: Response) => {
+  app.get("/api/mobile/devices/:serial/account", async (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
     const serial = p(req, "serial");
     const raw = cfg[serial]?.account ?? null;
     const migrated = migrateAccount(raw);
+    const hydratedSlots = await loadSlotPersonalityFromDatabase(serial, migrated.slots);
+    const hydrated = { ...migrated, slots: hydratedSlots };
     // Persist generated IDs immediately. Otherwise a legacy slot would get
     // a fresh identity on every reload before the UI had a chance to save.
-    if (JSON.stringify(raw) !== JSON.stringify(migrated)) {
-      cfg[serial] = { ...cfg[serial], account: migrated };
+    if (JSON.stringify(raw) !== JSON.stringify(hydrated)) {
+      cfg[serial] = { ...cfg[serial], account: hydrated };
       saveInstanceConfigs(cfg);
     }
-    res.json(migrated);
+    res.json(hydrated);
   });
   app.post("/api/mobile/devices/:serial/account", async (req: Request, res: Response) => {
     try {
@@ -3792,6 +3855,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], account: input };
       saveInstanceConfigs(cfg);
+      await Promise.all(input.slots.map(slot => persistSlotPersonalityToDatabase(serial, slot)));
       // Account saves are also a state-boundary checkpoint. The UI can save
       // the shortened slot array immediately after deleting a slot, before
       // the separate DELETE request finishes. Purge every slot-owned record
@@ -3824,11 +3888,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           )
           .map(key => storage.deleteGlobalSetting(key)),
       );
+      const livePersonalityKeys = new Set(
+        input.slots.flatMap(slot => slot.slotId ? [
+          slotPersonalityKey(serial, slot.slotId),
+          slotPersonalityOverridesKey(serial, slot.slotId),
+        ] : []),
+      );
+      await Promise.all(
+        Object.keys(allSettings)
+          .filter(key =>
+            (key.startsWith(`mobile_slot_personality_${serial}_`) ||
+             key.startsWith(`mobile_slot_personality_overrides_${serial}_`)) &&
+            !livePersonalityKeys.has(key),
+          )
+          .map(key => storage.deleteGlobalSetting(key)),
+      );
       res.json({ ok: true, account: input });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save the account" }); }
   });
 
-  app.post("/api/mobile/devices/:serial/slots/:slotIdx/personality", (req: Request, res: Response) => {
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/personality", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
       const slotIdx = Number(req.params.slotIdx);
@@ -3879,6 +3958,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       };
       cfg[serial] = { ...cfg[serial], account: { slots } };
       saveInstanceConfigs(cfg);
+      await persistSlotPersonalityToDatabase(serial, slots[requestedSlotIdx]);
       logger.info({ serial, slotIdx: requestedSlotIdx, slotId: parsed.slotId, personality, regenerate: Boolean(parsed.regenerate) }, "[slot-personality] saved");
       res.json({ ok: true, personality });
     } catch (e: any) {
@@ -3900,6 +3980,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         `mobile_followed_users_${serial}_`,
         `mobile_posted_media_${serial}_`,
         `mobile_posted_profile_media_${serial}_`,
+        `mobile_slot_personality_${serial}_`,
+        `mobile_slot_personality_overrides_${serial}_`,
       ];
       await Promise.all(
         Object.keys(all)
