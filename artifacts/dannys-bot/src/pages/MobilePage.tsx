@@ -5095,7 +5095,7 @@ function CopySettingsDialog({
 export function AutomationSettingsPanel({
   phone, settings: baseSettings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
   slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
-  templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile, settingsScrollRef, sharedScrollTopRef, isActive, personality,
+  templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile, onOpenGestures, settingsScrollRef, sharedScrollTopRef, isActive, personality,
 }: {
   phone: UsbPhone | null;
   settings: AutomationSettingsData;
@@ -5124,6 +5124,7 @@ export function AutomationSettingsPanel({
     icon: React.ComponentType<{ size?: number; color?: string; fill?: string; strokeWidth?: number }>;
   };
   onOpenBrowserProfile?: (username: string) => void;
+  onOpenGestures?: () => void;
   settingsScrollRef?: React.MutableRefObject<HTMLDivElement | null>;
   sharedScrollTopRef?: React.MutableRefObject<number>;
   isActive?: boolean;
@@ -5501,6 +5502,12 @@ export function AutomationSettingsPanel({
           )}
           {slotIdx !== undefined && (
             <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
+          )}
+          {slotIdx !== undefined && onOpenGestures && (
+            <Button type="button" variant="outline" size="sm" onClick={onOpenGestures}
+              className="h-7 px-2.5 text-xs font-semibold text-violet-700 border-violet-300 hover:bg-violet-50 dark:text-violet-300 dark:border-violet-700 dark:hover:bg-violet-950/40">
+              Gestures
+            </Button>
           )}
         </div>
       </div>
