@@ -8618,7 +8618,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       });
       const data = await response.json().catch(() => ({}));
       if (response.ok && data.personality) {
-        updateSlot(slotIdx, { personality: data.personality });
+        updateSlot(slotIdx, { personality: data.personality, personalityOverrides: {} });
         setRandomisedSlot(slotIdx);
         window.setTimeout(() => setRandomisedSlot(current => current === slotIdx ? null : current), 1800);
       } else {

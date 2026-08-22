@@ -3857,7 +3857,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const personality = parsed.regenerate
         ? randomDevicePersonality()
         : parsed.personality!;
-      slots[requestedSlotIdx] = { ...slots[requestedSlotIdx], personality };
+      slots[requestedSlotIdx] = {
+        ...slots[requestedSlotIdx],
+        personality,
+        ...(parsed.regenerate ? { personalityOverrides: {} } : {}),
+      };
       cfg[serial] = { ...cfg[serial], account: { slots } };
       saveInstanceConfigs(cfg);
       logger.info({ serial, slotIdx: requestedSlotIdx, slotId: parsed.slotId, personality, regenerate: Boolean(parsed.regenerate) }, "[slot-personality] saved");
