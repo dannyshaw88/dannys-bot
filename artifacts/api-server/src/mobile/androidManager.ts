@@ -8574,7 +8574,11 @@ export async function switchToInstagramAccount(
   // of opening the account switcher.  Give the surface one short, bounded
   // settle window after the tab is detected; this is deliberately a wait, not
   // a second gesture or a retry.
-  const PROFILE_TAB_SETTLE_MS = 1500 + Math.floor(Math.random() * 3501);
+  // The launch path already waits for the feed to render. Keep this second
+  // guard short so account switching does not accumulate another 1.5–5 s
+  // pause, while still allowing the navigation surface to finish its
+  // animation before the hold begins.
+  const PROFILE_TAB_SETTLE_MS = 500 + Math.floor(Math.random() * 1001);
   onLog?.(`  ↳ Profile tab found at (${profileTab.x},${profileTab.y}) via ${profileTabSource} — waiting ${PROFILE_TAB_SETTLE_MS}ms for Instagram to finish rendering…`);
   await _sleep(PROFILE_TAB_SETTLE_MS);
 
@@ -8588,7 +8592,7 @@ export async function switchToInstagramAccount(
       String(profileTab.x), String(profileTab.y),
       String(holdDurationMs),
     ], Math.max(12000, holdDurationMs + 4000));
-    await _sleep(700 + Math.floor(Math.random() * 4301));
+    await _sleep(300 + Math.floor(Math.random() * 701));
     postHeaderTapXml = await _uiDump(adbPath, serial).catch(() => "");
     onLog?.(`  ↳ Profile-tab long-press result: xmlLength=${postHeaderTapXml.length}, hasAccountSheet=${/(?:account|switch|chooser|dialog|bottom_sheet|modal)/i.test(postHeaderTapXml)}`);
   } else {

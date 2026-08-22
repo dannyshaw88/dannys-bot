@@ -12781,22 +12781,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const launchRestrictionDismissed = await android.dismissInstagramAccountRestriction(serial, tLog).catch(() => false);
       if (launchRestrictionDismissed) {
         steps.push("account-restriction-dismissed");
-        await sleepOrAbort(serial, 700);
-      } else {
-        const restrictionCheck = await android.getUiDump(serial).catch(() => "");
-        const restrictionLower = restrictionCheck.toLowerCase();
-        if (restrictionLower.includes("what happened") &&
-            (restrictionLower.includes("restriction") || restrictionLower.includes("can't share links"))) {
-          tLog("✗ Account restriction screen remains open and could not be safely dismissed — pausing cycle");
-          steps.push("account-restriction-unresolved");
-          throw new Error("Instagram account restriction screen could not be dismissed safely");
-        }
+        await sleepOrAbort(serial, 500);
       }
       // Instagram can expose the feed in the accessibility tree before the
-      // first feed render has finished. Give the launch screen a few seconds
-      // to settle before account switching or any tool taps begin.
+      // first feed render has finished. Keep a short bounded settle before
+      // account switching; the profile-tab selector has its own live guard.
       tLog("▶ Dwell: allowing Instagram feed to finish rendering…");
-      await sleepOrAbort(serial, 3000);
+      await sleepOrAbort(serial, 1000);
       tLog("  ✓ Instagram open");
 
       const preSwitchLastUsername = automationLastActiveUsername.get(serial) || "";
