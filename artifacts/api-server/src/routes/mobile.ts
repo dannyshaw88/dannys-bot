@@ -3823,6 +3823,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
       const parsed = z.object({
         regenerate: z.boolean().optional(),
+        slotId: z.string().min(8).max(100).optional(),
         personality: z.object({
           engagement: z.number().int().min(0).max(4),
           consumption: z.number().int().min(0).max(4),
@@ -3833,17 +3834,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }).refine(value => value.regenerate || value.personality, "Personality is required").parse(req.body);
       const cfg = loadInstanceConfigs();
       const slots = [...(cfg[serial]?.account?.slots ?? [])];
-      if (!slots[slotIdx]) {
+      const requestedSlotIdx = parsed.slotId
+        ? slots.findIndex(slot => slot.slotId === parsed.slotId)
+        : slotIdx;
+      if (requestedSlotIdx < 0 || !slots[requestedSlotIdx]) {
         res.status(404).json({ error: "Account slot not found" });
         return;
       }
       const personality = parsed.regenerate
         ? randomDevicePersonality()
         : parsed.personality!;
-      slots[slotIdx] = { ...slots[slotIdx], personality };
+      slots[requestedSlotIdx] = { ...slots[requestedSlotIdx], personality };
       cfg[serial] = { ...cfg[serial], account: { slots } };
       saveInstanceConfigs(cfg);
-      logger.info({ serial, slotIdx, personality, regenerate: Boolean(parsed.regenerate) }, "[slot-personality] saved");
+      logger.info({ serial, slotIdx: requestedSlotIdx, slotId: parsed.slotId, personality, regenerate: Boolean(parsed.regenerate) }, "[slot-personality] saved");
       res.json({ ok: true, personality });
     } catch (e: any) {
       res.status(400).json({ error: e?.message ?? "Failed to save slot personality" });

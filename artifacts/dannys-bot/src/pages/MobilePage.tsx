@@ -22,7 +22,7 @@ import {
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw,
-  Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles,
+  Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles, Shuffle,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2, ScanSearch,
 } from "lucide-react";
 
@@ -8614,7 +8614,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/personality`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ regenerate: true }),
+        body: JSON.stringify({ regenerate: true, slotId: slots[slotIdx].slotId }),
       });
       const data = await response.json().catch(() => ({}));
       if (response.ok && data.personality) {
@@ -9088,13 +9088,13 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
               {/* Unique per-account slot personality, derived from the
                   device and Trust Score baselines. */}
-              <div className="flex items-center gap-2 flex-wrap rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+              <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto rounded-md border border-border/60 bg-muted/20 px-2 py-2">
                 <span className="text-xs font-semibold text-muted-foreground mr-1">Personality:</span>
                 {SLOT_PERSONALITY_TRAITS.map(({ key, label, options, icon: TraitIcon, color }) => {
                   const override = slot.personalityOverrides?.[key as keyof SlotPersonality];
                   const automatic = slot.personality?.[key as keyof SlotPersonality];
                   return (
-                  <label key={key} className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] ${color}`} title={`${label} — choose Auto or a manual override`}>
+                  <label key={key} className={`inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-1 text-[11px] ${color}`} title={`${label} — choose Auto or a manual override`}>
                     <TraitIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
                     <span className="sr-only">{label}</span>
                     <select
@@ -9106,7 +9106,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                         else nextOverrides[key as keyof SlotPersonality] = Number(e.target.value) as never;
                         updateSlot(i, { personalityOverrides: nextOverrides });
                       }}
-                      className="max-w-[9rem] cursor-pointer bg-transparent text-[11px] font-medium outline-none"
+                      className="w-[4.8rem] cursor-pointer bg-transparent text-[10px] font-medium outline-none"
                     >
                       <option value="auto">Auto{automatic !== undefined ? `: ${options[automatic]}` : ""}</option>
                       {options.map((option, optionIdx) => <option key={option} value={optionIdx}>{option}</option>)}
@@ -9122,9 +9122,11 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     void randomiseSlotPersonality(i);
                   }}
                   disabled={loading || !phone?.serial || randomisingSlot !== null}
-                  className="ml-auto h-7 text-xs"
+                  className="h-7 w-7 shrink-0 p-0"
+                  title="Randomise this account slot's personality"
+                  aria-label="Randomise this account slot's personality"
                 >
-                  {randomisingSlot === i ? "Randomising…" : randomisedSlot === i ? "Saved" : "Randomise"}
+                  {randomisingSlot === i ? "…" : randomisedSlot === i ? "✓" : <Shuffle className="h-3.5 w-3.5" />}
                 </Button>
               </div>
           </div>
