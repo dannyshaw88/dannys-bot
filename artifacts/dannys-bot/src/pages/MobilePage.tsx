@@ -5472,15 +5472,11 @@ export function AutomationSettingsPanel({
   return (
     <div
       ref={settingsScrollRef}
-      data-personality-active={personality ? "true" : "false"}
       onScroll={e => {
         if (sharedScrollTopRef) sharedScrollTopRef.current = e.currentTarget.scrollTop;
       }}
-      className="personality-hst-settings h-full overflow-y-auto p-6 space-y-6"
+      className="h-full overflow-y-auto p-6 space-y-6"
     >
-      {personality && (
-        <style>{`.personality-hst-settings[data-personality-active="true"] input[type="number"] { color: #dc2626 !important; border-color: #f87171 !important; } .dark .personality-hst-settings[data-personality-active="true"] input[type="number"] { color: #f87171 !important; border-color: #f87171 !important; }`}</style>
-      )}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <Fingerprint className="w-4 h-4 shrink-0" style={{ color: "#1AD2F2" }} />
