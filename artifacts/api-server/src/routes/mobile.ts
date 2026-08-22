@@ -7379,43 +7379,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (wantLike || wantShareFeed || wantShareDm || wantSave) {
             await sleepOrAbort(serial, 600); // settle before scanning action bar
 
-            // ── Explore-only: wait for reel player nodes to appear ───────────
-            // Problem: the reel/post viewer sometimes opens in a separate window
-            // layer (observed on Xiaomi MIUI). The standard uiautomator dump
-            // captures the focused window — during the opening animation or
-            // before the view attaches to the accessibility system, the dump
-            // still returns the explore GRID rather than the post viewer.
-            // Running findFeedActionIcons / findReelActionIcons against that
-            // grid dump wastes ~9 s per cycle and both return null.
-            //
-            // Fix: do cheap raw dumps (no parsing, no scan logic) polling for
-            // ANY well-known post-viewer node to appear. Once confirmed, the
-            // tree is ready and the expensive scans will find the real icons.
-            // If the nodes never appear within the budget, fall straight through
-            // — the existing scan logic handles the null path as before.
-            {
-              const POST_NODES = [
-                "com.instagram.android:id/like_button",
-                "com.instagram.android:id/comment_button",
-                "com.instagram.android:id/direct_share_button",
-                "com.instagram.android:id/row_feed_button_like",
-              ];
-              const POLL_MS    = 2000;
-              const MAX_POLLS  = 6;  // up to 12 s additional wait
-              let postReady = false;
-              for (let p = 0; p < MAX_POLLS && !postReady; p++) {
-                const pollXml = await android.dumpUi(serial).catch(() => "");
-                if (POST_NODES.some(n => pollXml.includes(n))) {
-                  postReady = true;
-                  if (p > 0) onLog?.(`View Explore ${i + 1}/${scrollCount}: post viewer ready after ${p * POLL_MS / 1000}s extra wait`);
-                } else {
-                  onLog?.(`View Explore ${i + 1}/${scrollCount}: viewer not ready yet — retrying in ${POLL_MS / 1000}s (poll ${p + 1}/${MAX_POLLS})`);
-                  await sleepOrAbort(serial, POLL_MS);
-                }
-              }
-              if (!postReady) onLog?.(`View Explore ${i + 1}/${scrollCount}: viewer never appeared in tree — proceeding anyway`);
-            }
-
             onLog?.(`View Explore ${i + 1}/${scrollCount}: scanning action bar…`);
             let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
 
