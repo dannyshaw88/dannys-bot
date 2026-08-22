@@ -4146,147 +4146,16 @@ export async function findReelActionIcons(serial: string, onLog?: (msg: string) 
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
   const { w, h: screenH } = getScreenSize(serial);
-  void screenH;
+  void w;
 
-  // The action column sits in the right ~28% of the screen. Anchor on the
-  // Like/Unlike node closest to that column rather than trusting the first
-  // match anywhere on screen — a caption, hashtag, or the audio-disc label
-  // elsewhere on the frame could otherwise be mistaken for it.
-  const rightBand = w * 0.72;
-  const findAnchor = (label: "Like" | "Unlike"): { x: number; y: number } | null => {
-    const re = new RegExp(`content-desc="${label}"[^>]*bounds="(\\[\\d+,\\d+\\]\\[\\d+,\\d+\\])"`, "g");
-    let best: { x: number; y: number } | null = null;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(xml)) !== null) {
-      const c = _parseCenter(m[1]);
-      if (!c || c.x < rightBand) continue;
-      if (!best) best = c; // first right-column match wins
-    }
-    return best;
-  };
-
-  let like = findAnchor("Like");
-  let alreadyLiked = false;
-  if (!like) {
-    like = findAnchor("Unlike");
-    if (like) alreadyLiked = true;
-  }
+  // Reels uses the same proven visual Like target as View Feed. The only
+  // layout difference is that the Reel heart is in the transparent,
+  // white-outlined vertical action column on the right side.
+  const like = await findFeedLikeIconByPixels(serial, screenH / 2, onLog, "reel-right");
+  const alreadyLiked = false;
 
   if (!like) {
-    // ── Fallback 1: resource-id patterns for the Like button ─────────────────
-    // On some device/IG-build combinations (observed: Redmi 12 5G) the Reels
-    // action icons do not carry content-desc="Like"/"Unlike".  Try well-known
-    // resource-id fragments instead.  Only accept nodes in the right column.
-    const RID_LIKE_PATTERNS = [
-      "like_button",           // com.instagram.android:id/like_button
-      "row_feed_button_like",  // feed row like button rid
-      "like_count_button",     // some builds: like count tappable
-      "heart_button",          // alternative label used in some versions
-    ];
-    {
-      const ridRe = /<node\s([^>]+?)\s*\/?>/g;
-      let rm: RegExpExecArray | null;
-      outer: while ((rm = ridRe.exec(xml)) !== null) {
-        const a = rm[1];
-        const ridM = a.match(/resource-id="([^"]*)"/);
-        if (!ridM) continue;
-        const rid = ridM[1];
-        if (!RID_LIKE_PATTERNS.some(p => rid.includes(p))) continue;
-        const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
-        if (!bm) continue;
-        const c = _parseCenter(bm[1]);
-        if (!c || c.x < rightBand) continue;
-        // Determine already-liked from content-desc of this node if available
-        const cd = (a.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
-        if (/\bunlike\b/i.test(cd)) alreadyLiked = true;
-        like = c;
-        onLog?.(`[reel-icons] Like found via resource-id fallback: rid="${rid}" cd="${cd}" at (${c.x},${c.y})`);
-        break outer;
-      }
-    }
-
-    // ── Fallback 2: broadened content-desc match (e.g. "Like video", count) ─
-    // Some builds label the button with a count or alternative phrase rather
-    // than the plain word "Like".  Match any node in the right column whose
-    // content-desc starts with "Like" or equals "Unlike" (case-insensitive).
-    if (!like) {
-      const cdRe = /<node\s([^>]+?)\s*\/?>/g;
-      let cm: RegExpExecArray | null;
-      while ((cm = cdRe.exec(xml)) !== null) {
-        const a = cm[1];
-        const cdM = a.match(/content-desc="([^"]*)"/);
-        if (!cdM) continue;
-        const cd = cdM[1];
-        if (!/^\blike\b/i.test(cd) && !/^\bunlike\b/i.test(cd)) continue;
-        const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
-        if (!bm) continue;
-        const c = _parseCenter(bm[1]);
-        if (!c || c.x < rightBand) continue;
-        if (/^\bunlike\b/i.test(cd)) alreadyLiked = true;
-        like = c;
-        onLog?.(`[reel-icons] Like found via broadened cd match: cd="${cd}" at (${c.x},${c.y})`);
-        break;
-      }
-    }
-  }
-
-  if (!like) {
-    // Some builds expose the vertical action icons without semantic labels.
-    // In that case the top icon in the right-side column is Like. Use the
-    // accessibility node geometry, not a screenshot-shape guess: the icon
-    // ordering is Like, Comment, Repost/Share, Send, Save.
-    const unlabeled: Array<{ x: number; y: number; cls: string }> = [];
-    const topNodeRe = /<node\s([^>]+?)\s*\/?>/g;
-    let topMatch: RegExpExecArray | null;
-    while ((topMatch = topNodeRe.exec(xml)) !== null) {
-      const attrs = topMatch[1];
-      const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
-      if (!bm) continue;
-      const c = _parseCenter(bm[1]);
-      if (!c || c.x < rightBand || c.y < screenH * 0.15 || c.y >= screenH * 0.86) continue;
-      const cls = (attrs.match(/class="([^"]*)"/) ?? [])[1] ?? "";
-      const nodeW = Number(bm[4]) - Number(bm[2]);
-      const nodeH = Number(bm[5]) - Number(bm[3]);
-      if (!/(?:ImageView|Button|ViewGroup)$/.test(cls)) continue;
-      if (nodeW < 24 || nodeH < 24 || nodeW > 260 || nodeH > 260) continue;
-      unlabeled.push({ x: c.x, y: c.y, cls });
-    }
-    unlabeled.sort((a, b) => a.y - b.y);
-    if (unlabeled.length >= 2) {
-      like = { x: unlabeled[0].x, y: unlabeled[0].y };
-      onLog?.(`[reel-icons] Like inferred as top icon in vertical right column at (${like.x},${like.y}); ${unlabeled.length} icons present`);
-    }
-  }
-
-  if (!like) {
-    // Diagnostic dump: every node (clickable or not) in the right-edge column
-    // so a real run shows exactly what this device/IG build exposes.  Logging
-    // ALL nodes (not just clickable ones) reveals containers whose children
-    // are rendered without individual clickable="true" flags — the most common
-    // cause of "no Like found" on newer/tighter IG builds.
-    const colTolerance = w * 0.28;
-    const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-    const clickableNodes: string[] = [];
-    const allNodes: string[] = [];
-    let dm: RegExpExecArray | null;
-    while ((dm = nodeRe.exec(xml)) !== null) {
-      const a = dm[1];
-      const bm = a.match(/bounds="(\[\d+,\d+\]\[\d+,\d+\])"/);
-      if (!bm) continue;
-      const c = _parseCenter(bm[1]);
-      if (!c || c.x < w - colTolerance) continue;
-      const cd  = (a.match(/content-desc="([^"]*)"/) || [])[1] ?? "";
-      const rid = (a.match(/resource-id="([^"]*)"/)  || [])[1] ?? "";
-      const cls = (a.match(/class="([^"]*)"/)        || [])[1] ?? "";
-      const isClickable = /clickable="true"/.test(a);
-      const entry = `(${c.x},${c.y}) cd="${cd}" rid="${rid}" cls="${cls}"${isClickable ? "" : " [non-clickable]"}`;
-      if (isClickable) clickableNodes.push(entry);
-      else allNodes.push(entry);
-    }
-    onLog?.(`[reel-icons] no Like/Unlike node found — right-edge clickable: ${clickableNodes.length ? clickableNodes.join(" | ") : "(none)"}`);
-    if (allNodes.length > 0) {
-      onLog?.(`[reel-icons] right-edge non-clickable nodes: ${allNodes.slice(0, 8).join(" | ")}${allNodes.length > 8 ? ` … +${allNodes.length - 8} more` : ""}`);
-    }
+    onLog?.("[reel-icons] Like visual match not found in Reel right action column");
     return null;
   }
 
@@ -5908,7 +5777,7 @@ async function findFeedLikeIconByPixels(
   serial: string,
   rowY: number,
   onLog?: (msg: string) => void,
-  searchRegion: "feed-row" | "top-right" = "feed-row",
+  searchRegion: "feed-row" | "top-right" | "reel-right" = "feed-row",
 ): Promise<{ x: number; y: number } | null> {
   const screen = await _captureScreenPixels(serial);
   if (!screen) return null;
@@ -5931,11 +5800,16 @@ async function findFeedLikeIconByPixels(
       // Feed action rows occur below the header and above the bottom nav.
       const yMin = searchRegion === "top-right"
         ? 0
+        : searchRegion === "reel-right"
+          ? Math.max(0, Math.round(screenH * 0.15))
         : Math.max(0, Math.round(rowY - screen.height * 0.22));
       const yMax = searchRegion === "top-right"
         ? Math.min(screen.height - th, Math.round(screenH * 0.22))
-        : Math.min(screen.height - th, Math.round(rowY + screen.height * 0.22));
-      const xMin = searchRegion === "top-right" ? Math.round(screenW * 0.62) : 0;
+        : searchRegion === "reel-right"
+          ? Math.min(screen.height - th, Math.round(screenH * 0.82))
+          : Math.min(screen.height - th, Math.round(rowY + screen.height * 0.22));
+      const xMin = searchRegion === "top-right" || searchRegion === "reel-right"
+        ? Math.round(screenW * 0.72) : 0;
       const xMax = searchRegion === "top-right" ? screen.width - tw : screen.width - tw;
       for (let y = yMin; y <= yMax; y += 3) {
         for (let x = xMin; x <= xMax; x += 3) {
