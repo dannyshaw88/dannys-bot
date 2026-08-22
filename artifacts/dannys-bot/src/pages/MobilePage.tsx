@@ -8347,6 +8347,8 @@ async function hydrateAccountTrustScoreAssignments(
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
 function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning, onOpenBrowserProfile }, ref) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
+  const [randomisingSlot, setRandomisingSlot] = useState<number | null>(null);
+  const [randomisedSlot, setRandomisedSlot] = useState<number | null>(null);
   const phoneAppsPanelRef = useRef<MobilePhoneAppsPanelHandle>(null);
   const handleCopied = useCallback((targetSlotIdxs: number[]) => {
     setSlotRefreshKeys(prev => {
@@ -8606,6 +8608,8 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
   const randomiseSlotPersonality = async (slotIdx: number) => {
     if (!phone?.serial || !slots[slotIdx]) return;
+    setRandomisingSlot(slotIdx);
+    setRandomisedSlot(null);
     try {
       const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/personality`, {
         method: "POST",
@@ -8613,9 +8617,17 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         body: JSON.stringify({ regenerate: true }),
       });
       const data = await response.json().catch(() => ({}));
-      if (response.ok && data.personality) updateSlot(slotIdx, { personality: data.personality });
+      if (response.ok && data.personality) {
+        updateSlot(slotIdx, { personality: data.personality });
+        setRandomisedSlot(slotIdx);
+        window.setTimeout(() => setRandomisedSlot(current => current === slotIdx ? null : current), 1800);
+      } else {
+        setSaveError(data?.error ?? `Couldn't randomise slot (${response.status})`);
+      }
     } catch {
       setSaveError("Couldn't randomise this slot's personality");
+    } finally {
+      setRandomisingSlot(null);
     }
   };
 
@@ -9091,10 +9103,10 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                   onClick={() => {
                     void randomiseSlotPersonality(i);
                   }}
-                  disabled={loading || !phone?.serial}
+                  disabled={loading || !phone?.serial || randomisingSlot !== null}
                   className="ml-auto h-7 text-xs"
                 >
-                  Randomise
+                  {randomisingSlot === i ? "Randomising…" : randomisedSlot === i ? "Saved" : "Randomise"}
                 </Button>
               </div>
           </div>
