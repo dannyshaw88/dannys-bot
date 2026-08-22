@@ -3,8 +3,8 @@ name: Feed swipe tap guard
 description: Prevent calibrated feed scrolling from becoming an accidental tap
 ---
 
-Feed scrolling must validate the final dispatched path after profile coordinates, jitter, and Android safe-zone clamping. If the upward travel is too short, recover to a lower-screen upward path with a meaningful minimum distance.
+Feed scrolling must preserve the configured device-profile endpoints after the profile's own jitter and the shared Android safe-zone clamp. Do not rewrite the path to a generated lower-screen recovery gesture.
 
-**Why:** A slow or focused gesture with endpoints that collapse near the bottom edge can be interpreted by Instagram as a tap, opening the username under the finger instead of scrolling.
+**Why:** The device gesture profile is the calibrated physical baseline. Replacing it at runtime makes the logged/saved gesture differ from the gesture actually intended by the operator and can hide the real source of a bad interaction.
 
-**How to apply:** Keep this guard specific to feed scrolling; other surfaces may intentionally use short gestures or reverse swipes. Log whenever recovery changes the calibrated path so device profiles can be corrected later.
+**How to apply:** Keep the final resolved path fully observable in `[mobile-input] device-profile swipe resolved` and `[mobile-input] swipe dispatched` logs. Fix invalid coordinates or durations in the saved device profile, not with a hidden Feed-only fallback.
