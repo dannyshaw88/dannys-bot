@@ -10263,16 +10263,34 @@ export async function findInstagramSearchTab(
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial);
   if (!xml) return null;
-  const byId = _findLiveNodeByResId(xml, ":id/search", ":id/tab_search", ":id/nav_search", ":id/bottom_tab_search");
-  if (byId) return byId;
+  const { h: screenH } = getScreenSize(serial);
+  const bottomNavMinY = Math.round(screenH * 0.80);
+  const wantedIds = [":id/search", ":id/tab_search", ":id/nav_search", ":id/bottom_tab_search"]
+    .map(id => id.replace(/^:id\//, "").toLowerCase());
+
+  // Resource IDs are not sufficient on their own: Instagram can expose the
+  // top Explore search field with the same generic "search" ID. Validate the
+  // candidate's own bounds before accepting it as the bottom navigation tab.
+  for (const node of xml.match(/<node\b[^>]*>/gi) ?? []) {
+    const resourceId = node.match(/\bresource-id="([^"]*)"/i)?.[1]?.toLowerCase() ?? "";
+    if (!resourceId || !wantedIds.some(id => resourceId.includes(id))) continue;
+    const bounds = node.match(/\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    if (y2 < bottomNavMinY) continue;
+    const result = { x: Math.round((x1 + x2) / 2), y: Math.round((y1 + y2) / 2) };
+    onLog?.(`Follow: Search tab resource node validated in bottom nav "${resourceId}" at (${result.x}, ${result.y})`);
+    return result;
+  }
 
   // Do not use the generic _findElem() fallback here. On Explore, the first
   // matching "Search" node is commonly the large top EditText search field,
   // not the bottom navigation tab. Tapping it immediately opens the keyboard
   // and makes View Explore appear to navigate correctly before entering the
   // wrong interaction state.
-  const { h: screenH } = getScreenSize(serial);
-  const bottomNavMinY = Math.round(screenH * 0.80);
   const nodeRe = /<node\b[^>]*>/gi;
   let nodeMatch: RegExpExecArray | null;
   while ((nodeMatch = nodeRe.exec(xml)) !== null) {
