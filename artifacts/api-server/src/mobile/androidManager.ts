@@ -10351,63 +10351,6 @@ export async function findInstagramSearchBar(
   serial: string,
   onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  const { h: screenH } = getScreenSize(serial);
-  const topLimit = Math.round(screenH * 0.45);
-  const searchIds = [
-    ":id/action_bar_search_edit_text",
-    ":id/search_bar_input",
-    ":id/search_bar",
-    ":id/search_input",
-    ":id/search_field",
-    ":id/search_bar_container",
-    ":id/action_bar_search_hints_text_layout",
-    ":id/explore_action_bar_container",
-    ":id/explore_action_bar",
-  ];
-
-  // Accessibility bounds are the authoritative target when Instagram exposes
-  // them. Pixel matching can select a nearby grid edge during an animation,
-  // which explains the intermittent "tap not confirmed" failures.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await _sleep(350);
-    const xml = await _uiDump(adb, serial).catch(() => "");
-    if (!xml) continue;
-
-    const exact = _findLiveNodeByResId(xml, ":id/action_bar_search_edit_text");
-    if (exact && exact.y <= topLimit) {
-      onLog?.(`Follow: live search field action_bar_search_edit_text at (${exact.x}, ${exact.y}) attempt=${attempt + 1}`);
-      return exact;
-    }
-
-    const live = _findLiveNodeByResId(xml, ...searchIds);
-    if (live && live.y <= topLimit) {
-      onLog?.(`Follow: live search field resource node at (${live.x}, ${live.y}) attempt=${attempt + 1}`);
-      return live;
-    }
-
-    // Some builds omit the resource ID but retain a top-region EditText or a
-    // clickable container labelled Search. Keep this semantic fallback narrow
-    // so it cannot select a Search result or a grid item.
-    for (const match of xml.matchAll(/<node\b[^>]*>/gi)) {
-      const node = match[0];
-      const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
-      if (!bounds) continue;
-      const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
-      const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
-      const cy = (y1 + y2) / 2;
-      const attrs = `${node} ${node.match(/\btext="([^"]*)"/i)?.[1] ?? ""} ${node.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? ""} ${node.match(/\bhint="([^"]*)"/i)?.[1] ?? ""}`;
-      if (cy > topLimit || x2 - x1 < 120 || y2 <= y1) continue;
-      if (!/search/i.test(attrs)) continue;
-      if (!/edittext|clickable="true"|focusable="true"/i.test(node)) continue;
-      const result = { x: Math.round((x1 + x2) / 2), y: Math.round(cy) };
-      onLog?.(`Follow: live semantic search field at (${result.x}, ${result.y}) attempt=${attempt + 1}`);
-      return result;
-    }
-  }
-
-  // Compatibility fallback for Instagram renders with no usable search node.
   const visual = await findInstagramSearchFieldByPixels(serial, onLog);
   return visual ? { x: visual.x, y: visual.y } : null;
 
@@ -10660,9 +10603,9 @@ export async function isInstagramSearchBarFocused(serial: string): Promise<boole
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const { h: screenH } = getScreenSize(serial);
+  const topLimit = Math.round(screenH * 0.30);
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return false;
-  const topLimit = Math.round(screenH * 0.30);
   for (const match of xml.matchAll(/<node\b[^>]*>/gi)) {
     const node = match[0];
     const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
