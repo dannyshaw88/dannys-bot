@@ -5735,10 +5735,16 @@ async function findFeedLikeIconByPixels(
   const screen = await _captureScreenPixels(serial);
   if (!screen) return null;
   try {
-    const refPath = path.resolve(
-      process.cwd(),
-      "attached_assets/b5e6e86c-285d-4550-bf03-4e8c17a54214_1787055295714.jpg",
-    );
+     const refCandidates = [
+       path.resolve(process.cwd(), "attached_assets/like-reference-reels.png"),
+       path.resolve(process.cwd(), "../../attached_assets/like-reference-reels.png"),
+       path.resolve(__dirname, "../../../attached_assets/like-reference-reels.png"),
+     ];
+     const refPath = refCandidates.find(candidate => fs.existsSync(candidate));
+     if (!refPath) {
+       onLog?.("[feed-icons] Like visual reference unavailable — skipping visual anchor");
+       return null;
+     }
     const { data, info } = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
     const sample = (x: number, y: number) => {
       const i = (y * screen.width + x) * screen.channels;
