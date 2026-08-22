@@ -7470,22 +7470,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   onLog?.(`View Explore ${i + 1}/${scrollCount}: already liked — skipping like`);
                 } else {
                   // ~93 % double-tap on image; ~7 % heart-icon tap for variety.
-                  const useDoubleTap = Math.random() < 0.93;
-                  if (useDoubleTap) {
-                    const { w: _eW } = getScreenSize(serial);
-                    const dtX = Math.round(_eW / 2) + Math.round((Math.random() - 0.5) * 20);
-                    let dtY: number;
-                    if (icons.mediaBounds) {
-                      const mb = icons.mediaBounds;
-                      const fraction = 0.25 + Math.random() * 0.20;
-                      dtY = Math.round(mb.y1 + (mb.y2 - mb.y1) * fraction) + Math.round((Math.random() - 0.5) * 20);
-                      onLog?.(`View Explore ${i + 1}/${scrollCount}: double-tap using media bounds (${Math.round(fraction * 100)}% into media)`);
-                    } else {
-                      dtY = icons.like.y - Math.round(icons.like.y * 0.35) + Math.round((Math.random() - 0.5) * 40);
-                    }
-                    onLog?.(`View Explore ${i + 1}/${scrollCount}: double-tapping image at (${dtX},${dtY})…`);
-                    await android.doubleTap(serial, dtX, dtY);
-                  } else {
+                   const useDoubleTap = Math.random() < 0.93 && Boolean(icons.mediaBounds);
+                   if (useDoubleTap && icons.mediaBounds) {
+                     const mb = icons.mediaBounds;
+                     const xFraction = 0.35 + Math.random() * 0.30;
+                     const yFraction = 0.35 + Math.random() * 0.30;
+                     const dtX = Math.round(mb.x1 + (mb.x2 - mb.x1) * xFraction);
+                     const dtY = Math.round(mb.y1 + (mb.y2 - mb.y1) * yFraction);
+                     onLog?.(`View Explore ${i + 1}/${scrollCount}: double-tap using central media bounds (${Math.round(xFraction * 100)}%,${Math.round(yFraction * 100)}%)`);
+                     onLog?.(`View Explore ${i + 1}/${scrollCount}: double-tapping image at (${dtX},${dtY})…`);
+                     await android.doubleTap(serial, dtX, dtY, undefined, mb);
+                   } else {
+                     if (!icons.mediaBounds) {
+                       onLog?.(`View Explore ${i + 1}/${scrollCount}: media bounds unavailable — using confirmed Like icon instead of double-tap`);
+                     }
                     const jx = icons.like.x + Math.round((Math.random() - 0.5) * 6);
                     const jy = icons.like.y + Math.round((Math.random() - 0.5) * 6);
                     onLog?.(`View Explore ${i + 1}/${scrollCount}: tapping heart icon at (${jx},${jy})…`);
@@ -11128,22 +11126,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else {
         try {
           // ~93 % double-tap on the post image; ~7 % heart-icon tap for variety.
-          const useDoubleTap = Math.random() < 0.93;
-          if (useDoubleTap) {
-            const { w: _ibW } = getScreenSize(serial);
-            const dtX = Math.round(_ibW / 2) + Math.round((Math.random() - 0.5) * 20);
-            let dtY: number;
-            if (icons.mediaBounds) {
-              const mb = icons.mediaBounds;
-              const fraction = 0.25 + Math.random() * 0.20;
-              dtY = Math.round(mb.y1 + (mb.y2 - mb.y1) * fraction) + Math.round((Math.random() - 0.5) * 20);
-              onLog?.(`Inject Browsing: double-tap using media bounds (${Math.round(fraction * 100)}% into media)`);
-            } else {
-              dtY = icons.like.y - Math.round(icons.like.y * 0.35) + Math.round((Math.random() - 0.5) * 40);
-            }
-            onLog?.(`Inject Browsing: double-tapping image at (${dtX},${dtY})…`);
-            await android.doubleTap(serial, dtX, dtY);
-          } else {
+           const useDoubleTap = Math.random() < 0.93 && Boolean(icons.mediaBounds);
+           if (useDoubleTap && icons.mediaBounds) {
+             const mb = icons.mediaBounds;
+             const xFraction = 0.35 + Math.random() * 0.30;
+             const yFraction = 0.35 + Math.random() * 0.30;
+             const dtX = Math.round(mb.x1 + (mb.x2 - mb.x1) * xFraction);
+             const dtY = Math.round(mb.y1 + (mb.y2 - mb.y1) * yFraction);
+             onLog?.(`Inject Browsing: double-tap using central media bounds (${Math.round(xFraction * 100)}%,${Math.round(yFraction * 100)}%)`);
+             onLog?.(`Inject Browsing: double-tapping image at (${dtX},${dtY})…`);
+             await android.doubleTap(serial, dtX, dtY, undefined, mb);
+           } else {
+             if (!icons.mediaBounds) {
+               onLog?.("Inject Browsing: media bounds unavailable — using confirmed Like icon instead of double-tap");
+             }
             onLog?.(`Inject Browsing: tapping heart icon at (${icons.like.x},${icons.like.y})…`);
             await android.tap(serial, icons.like.x, icons.like.y);
           }

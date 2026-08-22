@@ -2817,6 +2817,7 @@ export async function doubleTap(
   x: number,
   y: number,
   onLog?: (msg: string) => void,
+  targetBounds?: { x1: number; y1: number; x2: number; y2: number },
 ): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -2827,8 +2828,14 @@ export async function doubleTap(
   const offset = () => Math.floor(Math.random() * 51) - 25;
   const offsetX = offset();
   const offsetY = offset();
-  const dispatchedX = Math.max(0, Math.min(screen.w - 1, Math.round(x) + offsetX));
-  const dispatchedY = Math.max(0, Math.min(screen.h - 1, Math.round(y) + offsetY));
+  const displayClampX = (value: number) => Math.max(0, Math.min(screen.w - 1, value));
+  const displayClampY = (value: number) => Math.max(0, Math.min(screen.h - 1, value));
+  const dispatchedX = targetBounds
+    ? Math.max(Math.round(targetBounds.x1), Math.min(Math.round(targetBounds.x2), Math.round(x) + offsetX))
+    : displayClampX(Math.round(x) + offsetX);
+  const dispatchedY = targetBounds
+    ? Math.max(Math.round(targetBounds.y1), Math.min(Math.round(targetBounds.y2), Math.round(y) + offsetY))
+    : displayClampY(Math.round(y) + offsetY);
   const interTapDelayMs = 35 + Math.floor(Math.random() * 86);
   const interTapDelaySeconds = (interTapDelayMs / 1000).toFixed(3);
   logger.info(
@@ -2841,6 +2848,7 @@ export async function doubleTap(
       offsetX: dispatchedX - Math.round(x),
       offsetY: dispatchedY - Math.round(y),
       maxOffsetPx: 25,
+      targetBounds: targetBounds ?? null,
       interTapDelayMs,
     },
     "[android-input] double-tap",
