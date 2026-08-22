@@ -119,3 +119,4 @@
 - [Electron API child recovery](electron-api-child-recovery.md) — unexpected API exits need bounded, identity-safe restart while normal shutdown remains excluded
 - [HST operation extraction](hst-operation-extraction.md) — extract independent tools behind explicit contexts before touching coupled cycle flows
 - [Parallel refactor reconciliation](parallel-refactor-reconciliation.md) — after delegated edits, reconcile against the current workspace before trusting module wiring or deletion claims
+- [HST context dependency closure](hst-context-dependency-closure.md) — extracted operations need every shared helper/state binding declared before context construction

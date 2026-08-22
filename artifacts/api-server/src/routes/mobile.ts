@@ -3372,6 +3372,42 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     logger.info({ serial, slotIdx, personality: next, regenerate }, "[slot-personality] resolved persistent account profile");
     return next;
   };
+  // Shared mother-code timing with a stable, serial-specific accent.  Keep
+  // this deterministic per device so a phone never inherits another phone's
+  // gesture geometry or pacing.
+  const motherCodeDiagnostics = new Set<string>();
+  const devicePersonality = (serial: string) => {
+    let h = 2166136261;
+    for (let i = 0; i < serial.length; i++) {
+      h ^= serial.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    const unit = (salt: number) => {
+      let n = (h ^ Math.imul(salt, 2246822519)) >>> 0;
+      n ^= n >>> 15; n = Math.imul(n, 2246822519) >>> 0;
+      n ^= n >>> 13; n = Math.imul(n, 3266489917) >>> 0;
+      return ((n ^ (n >>> 16)) >>> 0) / 0x100000000;
+    };
+    const personality = {
+      dwellScale: 0.86 + unit(1) * 0.30,
+      pauseScale: 0.82 + unit(2) * 0.36,
+      settleScale: 0.82 + unit(3) * 0.36,
+      gestureScale: 0.92 + unit(4) * 0.16,
+      xBias: Math.round((unit(5) - 0.5) * 36),
+      yBias: Math.round((unit(6) - 0.5) * 48),
+    };
+    if (!motherCodeDiagnostics.has(serial)) {
+      motherCodeDiagnostics.add(serial);
+      const prefs = loadInstanceConfigs()[serial]?.devicePrefs;
+      logger.info({
+        serial, personality, hasDevicePrefs: Boolean(prefs),
+        hasSwipeGesture: Boolean(prefs?.swipeGesture),
+        hasTypingProfile: Boolean(prefs?.typingSpeedProfile),
+        hasMotherOverrides: Boolean(prefs?.motherCodeOverrides),
+      }, "[mother-code] resolved per-device personality");
+    }
+    return personality;
+  };
 
   // ── Per-device prefs (hardware-level, not per-slot) ────────────────────────
   // Stored separately from automation settings so they can never be
@@ -4434,6 +4470,56 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
   }
 
+  // Persistent local-folder no-repeat history, keyed by stable account slot.
+  const mobilePostedLocalFiles = new Map<string, string[]>();
+  const POSTED_DIR = process.env.EQUINOX_DATA_DIR
+    ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-posted-local")
+    : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-posted-local");
+  try { fs.mkdirSync(POSTED_DIR, { recursive: true }); } catch {}
+  const _postedFilePath = (serial: string, slotIdx = 0) =>
+    path.join(POSTED_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_${accountSlotId(serial, slotIdx)}.json`);
+  const getPostedLocalFiles = (serial: string, slotIdx = 0): string[] => {
+    const key = `${serial}:${accountSlotId(serial, slotIdx)}`;
+    if (!mobilePostedLocalFiles.has(key)) {
+      try { mobilePostedLocalFiles.set(key, JSON.parse(fs.readFileSync(_postedFilePath(serial, slotIdx), "utf8"))); }
+      catch { mobilePostedLocalFiles.set(key, []); }
+    }
+    return mobilePostedLocalFiles.get(key)!;
+  };
+  const recordPostedLocalFile = (serial: string, slotIdx: number, fileName: string) => {
+    const list = getPostedLocalFiles(serial, slotIdx);
+    list.unshift(fileName);
+    try { fs.writeFileSync(_postedFilePath(serial, slotIdx), JSON.stringify(list.slice(0, 5000)), "utf8"); } catch {}
+  };
+
+  type PostedProfileMediaEntry = { id: string; filename: string; username: string; slotIdx: number; postedAt: string };
+  const mobilePostedProfileMedia = new Map<string, PostedProfileMediaEntry[]>();
+  const POSTED_PROFILE_MEDIA_DIR = process.env.EQUINOX_DATA_DIR
+    ? path.join(process.env.EQUINOX_DATA_DIR, "mobile-posted-profile-media")
+    : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "mobile-posted-profile-media");
+  try { fs.mkdirSync(POSTED_PROFILE_MEDIA_DIR, { recursive: true }); } catch {}
+  const _postedProfileMediaPath = (serial: string, slotIdx = 0) =>
+    path.join(POSTED_PROFILE_MEDIA_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_${accountSlotId(serial, slotIdx)}.json`);
+  const getPostedProfileMedia = (serial: string, slotIdx = 0): PostedProfileMediaEntry[] => {
+    const key = `${serial}:${accountSlotId(serial, slotIdx)}`;
+    if (!mobilePostedProfileMedia.has(key)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(_postedProfileMediaPath(serial, slotIdx), "utf8"));
+        mobilePostedProfileMedia.set(key, Array.isArray(parsed) ? parsed : []);
+      } catch { mobilePostedProfileMedia.set(key, []); }
+    }
+    return mobilePostedProfileMedia.get(key)!;
+  };
+  const recordPostedProfileMedia = (serial: string, slotIdx: number, username: string, filename: string) => {
+    const normalizedUsername = username.replace(/^@/, "").trim();
+    if (!normalizedUsername) return;
+    const list = getPostedProfileMedia(serial, slotIdx);
+    list.unshift({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`, filename, username: normalizedUsername, slotIdx, postedAt: new Date().toISOString() });
+    try { fs.writeFileSync(_postedProfileMediaPath(serial, slotIdx), JSON.stringify(list.slice(0, 5000)), "utf8"); } catch {}
+  };
+
+  const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+
   /**
    * Picks the next image to post from `folderPath` per the user's Local
    * Folder settings (random vs. alphabetical order, no-repeat). Returns
@@ -4488,6 +4574,288 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Isolation: local-folder image pick, IG composer open, caption, upload.
   //            Caption input remains on its existing direct adb-input path.
   // ═══════════════════════════════════════════════════════════════════════════
+
+  const isCycleAborted = (serial: string) =>
+    automationCycleAbortedId.get(serial) !== undefined &&
+    automationCycleAbortedId.get(serial) === automationCycleCurrentId.get(serial);
+
+  const applyDevicePersonality = <T extends Record<string, any>>(serial: string, input: T): T => {
+    const profile = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+    const result = { ...input };
+    const clampPct = (value: number) => Math.max(0, Math.min(100, value));
+    const adjustRange = (minKey: string, maxKey: string, scale: number) => {
+      const min = Number(result[minKey]), max = Number(result[maxKey]);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || Math.max(min, max) <= 0) return;
+      result[minKey] = clampPct(Math.min(min, max) * scale);
+      result[maxKey] = clampPct(Math.max(min, max) * scale);
+    };
+    const engagement = [0.75, 0.90, 1, 1.10, 1.25][profile.engagement];
+    const action = [0.75, 0.90, 1, 1.10, 1.25][profile.actionVariety];
+    const discovery = [0.75, 0.90, 1, 1.10, 1.25][profile.discovery];
+    const volume = [0.75, 0.90, 1, 1.10, 1.25][profile.consumption];
+    const attention = [0.85, 0.93, 1, 1.07, 1.15][profile.attention];
+    for (const [a, b] of [["likePercentMin", "likePercentMax"], ["viewStoriesLikePercentMin", "viewStoriesLikePercentMax"], ["viewReelsLikePercentMin", "viewReelsLikePercentMax"], ["viewExploreLikePercentMin", "viewExploreLikePercentMax"]]) adjustRange(a, b, engagement * action);
+    for (const [a, b] of [["shareFeedPercentMin", "shareFeedPercentMax"], ["shareDmPercentMin", "shareDmPercentMax"], ["savePercentMin", "savePercentMax"], ["viewStoriesShareDmPercentMin", "viewStoriesShareDmPercentMax"], ["viewStoriesCommentPercentMin", "viewStoriesCommentPercentMax"], ["viewReelsShareFeedPercentMin", "viewReelsShareFeedPercentMax"], ["viewReelsShareDmPercentMin", "viewReelsShareDmPercentMax"], ["viewReelsSavePercentMin", "viewReelsSavePercentMax"], ["viewExploreShareFeedPercentMin", "viewExploreShareFeedPercentMax"], ["viewExploreShareDmPercentMin", "viewExploreShareDmPercentMax"], ["viewExploreSavePercentMin", "viewExploreSavePercentMax"]]) adjustRange(a, b, action);
+    for (const [a, b] of [["clickAuthorPercentMin", "clickAuthorPercentMax"], ["clickHashtagPercentMin", "clickHashtagPercentMax"], ["viewStoriesClickAuthorPercentMin", "viewStoriesClickAuthorPercentMax"], ["viewReelsClickAuthorPercentMin", "viewReelsClickAuthorPercentMax"], ["viewExploreClickPostPctMin", "viewExploreClickPostPctMax"], ["viewExploreClickAuthorPercentMin", "viewExploreClickAuthorPercentMax"]]) adjustRange(a, b, discovery * action);
+    for (const [a, b] of [["feedScrollMin", "feedScrollMax"], ["viewStoriesSlidesMin", "viewStoriesSlidesMax"], ["viewReelsScrollMin", "viewReelsScrollMax"], ["viewExploreScrollMin", "viewExploreScrollMax"], ["checkDmScrollMin", "checkDmScrollMax"]]) {
+      const min = Number(result[a]), max = Number(result[b]);
+      if (Number.isFinite(min) && Number.isFinite(max) && Math.max(min, max) > 0) {
+        result[a] = Math.max(0, Math.round(Math.min(min, max) * volume));
+        result[b] = Math.max(result[a], Math.round(Math.max(min, max) * volume));
+      }
+    }
+    if (Number.isFinite(result.actionDelayMin)) result.actionDelayMin = Math.max(0, result.actionDelayMin * attention);
+    if (Number.isFinite(result.actionDelayMax)) result.actionDelayMax = Math.max(result.actionDelayMin ?? 0, result.actionDelayMax * attention);
+    if (Number.isFinite(result.viewExploreActionDelayMin)) result.viewExploreActionDelayMin = Math.max(0, result.viewExploreActionDelayMin * attention);
+    if (Number.isFinite(result.viewExploreActionDelayMax)) result.viewExploreActionDelayMax = Math.max(result.viewExploreActionDelayMin ?? 0, result.viewExploreActionDelayMax * attention);
+    logger.info({ serial, slotIdx: automationCycleActiveSlot.get(serial) ?? 0, personality: profile }, "[slot-personality] applied bounded runtime adjustments");
+    return result;
+  };
+
+  const effectiveTypingProfile = (serial: string) => {
+    const profile = loadInstanceConfigs()[serial]?.devicePrefs?.typingSpeedProfile;
+    if (!profile) return undefined;
+    const slot = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+    const scale = devicePersonality(serial).dwellScale * [1.08, 1.04, 1, 0.96, 0.92][slot.attention];
+    const range = (minMs: number, maxMs: number) => ({ minMs: Math.max(0, Math.round(minMs * scale)), maxMs: Math.max(0, Math.round(maxMs * scale)) });
+    return { ...profile, ...range(profile.minMs, profile.maxMs), dwellMinMs: Math.max(1, Math.round(profile.dwellMinMs * scale)), dwellMaxMs: Math.max(1, Math.round(profile.dwellMaxMs * scale)), hesitationMinMs: Math.max(0, Math.round(profile.hesitationMinMs * scale)), hesitationMaxMs: Math.max(0, Math.round(profile.hesitationMaxMs * scale)) };
+  };
+
+  const dwellDiagnosticAt = new Map<string, number>();
+  const randomizedDwellMs = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" | "airplaneMode" = "actionPacing"): number => {
+    if (!Number.isFinite(ms) || ms <= 0) return Math.max(0, ms);
+    if (category === "airplaneMode") return Math.round(ms);
+    const slot = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+    const scaled = ms * devicePersonality(serial).dwellScale * [1.08, 1.04, 1, 0.96, 0.92][slot.attention];
+    const low = scaled >= 5000 ? Math.max(1, Math.round(scaled * 0.5)) : Math.max(1, Math.round(scaled));
+    const high = scaled >= 5000 ? Math.round(scaled) : 5000;
+    const overrides = loadInstanceConfigs()[serial]?.devicePrefs?.motherCodeOverrides;
+    const source = overrides?.[category] ? category : overrides?.globalDwell ? "globalDwell" : "generated";
+    const override = source === "generated" ? undefined : overrides?.[source];
+    if (!override) return low + Math.floor(Math.random() * (high - low + 1));
+    const min = Math.min(override.minMs, override.maxMs), max = Math.max(override.minMs, override.maxMs);
+    const actual = Math.round(min + Math.random() * (max - min));
+    const key = `${serial}:${category}`, now = Date.now();
+    if ((dwellDiagnosticAt.get(key) ?? 0) + 5000 <= now) {
+      dwellDiagnosticAt.set(key, now);
+      logger.info({ serial, category, overrideSource: source, requestedMs: ms, overrideMinMs: min, overrideMaxMs: max, actualMs: actual }, "[mobile-override] dwell override applied");
+    }
+    return actual;
+  };
+  const sleepOrAbort = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" | "airplaneMode" = "actionPacing") => {
+    const dwellMs = randomizedDwellMs(serial, ms, category);
+    const startedAt = performance.now();
+    return new Promise<void>((resolve, reject) => {
+      const finish = () => {
+        const aborted = isCycleAborted(serial);
+        logger.info({ serial, category, requestedMs: ms, scheduledMs: dwellMs, elapsedMs: Math.round(performance.now() - startedAt), completed: !aborted },
+          "[mobile-execution] dwell completed");
+        if (aborted) reject(new Error("cycle-aborted")); else resolve();
+      };
+      const t = setTimeout(finish, dwellMs);
+      if (dwellMs <= 0) { clearTimeout(t); finish(); }
+    });
+  };
+  const returnToHomeSafely = async (serial: string): Promise<boolean> => {
+    const home = await android.findHomeTab(serial).catch(() => null);
+    if (!home) return false;
+    await android.tap(serial, home.x, home.y);
+    return true;
+  };
+  const hstRandomDelay = (serial: string, minMs: number, maxMs: number) =>
+    sleepOrAbort(serial, minMs + Math.floor(Math.random() * (maxMs - minMs + 1)));
+
+  function rollScrollVelocity(
+    h: number,
+    weights: { superSkim: number; skim: number; fast: number; quick: number; normal: number; slow: number; focused: number; tapDragRelease: number; back: number },
+    allowBack = true,
+    safeStartFrac = 0.80,
+    history?: { lastMode?: string; streak: number },
+    serial?: string,
+  ): { duration: number; fromY: number; toY: number; mode: string } {
+    const overrides = serial ? loadInstanceConfigs()[serial]?.devicePrefs?.swipePersonalityOverrides : undefined;
+    const effective = { ...weights };
+    if (serial) {
+      const slot = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+      const attention = [0.80, 0.92, 1, 1.08, 1.18][slot.attention];
+      const variety = [0.82, 0.92, 1, 1.08, 1.16][slot.actionVariety];
+      effective.fast *= attention; effective.quick *= attention;
+      effective.normal *= attention; effective.slow *= attention;
+      effective.focused *= attention * variety; effective.tapDragRelease *= variety;
+    }
+    for (const mode of Object.keys(effective) as Array<keyof typeof effective>) {
+      const configured = overrides?.[mode];
+      if (configured && (configured.weightMin > 0 || configured.weightMax > 0)) {
+        const min = Math.min(configured.weightMin, configured.weightMax);
+        const max = Math.max(configured.weightMin, configured.weightMax);
+        effective[mode] = min + Math.random() * (max - min);
+      }
+    }
+    const blocked = new Set<string>();
+    if (history?.lastMode && history.streak >= 3) blocked.add(history.lastMode);
+    if (history?.lastMode === "back" && history.streak >= 2) blocked.add("back");
+    const modeWeights = (mode: keyof typeof effective) =>
+      blocked.has(mode) || (mode === "back" && !allowBack) ? 0 : effective[mode];
+    const entries = (Object.keys(effective) as Array<keyof typeof effective>)
+      .map(mode => [mode, modeWeights(mode)] as const);
+    const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+    let roll = Math.random() * total;
+    let mode: keyof typeof effective = "normal";
+    for (const [candidate, weight] of entries) {
+      roll -= weight;
+      if (roll < 0) { mode = candidate; break; }
+    }
+    const configured = overrides?.[mode];
+    const defaults: Record<typeof mode, [number, number]> = {
+      superSkim: [150, 350], skim: [450, 800], fast: [900, 1500], quick: [1250, 2000],
+      normal: [1500, 2500], slow: [2000, 3500], focused: [2500, 5000],
+      tapDragRelease: [450, 850], back: [350, 600],
+    };
+    const [fallbackMin, fallbackMax] = defaults[mode];
+    const min = Math.max(1, Math.round(configured?.durationMinMs ?? fallbackMin));
+    const max = Math.max(min, Math.round(configured?.durationMaxMs ?? fallbackMax));
+    const duration = min + Math.round(Math.random() * (max - min));
+    const from = mode === "quick" || mode === "normal" ? Math.min(0.65, safeStartFrac)
+      : mode === "slow" ? Math.min(0.62, safeStartFrac)
+      : mode === "focused" ? Math.min(0.58, safeStartFrac) : safeStartFrac;
+    const to: Record<typeof mode, number> = {
+      superSkim: 0.08, skim: 0.22, fast: 0.30, quick: 0.38, normal: 0.42,
+      slow: 0.45, focused: 0.48, tapDragRelease: 0.35, back: 0.52,
+    };
+    return { mode, duration, fromY: Math.round(h * (mode === "back" ? 0.28 : from)), toY: Math.round(h * to[mode]) };
+  }
+  const consumptionScrollWeights = {
+    superSkim: 1, skim: 3, fast: 8, quick: 12, normal: 30, slow: 30,
+    focused: 20, tapDragRelease: 5, back: 0,
+  };
+  function rollFeedConsumptionGesture(h: number, history: { lastMode?: string; streak: number }, serial: string) {
+    return rollScrollVelocity(h, consumptionScrollWeights, false, 0.80, history, serial);
+  }
+
+  async function deviceProfileSwipe(
+    serial: string,
+    fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
+    source: string,
+    personality?: "superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "tapDragRelease" | "back",
+    opts?: { maxFromY?: number },
+  ): Promise<{ x1: number; y1: number; x2: number; y2: number; durationMs: number; profile: boolean }> {
+    let configured: DevicePrefs["swipeGesture"] | undefined;
+    try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
+    const size = getScreenSize(serial);
+    const clamp = (value: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(value)));
+    if (!configured) throw new Error(`Swipe Gesture Profile is required for ${source}`);
+    const jitterX = Number.isFinite(configured.jitterX) ? configured.jitterX : 0;
+    const jitterY = Number.isFinite(configured.jitterY) ? configured.jitterY : 0;
+    const dx = Math.round((Math.random() * 2 - 1) * jitterX);
+    const startMin = Math.max(0, Math.min(configured.startJitterMinY ?? 0, configured.startJitterMaxY ?? 0));
+    const startMax = Math.max(startMin, configured.startJitterMaxY ?? startMin);
+    const startDy = Math.round(startMin + Math.random() * (startMax - startMin));
+    const endDy = Math.round((Math.random() * 2 - 1) * jitterY);
+    if (!Number.isFinite(configured.durationMinMs) || !Number.isFinite(configured.durationMaxMs)) {
+      throw new Error(`Swipe Gesture Profile duration is invalid for ${source}`);
+    }
+    const minDuration = Math.max(1, Math.min(configured.durationMinMs, configured.durationMaxMs));
+    const maxDuration = Math.max(minDuration, Math.max(configured.durationMinMs, configured.durationMaxMs));
+    const bands: Record<NonNullable<typeof personality>, [number, number]> = {
+      superSkim: [0, .20], skim: [.20, .45], fast: [.45, .70], quick: [.70, .90],
+      normal: [.90, 1], slow: [.90, 1], focused: [.90, 1], tapDragRelease: [.05, .10], back: [.05, .10],
+    };
+    const [bandStart, bandEnd] = personality ? bands[personality] : [0, 1];
+    const slot = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+    const slotScale = [1.08, 1.04, 1, .96, .92][slot.attention];
+    const mother = devicePersonality(serial);
+    const durationMs = Math.max(1, Math.round((minDuration + (maxDuration - minDuration) *
+      (bandStart + Math.random() * (bandEnd - bandStart))) * mother.gestureScale * slotScale));
+    const pauseMin = Math.max(0, Math.min(configured.pauseMinMs ?? 0, configured.pauseMaxMs ?? 0));
+    const pauseMax = Math.max(pauseMin, configured.pauseMaxMs ?? pauseMin);
+    const settleMin = Math.max(0, Math.min(configured.settleMinMs ?? 0, configured.settleMaxMs ?? 0));
+    const settleMax = Math.max(settleMin, configured.settleMaxMs ?? settleMin);
+    const pauseMs = Math.round((pauseMin + Math.random() * (pauseMax - pauseMin)) * mother.pauseScale * slotScale);
+    const settleMs = Math.round((settleMin + Math.random() * (settleMax - settleMin)) * mother.settleScale * slotScale);
+    if (pauseMs > 0) await new Promise(resolve => setTimeout(resolve, pauseMs));
+    const reversed = personality === "back";
+    const path = {
+      x1: clamp((reversed ? configured.x2 : configured.x1) + dx + mother.xBias, size.w),
+      y1: clamp((reversed ? configured.y2 : configured.y1) + (reversed ? endDy : startDy) + mother.yBias, size.h),
+      x2: clamp((reversed ? configured.x1 : configured.x2) + dx + mother.xBias, size.w),
+      y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy) + mother.yBias, size.h),
+      durationMs,
+    };
+    if (opts?.maxFromY !== undefined && !reversed) path.y1 = Math.min(path.y1, opts.maxFromY);
+    if (source === "explore-scroll" && !reversed && path.y1 - path.y2 < Math.round(size.h * .22)) {
+      path.y2 = Math.max(0, path.y1 - Math.round(size.h * .22));
+      logger.warn({ serial, source, minExploreTravel: Math.round(size.h * .22) }, "[mobile-input] recovered short Explore swipe before dispatch");
+    }
+    logger.info({
+      serial,
+      source,
+      personality,
+      reversed,
+      profileConfiguredFrom: [configured.x1, configured.y1],
+      profileConfiguredTo: [configured.x2, configured.y2],
+      profileDurationRangeMs: [configured.durationMinMs, configured.durationMaxMs],
+      profileJitter: {
+        xMax: configured.jitterX,
+        yMax: configured.jitterY,
+        startY: [configured.startJitterMinY, configured.startJitterMaxY],
+        applied: { x: dx, startY: startDy, endY: endDy },
+      },
+      profilePauseRangeMs: [configured.pauseMinMs, configured.pauseMaxMs],
+      profileSettleRangeMs: [configured.settleMinMs, configured.settleMaxMs],
+      requestedFallback: {
+        from: [fallback.x1, fallback.y1],
+        to: [fallback.x2, fallback.y2],
+        durationMs: fallback.durationMs,
+      },
+      from: [path.x1, path.y1],
+      to: [path.x2, path.y2],
+      durationMs,
+      pauseMs,
+      settleMs,
+      profile: true,
+    }, "[mobile-input] device-profile swipe resolved");
+    await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs, false);
+    if (settleMs > 0) await new Promise(resolve => setTimeout(resolve, settleMs));
+    return { ...path, profile: true };
+  }
+
+  // Shared screen-size resolver for every HST operation. Keep this bound to the
+  // Android manager namespace so extracted operations and the gesture layer use
+  // the same device dimensions.
+  const getScreenSize = android.getScreenSize;
+
+  /**
+   * Dismiss Instagram's first-save collection sheet only after positively
+   * detecting its accessibility markers. The tap stays inside the confirmed
+   * clear scrim above the sheet and is randomized within that safe region.
+   */
+  const dismissSaveCollectionPrompt = async (
+    serial: string,
+    xml: string,
+    onLog?: (msg: string) => void,
+    context = "Save",
+  ): Promise<boolean> => {
+    if (!/(?:pinned_save_row|collect the posts you love|start a collection|save to collection)/i.test(xml)) {
+      return false;
+    }
+    const { w, h } = getScreenSize(serial);
+    const x = Math.round(w * (0.10 + Math.random() * 0.80));
+    const y = Math.round(h * (0.04 + Math.random() * 0.15));
+    await android.tap(serial, x, y);
+    onLog?.(`${context}: dismissed collection prompt at randomized top-scrim point (${x},${y})`);
+    await sleepOrAbort(serial, 300);
+    return true;
+  };
+
+  // Keep the last validated DM recipient independently per operation. A
+  // recipient coordinate is only a short-lived optimization for that tool's
+  // next share action and must never leak between Feed, Stories, Explore,
+  // Reels, or Inject Browsing.
+  const _viewFeedLastDmRecipient = new Map<string, { x: number; y: number }>();
+  const _viewStoriesLastDmRecipient = new Map<string, { x: number; y: number }>();
+  const _viewExploreLastDmRecipient = new Map<string, { x: number; y: number }>();
+  const _viewReelsLastDmRecipient = new Map<string, { x: number; y: number }>();
+  const _injectBrowsingLastDmRecipient = new Map<string, { x: number; y: number }>();
 
   const hstOperationContext: any = {
     android, fs, fsPromises, path, storage, logger, deviceProfileSwipe,
