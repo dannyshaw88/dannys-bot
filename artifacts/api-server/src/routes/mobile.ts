@@ -4815,30 +4815,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }, "[mobile-input] recovered short Explore swipe before dispatch");
       }
     }
-    // A feed swipe must never degrade into a tap. This can happen when a
-    // saved profile's endpoints are near the Android bottom gesture zone and
-    // both get clamped to nearly the same Y, especially for slow/focused
-    // personalities. Keep the recovery gesture in the lower content area and
-    // force a meaningful upward travel distance.
-    if (source === "feed-scroll" && !reversed) {
-      const minTravel = Math.round(size.h * 0.18);
-      const lowerStart = Math.round(size.h * 0.72);
-      const upperStart = Math.round(size.h * 0.82);
-      const originalTravel = path.y1 - path.y2;
-      if (path.y1 < lowerStart || originalTravel < minTravel) {
-        const startY = Math.min(upperStart, Math.max(lowerStart, path.y1));
-        path.y1 = startY;
-        path.y2 = Math.max(Math.round(size.h * 0.48), startY - minTravel);
-        logger.warn({
-          serial,
-          source,
-          originalFrom: [path.x1, startY],
-          originalTo: [path.x2, startY - originalTravel],
-          recoveredTo: [path.x2, path.y2],
-          minTravel,
-        }, "[mobile-input] recovered short feed swipe before dispatch");
-      }
-    }
     // The Reels caller already captures one live accessibility dump before and
     // after each advance. Do not repeat those expensive dumps here; the
     // calibrated path and final input coordinates are still logged below.
@@ -13192,19 +13168,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               tLog(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
               await sleepOrAbort(serial, 500);
             }
-            // Selecting an account can leave Instagram on that account's
-            // Profile page. Never let the next Feed swipe run on a profile
-            // grid, where the same calibrated drag can open a post/account.
-            // Home must be positively detected; no coordinate fallback is safe.
-            const switchedHomeTab = await android.findHomeTab(serial).catch(() => null);
-            if (!switchedHomeTab) {
-              tLog("✗ Account switch completed, but Home icon was not confirmed — stopping before tools");
-              steps.push("home-navigation(aborted — Home icon not confirmed after account switch)");
-              throw new Error("Account switch completed but Instagram Home was not confirmed");
-            }
-            tLog(`▶ Account switch: tapping confirmed Home tab at (${switchedHomeTab.x}, ${switchedHomeTab.y}) before tools`);
-            await android.tap(serial, switchedHomeTab.x, switchedHomeTab.y, "bot");
-            await sleepOrAbort(serial, 700);
          } else {
             tLog("[TRACE] step-1 account-switch: failed");
            tLog(`✗ Account switch to @${resolvedSlotUsername} failed — continuing with tools`);
