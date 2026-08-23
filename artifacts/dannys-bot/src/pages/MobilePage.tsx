@@ -8593,6 +8593,15 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     window.addEventListener("mobile_trustscore_template_changed", onTemplateChanged);
     return () => window.removeEventListener("mobile_trustscore_template_changed", onTemplateChanged);
   }, [slots.length]);
+  useEffect(() => {
+    const onOpenNotebook = (event: Event) => {
+      const detail = (event as CustomEvent<{ serial?: string }>).detail;
+      if (!phone?.serial || detail?.serial !== phone.serial || slots.length === 0) return;
+      void openNotebook(0);
+    };
+    window.addEventListener("mobile-open-account-notebook", onOpenNotebook);
+    return () => window.removeEventListener("mobile-open-account-notebook", onOpenNotebook);
+  }, [phone?.serial, slots.length]);
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
