@@ -255,45 +255,10 @@ function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: st
         bc.close();
       } catch { /* BroadcastChannel unavailable in very old environments */ }
 
-      // 3. When turning ON, also kick off an automation cycle directly.
-      //    This handles the common case where the user is on the Stats page
-      //    and MobilePage is NOT mounted — the BroadcastChannel message above
-      //    would be lost and no cycle would ever start. We load and spread the
-      //    full settings object so the cycle runs with the slot's real
-      //    configuration. If MobilePage also picks up the BroadcastChannel
-      //    and fires its own cycle request, the server's 409 "already in
-      //    progress" guard on the /automation-cycle endpoint prevents a
-      //    duplicate — whichever arrives second is safely ignored.
-      if (val) {
-        const settingsResponse = await fetch(
-          `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`,
-          { cache: "no-store" },
-        );
-        if (!settingsResponse.ok) throw new Error("Could not load slot settings");
-        const s = await settingsResponse.json() as Record<string, any>;
-        const scrollMin = Math.max(1, Math.min(s.feedScrollMin ?? 5, s.feedScrollMax ?? 10));
-        const scrollMax = Math.max(s.feedScrollMin ?? 5, s.feedScrollMax ?? 10);
-        const count = Math.floor(Math.random() * (scrollMax - scrollMin + 1)) + scrollMin;
-        const cycleId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-        // Fire-and-forget: 409 means a cycle is already running (e.g. MobilePage
-        // also triggered one via BroadcastChannel), which is fine.
-        fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            // Spread all settings so every tool flag/percentage is forwarded.
-            // The server's zod schema ignores unknown fields.
-            ...s,
-            // Computed / renamed fields that override the raw settings names:
-            cycleId,
-            slotIdx,
-            slotUsername,
-            count,
-            delayMinSec: s.actionDelayMin,
-            delayMaxSec: s.actionDelayMax,
-          }),
-        }).catch(() => {}); // 409 = another cycle already in progress, ignore
-      }
+      // The always-mounted HstToggleListener receives the broadcast and starts
+      // the shared HST loop, even when MobilePage itself is not mounted. Do not
+      // post a second automation cycle here: doing both caused every Stats-page
+      // toggle to race the loop and produce a device-busy 409.
     } catch {
       setOptimistic(null);
     }
