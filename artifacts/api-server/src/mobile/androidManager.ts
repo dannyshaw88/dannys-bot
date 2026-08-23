@@ -8717,6 +8717,37 @@ export async function switchToInstagramAccount(
     sheetMarkers: (postHeaderTapXml.match(/(?:account|switch|chooser|dialog|bottom_sheet|modal|action_bar_username_container)/gi) ?? []).slice(0, 20),
   };
   onLog?.(`  ↳ Account-header tap result: xmlLength=${postHeaderTapXml.length}, state=${JSON.stringify(postHeaderState)}`);
+
+  // Finding a coordinate is not proof that the selector accepted the tap.
+  // On slower Instagram/Xiaomi builds the profile surface can still be
+  // settling, so the tap lands on a non-interactive header frame and the
+  // account list never opens. Confirm a switcher-like surface before scanning
+  // for the destination row; if it is absent, refresh the tree, resolve the
+  // currently displayed account selector again, and press it once more.
+  const accountSwitcherLooksOpen = (xml: string): boolean => {
+    if (!xml) return false;
+    const hasSwitcherMarker =
+      /(?:account_switcher|account_list|switch_account|switcher|account_chooser|bottom_sheet)/i.test(xml) ||
+      /(?:text|content-desc)="(?:Switch account|Add account|Accounts|Choose account)"/i.test(xml);
+    const usernameLabels = (xml.match(/(?:text|content-desc)="@?[a-z0-9._]{2,40}"/gi) ?? []).length;
+    return hasSwitcherMarker || usernameLabels >= 2;
+  };
+
+  if (!accountSwitcherLooksOpen(postHeaderTapXml)) {
+    onLog?.("  ⚠ Active-account selector tap was not confirmed — refreshing the profile header and retrying once…");
+    await _sleep(400);
+    const refreshedProfileXml = await _uiDump(adbPath, serial).catch(() => "");
+    const refreshedSelector = _findTopProfileUsername(refreshedProfileXml);
+    if (refreshedSelector) {
+      onLog?.(`  ↳ Retrying active-account selector at (${refreshedSelector.x},${refreshedSelector.y}) — destination @${clean} is still not used for this tap`);
+      await _adbTapAsync(adbPath, serial, refreshedSelector.x, refreshedSelector.y);
+      await _sleep(700 + Math.floor(Math.random() * 701));
+      postHeaderTapXml = await _uiDump(adbPath, serial).catch(() => "");
+      onLog?.(`  ↳ Account-selector retry result: xmlLength=${postHeaderTapXml.length}, switcherConfirmed=${accountSwitcherLooksOpen(postHeaderTapXml)}`);
+    } else {
+      onLog?.("  ⚠ Active-account selector was not present in the refreshed profile header; continuing to the bounded row lookup");
+    }
+  }
   }
 
   // 4. Dump the accessibility tree and look for the target username.
