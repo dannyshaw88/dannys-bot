@@ -1,5 +1,5 @@
 import { build as esbuild } from "esbuild";
-import { cp, rm, mkdir, readFile, writeFile } from "fs/promises";
+import { cp, rm, mkdir, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -113,27 +113,12 @@ if (
 const likeIconReferenceName = "like-reference-reels.png";
 const likeIconReferenceTarget = path.join(dist, "server", "like-icon-refs");
 await mkdir(likeIconReferenceTarget, { recursive: true });
-const likeIconSource = path.join(searchReferenceSource, likeIconReferenceName);
-const bundledLikeIconSource = path.join(__dirname, "assets", likeIconReferenceName);
-const bundledLikeIconBase64 = path.join(__dirname, "assets", `${likeIconReferenceName}.base64`);
 const embeddedLikeIconBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAAAAABWESUoAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAACYktHRAD/h4/MvwAAABhREFUOMtjlGfAD5gYRhWMKhhVMEIVAAAH8ABfObtYzAAAAABJRU5ErkJggg==";
-if (existsSync(likeIconSource)) {
-  await cp(likeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
-} else if (existsSync(bundledLikeIconSource)) {
-  await cp(bundledLikeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
-} else if (existsSync(bundledLikeIconBase64)) {
-  const encoded = await readFile(bundledLikeIconBase64, "utf8");
-  await writeFile(
-    path.join(likeIconReferenceTarget, likeIconReferenceName),
-    Buffer.from(encoded.trim(), "base64"),
-  );
-} else {
-  await writeFile(
-    path.join(likeIconReferenceTarget, likeIconReferenceName),
-    Buffer.from(embeddedLikeIconBase64, "base64"),
-  );
-}
+await writeFile(
+  path.join(likeIconReferenceTarget, likeIconReferenceName),
+  Buffer.from(embeddedLikeIconBase64, "base64"),
+);
 await cp(likeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
 
 // Ship the visual Instagram Save/bookmark reference with the packaged API.
