@@ -8676,7 +8676,7 @@ export async function switchToInstagramAccount(
       x: Math.round(screen.w * 0.50),
       y: Math.round(screen.h * 0.08),
     };
-    onLog?.(`  ⚠ Could not find @${clean} in the profile header — using fallback tap at (${fallbackHeader.x},${fallbackHeader.y}) and continuing`);
+    onLog?.(`  ⚠ Could not find the active-account selector in the profile header — using fallback tap at (${fallbackHeader.x},${fallbackHeader.y}) and continuing`);
     profileHeaderUsername = fallbackHeader;
   }
   const headerNode = (() => {
@@ -8702,7 +8702,7 @@ export async function switchToInstagramAccount(
     return null;
   })();
   onLog?.(`  ↳ Account-header tap target: (${profileHeaderUsername.x},${profileHeaderUsername.y}) node=${JSON.stringify(headerNode)}`);
-  onLog?.(`  ↳ Tapping profile header username @${clean} to open account list…`);
+  onLog?.(`  ↳ Tapping the currently displayed account selector to open the account list; destination @${clean} will be matched after the list opens…`);
   await _adbTapAsync(adbPath, serial, profileHeaderUsername.x, profileHeaderUsername.y);
   // The post-tap dump below is the account-sheet readiness check.
   await _sleep(500 + Math.floor(Math.random() * 501));
@@ -9007,7 +9007,7 @@ function _findElem(xml: string, ...candidates: string[]): { x: number; y: number
   return null;
 }
 
-/** Find the active profile's clickable username control in Instagram's top header. */
+/** Find the currently displayed account selector in Instagram's top header. */
 function _findTopProfileUsername(xml: string): { x: number; y: number } | null {
   // Instagram exposes the top account selector as this clickable container.
   // Prefer the container over its child TextView: tapping the child can be
