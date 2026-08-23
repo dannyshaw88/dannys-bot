@@ -342,7 +342,9 @@ function PhoneFarmPhoneSection({
 
   const orderedLabels = farmColOrder
     .map(k => FARM_STAT_LABELS.find(s => s.key === k))
-    .filter(Boolean) as typeof FARM_STAT_LABELS;
+    .filter((label, index, labels) =>
+      Boolean(label) && labels.findIndex(candidate => candidate?.key === label?.key) === index,
+    ) as typeof FARM_STAT_LABELS;
   const colCount = 1 + farmColOrder.length;
 
   const slotsWithStats = slots.map((slot, i) => {
@@ -1177,7 +1179,10 @@ function PhoneFarmTab() {
     "farm_col_order",
     FARM_STAT_LABELS.map(s => s.key),
     (stored, defaults) => {
-      const filtered = stored.filter(k => defaults.includes(k));
+      // Older split builds could save the same column key more than once.
+      // Deduplicate before rendering: duplicate session_tool columns mount
+      // duplicate toggle controls for every device slot.
+      const filtered = [...new Set(stored.filter(k => defaults.includes(k)))];
       const newKeys = defaults.filter(k => !filtered.includes(k));
       return [...filtered, ...newKeys];
     },
