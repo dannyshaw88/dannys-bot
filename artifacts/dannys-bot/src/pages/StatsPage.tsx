@@ -222,6 +222,17 @@ type MetricAccount = {
   slotIndex?: number;
 };
 
+// Stats can briefly receive two opposite Radix Switch events when the farm
+// table is reconciled at the same time as the extracted HST owner/listener is
+// mounting.  Do not let those transient events become two DB writes and two
+// loop starts.  Keep this coordinator outside React so duplicate component
+// instances share the same gate.
+type PendingMobileSlotToggle = {
+  value: boolean;
+  timer: ReturnType<typeof setTimeout>;
+};
+const pendingMobileSlotToggles = new Map<string, PendingMobileSlotToggle>();
+
 function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: string; slotIdx: number; slotUsername: string }) {
   const qKey = [`/api/mobile/devices/${serial}/slots/${slotIdx}/automation-state`];
   // The table only needs the lightweight master enabled state. The complete
@@ -234,7 +245,11 @@ function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: st
 
   const checked = optimistic ?? state.enabled;
 
-  const toggle = async (val: boolean) => {
+  const commitToggle = async (val: boolean) => {
+    const toggleKey = `${serial}:${slotIdx}`;
+    const pending = pendingMobileSlotToggles.get(toggleKey);
+    if (pending?.value === val) pendingMobileSlotToggles.delete(toggleKey);
+
     setOptimistic(val);
     try {
       // 1. Persist the new enabled state.
@@ -262,6 +277,22 @@ function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: st
     } catch {
       setOptimistic(null);
     }
+  };
+
+  const toggle = (val: boolean) => {
+    const toggleKey = `${serial}:${slotIdx}`;
+    const previous = pendingMobileSlotToggles.get(toggleKey);
+    if (previous) clearTimeout(previous.timer);
+
+    // Let a same-tick off→on reconciliation settle before touching the API.
+    // The final requested value is the only value that is meaningful to the
+    // user and the only one that may start/stop the shared HST loop.
+    const timer = setTimeout(() => {
+      pendingMobileSlotToggles.delete(toggleKey);
+      void commitToggle(val);
+    }, 150);
+    pendingMobileSlotToggles.set(toggleKey, { value: val, timer });
+    setOptimistic(val);
   };
 
   return (

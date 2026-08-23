@@ -121,3 +121,4 @@
 - [Parallel refactor reconciliation](parallel-refactor-reconciliation.md) — after delegated edits, reconcile against the current workspace before trusting module wiring or deletion claims
 - [HST context dependency closure](hst-context-dependency-closure.md) — extracted operations need every shared helper/state binding declared before context construction
 - [HST recovery slot validation](hst-recovery-slot-validation.md) — startup recovery must ignore stable/stale slot keys and retry device-busy turns
+- [Split HST toggle ownership](split-hst-toggle-ownership.md) — coordinate cross-component toggle events so reconciliation cannot create duplicate writes and cycles
