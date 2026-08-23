@@ -4104,6 +4104,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       cycleIdRef.current = cycleId;
       onLog?.(`[HST-DBG] ${_dbgTag} — sending cycle to server (serial=${serial}, count=${count})`);
       srvLog(`${_dbgTag} — sending POST /automation-cycle (serial=${serial}, count=${count})`);
+      let retryBusy = false;
       try {
         const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
           method: "POST",
@@ -4311,9 +4312,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         if (!r.ok || !body?.ok) {
           if (r.status === 409) {
             // Server already has a cycle running (e.g. we just remounted while
-            // one was in progress). Not an error — just wait the interval and
-            // retry; serverCycleRunning polling will keep the mirror live.
-            onLog?.("Cycle deferred — server cycle already in progress, will retry after interval");
+            // one was in progress). Not an error — retry shortly instead of
+            // waiting for the full HST interval and appearing inactive.
+            retryBusy = true;
+            onLog?.("Cycle deferred — server cycle already in progress, will retry shortly");
           } else {
             const acctTag = slotUsername ? `@${slotUsername} — ` : "";
             onLog?.(`${acctTag}Cycle failed — ${body?.error ?? r.status}${body?.steps?.length ? ` (reached: ${body.steps.join(", ")})` : ""}`);
@@ -4358,7 +4360,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // not replace this account's configured HST Run-every interval.
       const safeMin = Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const safeMax = Math.max(1, Math.max(s2.cycleIntervalMin, s2.cycleIntervalMax));
-      const gapMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
+       const gapMs = retryBusy
+         ? 10_000 + Math.random() * 10_000
+         : (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
       const nextFireAt2 = Date.now() + Math.round(gapMs);
       _hstNextRunAt.set(key, nextFireAt2);
       setNextRunAt(nextFireAt2);
