@@ -9686,18 +9686,34 @@ export async function findInstagramNotificationsIcon(
  * Tries resource IDs and the "Profile" content-desc label.
  */
 export async function findInstagramProfileTab(serial: string): Promise<{ x: number; y: number } | null> {
-  // Instagram's profile control is the fixed rightmost slot in the bottom
-  // navigation. Do not depend on Instagram exposing an accessibility node:
-  // Xiaomi/Instagram builds can visibly render the icon while omitting it
-  // from UIAutomator entirely. All callers use this function for a profile
-  // button action, so the live logical display size is the only coordinate
-  // source needed here.
-  const { w, h } = getScreenSize(serial);
+  // Use the same live XML lookup used by account switching. Do not guess a
+  // coordinate from screen dimensions: mirror letterboxing and Instagram
+  // layout variants can put the actual control elsewhere.
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return null;
+  const byResource = _findBottomProfileResource(xml);
+  if (byResource) return byResource;
+  const byLabel = _findBottomProfileLabel(xml);
+  if (byLabel) return byLabel;
+  const { w, h } = _getScreenSize(xml);
   if (!w || !h) return null;
-  return {
-    x: Math.round(w * 0.90),
-    y: Math.round(h * 0.94),
-  };
+  const candidates: { x: number; y: number }[] = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bounds || !/clickable="true"/i.test(attrs)) continue;
+    const x1 = Number(bounds[1]), y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]), y2 = Number(bounds[4]);
+    const x = Math.round((x1 + x2) / 2);
+    const y = Math.round((y1 + y2) / 2);
+    if (y >= Math.round(h * 0.82) && x >= Math.round(w * 0.72)) candidates.push({ x, y });
+  }
+  candidates.sort((a, b) => a.x - b.x || a.y - b.y);
+  return candidates.at(-1) ?? null;
   /*
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
