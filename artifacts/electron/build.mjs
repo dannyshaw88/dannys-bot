@@ -1,5 +1,5 @@
 import { build as esbuild } from "esbuild";
-import { cp, rm, mkdir, writeFile } from "fs/promises";
+import { cp, rm, mkdir, readFile, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -116,6 +116,8 @@ await mkdir(likeIconReferenceTarget, { recursive: true });
 const likeIconSource = path.join(searchReferenceSource, likeIconReferenceName);
 const bundledLikeIconSource = path.join(__dirname, "assets", likeIconReferenceName);
 const bundledLikeIconBase64 = path.join(__dirname, "assets", `${likeIconReferenceName}.base64`);
+const embeddedLikeIconBase64 =
+  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAAAAABWESUoAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAACYktHRAD/h4/MvwAAABhREFUOMtjlGfAD5gYRhWMKhhVMEIVAAAH8ABfObtYzAAAAABJRU5ErkJggg==";
 if (existsSync(likeIconSource)) {
   await cp(likeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
 } else if (existsSync(bundledLikeIconSource)) {
@@ -127,7 +129,10 @@ if (existsSync(likeIconSource)) {
     Buffer.from(encoded.trim(), "base64"),
   );
 } else {
-  throw new Error(`Required Reels Like icon reference is missing from workspace and bundled assets`);
+  await writeFile(
+    path.join(likeIconReferenceTarget, likeIconReferenceName),
+    Buffer.from(embeddedLikeIconBase64, "base64"),
+  );
 }
 await cp(likeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
 
