@@ -4254,6 +4254,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     likePercentMin: z.number().min(0).max(100).default(0),
     likePercentMax: z.number().min(0).max(100).default(0),
   });
+  // The cycle payload is the complete execution settings object plus a small
+  // amount of cycle/slot metadata. Keep this boundary permissive so newly
+  // added HST settings are preserved and validated by the settings schema
+  // when they are loaded, rather than failing because this route's metadata
+  // schema was not updated in lockstep.
+  const automationCycleSchema = z.object({
+    cycleId: z.string().min(1),
+    slotId: z.string().min(1),
+    slotIdx: z.number().int().min(0).optional(),
+    slotUsername: z.string().optional(),
+    count: z.number().int().min(1).max(50),
+  }).passthrough();
   const checkFeedInProgress = new Set<string>();
   // Shared cycle state used by the automation-cycle route, status polling,
   // mirror gating, and graceful shutdown handling.
