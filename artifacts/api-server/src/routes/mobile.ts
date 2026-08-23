@@ -3073,6 +3073,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // read the Account Settings panel's React state.  Include the
         // persisted account identity in the per-slot response so a restart
         // preserves both slotIdx and slotUsername in cycle/dashboard events.
+        slotId: cfg[serial]?.account?.slots?.[slotIdx]?.slotId ?? "",
         slotUsername: cfg[serial]?.account?.slots?.[slotIdx]?.username ?? "",
       };
       // The dedicated folder-path file is the authoritative source for
@@ -4269,6 +4270,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // after the next cycle has already started cannot kill the new cycle.
   const automationCycleCurrentId  = new Map<string, string>(); // serial → running cycle ID
   const automationCycleAbortedId  = new Map<string, string>(); // serial → ID that was aborted
+  // Current tool label for each active device cycle. This is read by the
+  // lightweight status endpoint and cleared with the cycle state in finally.
+  // Keep it in the same route-local registry as the other cycle maps so every
+  // cycle/status path shares one authoritative value.
+  const automationCurrentTool = new Map<string, string>(); // serial → current tool label
   // Tracks which Instagram account (username) was last successfully active on
   // each device. Used to skip the account-switcher tap sequence when the same
   // slot runs back-to-back — avoids a visually-identical long-press every cycle.

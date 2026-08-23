@@ -141,6 +141,10 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
         cycleId,
         count,
         slotIdx,
+          // Startup recovery runs outside MobilePage, so carry the persisted
+          // stable slot identity through to the cycle route. Without this,
+          // the server correctly rejects every recovered cycle as stale.
+          slotId: s.slotId ?? "",
         slotUsername: s.slotUsername ?? "",
         feedEnabled: s.feedEnabled,
         storiesEnabled: s.storiesEnabled,
