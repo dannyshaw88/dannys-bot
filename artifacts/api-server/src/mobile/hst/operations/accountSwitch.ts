@@ -74,7 +74,7 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
     const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
     if (profileTab) {
       log(`▶ Pre-switch complete: tapping Profile tab again at (${profileTab.x}, ${profileTab.y}) before account switch…`);
-      await android.tap(serial, profileTab.x, profileTab.y, "fixed");
+      await android.tap(serial, profileTab.x, profileTab.y);
       await sleepOrAbort(serial, 800);
     } else {
       log("⚠ Pre-switch complete: Profile tab was not found for the required return tap; account switch will perform its own lookup");

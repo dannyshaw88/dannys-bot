@@ -2775,7 +2775,7 @@ function applySmallTapOffset(x: number, y: number): { x: number; y: number; jitt
   };
 }
 
-export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot" | "fixed"): Promise<void> {
+export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
   const tapSource = source ?? "bot";
   const dispatched = tapSource === "bot" ? applySmallTapOffset(x, y) : { x: Math.round(x), y: Math.round(y), jitterPx: 0 };
   logger.info(

@@ -1,7 +1,7 @@
 export interface VisitOwnProfileOperationContext {
   android: {
     findInstagramProfileTab(serial: string): Promise<{ x: number; y: number } | null>;
-    tap(serial: string, x: number, y: number, source?: "manual" | "bot" | "fixed"): Promise<void>;
+    tap(serial: string, x: number, y: number): Promise<void>;
     dismissInstagramInterstitials(serial: string): Promise<string | null>;
     findHomeTab(serial: string): Promise<{ x: number; y: number } | null>;
     pressBack(serial: string): Promise<void>;
@@ -23,7 +23,7 @@ export async function runVisitOwnProfile(
     logger.warn({ serial }, "[jitter-visit-profile] profile tab not found by scan");
     return;
   }
-  await android.tap(serial, profileTab.x, profileTab.y, "fixed");
+  await android.tap(serial, profileTab.x, profileTab.y);
   await hstRandomDelay(serial, 1500, 10000);
 
   const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
