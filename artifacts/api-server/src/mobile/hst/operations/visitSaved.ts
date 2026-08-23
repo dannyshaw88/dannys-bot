@@ -1,7 +1,7 @@
 export interface VisitSavedOperationContext {
   android: {
     findInstagramProfileTab(serial: string): Promise<{ x: number; y: number } | null>;
-    tap(serial: string, x: number, y: number): Promise<void>;
+    tap(serial: string, x: number, y: number, source?: "manual" | "bot" | "fixed"): Promise<void>;
     dismissInstagramInterstitials(serial: string): Promise<string | null>;
     findInstagramProfileOptionsButton(serial: string): Promise<{ x: number; y: number } | null>;
     findInstagramSavedRow(serial: string): Promise<{ x: number; y: number } | null>;
@@ -35,7 +35,7 @@ export async function runVisitSaved(
     logger.warn({ serial }, "[jitter-visit-saved] profile tab not found");
     return;
   }
-  await android.tap(serial, profileTab.x, profileTab.y);
+  await android.tap(serial, profileTab.x, profileTab.y, "fixed");
   await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
 
   const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
