@@ -248,6 +248,9 @@ export function MobilePhoneApps({
       {/* Card */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-bold text-black uppercase tracking-wider">
+            Mobile Phone Apps
+          </p>
 
           {/* Phone-app controls: fingerprint button + toggle */}
           <div className="flex items-center gap-2 flex-wrap">
