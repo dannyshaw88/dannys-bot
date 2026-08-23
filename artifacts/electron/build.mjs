@@ -107,6 +107,18 @@ if (
   throw new Error(`Home icon reference was not copied to: ${homeIconReferenceTarget}`);
 }
 
+// Ship the visual Reels Like-heart reference with the packaged API.
+// The Reels detector intentionally refuses an unverified coordinate, so this
+// asset must be present in the Windows bundle rather than workspace-only.
+const likeIconReferenceName = "like-reference-reels.png";
+const likeIconReferenceTarget = path.join(dist, "server", "like-icon-refs");
+await mkdir(likeIconReferenceTarget, { recursive: true });
+const likeIconSource = path.join(searchReferenceSource, likeIconReferenceName);
+if (!existsSync(likeIconSource)) {
+  throw new Error(`Required Reels Like icon reference is missing: ${likeIconSource}`);
+}
+await cp(likeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
+
 // Ship the visual Instagram Save/bookmark reference with the packaged API.
 const saveIconReferenceName = "save_1787133131184.jpg";
 const saveIconReferenceTarget = path.join(dist, "server", "save-icon-refs");

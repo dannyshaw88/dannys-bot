@@ -5747,6 +5747,7 @@ async function findFeedLikeIconByPixels(
        path.resolve(process.cwd(), "attached_assets/like-reference-reels.png"),
        path.resolve(process.cwd(), "../../attached_assets/like-reference-reels.png"),
        path.resolve(__dirname, "../../../attached_assets/like-reference-reels.png"),
+        path.resolve(__dirname, "../like-icon-refs/like-reference-reels.png"),
      ];
      const refPath = refCandidates.find(candidate => fs.existsSync(candidate));
      if (!refPath) {
