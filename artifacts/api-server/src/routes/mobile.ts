@@ -48,6 +48,12 @@ import { runUpdateBio as runUpdateBioOperation } from "../mobile/hst/operations/
 import { runRandomActionsStep, type RandomActionsOperationContext } from "../mobile/hst/operations/randomActions";
 import { runFollowUsersStep } from "../mobile/hst/operations/follow";
 import {
+  startSlotCycleNotebook,
+  appendSlotCycleNotebook,
+  finishSlotCycleNotebook,
+  getSlotCycleNotebook,
+} from "../mobile/slotCycleNotebook";
+import {
   runAccountSwitch,
   runManualProfileTabLongPress,
 } from "../mobile/hst/operations/accountSwitch";
@@ -5798,6 +5804,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // safely ignored.
     const incomingCycleId: string = req.body?.cycleId ?? `fallback-${Date.now()}`;
     const incomingSlotIdx: number = typeof req.body?.slotIdx === "number" ? req.body.slotIdx : 0;
+    const configuredSlot = loadInstanceConfigs()[serial]?.account?.slots?.[incomingSlotIdx];
+    const incomingSlotId = typeof req.body?.slotId === "string" ? req.body.slotId.trim() : "";
+    const configuredSlotId = configuredSlot?.slotId?.trim() ?? "";
+    const slotId = incomingSlotId || configuredSlotId;
+    if (!configuredSlotId || !incomingSlotId || incomingSlotId !== configuredSlotId) {
+      res.status(409).json({ error: "The account slot changed; refresh the mobile page and retry" });
+      return;
+    }
     automationCycleCurrentId.set(serial, incomingCycleId);
     automationCycleAbortedId.delete(serial); // clear any abort from a previous cycle
     automationCycleInProgress.add(serial);
@@ -5873,7 +5887,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // the same timestamp remain in the rolling log panel but do not start
       // additional ADB/Sharp screenshot work.
       queueDebugScreenshot(serial, elapsed, fullLine);
+      if (notebookStarted) {
+        try { appendSlotCycleNotebook(serial, slotId, incomingCycleId, fullLine); }
+        catch (error) { logger.warn({ err: error, serial, slotId }, "[mobile-cycle] notebook append failed"); }
+      }
     };
+    let notebookStarted = false;
     try {
       const parsedCycle = automationCycleSchema.parse(req.body);
       // Re-resolve the assigned TrustScore at execution time. The browser
@@ -6016,6 +6035,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Capture for catch-block COMPLETE log (in scope there).
       _slotUsername = resolvedSlotUsername;
       _mobileProfileId = mobileProfileId;
+      try {
+        startSlotCycleNotebook({
+          serial,
+          slotId,
+          username: resolvedSlotUsername,
+          cycleId: incomingCycleId,
+        });
+        notebookStarted = true;
+      } catch (error) {
+        logger.warn({ err: error, serial, slotId }, "[mobile-cycle] notebook start failed; continuing without notebook");
+      }
       // Log cycle start to Dashboard.
       // profileId 0 is the system sentinel (same as "Aura Farming started")
       // so events always appear even when slotUsername has no matching EB
@@ -7556,6 +7586,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         steps,
         executionTrace,
       });
+      try {
+        finishSlotCycleNotebook({
+          serial, slotId, cycleId: incomingCycleId, status: "complete",
+          summary: `Cycle complete — ${cycleMetricSummary()}`,
+        });
+      } catch (error) {
+        logger.warn({ err: error, serial, slotId }, "[mobile-cycle] notebook completion failed");
+      }
     } catch (e: any) {
       // A device restart can make an in-flight ADB request throw a generic
       // "device offline"/transport error before the next abort checkpoint is
@@ -7640,6 +7678,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         steps,
         executionTrace,
       });
+      if (notebookStarted) {
+        try {
+          finishSlotCycleNotebook({
+            serial, slotId, cycleId: incomingCycleId,
+            status: aborted ? "aborted" : "failed",
+            summary: aborted ? "Cycle aborted" : `Cycle failed: ${e?.message ?? "unknown error"}`,
+          });
+        } catch (error) {
+          logger.warn({ err: error, serial, slotId }, "[mobile-cycle] notebook failure stamp failed");
+        }
+      }
     } finally {
       automationCycleInProgress.delete(serial);
       automationCycleActiveSlot.delete(serial);
@@ -7651,6 +7700,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // slot wallpaper instead of continuing to poll a stale screencap stream.
       mirrorLive.delete(serial);
     }
+  });
+
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/cycle-notebook", (req: Request, res: Response) => {
+    const serial = p(req, "serial");
+    const slotIdx = Number(req.params.slotIdx);
+    const configuredSlot = loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx];
+    const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId.trim() : "";
+    const slotId = requestedSlotId || configuredSlot?.slotId?.trim();
+    if (!configuredSlot?.slotId || !requestedSlotId || configuredSlot.slotId !== requestedSlotId) {
+      res.status(409).json({ ok: false, error: "The account slot identity is unavailable or changed" });
+      return;
+    }
+    res.json(getSlotCycleNotebook(serial, slotId));
   });
 
   // ── Per-slot metrics (daily + lifetime, persisted across restarts) ───────────

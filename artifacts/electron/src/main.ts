@@ -1326,6 +1326,16 @@ async function createWindow() {
     }
   });
 
+  ipcMain.handle("save-cycle-notebook-to-desktop", async (_e, { filename, content }: { filename: string; content: string }) => {
+    const safeFilename = path.basename(filename).replace(/[^\w.-]+/g, "_");
+    const desktopDir = app.getPath("desktop");
+    const filePath = path.join(desktopDir, safeFilename || "aura-cycle-notebook.txt");
+    fs.mkdirSync(desktopDir, { recursive: true });
+    fs.writeFileSync(filePath, content, "utf8");
+    appendToMainLog(`[notebook] wrote cycle notebook to Desktop: ${filePath}`);
+    return { saved: true, filePath };
+  });
+
   // This path intentionally does not contact the API child or open a browser
   // download. It writes directly from Electron to Downloads, so it remains
   // available while the API is hung or has already crashed.

@@ -21,7 +21,7 @@ import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
-  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw,
+  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw, NotebookTabs,
   Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles, Shuffle,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2, ScanSearch,
 } from "lucide-react";
@@ -4111,6 +4111,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           signal: ctrl.signal,
           body: JSON.stringify({
             cycleId,
+            slotId,
             count,
             feedEnabled: s.feedEnabled,
             storiesEnabled: s.storiesEnabled,
@@ -8600,6 +8601,13 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const [totpCode, setTotpCode] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
   const [totpError, setTotpError] = useState<(string | null)[]>(Array(ACCT_SLOT_COUNT).fill(null));
   const [showEmailPassword, setShowEmailPassword] = useState<boolean[]>(Array(ACCT_SLOT_COUNT).fill(false));
+  const [notebookSlot, setNotebookSlot] = useState<number | null>(null);
+  const [notebookText, setNotebookText] = useState("");
+  const [notebookCycles, setNotebookCycles] = useState<Array<{ id: string; startedAt: string; finishedAt?: string; status: string; username: string }>>([]);
+  const [notebookLoading, setNotebookLoading] = useState(false);
+  const [notebookError, setNotebookError] = useState<string | null>(null);
+  const [notebookExporting, setNotebookExporting] = useState(false);
+  const [notebookNotice, setNotebookNotice] = useState<string | null>(null);
   // null = show slot list; number = show Human Session Tool for that slot index
   // initialSlot lets the Dashboard (or any deep-link) open a specific slot's
   // Human Session Tool directly on mount (e.g. ?slot=0 in the URL).
@@ -8908,6 +8916,55 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     setOpenSlotTool(prev => prev === i ? null : prev);
   };
 
+  const openNotebook = async (i: number) => {
+    const serial = phone?.serial;
+    const slot = slots[i];
+    if (!serial || !slot) return;
+    setNotebookSlot(i);
+    setNotebookLoading(true);
+    setNotebookError(null);
+    setNotebookNotice(null);
+    try {
+      const response = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${i}/cycle-notebook?slotId=${encodeURIComponent(slot.slotId)}`,
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.ok) throw new Error(body?.error ?? `Couldn't load notebook (${response.status})`);
+      setNotebookText(typeof body.text === "string" ? body.text : "");
+      setNotebookCycles(Array.isArray(body.cycles) ? body.cycles : []);
+    } catch (error: any) {
+      setNotebookError(error?.message ?? "Couldn't load notebook");
+    } finally {
+      setNotebookLoading(false);
+    }
+  };
+
+  const exportNotebook = async () => {
+    if (notebookSlot === null || !notebookText) return;
+    const slot = slots[notebookSlot];
+    if (!slot) return;
+    setNotebookExporting(true);
+    setNotebookNotice(null);
+    try {
+      const filename = `aura-cycle-notebook-${slot.username.trim() || slot.slotId}.txt`;
+      const api = (window as any).electronAPI;
+      if (api?.saveCycleNotebookToDesktop) {
+        await api.saveCycleNotebookToDesktop({ filename, content: notebookText });
+      } else {
+        const blob = new Blob([notebookText], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url; link.download = filename; link.click();
+        URL.revokeObjectURL(url);
+      }
+      setNotebookNotice("Notebook exported to Desktop");
+    } catch (error: any) {
+      setNotebookError(error?.message ?? "Couldn't export notebook");
+    } finally {
+      setNotebookExporting(false);
+    }
+  };
+
   const generateTotp = async (slotIdx: number, secret: string): Promise<string | null> => {
     setTotpCode(c => c.map((v, i) => i === slotIdx ? null : v));
     setTotpError(e => e.map((v, i) => i === slotIdx ? null : v));
@@ -9056,6 +9113,17 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     onClick={() => setOpenSlotTool(i)}
                   >
                     <Fingerprint className="w-3.5 h-3.5 text-white" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    title="Open cycle debugging notebook"
+                    aria-label={`Open cycle debugging notebook for Instagram Account Slot ${i + 1}`}
+                    onClick={() => void openNotebook(i)}
+                  >
+                    <NotebookTabs className="w-3.5 h-3.5" />
                   </Button>
 
                   {/* Toggle for this slot's Human Session Tool. Calls setEnabled
@@ -9335,6 +9403,38 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               </div>
           </div>
         ))}
+
+          <Dialog open={notebookSlot !== null} onOpenChange={open => { if (!open) setNotebookSlot(null); }}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>
+                  Cycle debugging notebook{notebookSlot !== null ? ` — Slot ${notebookSlot + 1}` : ""}
+                </DialogTitle>
+              </DialogHeader>
+              {notebookLoading ? (
+                <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading notebook…</div>
+              ) : notebookError ? (
+                <p className="py-6 text-sm text-destructive">{notebookError}</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span>{notebookCycles.length} of 10 cycles retained</span>
+                    <Button type="button" size="sm" onClick={() => void exportNotebook()} disabled={!notebookText || notebookExporting}>
+                      {notebookExporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
+                      Export to Desktop
+                    </Button>
+                  </div>
+                  <textarea
+                    readOnly
+                    value={notebookText || "No completed or in-progress cycles recorded for this slot yet."}
+                    className="h-[55vh] w-full resize-none rounded-md border border-border bg-muted/20 p-3 font-mono text-[11px] leading-relaxed"
+                    aria-label="Cycle debugging notebook contents"
+                  />
+                  {notebookNotice && <p className="text-xs text-green-600">{notebookNotice}</p>}
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
 
           {/* Add slot button */}
           <div className="flex justify-start">
