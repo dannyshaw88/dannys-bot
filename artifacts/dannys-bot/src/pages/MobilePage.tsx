@@ -3676,8 +3676,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     try {
       bc = new BroadcastChannel("aura-slot-toggle");
       bc.onmessage = (ev: MessageEvent) => {
-        const { serial: evSerial, slotIdx: evSlot, enabled } = ev.data ?? {};
-        if (evSerial === serial && evSlot === (slotIdx ?? 0)) {
+         const { serial: evSerial, slotIdx: evSlot, slotId: evSlotId, enabled } = ev.data ?? {};
+         if (evSerial === serial && evSlot === (slotIdx ?? 0) && (!evSlotId || evSlotId === slotId)) {
           // Guard: if the slot is already in the requested state, skip the
           // call entirely.  Without this, a Stats-page broadcast of
           // enabled:true to an already-enabled slot sets manualToggleOnRef

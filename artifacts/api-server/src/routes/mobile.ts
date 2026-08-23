@@ -5920,7 +5920,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // must remain authoritative when a template was edited in another tab
       // or the request came from the background runner.
       const savedSlotSettings =
-        loadInstanceConfigs()[serial]?.slotAutomation?.[String(incomingSlotIdx)] ?? {};
+        loadInstanceConfigs()[serial]?.slotAutomation?.[slotAutomationKey(serial, incomingSlotIdx, slotId)]
+        ?? loadInstanceConfigs()[serial]?.slotAutomation?.[String(incomingSlotIdx)]
+        ?? {};
       const effectiveCycle = await resolveTrustScoreSettings(serial, incomingSlotIdx, {
         ...savedSlotSettings,
         ...parsedCycle,
@@ -7615,6 +7617,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         logger.warn({ err: error, serial, slotId }, "[mobile-cycle] notebook completion failed");
       }
     } catch (e: any) {
+      logger.error({
+        err: e,
+        serial,
+        slotIdx: incomingSlotIdx,
+        slotId,
+        cycleId: incomingCycleId,
+        steps: steps.slice(-8),
+      }, "[mobile-cycle] cycle failed");
       // A device restart can make an in-flight ADB request throw a generic
       // "device offline"/transport error before the next abort checkpoint is
       // reached. The matching abort marker is authoritative for an explicit

@@ -233,8 +233,9 @@ type PendingMobileSlotToggle = {
 };
 const pendingMobileSlotToggles = new Map<string, PendingMobileSlotToggle>();
 
-function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: string; slotIdx: number; slotUsername: string }) {
-  const qKey = [`/api/mobile/devices/${serial}/slots/${slotIdx}/automation-state`];
+function MobileSlotSessionToggle({ serial, slotIdx, slotId, slotUsername }: { serial: string; slotIdx: number; slotId?: string; slotUsername: string }) {
+  const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-state${slotId ? `?slotId=${encodeURIComponent(slotId)}` : ""}`;
+  const qKey = [stateUrl];
   // The table only needs the lightweight master enabled state. The complete
   // settings object is fetched on demand if the user turns a slot on.
   const { data: state, isLoading } = useQuery<{ enabled: boolean }>({ queryKey: qKey });
@@ -253,10 +254,10 @@ function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: st
     setOptimistic(val);
     try {
       // 1. Persist the new enabled state.
-      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`, {
+       await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotId ? `?slotId=${encodeURIComponent(slotId)}` : ""}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: val }),
+         body: JSON.stringify({ enabled: val }),
       });
       queryClient.invalidateQueries({ queryKey: qKey });
 
@@ -266,7 +267,7 @@ function MobileSlotSessionToggle({ serial, slotIdx, slotUsername }: { serial: st
       //    extra delay, exactly like pressing the toggle on that page.
       try {
         const bc = new BroadcastChannel("aura-slot-toggle");
-        bc.postMessage({ serial, slotIdx, enabled: val });
+         bc.postMessage({ serial, slotIdx, slotId, enabled: val });
         bc.close();
       } catch { /* BroadcastChannel unavailable in very old environments */ }
 
@@ -317,13 +318,13 @@ function PhoneFarmPhoneSection({
   farmSortDir: "desc" | "asc";
   profiles: Profile[];
 }) {
-  const { data: account, isLoading } = useQuery<{ slots: { username: string }[] }>({
+   const { data: account, isLoading } = useQuery<{ slots: { username: string; slotId?: string }[] }>({
     queryKey: [`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`],
     refetchInterval: 30000,
   });
 
   const slots = (account?.slots ?? [])
-    .map((s, i) => ({ username: s.username?.trim() ?? "", idx: i }))
+     .map((s, i) => ({ username: s.username?.trim() ?? "", slotId: s.slotId, idx: i }))
     .filter(s => s.username !== "");
 
   const slotStatsResults = useQueries({
@@ -412,7 +413,7 @@ function PhoneFarmPhoneSection({
                 return (
                   <td key="session_tool" className="py-2.5 px-3 text-center">
                     <div className="flex items-center justify-center">
-                      <MobileSlotSessionToggle serial={phone.serial} slotIdx={slot.idx} slotUsername={slot.username} />
+                       <MobileSlotSessionToggle serial={phone.serial} slotIdx={slot.idx} slotId={slot.slotId} slotUsername={slot.username} />
                     </div>
                   </td>
                 );
