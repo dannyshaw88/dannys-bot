@@ -8916,6 +8916,20 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     setOpenSlotTool(prev => prev === i ? null : prev);
   };
 
+  const saveNotebookAs = async (content: string, slot: AccountSlot) => {
+    const filename = `aura-cycle-notebook-${slot.username.trim() || slot.slotId}.txt`;
+    const api = (window as any).electronAPI;
+    if (api?.saveCycleNotebookToDesktop) {
+      return api.saveCycleNotebookToDesktop({ filename, content });
+    }
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = filename; link.click();
+    URL.revokeObjectURL(url);
+    return { saved: true };
+  };
+
   const openNotebook = async (i: number) => {
     const serial = phone?.serial;
     const slot = slots[i];
@@ -8930,8 +8944,15 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       );
       const body = await response.json().catch(() => null);
       if (!response.ok || !body?.ok) throw new Error(body?.error ?? `Couldn't load notebook (${response.status})`);
-      setNotebookText(typeof body.text === "string" ? body.text : "");
+      const text = typeof body.text === "string" ? body.text : "";
+      setNotebookText(text);
       setNotebookCycles(Array.isArray(body.cycles) ? body.cycles : []);
+      const result = await saveNotebookAs(text, slot);
+      if (result?.saved === false) {
+        setNotebookNotice("Save cancelled");
+      } else {
+        setNotebookNotice("Notebook saved as a .txt file");
+      }
     } catch (error: any) {
       setNotebookError(error?.message ?? "Couldn't load notebook");
     } finally {
@@ -8946,18 +8967,8 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     setNotebookExporting(true);
     setNotebookNotice(null);
     try {
-      const filename = `aura-cycle-notebook-${slot.username.trim() || slot.slotId}.txt`;
-      const api = (window as any).electronAPI;
-      if (api?.saveCycleNotebookToDesktop) {
-        await api.saveCycleNotebookToDesktop({ filename, content: notebookText });
-      } else {
-        const blob = new Blob([notebookText], { type: "text/plain;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url; link.download = filename; link.click();
-        URL.revokeObjectURL(url);
-      }
-      setNotebookNotice("Notebook exported to Desktop");
+      const result = await saveNotebookAs(notebookText, slot);
+      setNotebookNotice(result?.saved === false ? "Save cancelled" : "Notebook saved as a .txt file");
     } catch (error: any) {
       setNotebookError(error?.message ?? "Couldn't export notebook");
     } finally {
