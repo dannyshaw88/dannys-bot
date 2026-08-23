@@ -87,6 +87,13 @@ export async function runVisitSettings(
   const topLeftBackY = Math.max(1, Math.round(48 * dp));
   await android.tap(serial, topLeftBackX, topLeftBackY);
   await sleepOrAbort(serial, 800);
-  onLog?.(`Visit Settings: ✓ tapped upper-left Back button at (${topLeftBackX},${topLeftBackY})`);
-  onLog?.("Visit Settings: ✓ done after one visual Back");
+   onLog?.(`Visit Settings: ✓ tapped upper-left Back button at (${topLeftBackX},${topLeftBackY}) — returning from selected setting`);
+
+   // A random top-level row opens a second Instagram surface. The first Back
+   // exits that selected setting to "Settings and activity"; the second Back
+   // exits "Settings and activity" back to the profile/home flow.
+   await android.tap(serial, topLeftBackX, topLeftBackY);
+   await sleepOrAbort(serial, 800);
+   onLog?.(`Visit Settings: ✓ tapped upper-left Back button at (${topLeftBackX},${topLeftBackY}) — leaving Settings and activity`);
+   onLog?.("Visit Settings: ✓ done after two visual Backs");
 }
