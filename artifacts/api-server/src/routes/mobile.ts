@@ -7708,7 +7708,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const configuredSlot = loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx];
     const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId.trim() : "";
     const slotId = requestedSlotId || configuredSlot?.slotId?.trim();
-    if (!configuredSlot?.slotId || !requestedSlotId || configuredSlot.slotId !== requestedSlotId) {
+    if (!requestedSlotId) {
       res.status(409).json({ ok: false, error: "The account slot identity is unavailable or changed" });
       return;
     }

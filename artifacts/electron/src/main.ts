@@ -1329,11 +1329,28 @@ async function createWindow() {
   ipcMain.handle("save-cycle-notebook-to-desktop", async (_e, { filename, content }: { filename: string; content: string }) => {
     const safeFilename = path.basename(filename).replace(/[^\w.-]+/g, "_");
     const desktopDir = app.getPath("desktop");
-    const filePath = path.join(desktopDir, safeFilename || "aura-cycle-notebook.txt");
-    fs.mkdirSync(desktopDir, { recursive: true });
-    fs.writeFileSync(filePath, content, "utf8");
-    appendToMainLog(`[notebook] wrote cycle notebook to Desktop: ${filePath}`);
-    return { saved: true, filePath };
+    const defaultPath = path.join(desktopDir, safeFilename || "aura-cycle-notebook.txt");
+    try {
+      if (!win || win.isDestroyed()) throw new Error("main window is unavailable");
+      const result = await dialog.showSaveDialog(win, {
+        title: "Save cycle debugging notebook",
+        defaultPath,
+        filters: [
+          { name: "Text Files", extensions: ["txt"] },
+          { name: "All Files", extensions: ["*"] },
+        ],
+      });
+      if (result.canceled || !result.filePath) return { saved: false };
+      const filePath = result.filePath.toLowerCase().endsWith(".txt") ? result.filePath : `${result.filePath}.txt`;
+      fs.writeFileSync(filePath, content, "utf8");
+      appendToMainLog(`[notebook] saved cycle notebook: ${filePath}`);
+      return { saved: true, filePath };
+    } catch (error: any) {
+      fs.mkdirSync(desktopDir, { recursive: true });
+      fs.writeFileSync(defaultPath, content, "utf8");
+      appendToMainLog(`[notebook] Save As failed; wrote directly to Desktop: ${defaultPath} — ${error?.message ?? String(error)}`);
+      return { saved: true, filePath: defaultPath, fallback: "desktop" };
+    }
   });
 
   // This path intentionally does not contact the API child or open a browser

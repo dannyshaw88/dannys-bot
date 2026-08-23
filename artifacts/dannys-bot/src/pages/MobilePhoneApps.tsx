@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Minus, Plus, Plane } from "lucide-react";
+import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Plane } from "lucide-react";
 
 // Collision preventer slot index reserved for phone apps (outside Instagram slot range 0..N).
 const PHONE_APPS_SLOT_IDX = 99;
@@ -166,7 +166,6 @@ interface MobilePhoneAppsProps {
 
 function DeviceQuickControls({ serial }: { serial: string | null | undefined }) {
   const [screenOn, setScreenOn] = useState(true);
-  const [brightness, setBrightness] = useState(100);
   const [rebooting, setRebooting] = useState(false);
   const [airplaneRemaining, setAirplaneRemaining] = useState<number | null>(null);
   const airplaneTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -197,16 +196,6 @@ function DeviceQuickControls({ serial }: { serial: string | null | undefined }) 
     }
     setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);
   }, [serial, rebooting]);
-
-  const changeBrightness = useCallback(async (delta: number) => {
-    if (!serial) return;
-    const nextBrightness = Math.min(100, Math.max(0, brightness + delta));
-    setBrightness(nextBrightness);
-    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/brightness`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ percent: nextBrightness }),
-    }).catch(() => {});
-  }, [serial, brightness]);
 
   const handleAirplane = useCallback(async () => {
     if (!serial || airplaneRemaining !== null) return;
@@ -247,12 +236,6 @@ function DeviceQuickControls({ serial }: { serial: string | null | undefined }) 
         className={`${buttonClass} ${airplaneRemaining !== null ? "bg-amber-500 text-white" : "bg-sky-500 hover:bg-sky-600 text-white"}`}>
         {airplaneRemaining !== null ? <span className="text-[10px] font-bold tabular-nums">{airplaneRemaining}</span> : <Plane className="w-3.5 h-3.5" />}
       </button>
-      <button onClick={() => changeBrightness(-15)} disabled={!serial || brightness <= 0} title={`Decrease brightness (${brightness}%)`}
-        className={`${buttonClass} bg-white text-gray-900`}><Minus className="w-3.5 h-3.5" /></button>
-      {/* Brightness Plus must remain pressable at the ceiling so the control
-          never disappears into a disabled state; the API clamps at 100%. */}
-      <button onClick={() => changeBrightness(15)} disabled={!serial} title={`Increase brightness (${brightness}%)`}
-        className={`${buttonClass} bg-white text-gray-900`}><Plus className="w-3.5 h-3.5" /></button>
     </div>
   );
 }

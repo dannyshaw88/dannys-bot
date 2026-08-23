@@ -21,7 +21,7 @@ import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
-  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw,
+  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw, NotebookPen,
   Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles, Shuffle,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2, ScanSearch,
 } from "lucide-react";
@@ -8593,15 +8593,6 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     window.addEventListener("mobile_trustscore_template_changed", onTemplateChanged);
     return () => window.removeEventListener("mobile_trustscore_template_changed", onTemplateChanged);
   }, [slots.length]);
-  useEffect(() => {
-    const onOpenNotebook = (event: Event) => {
-      const detail = (event as CustomEvent<{ serial?: string }>).detail;
-      if (!phone?.serial || detail?.serial !== phone.serial || slots.length === 0) return;
-      void openNotebook(0);
-    };
-    window.addEventListener("mobile-open-account-notebook", onOpenNotebook);
-    return () => window.removeEventListener("mobile-open-account-notebook", onOpenNotebook);
-  }, [phone?.serial, slots.length]);
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -8733,11 +8724,6 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         setTotpError(Array(loaded.length).fill(null));
         setLoading(false);
         hydratedRef.current = true;
-        const pendingNotebookKey = `mobile-open-notebook:${phone.serial}`;
-        if (sessionStorage.getItem(pendingNotebookKey) === "0" && loaded.length > 0) {
-          sessionStorage.removeItem(pendingNotebookKey);
-          void openNotebook(0);
-        }
         writeUiSpeedLog("account-slots-state-ready", {
           serial: phone.serial,
           slotCount: loaded.length,
@@ -9163,17 +9149,32 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     );
                   })()}
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={loading}
-                  onClick={() => setConfirmDeleteSlot(i)}
-                  className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  aria-label={`Delete Instagram Account Slot ${i + 1}`}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={loading}
+                    onClick={() => void openNotebook(i)}
+                    className="h-6 w-6 p-0 text-black hover:bg-black/10 hover:text-black"
+                    aria-label={`Export cycle debugging notebook for Instagram Account Slot ${i + 1}`}
+                    title="Export cycle debugging notebook as .txt"
+                  >
+                    <NotebookPen className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={loading}
+                    onClick={() => setConfirmDeleteSlot(i)}
+                    className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Delete Instagram Account Slot ${i + 1}`}
+                    title="Delete account slot"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               </div>
 
               {/* Row 1: Username + Password + 2FA OTP Secret */}
