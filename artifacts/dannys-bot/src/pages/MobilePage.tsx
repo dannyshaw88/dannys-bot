@@ -30,7 +30,7 @@ import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
 import { TrustScoreCountdown } from "@/components/TrustScoreCountdown";
 import { getTrustLevels, getTrustScore, type TrustLevelEntry } from "@/components/TrustScoreBadge";
-import { MobilePhoneApps, MobilePhoneAppsPanel, type MobilePhoneAppsPanelHandle } from "@/pages/MobilePhoneApps";
+import { MobilePhoneApps, MobilePhoneAppsPanel, DeviceQuickControls, type MobilePhoneAppsPanelHandle } from "@/pages/MobilePhoneApps";
 import {
   loadSlotTrustScore,
   readLocalSlotTrustScore,
@@ -11618,6 +11618,7 @@ export function MobilePage() {
                   )
                 ))}
                 <div className="flex-1" />
+                <DeviceQuickControls serial={activeSerial} />
                 {MOBILE_TABS_RIGHT.map(t => (
                   (!deviceDetailView || t.id !== "actionlog") && (
                   <button

@@ -164,7 +164,7 @@ interface MobilePhoneAppsProps {
   onToggle:    (v: boolean) => void;
 }
 
-function DeviceQuickControls({ serial }: { serial: string | null | undefined }) {
+export function DeviceQuickControls({ serial }: { serial: string | null | undefined }) {
   const [screenOn, setScreenOn] = useState(true);
   const [rebooting, setRebooting] = useState(false);
   const [airplaneRemaining, setAirplaneRemaining] = useState<number | null>(null);
@@ -245,25 +245,12 @@ export function MobilePhoneApps({
 }: MobilePhoneAppsProps) {
   return (
     <>
-      {/* Section heading */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <h2 className="text-lg font-bold text-black whitespace-nowrap">Mobile Phone Apps</h2>
-          <DeviceQuickControls serial={_serial} />
-        </div>
-        <span className="text-xs text-muted-foreground text-right shrink-0 pt-1">{deviceName}</span>
-      </div>
-
       {/* Card */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
 
-          {/* Left: title + fingerprint button + toggle */}
+          {/* Phone-app controls: fingerprint button + toggle */}
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-xs font-bold text-black uppercase tracking-wider min-w-[200px] shrink-0">
-              Mobile Phone Apps
-            </p>
-
             {/* Fingerprint / tool button */}
             <Button
               type="button"
@@ -293,14 +280,6 @@ export function MobilePhoneApps({
             </div>
           </div>
 
-          {/* Right: brand icons */}
-          <div className="flex items-center gap-2 shrink-0">
-            <ChromeIcon />
-            <GooglePlayIcon />
-            <SnapchatIcon />
-            <YouTubeIcon />
-            <WhatsAppIcon />
-          </div>
         </div>
       </div>
     </>
