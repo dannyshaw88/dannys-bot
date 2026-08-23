@@ -134,7 +134,7 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
   const cycleId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 
   try {
-    await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
+    const cycleResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -327,6 +327,13 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
         dismissDirection: s.dismissDirection,
       }),
     });
+    if (cycleResponse.status === 409) {
+      // Another slot on this device is currently running. Keep this slot's
+      // turn alive and retry shortly rather than waiting for the full interval
+      // and making an enabled HST appear inert.
+      scheduleNextBg(serial, slotIdx, key, 10_000 + Math.random() * 10_000);
+      return;
+    }
   } catch {
     // Keep the loop alive through a transient API/network failure. A delayed
     // retry is safer than relying on MobilePage to be mounted.

@@ -2797,8 +2797,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       for (const [serial, deviceCfg] of Object.entries(cfg)) {
         const slotAuto = (deviceCfg as InstanceConfig).slotAutomation ?? {};
         for (const [idxStr, settings] of Object.entries(slotAuto)) {
-          if ((settings as AutomationSettings).enabled) {
-            slots.push({ serial, slotIdx: parseInt(idxStr, 10) });
+          // slotAutomation also contains stable slotId keys and may retain
+          // legacy/out-of-range entries from before the slot split. Startup
+          // recovery must never turn those keys into invalid `/slots/N`
+          // requests.
+          if (!(settings as AutomationSettings).enabled) continue;
+          if (!/^(?:0|[1-9]\d*)$/.test(idxStr)) continue;
+          const slotIdx = Number(idxStr);
+          if (Number.isSafeInteger(slotIdx) && slotIdx < MAX_MOBILE_ACCOUNT_SLOTS) {
+            slots.push({ serial, slotIdx });
           }
         }
       }
