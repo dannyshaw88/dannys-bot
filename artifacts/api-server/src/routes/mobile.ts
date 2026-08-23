@@ -38,7 +38,10 @@ import { runVisitSettings as runVisitSettingsOperation } from "../mobile/hst/ope
 import { runCheckNotifications as runCheckNotificationsOperation } from "../mobile/hst/operations/checkNotifications";
 import { runCheckDmLoop as runCheckDmLoopOperation } from "../mobile/hst/operations/checkDm";
 import { runCheckFeedLoop as runCheckFeedLoopOperation } from "../mobile/hst/operations/viewFeed";
-import { runViewStoriesFromFeedLoop as runViewStoriesFromFeedLoopOperation } from "../mobile/hst/operations/viewStories";
+import {
+  pickAndOpenRandomStory,
+  runViewStoriesFromFeedLoop as runViewStoriesFromFeedLoopOperation,
+} from "../mobile/hst/operations/viewStories";
 import { runViewExplorePage as runViewExplorePageOperation } from "../mobile/hst/operations/viewExplore";
 import { runViewReelsLoop as runViewReelsLoopOperation } from "../mobile/hst/operations/viewReels";
 import { runMakePostStep as runMakePostStepOperation } from "../mobile/hst/operations/makePost";
@@ -6893,6 +6896,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 getScreenSize(serial).w,
                 getScreenSize(serial).h,
                 (msg) => tLog(`  ${msg}`),
+                hstOperationContext,
               );
             }
             if (!storyEntry.opened) {
