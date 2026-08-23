@@ -45,6 +45,38 @@ export async function runMakePostStep(serial: string, opts: {
     homeTapCount = 1,
   } = opts;
 
+// Establish Instagram Home before doing any local-file selection or image
+// processing. This ordering is intentional: Home is the first Make a Post
+// action, before Fix AI Slop, alteration, custom image settings, media
+// preparation, or any other post feature.
+onLog?.("Make a Post: locating Instagram Home button before image preparation…");
+const homeTab = await android.findHomeTab(serial).catch(() => null);
+if (!homeTab) {
+  onLog?.("Make a Post: validated Instagram Home node not exposed — aborting before any tap");
+  return { posted: false };
+}
+if (
+  !Number.isFinite(homeTab.x) ||
+  !Number.isFinite(homeTab.y) ||
+  homeTab.x < 0 ||
+  homeTab.y < 0
+) {
+  onLog?.(`Make a Post: invalid Home coordinates (${homeTab.x}, ${homeTab.y}) — aborting before any tap`);
+  return { posted: false };
+}
+const taps = Math.max(1, Math.round(homeTapCount));
+for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
+  onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
+  await android.tap(serial, homeTab.x, homeTab.y);
+  if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
+}
+// Do not immediately continue after the tab tap. On slower phones the
+// Home surface remains in its transition state for several seconds; use
+// a natural randomized 3–5 second dwell before pushing/opening compose.
+const homeDwellMs = 3000 + Math.round(Math.random() * 2000);
+onLog?.(`Make a Post: waiting ${ (homeDwellMs / 1000).toFixed(1) }s for Instagram Home to finish loading…`);
+await sleepOrAbort(serial, homeDwellMs);
+
 const fileName = await pickLocalFolderImage(serial, {
   folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, slotIdx, onLog,
 });
@@ -66,39 +98,6 @@ onLog?.(
   `bytes=${prepared.audit.processedBytes} format=${prepared.audit.format} ` +
   `dimensions=${prepared.audit.width}x${prepared.audit.height}`,
 );
-
-// Prepare the media before touching Instagram navigation. This is
-// intentional: a Home/compose tap must never happen before the source has
-// been selected, transformed, verified, and is ready to push.
-onLog?.("Make a Post: image is prepared and verified; locating Instagram Home button…");
-const homeTab = await android.findHomeTab(serial).catch(() => null);
-if (!homeTab) {
-  await prepared.cleanup();
-  onLog?.("Make a Post: validated Instagram Home node not exposed — aborting before any tap");
-  return { posted: false };
-}
-if (
-  !Number.isFinite(homeTab.x) ||
-  !Number.isFinite(homeTab.y) ||
-  homeTab.x < 0 ||
-  homeTab.y < 0
-) {
-  await prepared.cleanup();
-  onLog?.(`Make a Post: invalid Home coordinates (${homeTab.x}, ${homeTab.y}) — aborting before any tap`);
-  return { posted: false };
-}
-const taps = Math.max(1, Math.round(homeTapCount));
-for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
-  onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
-  await android.tap(serial, homeTab.x, homeTab.y);
-  if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
-}
-// Do not immediately continue after the tab tap. On slower phones the
-// Home surface remains in its transition state for several seconds; use
-// a natural randomized 3–5 second dwell before pushing/opening compose.
-const homeDwellMs = 3000 + Math.round(Math.random() * 2000);
-onLog?.(`Make a Post: waiting ${ (homeDwellMs / 1000).toFixed(1) }s for Instagram Home to finish loading…`);
-await sleepOrAbort(serial, homeDwellMs);
 
 onLog?.(`Make a Post: pushing "${fileName}" to device…`);
 let devicePath: string;
