@@ -4247,6 +4247,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     likePercentMax: z.number().min(0).max(100).default(0),
   });
   const checkFeedInProgress = new Set<string>();
+  // Shared cycle state used by the automation-cycle route, status polling,
+  // mirror gating, and graceful shutdown handling.
+  const automationCycleInProgress = new Set<string>();
+  // Tracks the account slot currently executing on each device. This is
+  // shared by the cycle runner and the lightweight status endpoint so the
+  // account list can show Running on the correct slot.
+  const automationCycleActiveSlot = new Map<string, number>();
 
   // Per-cycle abort tracking.  Each new cycle is assigned a random ID that is
   // passed by the frontend in both the cycle POST body and the abort POST body.
