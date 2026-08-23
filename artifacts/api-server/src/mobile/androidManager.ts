@@ -5949,10 +5949,17 @@ export async function findBackHeaderIconByPixels(
   const screen = await _captureScreenPixels(serial);
   if (!screen) return null;
   try {
-    const refPath = path.resolve(
-      process.cwd(),
-      "attached_assets/fdsfs_1787258338907.jpg",
-    );
+     const refCandidates = [
+       path.resolve(process.cwd(), "attached_assets/fdsfs_1787258338907.jpg"),
+       path.resolve(process.cwd(), "../../attached_assets/fdsfs_1787258338907.jpg"),
+       path.resolve(__dirname, "../../../attached_assets/fdsfs_1787258338907.jpg"),
+       path.resolve(__dirname, "../back-icon-refs/back-icon-reference.svg"),
+     ];
+     const refPath = refCandidates.find(candidate => fs.existsSync(candidate));
+     if (!refPath) {
+       onLog?.("[back-icon] visual reference unavailable — refusing fallback tap");
+       return null;
+     }
     const { data, info } = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
     const sample = (x: number, y: number): number => {
       const i = (y * screen.width + x) * screen.channels;

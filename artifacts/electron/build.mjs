@@ -119,6 +119,15 @@ await writeFile(
   path.join(likeIconReferenceTarget, likeIconReferenceName),
   Buffer.from(embeddedLikeIconBase64, "base64"),
 );
+
+// Ship the visual Instagram back-arrow reference with the packaged API.
+const backIconReferenceTarget = path.join(dist, "server", "back-icon-refs");
+await mkdir(backIconReferenceTarget, { recursive: true });
+await cp(
+  path.join(__dirname, "assets", "back-icon-reference.svg"),
+  path.join(backIconReferenceTarget, "back-icon-reference.svg"),
+);
+
 // Ship the visual Instagram Save/bookmark reference with the packaged API.
 const saveIconReferenceName = "save_1787133131184.jpg";
 const saveIconReferenceTarget = path.join(dist, "server", "save-icon-refs");
