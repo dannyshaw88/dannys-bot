@@ -220,21 +220,21 @@ export function DeviceQuickControls({ serial }: { serial: string | null | undefi
     if (airplaneTimerRef.current) clearInterval(airplaneTimerRef.current);
   }, []);
 
-  const buttonClass = "w-8 h-8 rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm";
+  const buttonClass = "w-[30px] h-[30px] rounded-full flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm";
   return (
     <div className="flex items-center gap-1.5 shrink-0" aria-label="Device controls">
       <button onClick={handleStandby} disabled={!serial} title={screenOn ? "Put device to sleep" : "Wake device"}
-        className={`${buttonClass} ${screenOn ? "bg-red-500 hover:bg-red-600 text-white" : "bg-red-500/30 text-red-400 ring-1 ring-red-500/40"}`}>
-        <Power className="w-3.5 h-3.5" />
+        className={`${buttonClass} border border-gray-300 bg-white text-gray-500 hover:bg-red-500 hover:border-red-500 hover:text-white`}>
+        <Power className="w-[13px] h-[13px]" />
       </button>
       <button onClick={handleReboot} disabled={!serial || rebooting} title="Restart device"
-        className={`${buttonClass} bg-green-500 hover:bg-green-600 text-white`}>
-        <RotateCcw className={`w-3.5 h-3.5 ${rebooting ? "animate-spin" : ""}`} />
+        className={`${buttonClass} border border-gray-300 bg-white text-gray-500 hover:bg-green-500 hover:border-green-500 hover:text-white`}>
+        <RotateCcw className={`w-[13px] h-[13px] ${rebooting ? "animate-spin" : ""}`} />
       </button>
       <button onClick={handleAirplane} disabled={!serial || airplaneRemaining !== null}
         title={airplaneRemaining === null ? "Cycle airplane mode for 10–15 seconds" : `Airplane mode — ${airplaneRemaining}s remaining`}
-        className={`${buttonClass} ${airplaneRemaining !== null ? "bg-amber-500 text-white" : "bg-sky-500 hover:bg-sky-600 text-white"}`}>
-        {airplaneRemaining !== null ? <span className="text-[10px] font-bold tabular-nums">{airplaneRemaining}</span> : <Plane className="w-3.5 h-3.5" />}
+        className={`${buttonClass} border border-gray-300 bg-white text-gray-500 hover:bg-blue-500 hover:border-blue-500 hover:text-white ${airplaneRemaining !== null ? "ring-2 ring-blue-300" : ""}`}>
+        {airplaneRemaining !== null ? <span className="text-[10px] font-bold tabular-nums">{airplaneRemaining}</span> : <Plane className="w-[13px] h-[13px]" />}
       </button>
     </div>
   );
