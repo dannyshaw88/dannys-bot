@@ -119,8 +119,6 @@ await writeFile(
   path.join(likeIconReferenceTarget, likeIconReferenceName),
   Buffer.from(embeddedLikeIconBase64, "base64"),
 );
-await cp(likeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
-
 // Ship the visual Instagram Save/bookmark reference with the packaged API.
 const saveIconReferenceName = "save_1787133131184.jpg";
 const saveIconReferenceTarget = path.join(dist, "server", "save-icon-refs");
