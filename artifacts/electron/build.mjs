@@ -114,8 +114,20 @@ const likeIconReferenceName = "like-reference-reels.png";
 const likeIconReferenceTarget = path.join(dist, "server", "like-icon-refs");
 await mkdir(likeIconReferenceTarget, { recursive: true });
 const likeIconSource = path.join(searchReferenceSource, likeIconReferenceName);
-if (!existsSync(likeIconSource)) {
-  throw new Error(`Required Reels Like icon reference is missing: ${likeIconSource}`);
+const bundledLikeIconSource = path.join(__dirname, "assets", likeIconReferenceName);
+const bundledLikeIconBase64 = path.join(__dirname, "assets", `${likeIconReferenceName}.base64`);
+if (existsSync(likeIconSource)) {
+  await cp(likeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
+} else if (existsSync(bundledLikeIconSource)) {
+  await cp(bundledLikeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
+} else if (existsSync(bundledLikeIconBase64)) {
+  const encoded = await readFile(bundledLikeIconBase64, "utf8");
+  await writeFile(
+    path.join(likeIconReferenceTarget, likeIconReferenceName),
+    Buffer.from(encoded.trim(), "base64"),
+  );
+} else {
+  throw new Error(`Required Reels Like icon reference is missing from workspace and bundled assets`);
 }
 await cp(likeIconSource, path.join(likeIconReferenceTarget, likeIconReferenceName));
 
