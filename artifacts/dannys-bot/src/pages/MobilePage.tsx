@@ -21,7 +21,7 @@ import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
-  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw, NotebookTabs,
+  FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw,
   Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles, Shuffle,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2, ScanSearch,
 } from "lucide-react";
@@ -8724,6 +8724,11 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         setTotpError(Array(loaded.length).fill(null));
         setLoading(false);
         hydratedRef.current = true;
+        const pendingNotebookKey = `mobile-open-notebook:${phone.serial}`;
+        if (sessionStorage.getItem(pendingNotebookKey) === "0" && loaded.length > 0) {
+          sessionStorage.removeItem(pendingNotebookKey);
+          void openNotebook(0);
+        }
         writeUiSpeedLog("account-slots-state-ready", {
           serial: phone.serial,
           slotCount: loaded.length,
@@ -9113,17 +9118,6 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     onClick={() => setOpenSlotTool(i)}
                   >
                     <Fingerprint className="w-3.5 h-3.5 text-white" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                    title="Open cycle debugging notebook"
-                    aria-label={`Open cycle debugging notebook for Instagram Account Slot ${i + 1}`}
-                    onClick={() => void openNotebook(i)}
-                  >
-                    <NotebookTabs className="w-3.5 h-3.5" />
                   </Button>
 
                   {/* Toggle for this slot's Human Session Tool. Calls setEnabled
