@@ -117,7 +117,6 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
     log("[TRACE] step-1 account-switch: confirmed");
     steps.push(`account-switch(@${username})`);
     lastActiveUsername.set(serial, username);
-    await sleepOrAbort(serial, 1500);
     const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
     if (postSwitchPopup) {
       log(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
