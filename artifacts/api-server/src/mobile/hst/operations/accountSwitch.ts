@@ -33,8 +33,9 @@ export async function runManualProfileTabLongPress(
   }
 
   logger.info({ serial, profileTab }, "[manual-account-switch] profile target resolved; dispatching long-press");
-  await android.swipe(serial, profileTab.x, profileTab.y, profileTab.x, profileTab.y, 2000);
-  logger.info({ serial, profileTab }, "[manual-account-switch] long-press dispatched");
+  const holdDurationMs = 2000 + Math.floor(Math.random() * 3001);
+  await android.swipe(serial, profileTab.x, profileTab.y, profileTab.x, profileTab.y, holdDurationMs);
+  logger.info({ serial, profileTab, holdDurationMs }, "[manual-account-switch] long-press dispatched");
   return { ok: true, dispatched: true, target: "profile-tab", node: profileTab };
 }
 
@@ -95,7 +96,7 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
   // Intentionally not configurable: retain the established 50/50 method mix.
   const useProfileTabLongPress = Math.random() < 0.5;
   const holdDurationMs = useProfileTabLongPress
-    ? 3000 + Math.floor(Math.random() * 7001)
+    ? 2000 + Math.floor(Math.random() * 3001)
     : undefined;
   log(
     useProfileTabLongPress
