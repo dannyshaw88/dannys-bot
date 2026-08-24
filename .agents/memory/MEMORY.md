@@ -123,3 +123,4 @@
 - [HST recovery slot validation](hst-recovery-slot-validation.md) — startup recovery must ignore stable/stale slot keys and retry device-busy turns
 - [Split HST toggle ownership](split-hst-toggle-ownership.md) — coordinate cross-component toggle events so reconciliation cannot create duplicate writes and cycles
 - [Fix AI Slop Windows binary packaging](fix-ai-slop-windows-binary.md) — Windows dependency installs skip lifecycle scripts, so explicitly install, verify, and bundle ffmpeg.exe
+- [Update Bio screen gate](update-bio-screen-gate.md) — require the dedicated Bio editor marker; generic form markers also occur on Edit Profile and can select Name
