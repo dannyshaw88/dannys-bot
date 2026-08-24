@@ -8261,7 +8261,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Manual long-press from the operator holding on the mirrored screen.
   // The standard ADB idiom for a long-press is a zero-distance swipe with a
   // long duration — same as the automation uses in switchToInstagramAccount
-  // to open the account switcher.  2000ms is the same duration used there.
+  // to open the account switcher. Profile-tab account switching uses a
+  // randomized 2000–5000ms duration.
   app.post("/api/mobile/devices/:serial/input/longpress", async (req: Request, res: Response) => {
     try {
       const input = tapSchema.parse(req.body);
