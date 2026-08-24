@@ -10015,7 +10015,10 @@ export async function findInstagramSettingsRow(
     "Help",
     "About",
   ];
-  const excluded = /^(Settings and activity|Accounts Center|Log out|Add account|Switch account|Meta Verified)$/i;
+  // Instagram uses both spellings across builds. Accounts Centre/Center is
+  // the header card, not a settings row; without this exclusion its label
+  // contains "Account" and can be misclassified as the Account row below it.
+  const excluded = /^(Settings and activity|Accounts? Cent(?:er|re)|Log out|Add account|Switch account|Meta Verified)$/i;
   const candidates: Array<{ x: number; y: number; label: string }> = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let match: RegExpExecArray | null;
@@ -10036,7 +10039,7 @@ export async function findInstagramSettingsRow(
     const text = attrs.match(/\btext="([^"]*)"/)?.[1] ?? "";
     const desc = attrs.match(/\bcontent-desc="([^"]*)"/)?.[1] ?? "";
     const label = text || desc;
-    if (!label || excluded.test(label)) continue;
+    if (!label || excluded.test(label) || /^Manage your connected experiences\b/i.test(label)) continue;
     const known = knownLabels.find(candidate => label.toLowerCase().includes(candidate.toLowerCase()));
     if (!known && !/^[A-Za-z][A-Za-z '&·.-]{2,48}$/.test(label)) continue;
     candidates.push({ x, y, label: known ?? label });
