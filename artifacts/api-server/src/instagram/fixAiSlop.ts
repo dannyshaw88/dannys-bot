@@ -41,7 +41,7 @@
  */
 
 import { randomBytes } from "crypto";
-import { appendFileSync } from "fs";
+import { appendFileSync, existsSync } from "fs";
 import { readFile, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
@@ -291,6 +291,15 @@ function detectFormat(buf: Buffer): ImageFormat {
 }
 
 async function resolveFfmpegPath(): Promise<string> {
+  const packagedCandidates = [
+    join(__dirname, "vendor", "ffmpeg.exe"),
+    join(__dirname, "server", "vendor", "ffmpeg.exe"),
+    join(__dirname, "vendor", "ffmpeg"),
+    join(__dirname, "server", "vendor", "ffmpeg"),
+  ];
+  const packagedPath = packagedCandidates.find(candidate => existsSync(candidate));
+  if (packagedPath) return packagedPath;
+
   try {
     const mod = await import("ffmpeg-static");
     const ffmpegPath = (mod as { default?: unknown }).default ?? mod;
