@@ -4683,8 +4683,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     return actual;
   };
-  const sleepOrAbort = (serial: string, ms: number, category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" | "airplaneMode" = "actionPacing") => {
-    const dwellMs = randomizedDwellMs(serial, ms, category);
+  const jitterStaticDwell = (ms: number): number => {
+    if (!Number.isFinite(ms) || ms <= 0) return Math.max(0, Math.round(ms));
+    const min = Math.max(1, Math.ceil(ms * 0.8));
+    const max = Math.max(min, Math.floor(ms * 1.2));
+    return min + Math.floor(Math.random() * (max - min + 1));
+  };
+  const sleepOrAbort = (
+    serial: string,
+    ms: number,
+    category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" | "airplaneMode" = "actionPacing",
+    timingMode: "static" | "computed" = "static",
+  ) => {
+    const dwellMs = timingMode === "computed"
+      ? randomizedDwellMs(serial, ms, category)
+      : jitterStaticDwell(ms);
     const startedAt = performance.now();
     return new Promise<void>((resolve, reject) => {
       const finish = () => {
@@ -4704,7 +4717,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     return true;
   };
   const hstRandomDelay = (serial: string, minMs: number, maxMs: number) =>
-    sleepOrAbort(serial, minMs + Math.floor(Math.random() * (maxMs - minMs + 1)));
+    sleepOrAbort(serial, minMs + Math.floor(Math.random() * (maxMs - minMs + 1)), "actionPacing", "computed");
 
   function rollScrollVelocity(
     h: number,
@@ -5133,7 +5146,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Dwell 2–20 s inside the highlight story.
       const dwellMs = 2000 + Math.round(Math.random() * 18000);
       onLog?.(`Inject Browsing: dwelling in highlight for ${(dwellMs / 1000).toFixed(1)}s…`);
-      await sleepOrAbort(serial, dwellMs);
+      await sleepOrAbort(serial, dwellMs, "actionPacing", "computed");
 
       // Instagram's story viewer dismisses with the inverse of the normal
       // feed scroll gesture. Do not spend another UIAutomator dump deciding
@@ -5243,7 +5256,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Wait 4–7 seconds so images fully render before the next scroll.
       const renderWait = 4000 + Math.round(Math.random() * 3000);
       onLog?.(`Inject Browsing: waiting ${(renderWait / 1000).toFixed(1)}s for media to render…`);
-      await sleepOrAbort(serial, renderWait);
+      await sleepOrAbort(serial, renderWait, "actionPacing", "computed");
     }
 
     // ── Highlights — AFTER feed scroll ───────────────────────────────────
@@ -5503,7 +5516,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // ── Inject Browsing — Share via DM (isolated; not shared with any other tool) ──
       try {
         if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-        await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+        await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300), "actionPacing", "computed");
         onLog?.(`Inject Browsing: tapping share-via-DM icon at (${icons.shareDm.x},${icons.shareDm.y})…`);
         await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
         await sleepOrAbort(serial, 1500);
@@ -5599,7 +5612,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } else {
       try {
         if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-        await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
+        await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300), "actionPacing", "computed");
         onLog?.(`Inject Browsing: tapping save icon at (${icons.save.x},${icons.save.y})…`);
         await android.tap(serial, icons.save.x, icons.save.y);
         await sleepOrAbort(serial, 600);
@@ -7524,7 +7537,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const waitLoSec = Math.min(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitHiSec = Math.max(airplaneWaitMinSec, airplaneWaitMaxSec);
       const waitSec = waitLoSec + Math.random() * (waitHiSec - waitLoSec);
-      await sleepOrAbort(serial, Math.round(waitSec * 1000), "airplaneMode");
+      await sleepOrAbort(serial, Math.round(waitSec * 1000), "airplaneMode", "computed");
       tLog("▶ Airplane mode OFF — restoring network…");
       await android.setAirplaneMode(serial, false);
       tLog("  ✓ Airplane mode off — network reconnecting");
