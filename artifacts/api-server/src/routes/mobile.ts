@@ -6214,24 +6214,58 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // These values must exist before pre-switch dispatch. Previously they
       // were declared below this branch, causing a TDZ failure whenever
       // pre-switch ran: "Cannot access '_toolActivated' before initialization".
-      const _activationTrace: Record<string, { minPct: number; maxPct: number; sampledPct: number; draw: number; active: boolean }> = {};
-      const _activateTool = (name: string, minPct: number, maxPct: number) => {
+      const trustScoreAssigned = Boolean(effectiveCycle.scoreId);
+      const _activationTrace: Record<string, {
+        eligible: boolean;
+        eligibilityReason: string;
+        minPct: number;
+        maxPct: number;
+        sampledPct: number | null;
+        draw: number | null;
+        active: boolean;
+      }> = {};
+      const _activateTool = (name: string, trustScoreField: string, minPct: number, maxPct: number) => {
+        const eligible = !trustScoreAssigned || effectiveSettings[trustScoreField] !== false;
+        if (!eligible) {
+          _activationTrace[name] = {
+            eligible: false,
+            eligibilityReason: `Trust Score has ${trustScoreField} unchecked`,
+            minPct,
+            maxPct,
+            sampledPct: null,
+            draw: null,
+            active: false,
+          };
+          return false;
+        }
         const roll = rollActivateWithTrace(minPct, maxPct);
-        _activationTrace[name] = { minPct, maxPct, sampledPct: roll.sampledPct, draw: roll.draw, active: roll.active };
+        _activationTrace[name] = {
+          eligible: true,
+          eligibilityReason: "eligible",
+          minPct,
+          maxPct,
+          sampledPct: roll.sampledPct,
+          draw: roll.draw,
+          active: roll.active,
+        };
         return roll.active;
       };
       const _toolActivated: Record<string, boolean> = {
-        feed: _activateTool("feed", feedActivatePctMin, feedActivatePctMax),
-        stories: _activateTool("stories", viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
-        explore: _activateTool("explore", viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
-        reels: _activateTool("reels", viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
-        checkDm: _activateTool("checkDm", checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
-        follow: _activateTool("follow", followActivatePctMin, followActivatePctMax),
-        post: _activateTool("post", makePostActivatePctMin, makePostActivatePctMax),
-        postStory: _activateTool("postStory", postStoryActivatePctMin, postStoryActivatePctMax),
-        "Random Actions": _activateTool("Random Actions", randomJitterActivatePctMin, randomJitterActivatePctMax),
+        feed: _activateTool("feed", "feedEnabled", feedActivatePctMin, feedActivatePctMax),
+        stories: _activateTool("stories", "storiesEnabled", viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
+        explore: _activateTool("explore", "viewExploreEnabled", viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
+        reels: _activateTool("reels", "viewReelsEnabled", viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
+        checkDm: _activateTool("checkDm", "checkDmEnabled", checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
+        follow: _activateTool("follow", "followEnabled", followActivatePctMin, followActivatePctMax),
+        post: _activateTool("post", "makePostEnabled", makePostActivatePctMin, makePostActivatePctMax),
+        postStory: _activateTool("postStory", "postStoryEnabled", postStoryActivatePctMin, postStoryActivatePctMax),
+        "Random Actions": _activateTool("Random Actions", "randomJitterEnabled", randomJitterActivatePctMin, randomJitterActivatePctMax),
       };
-      tLog(`[activation] ${JSON.stringify({ tools: _activationTrace, activeTools: Object.keys(_toolActivated).filter(tool => _toolActivated[tool]) })}`);
+      tLog(`[activation] ${JSON.stringify({
+        trustScoreId: effectiveCycle.scoreId,
+        tools: _activationTrace,
+        activeTools: Object.keys(_toolActivated).filter(tool => _toolActivated[tool]),
+      })}`);
       const _toolOrderLabels: Record<string, string> = {
         feed: "VIEW FEED", stories: "VIEW STORIES", explore: "VIEW EXPLORE",
         reels: "VIEW REELS", checkDm: "CHECK INBOX", follow: "FOLLOW USERS",
