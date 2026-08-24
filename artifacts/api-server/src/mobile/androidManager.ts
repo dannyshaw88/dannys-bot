@@ -8779,11 +8779,14 @@ export async function switchToInstagramAccount(
     }
 
     // The switcher is populated, but the requested account may be below the
-    // current viewport. Always scroll once when the target is not visible.
-    // Instagram frequently exposes the sheet's child overlays instead of a
-    // scrollable parent, so scrollable="true" is not a prerequisite.
-    if (!coords) {
-      onLog?.(`  ↳ @${clean} is not visible — scrolling the expanded account sheet once regardless of accessibility flags…`);
+    // current viewport. Expand the account sheet by at most two forward swipes,
+    // searching after each one. Never guess a row coordinate if the username
+    // is still absent after the second swipe.
+    for (let swipeAttempt = 1; swipeAttempt <= 2 && !coords; swipeAttempt++) {
+      onLog?.(
+        `  ↳ @${clean} is not visible — expanding the account sheet (swipe ${swipeAttempt}/2) ` +
+        `regardless of accessibility flags…`,
+      );
       const screen = getScreenSize(serial);
       const scrollBounds = _findScrollableBounds(xml) ?? {
         x1: 0,
@@ -8842,13 +8845,11 @@ export async function switchToInstagramAccount(
     }
 
     if (!coords) {
-      onLog?.(`  ⚠ "@${clean}" not found in switcher — is the account logged in on this device?`);
-      // Continue the physical sequence even when accessibility does not expose
-      // the row. This is intentionally a last-resort tap, not a success claim.
-      // The picker remains open and the next cycle can still correct the state.
-      const fallbackRow = Math.max(1, Math.min(switcherScreenHeight - 1, Math.round(switcherScreenHeight * 0.28)));
-      coords = { x: Math.round(getScreenSize(serial).w * 0.5), y: fallbackRow };
-      onLog?.(`  ↳ Continuing with fallback account-row tap at (${coords.x},${coords.y})`);
+      onLog?.(
+        `  ⚠ "@${clean}" not found in switcher after 2 sheet swipes — ` +
+        "abandoning without an account-row tap",
+      );
+      return false;
     }
   }
 
