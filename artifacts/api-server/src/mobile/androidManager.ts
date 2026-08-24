@@ -8862,16 +8862,13 @@ export async function switchToInstagramAccount(
   // logs in naturally, so no Back is needed. When the tapped row is the
   // already-active account, Instagram can leave the account sheet open; in
   // that one case, dismiss it with exactly one Android Back. Never retry Back.
-   await _sleep(1500 + Math.floor(Math.random() * 3501));
-   const restrictionAfterSwitch = await dismissInstagramAccountRestriction(serial, onLog);
-   if (!restrictionAfterSwitch) {
-     const restrictionCheck = await getUiDump(serial).catch(() => "");
-     const restrictionLower = restrictionCheck.toLowerCase();
-     if (restrictionLower.includes("what happened") &&
-         (restrictionLower.includes("restriction") || restrictionLower.includes("can't share links"))) {
-       return false;
-     }
-   }
+   // The row tap has already dispatched the account switch. Keep only a short
+   // handoff wait for Instagram to replace the active surface; the subsequent
+   // live dump is the readiness check. A 1.5–5s random dwell here, followed by
+   // another final 0.7–5s dwell below, made an already-loaded account appear
+   // idle for roughly 20 seconds on busy Xiaomi devices.
+   await _sleep(1500 + Math.floor(Math.random() * 1001));
+   await dismissInstagramAccountRestriction(serial, onLog);
   const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
   if (postTapXml) {
     const homeFeedVisible =
@@ -8901,8 +8898,8 @@ export async function switchToInstagramAccount(
     }
   }
 
-  // 7. Give Instagram time to finish loading the feed.
-   await _sleep(700 + Math.floor(Math.random() * 4301));
+  // 7. The post-tap verification dump above is the readiness check. Do not
+  // add another random dwell after the account is already loaded.
   return true;
 }
 
