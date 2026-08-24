@@ -48,7 +48,7 @@ export async function runVisitSettings(
     return;
   }
   await android.tap(serial, optionsButton.x, optionsButton.y);
-  await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 600));
+  await sleepOrAbort(serial, 2500);
   onLog?.("Visit Settings: ✓ opened Settings and activity");
 
   const settingsRow = await android.findInstagramSettingsRow(serial).catch(() => null);
