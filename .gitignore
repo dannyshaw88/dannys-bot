@@ -73,6 +73,9 @@ attached_assets/*.png
 attached_assets/*.jpg
 attached_assets/*.jpeg
 attached_assets/*.webp
+# Runtime visual references used by the packaged mobile detector.
+!attached_assets/home_1787131461428.jpg
+!attached_assets/like-reference-reels.png
 
 # Local mobile-device runtime state — may contain account credentials or
 # emulator-specific configuration and is not part of the application source.
