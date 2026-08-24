@@ -4980,9 +4980,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
    * (back-compat default); e.g. 5/10 gives this execution roughly a 5-10%
    * (~7.5% avg) chance of the tool being active at all this time around.
    */
-  function rollActivate(min: number, max: number): boolean {
-    const chance = rollRange(min, max) / 100;
-    return chance > 0 && Math.random() < chance;
+  function rollActivateWithTrace(min: number, max: number): { active: boolean; sampledPct: number; draw: number } {
+    const sampledPct = rollRange(min, max);
+    const draw = Math.random();
+    return { sampledPct, draw, active: sampledPct > 0 && draw < sampledPct / 100 };
   }
 
   /**
@@ -6213,17 +6214,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // These values must exist before pre-switch dispatch. Previously they
       // were declared below this branch, causing a TDZ failure whenever
       // pre-switch ran: "Cannot access '_toolActivated' before initialization".
-      const _toolActivated: Record<string, boolean> = {
-        feed: feedEnabled && rollActivate(feedActivatePctMin, feedActivatePctMax),
-        stories: storiesEnabled && viewStoriesSlidesMax > 0 && rollActivate(viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
-        explore: (viewExploreEnabled ?? false) && (viewExploreScrollMax ?? 0) > 0 && rollActivate(viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
-        reels: (viewReelsEnabled ?? false) && (viewReelsScrollMax ?? 0) > 0 && rollActivate(viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
-        checkDm: (checkDmEnabled ?? false) && rollActivate(checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
-        follow: followEnabled && rollActivate(followActivatePctMin, followActivatePctMax),
-        post: makePostEnabled && rollActivate(makePostActivatePctMin, makePostActivatePctMax),
-        postStory: postStoryEnabled && rollActivate(postStoryActivatePctMin, postStoryActivatePctMax),
-        "Random Actions": randomJitterEnabled && rollActivate(randomJitterActivatePctMin, randomJitterActivatePctMax),
+      const _activationTrace: Record<string, { enabled: boolean; minPct: number; maxPct: number; sampledPct: number; draw: number; active: boolean }> = {};
+      const _activateTool = (name: string, enabled: boolean, minPct: number, maxPct: number) => {
+        const roll = rollActivateWithTrace(minPct, maxPct);
+        const active = enabled && roll.active;
+        _activationTrace[name] = { enabled, minPct, maxPct, sampledPct: roll.sampledPct, draw: roll.draw, active };
+        return active;
       };
+      const _toolActivated: Record<string, boolean> = {
+        feed: _activateTool("feed", feedEnabled, feedActivatePctMin, feedActivatePctMax),
+        stories: _activateTool("stories", storiesEnabled && viewStoriesSlidesMax > 0, viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
+        explore: _activateTool("explore", (viewExploreEnabled ?? false) && (viewExploreScrollMax ?? 0) > 0, viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
+        reels: _activateTool("reels", (viewReelsEnabled ?? false) && (viewReelsScrollMax ?? 0) > 0, viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
+        checkDm: _activateTool("checkDm", checkDmEnabled ?? false, checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
+        follow: _activateTool("follow", followEnabled, followActivatePctMin, followActivatePctMax),
+        post: _activateTool("post", makePostEnabled, makePostActivatePctMin, makePostActivatePctMax),
+        postStory: _activateTool("postStory", postStoryEnabled, postStoryActivatePctMin, postStoryActivatePctMax),
+        "Random Actions": _activateTool("Random Actions", randomJitterEnabled, randomJitterActivatePctMin, randomJitterActivatePctMax),
+      };
+      tLog(`[activation] ${JSON.stringify({ tools: _activationTrace, activeTools: Object.keys(_toolActivated).filter(tool => _toolActivated[tool]) })}`);
       const _toolOrderLabels: Record<string, string> = {
         feed: "VIEW FEED", stories: "VIEW STORIES", explore: "VIEW EXPLORE",
         reels: "VIEW REELS", checkDm: "CHECK INBOX", follow: "FOLLOW USERS",
