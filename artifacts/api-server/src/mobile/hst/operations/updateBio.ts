@@ -84,8 +84,12 @@ export async function runUpdateBio(
     //     connection before we try to type.
     {
       const bioXml = await android.dumpUi(serial);
-      // Bio edit screen is identified by edit_bio_layout or prism_form_field_container.
-      if (bioXml.includes("edit_bio_layout") || bioXml.includes("prism_form_field_container")) {
+      // `prism_form_field_container` is also present on the surrounding Edit
+      // Profile form, so it cannot prove that the dedicated Bio screen opened.
+      // Require the Bio screen's own layout marker before looking for an
+      // EditText. This prevents the first EditText on Edit Profile (Name)
+      // from being mistaken for the Bio field.
+      if (bioXml.includes("edit_bio_layout")) {
         // Tap the EditText (the actual text field, not the outer container).
         const et = bioXml.match(/\bEditText\b[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
         if (et) {
