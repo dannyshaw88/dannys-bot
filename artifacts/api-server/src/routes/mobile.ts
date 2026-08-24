@@ -6214,23 +6214,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // These values must exist before pre-switch dispatch. Previously they
       // were declared below this branch, causing a TDZ failure whenever
       // pre-switch ran: "Cannot access '_toolActivated' before initialization".
-      const _activationTrace: Record<string, { enabled: boolean; minPct: number; maxPct: number; sampledPct: number; draw: number; active: boolean }> = {};
-      const _activateTool = (name: string, enabled: boolean, minPct: number, maxPct: number) => {
+      const _activationTrace: Record<string, { minPct: number; maxPct: number; sampledPct: number; draw: number; active: boolean }> = {};
+      const _activateTool = (name: string, minPct: number, maxPct: number) => {
         const roll = rollActivateWithTrace(minPct, maxPct);
-        const active = enabled && roll.active;
-        _activationTrace[name] = { enabled, minPct, maxPct, sampledPct: roll.sampledPct, draw: roll.draw, active };
-        return active;
+        _activationTrace[name] = { minPct, maxPct, sampledPct: roll.sampledPct, draw: roll.draw, active: roll.active };
+        return roll.active;
       };
       const _toolActivated: Record<string, boolean> = {
-        feed: _activateTool("feed", feedEnabled, feedActivatePctMin, feedActivatePctMax),
-        stories: _activateTool("stories", storiesEnabled && viewStoriesSlidesMax > 0, viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
-        explore: _activateTool("explore", (viewExploreEnabled ?? false) && (viewExploreScrollMax ?? 0) > 0, viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
-        reels: _activateTool("reels", (viewReelsEnabled ?? false) && (viewReelsScrollMax ?? 0) > 0, viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
-        checkDm: _activateTool("checkDm", checkDmEnabled ?? false, checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
-        follow: _activateTool("follow", followEnabled, followActivatePctMin, followActivatePctMax),
-        post: _activateTool("post", makePostEnabled, makePostActivatePctMin, makePostActivatePctMax),
-        postStory: _activateTool("postStory", postStoryEnabled, postStoryActivatePctMin, postStoryActivatePctMax),
-        "Random Actions": _activateTool("Random Actions", randomJitterEnabled, randomJitterActivatePctMin, randomJitterActivatePctMax),
+        feed: _activateTool("feed", feedActivatePctMin, feedActivatePctMax),
+        stories: _activateTool("stories", viewStoriesActivatePctMin ?? 100, viewStoriesActivatePctMax ?? 100),
+        explore: _activateTool("explore", viewExploreActivatePctMin ?? 100, viewExploreActivatePctMax ?? 100),
+        reels: _activateTool("reels", viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
+        checkDm: _activateTool("checkDm", checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
+        follow: _activateTool("follow", followActivatePctMin, followActivatePctMax),
+        post: _activateTool("post", makePostActivatePctMin, makePostActivatePctMax),
+        postStory: _activateTool("postStory", postStoryActivatePctMin, postStoryActivatePctMax),
+        "Random Actions": _activateTool("Random Actions", randomJitterActivatePctMin, randomJitterActivatePctMax),
       };
       tLog(`[activation] ${JSON.stringify({ tools: _activationTrace, activeTools: Object.keys(_toolActivated).filter(tool => _toolActivated[tool]) })}`);
       const _toolOrderLabels: Record<string, string> = {
