@@ -8616,7 +8616,7 @@ export async function switchToInstagramAccount(
 
   let postHeaderTapXml = "";
   if (switchMethod?.useProfileTabLongPress) {
-    const holdDurationMs = Math.max(3000, Math.min(10000, Math.round(switchMethod.holdDurationMs ?? 3000)));
+    const holdDurationMs = Math.max(2000, Math.min(5000, Math.round(switchMethod.holdDurationMs ?? 2000)));
     onLog?.(`  ↳ Holding live Profile tab at (${profileTab.x},${profileTab.y}) for ${holdDurationMs}ms to open account sheet…`);
     await runAdb(adbPath, [
       "-s", serial, "shell", "input", "swipe",
