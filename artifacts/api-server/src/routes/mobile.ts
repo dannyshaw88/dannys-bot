@@ -118,6 +118,19 @@ const malesOnlyMatcherCache = new Map<string, CompiledMalesOnlyName[]>();
 const screencapInFlight = new Map<string, Promise<Buffer>>();
 const SCREENCAP_TIMEOUT_MS = 8_000;
 let visualDecodeQueue: Promise<void> = Promise.resolve();
+let sharpNativeQueue: Promise<void> = Promise.resolve();
+
+async function withSharpNative<T>(operation: () => Promise<T>): Promise<T> {
+  let release!: () => void;
+  const previous = sharpNativeQueue;
+  sharpNativeQueue = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
 
 function capturePng(adbPath: string, serial: string): Promise<Buffer> {
   const existing = screencapInFlight.get(serial);
@@ -909,52 +922,54 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
     const PADDING  = 10;
     const LINE_H   = 16;
 
-    const phoneResized = await sharp(phonePngRaw)
-      .resize({ height: TARGET_H, fit: "contain", background: "#000000" })
-      .png()
-      .toBuffer();
-    const phoneMeta = await sharp(phoneResized).metadata();
-    const phoneW = phoneMeta.width ?? 360;
+    const composite = await withSharpNative(async () => {
+      const phoneResized = await sharp(phonePngRaw)
+        .resize({ height: TARGET_H, fit: "contain", background: "#000000" })
+        .png()
+        .toBuffer();
+      const phoneMeta = await sharp(phoneResized).metadata();
+      const phoneW = phoneMeta.width ?? 360;
 
-    // ── 3. Render the debug log panel as SVG ──────────────────────────────────
-    const bufLines = debugLogBuffer.get(serial) ?? [];
-    const maxLines = Math.floor((TARGET_H - PADDING * 2) / LINE_H) - 1; // -1 for header
-    const visibleLines = bufLines.slice(-maxLines);
+      // ── 3. Render the debug log panel as SVG ──────────────────────────────────
+      const bufLines = debugLogBuffer.get(serial) ?? [];
+      const maxLines = Math.floor((TARGET_H - PADDING * 2) / LINE_H) - 1; // -1 for header
+      const visibleLines = bufLines.slice(-maxLines);
 
-    const headerY = PADDING + LINE_H;
-    const textRows = visibleLines.map((line, i) => {
-      const y = headerY + (i + 1) * LINE_H;
-      const color = debugLogLineColor(line);
-      // Truncate long lines so they don't overflow the panel width.
-      const display = escapeXmlSvg(line.length > 68 ? line.slice(0, 68) + "…" : line);
-      return `<text x="${PADDING}" y="${y}" fill="${color}">${display}</text>`;
-    }).join("\n    ");
+      const headerY = PADDING + LINE_H;
+      const textRows = visibleLines.map((line, i) => {
+        const y = headerY + (i + 1) * LINE_H;
+        const color = debugLogLineColor(line);
+        // Truncate long lines so they don't overflow the panel width.
+        const display = escapeXmlSvg(line.length > 68 ? line.slice(0, 68) + "…" : line);
+        return `<text x="${PADDING}" y="${y}" fill="${color}">${display}</text>`;
+      }).join("\n    ");
 
-    const svgStr = `<?xml version="1.0" encoding="UTF-8"?>
+      const svgStr = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${LOG_W}" height="${TARGET_H}">
   <rect width="${LOG_W}" height="${TARGET_H}" fill="#0f172a"/>
   <text x="${PADDING}" y="${headerY}" fill="#94a3b8" font-weight="bold">── Debugging Log ──</text>
   ${textRows}
 </svg>`;
 
-    // sharp rasterises SVG natively (libvips + librsvg).
-    const logPanelPng = await sharp(Buffer.from(svgStr, "utf8"))
-      .resize(LOG_W, TARGET_H)
-      .png()
-      .toBuffer();
+      // sharp rasterises SVG natively (libvips + librsvg).
+      const logPanelPng = await sharp(Buffer.from(svgStr, "utf8"))
+        .resize(LOG_W, TARGET_H)
+        .png()
+        .toBuffer();
 
-    // ── 4. Composite: phone (left) + log panel (right) ────────────────────────
-    const totalW = phoneW + LOG_W;
-    const composite = await sharp({
-      create: { width: totalW, height: TARGET_H, channels: 4 as const,
-                background: { r: 15, g: 23, b: 42, alpha: 1 } },
-    })
-      .composite([
-        { input: phoneResized, left: 0,      top: 0 },
-        { input: logPanelPng,  left: phoneW, top: 0 },
-      ])
-      .png()
-      .toBuffer();
+      // ── 4. Composite: phone (left) + log panel (right) ────────────────────────
+      const totalW = phoneW + LOG_W;
+      return await sharp({
+        create: { width: totalW, height: TARGET_H, channels: 4 as const,
+                  background: { r: 15, g: 23, b: 42, alpha: 1 } },
+      })
+        .composite([
+          { input: phoneResized, left: 0,      top: 0 },
+          { input: logPanelPng,  left: phoneW, top: 0 },
+        ])
+        .png()
+        .toBuffer();
+    });
 
     await fsPromises.writeFile(path.join(dir, filename), composite).catch(() => {});
   } catch {
@@ -1835,7 +1850,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const pulledPath = await android.pullFileFromDevice(serial, devicePath);
       const pulledBytes = await fsPromises.readFile(pulledPath);
       const deviceSha256 = createHash("sha256").update(pulledBytes).digest("hex");
-      const deviceMetadata = await sharp(pulledBytes).metadata();
+      const deviceMetadata = await withSharpNative(() => sharp(pulledBytes).metadata());
       await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});
 
       res.json({
@@ -4458,7 +4473,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       pulledPath = await android.pullFileFromDevice(serial, devicePath);
       const bytes = await fsPromises.readFile(pulledPath);
-      const metadata = await sharp(bytes).metadata();
+      const metadata = await withSharpNative(() => sharp(bytes).metadata());
       const sha256 = createHash("sha256").update(bytes).digest("hex");
       const matchesShape =
         bytes.length === expected.bytes &&
@@ -4481,7 +4496,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   }
 
   async function forensicImageReport(label: string, bytes: Buffer) {
-    const metadata = await sharp(bytes).metadata();
+    const metadata = await withSharpNative(() => sharp(bytes).metadata());
     const hashBuffer = (value?: Buffer) => value ? createHash("sha256").update(value).digest("hex") : null;
     return {
       label,
