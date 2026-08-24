@@ -3,7 +3,12 @@ export interface MakePostOperationContext {
   android: any;
   path: any;
   fsPromises: any;
-  sleepOrAbort: (serial: string, ms: number) => Promise<void>;
+  sleepOrAbort: (
+    serial: string,
+    ms: number,
+    category?: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" | "airplaneMode",
+    timingMode?: "static" | "computed",
+  ) => Promise<void>;
   logger?: any;
   pickLocalFolderImage: (serial: string, opts: any) => Promise<string | null>;
   prepareMakePostImage: (localPath: string, fileName: string, opts: any) => Promise<any>;
@@ -75,7 +80,7 @@ for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
 // a natural randomized 3–5 second dwell before pushing/opening compose.
 const homeDwellMs = 3000 + Math.round(Math.random() * 2000);
 onLog?.(`Make a Post: waiting ${ (homeDwellMs / 1000).toFixed(1) }s for Instagram Home to finish loading…`);
-await sleepOrAbort(serial, homeDwellMs);
+  await sleepOrAbort(serial, homeDwellMs, "actionPacing", "computed");
 
 const fileName = await pickLocalFolderImage(serial, {
   folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, slotIdx, onLog,
