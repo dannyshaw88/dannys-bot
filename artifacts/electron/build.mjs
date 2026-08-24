@@ -1,11 +1,14 @@
 import { build as esbuild } from "esbuild";
 import { cp, rm, mkdir, writeFile } from "fs/promises";
 import { existsSync } from "fs";
+import { createRequire } from "node:module";
+import { spawnSync } from "node:child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(__dirname, "dist");
+const require = createRequire(import.meta.url);
 
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
@@ -65,6 +68,45 @@ if (!existsSync(serverSrc)) {
   throw new Error(`API server dist not found at ${serverSrc}. Run 'pnpm --filter @workspace/api-server run build' first.`);
 }
 await cp(serverSrc, path.join(dist, "server"), { recursive: true });
+
+// ffmpeg-static installs a platform-specific binary after package install.
+// Copy it explicitly into the server bundle: the package's JavaScript loader
+// may be present in the Electron app while its generated ffmpeg.exe is not.
+const serverVendorTarget = path.join(dist, "server", "vendor");
+await mkdir(serverVendorTarget, { recursive: true });
+let ffmpegBinarySource = "";
+try {
+  const ffmpegLoader = require.resolve("ffmpeg-static");
+  const ffmpegDir = path.dirname(ffmpegLoader);
+  let candidates = [
+    path.join(ffmpegDir, "ffmpeg.exe"),
+    path.join(ffmpegDir, "ffmpeg"),
+  ];
+  ffmpegBinarySource = candidates.find(candidate => existsSync(candidate)) || "";
+  if (!ffmpegBinarySource && process.platform === "win32") {
+    // The Windows installer workflow intentionally installs npm packages with
+    // lifecycle scripts disabled. Run ffmpeg-static's own platform installer
+    // here before packaging, then resolve the generated executable again.
+    const installResult = spawnSync(process.execPath, [path.join(ffmpegDir, "install.js")], {
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    if (installResult.status !== 0) {
+      throw new Error(`ffmpeg-static installer exited with status ${installResult.status}`);
+    }
+    ffmpegBinarySource = candidates.find(candidate => existsSync(candidate)) || "";
+  }
+} catch {}
+if (ffmpegBinarySource) {
+  const ffmpegName = path.basename(ffmpegBinarySource);
+  await cp(ffmpegBinarySource, path.join(serverVendorTarget, ffmpegName));
+  console.log(`Bundled ${ffmpegName} for Fix AI Slop → ${ffmpegBinarySource}`);
+} else {
+  if (process.platform === "win32") {
+    throw new Error("Fix AI Slop FFmpeg binary is missing; run ffmpeg-static/install.js before building the Windows bundle.");
+  }
+  console.warn("Fix AI Slop FFmpeg binary was not found during Linux build; Windows packaging must install ffmpeg-static for its target platform.");
+}
 
 // Ship the visual Search-bar references with the API server. The runtime
 // cannot depend on Replit's workspace-level attached_assets directory once
