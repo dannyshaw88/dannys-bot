@@ -5747,14 +5747,26 @@ async function findFeedLikeIconByPixels(
        path.resolve(process.cwd(), "attached_assets/like-reference-reels.png"),
        path.resolve(process.cwd(), "../../attached_assets/like-reference-reels.png"),
        path.resolve(__dirname, "../../../attached_assets/like-reference-reels.png"),
+        // Electron packages the API under resources/app/dist/server, where
+        // build.mjs copies the reference to this directory.
+        path.resolve(__dirname, "like-icon-refs/like-reference-reels.png"),
         path.resolve(__dirname, "../like-icon-refs/like-reference-reels.png"),
      ];
      const refPath = refCandidates.find(candidate => fs.existsSync(candidate));
      if (!refPath) {
-       onLog?.("[feed-icons] Like visual reference unavailable — skipping visual anchor");
+        onLog?.(`[feed-icons] Like visual reference unavailable — checked ${refCandidates.join(" | ")}`);
        return null;
      }
-    const { data, info } = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
+     let data: Buffer;
+     let info: { width: number; height: number };
+     try {
+       const loaded = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
+       data = loaded.data;
+       info = loaded.info;
+     } catch (error: any) {
+       onLog?.(`[feed-icons] Like visual reference read failed at ${refPath}: ${error?.message ?? String(error)}`);
+       return null;
+     }
     const sample = (x: number, y: number) => {
       const i = (y * screen.width + x) * screen.channels;
       return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
@@ -5833,8 +5845,8 @@ async function findFeedLikeIconByPixels(
         : `[feed-icons] Like visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`,
     );
     return { x: best.x, y: best.y };
-  } catch {
-    onLog?.("[feed-icons] Like visual reference unavailable — skipping visual anchor");
+   } catch (error: any) {
+     onLog?.(`[feed-icons] Like visual matcher failed: ${error?.message ?? String(error)}`);
     return null;
   }
 }
