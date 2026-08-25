@@ -83,8 +83,10 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
   }
 
   log("[TRACE] step-1 account-switch: begin");
+  logger.info({ serial, username: username || null }, "[account-switch] begin");
   if (!username) {
     log("[TRACE] step-1 account-switch: skipped-no-slot-username");
+    logger.warn({ serial }, "[account-switch] skipped: slot has no username");
     lastActiveUsername.set(serial, lastActiveUsername.get(serial) || "");
     return false;
   }
@@ -103,6 +105,15 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
       ? `▶ Account switch method: Profile-tab long-press (${holdDurationMs}ms hold)`
       : "▶ Account switch method: Home/top-profile",
   );
+  logger.info(
+    {
+      serial,
+      username,
+      method: useProfileTabLongPress ? "profile-tab-long-press" : "home-top-profile",
+      holdDurationMs: holdDurationMs ?? null,
+    },
+    "[account-switch] dispatching low-level switch",
+  );
 
   const switched = await android.switchToInstagramAccount(
     serial,
@@ -116,6 +127,7 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
   );
   if (switched) {
     log("[TRACE] step-1 account-switch: confirmed");
+    logger.info({ serial, username }, "[account-switch] confirmed");
     steps.push(`account-switch(@${username})`);
     lastActiveUsername.set(serial, username);
     const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
@@ -125,6 +137,7 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
     }
   } else {
     log("[TRACE] step-1 account-switch: failed");
+    logger.warn({ serial, username }, "[account-switch] returned false");
     log(`✗ Account switch to @${username} failed — continuing with tools`);
     steps.push("account-switch(attempted — continuing)");
   }
