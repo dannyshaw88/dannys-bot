@@ -8,3 +8,5 @@ Software restart loses browser-memory timers, so previously enabled HST slots ne
 **Why:** A shared immediate-start helper caused every enabled slot to launch as soon as the app restarted. The background runner also reloads settings outside the account panel, so omitting the persisted username loses Dashboard account attribution even when the slot index is correct.
 
 **How to apply:** Keep startup recovery and manual toggle-on as distinct call modes. Recovery must treat unavailable settings or network failures as delayed retries, and the per-slot settings response must include the persisted account username so restart-triggered cycles send `slotIdx`, `slotUsername`, `sourceType: "phone"`, and `serial:slot` metadata together.
+
+Manual off→on reliability also depends on keeping `hydrated` true during same-device refreshes. Only a changed device/slot identity should reset the hydration gate; preserve explicit toggle edits made while a settings refresh is in flight.

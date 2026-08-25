@@ -3599,6 +3599,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // Run-every interval, same as every cycle after it. Set by
   // `setEnabledByUser` below, consumed once by the run-loop effect.
   const manualToggleOnRef = useRef(false);
+  // Counts explicit master-toggle edits so a settings response that was
+  // already in flight cannot overwrite a newer off→on (or on→off) choice.
+  const enabledEditRevisionRef = useRef(0);
+  // Hydration is a gate only for a new slot/device identity. Refreshing the
+  // same identity must not briefly set hydrated=false and tear down scheduling.
+  const hydrationIdentityRef = useRef<string | null>(null);
   // Tracks whether the NEXT cleanup should abort the server-side cycle.
   // Only set when the user explicitly toggles the master switch off — NOT on
   // component unmount (user navigating to another page).  This prevents the
@@ -3650,6 +3656,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   }, [deviceUnavailable]);
 
   const setEnabledByUser = useCallback((enabled: boolean) => {
+    enabledEditRevisionRef.current += 1;
     if (enabled) {
       // A rapid off→on toggle can run the old effect cleanup after the new
       // enabled state has already rendered. Clear the stale explicit-stop
@@ -3755,15 +3762,21 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       return;
     }
     let active = true;
+    const serial = phone.serial; // capture at effect-run time
     // A stable slot component can move to a new visible index after an
     // account is deleted. Treat that as a new persistence boundary: while
     // the new slot's settings are loading, block autosave so the previous
     // account's enabled=false (or other settings) cannot be written into
     // the account that moved into this position.
-    hydratedRef.current = false;
-    setHydrated(false);
+    const hydrationIdentity = `${serial}:${slotIdx ?? 0}:${slotId ?? ""}`;
+    const identityChanged = hydrationIdentityRef.current !== hydrationIdentity;
+    hydrationIdentityRef.current = hydrationIdentity;
+    const hydrationEditRevision = enabledEditRevisionRef.current;
+    if (identityChanged) {
+      hydratedRef.current = false;
+      setHydrated(false);
+    }
     setLoading(true);
-    const serial = phone.serial; // capture at effect-run time
     // Load only the master toggle first. This endpoint reads the raw slot
     // record and does not resolve TrustScore templates, so the account cards
     // reflect the real enabled/disabled state immediately while the detailed
@@ -3775,6 +3788,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const applyHydratedSettings = (d: Record<string, any>) => {
       if (!active) return;
       const merged = { ...AUTOMATION_DEFAULTS, ...d, makePostLocalFolderEnabled: true };
+      // A user edit made while this request was in flight is newer than the
+      // server snapshot. Preserve that explicit toggle while still applying
+      // the rest of the refreshed settings.
+      if (enabledEditRevisionRef.current !== hydrationEditRevision) {
+        merged.enabled = settingsRef.current.enabled;
+      }
       lastSavedRef.current = JSON.stringify(merged);
       // Set settings AND hydrated in the same React batch so the run-loop
       // fires exactly once with the correct loaded values.
