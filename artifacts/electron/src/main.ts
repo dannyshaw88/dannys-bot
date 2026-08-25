@@ -1396,6 +1396,16 @@ async function createWindow() {
         logs: _mainLogPath || null,
       },
       recentMainLog: readTail(_mainLogPath || path.join(process.cwd(), "logs.log")),
+      // A hard process termination can leave no final exit line in the new
+      // session.  startServer rotates the previous session to logs.1, so
+      // include the rotated tails in the export instead of hiding the exact
+      // period in which the process disappeared.
+      previousMainLogs: [1, 2, 3].reduce<Record<string, string>>((logs, index) => {
+        const base = _mainLogPath || path.join(process.cwd(), "logs.log");
+        logs[`logs.${index}`] = readTail(`${base}.${index}`);
+        return logs;
+      }, {}),
+      lastNativeOperation: readTail(path.join(getUserDataPath(), "last-native-operation.log"), 32 * 1024),
       recentApiLog: _serverDebugLogPath ? readTail(_serverDebugLogPath) : "",
     };
     try {
