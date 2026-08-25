@@ -8229,6 +8229,13 @@ function applySlotPersonalityToSettings(input: AutomationSettingsData, personali
       (result as any)[max] = Math.max((result as any)[min], Math.round(Math.max(low, high) * volume));
     }
   });
+  // Reels watch duration is an account personality signal too: Skimmers move
+  // on sooner while Immersive accounts stay with a clip longer. Consumption
+  // adds a deliberately smaller inverse adjustment so high-volume accounts
+  // progress through more clips without overriding their attention style.
+  const watchAttention = [0.65, 0.82, 1, 1.18, 1.35][personality.attention ?? 2] ?? 1;
+  const watchConsumption = [1.05, 1.02, 1, 0.98, 0.95][personality.consumption ?? 2] ?? 1;
+  range("viewReelsWatchPctMin", "viewReelsWatchPctMax", watchAttention * watchConsumption);
   (result as any).actionDelayMin = Math.max(0, Number(result.actionDelayMin) * attention);
   (result as any).actionDelayMax = Math.max((result as any).actionDelayMin, Number(result.actionDelayMax) * attention);
   (result as any).viewExploreActionDelayMin = Math.max(0, Number(result.viewExploreActionDelayMin) * attention);
