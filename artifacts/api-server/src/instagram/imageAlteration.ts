@@ -12,6 +12,8 @@
  */
 import { randomBytes } from "crypto";
 import { spawn } from "child_process";
+import { tmpdir } from "os";
+import { join } from "path";
 
 export type AlterationLevel = "small" | "medium" | "high";
 
@@ -125,8 +127,8 @@ async function getFfmpegPath(): Promise<string> {
 
 async function ffmpegAlter(input: Buffer, level: AlterationLevel, cfg: AlterationConfig, frequencyDisruption: boolean): Promise<Buffer> {
   const ffmpegPath = await getFfmpegPath();
-  const inputPath = `/tmp/equinox-alter-input-${randomBytes(8).toString("hex")}.jpg`;
-  const outputPath = `/tmp/equinox-alter-output-${randomBytes(8).toString("hex")}.jpg`;
+  const inputPath = join(tmpdir(), `equinox-alter-input-${randomBytes(8).toString("hex")}.jpg`);
+  const outputPath = join(tmpdir(), `equinox-alter-output-${randomBytes(8).toString("hex")}.jpg`);
   const { writeFile, readFile, unlink } = await import("fs/promises");
   const contrast = 1 + randInRange(cfg.contrast.min, cfg.contrast.max) / 1000;
   const brightness = randInRange(cfg.brightness.min, cfg.brightness.max) / 5000;
@@ -176,9 +178,19 @@ export async function alterJpegBuffer(
   level: AlterationLevel,
   customSettings?: ImageFilterSettings,
   frequencyDisruption = true,
+  options?: { forceFfmpeg?: boolean },
 ): Promise<Buffer> {
   const cfg = buildConfig(level, customSettings);
   const comLen = level === "small" ? 8 : level === "medium" ? 32 : 64;
+
+  // Mobile Make a Post runs in the same process as the mirror/screenshot
+  // pipeline. Keep that path completely away from libvips/Sharp native code;
+  // a native Sharp fault can take down the mirror even when the image result
+  // itself would otherwise be valid. Legacy browser/API callers retain the
+  // existing Sharp-first behavior unless they explicitly opt into this mode.
+  if (options?.forceFfmpeg) {
+    return ffmpegAlter(input, level, cfg, frequencyDisruption);
+  }
 
   const sharp = await getSharp();
 
