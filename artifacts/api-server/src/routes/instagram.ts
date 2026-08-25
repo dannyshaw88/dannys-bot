@@ -6159,6 +6159,17 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         if (!output.length || output.equals(input)) {
           throw new Error(`${stage} output was empty or byte-identical to its input`);
         }
+        // Fix AI Slop already performs its own FFmpeg decode/re-encode. Do
+        // not send that result through Sharp just to verify a JPEG header:
+        // Sharp/libvips is a native Windows dependency and this extra decode
+        // was the remaining native-crash exposure in the packaged image path.
+        if (stage === "Fix AI Slop") {
+          const isJpeg = output.length >= 2 && output[0] === 0xff && output[1] === 0xd8;
+          if (!isJpeg) {
+            throw new Error(`${stage} output is not a valid JPEG`);
+          }
+          return;
+        }
         const metadata = await sharp(output).metadata();
         if (!metadata.format || !metadata.width || !metadata.height) {
           throw new Error(`${stage} output is missing a valid image format or dimensions`);

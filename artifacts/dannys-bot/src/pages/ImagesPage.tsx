@@ -58,6 +58,40 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+function describeImageRequestError(error: unknown, endpoint: string, stage: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  const failedToFetch = /failed to fetch|networkerror|load failed/i.test(message);
+  const timestamp = new Date().toISOString();
+  const online = typeof navigator === "undefined" ? true : navigator.onLine;
+  const diagnostic = {
+    timestamp,
+    endpoint,
+    stage,
+    online,
+    error: message,
+  };
+
+  // Keep this diagnostic available even when the API process has died and
+  // cannot receive the normal client-log request.
+  try {
+    window.sessionStorage.setItem(
+      "dannys-bot.last-image-processing-error",
+      JSON.stringify(diagnostic),
+    );
+  } catch {}
+  console.error("[image-processing] request failed", diagnostic, error);
+
+  if (failedToFetch) {
+    return new Error(
+      `${stage} could not reach the local API at ${endpoint} (${timestamp}). ` +
+      (online
+        ? "The API may have stopped or restarted; export the diagnostic log and try again."
+        : "The browser reports no network connection; reconnect and try again."),
+    );
+  }
+  return new Error(`${stage} request failed at ${endpoint}: ${message}`);
+}
+
 export interface MediaItem {
   id: string;
   file?: File;
@@ -317,20 +351,24 @@ export default function ImagesPage(props: ImagesPageProps) {
              }, 850);
              let waveResponse: Response;
              try {
-               waveResponse = await fetch("/api/wavespeed/process", {
-                 method: "POST",
-                 headers: { "Content-Type": "application/json" },
-                 body: JSON.stringify({
-                   imageBase64,
-                   filename: item.name,
-                   prompt: wavePrompt,
-                   strength: waveStrength,
-                   seed: waveSeed,
-                   outputFormat: waveOutputFormat,
-                   ...(waveWidth ? { width: Number(waveWidth) } : {}),
-                   ...(waveHeight ? { height: Number(waveHeight) } : {}),
-                 }),
-               });
+                try {
+                  waveResponse = await fetch("/api/wavespeed/process", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      imageBase64,
+                      filename: item.name,
+                      prompt: wavePrompt,
+                      strength: waveStrength,
+                      seed: waveSeed,
+                      outputFormat: waveOutputFormat,
+                      ...(waveWidth ? { width: Number(waveWidth) } : {}),
+                      ...(waveHeight ? { height: Number(waveHeight) } : {}),
+                    }),
+                  });
+                } catch (error) {
+                  throw describeImageRequestError(error, "/api/wavespeed/process", "WaveSpeed");
+                }
              } finally {
                window.clearInterval(waveProgressTimer);
              }
@@ -348,26 +386,31 @@ export default function ImagesPage(props: ImagesPageProps) {
           setLocalItems(prev => prev.map(current => current.id === item.id
             ? { ...current, progress: 28 }
             : current));
-           const response = await fetch("/api/images/process", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-               // The API process cannot reliably read a browser/Electron
-               // machine's local path after a WaveSpeed pass or workspace
-               // restore. The captured data URL is the portable source for
-               // the local pipeline and preserves the original image when
-               // WaveSpeed is toggled back off.
-               imageBase64,
-               filename: processFilename,
-              fixAiSlop,
-              alterationEnabled,
-              alterationLevel,
-              imageSettingsEnabled,
-              imageSettings,
-               metadataCleanup: localMetadataCleanup,
-               frequencyDisruption: localFrequencyDisruption,
-            }),
-          });
+            let response: Response;
+            try {
+              response = await fetch("/api/images/process", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  // The API process cannot reliably read a browser/Electron
+                  // machine's local path after a WaveSpeed pass or workspace
+                  // restore. The captured data URL is the portable source for
+                  // the local pipeline and preserves the original image when
+                  // WaveSpeed is toggled back off.
+                  imageBase64,
+                  filename: processFilename,
+                  fixAiSlop,
+                  alterationEnabled,
+                  alterationLevel,
+                  imageSettingsEnabled,
+                  imageSettings,
+                  metadataCleanup: localMetadataCleanup,
+                  frequencyDisruption: localFrequencyDisruption,
+                }),
+              });
+            } catch (error) {
+              throw describeImageRequestError(error, "/api/images/process", "Image processing");
+            }
           const result = await response.json().catch(() => null);
           if (!response.ok || !result?.ok || typeof result.dataUrl !== "string") {
             throw new Error(result?.error ?? `Processing failed (${response.status})`);
