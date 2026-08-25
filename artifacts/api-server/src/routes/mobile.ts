@@ -4151,9 +4151,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/device-settings", (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-       const { googlePlayEmail, googlePlayPassword, selectedSimSlot, simPhoneNumbers } = req.body as DeviceSettings;
+       const incoming = z.object({
+         googlePlayEmail: z.string().optional(),
+         googlePlayPassword: z.string().optional(),
+         selectedSimSlot: z.number().int().optional(),
+         simPhoneNumbers: z.record(z.string(), z.string()).optional(),
+       }).parse(req.body) as DeviceSettings;
       const cfg = loadInstanceConfigs();
-       cfg[serial] = { ...cfg[serial], deviceSettings: { googlePlayEmail, googlePlayPassword, selectedSimSlot, simPhoneNumbers } };
+       cfg[serial] = {
+         ...cfg[serial],
+         deviceSettings: {
+           ...cfg[serial]?.deviceSettings,
+           ...incoming,
+         },
+       };
       saveInstanceConfigs(cfg);
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
