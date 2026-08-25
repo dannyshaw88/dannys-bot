@@ -11666,7 +11666,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} onOpenBrowserProfile={openBrowserProfile} />
+                  <AccountSettingsPanel key={stickySlot0Ref.current?.serial ?? "no-device"} ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} onOpenBrowserProfile={openBrowserProfile} />
                 </div>
                 {/* Browser tab — isolated ghost browser per device serial */}
                 {/* Positioned absolutely so it spans the full split-view width
