@@ -4541,7 +4541,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 interface CollisionPreventerConfig { enabled: boolean; restMinMin: number; restMinMax: number; }
 
 function useCollisionPreventer(serial: string | null) {
-  const [config, setConfig] = useState<CollisionPreventerConfig>({ enabled: false, restMinMin: 1, restMinMax: 3 });
+  // Fail closed while the device-specific setting is hydrating. Starting with
+  // enabled=false lets an immediate/manual HST run bypass the collider before
+  // the GET response arrives, allowing two slots to enter the device together.
+  // The settings panel uses the same safe defaults for a new device.
+  const [config, setConfig] = useState<CollisionPreventerConfig>({ enabled: true, restMinMin: 5, restMinMax: 10 });
   const configRef = useRef(config);
   useEffect(() => { configRef.current = config; }, [config]);
 
