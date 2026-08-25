@@ -9629,11 +9629,13 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   React.useEffect(() => { swipeGestureRef.current = swipeGesture; }, [swipeGesture]);
 
   React.useEffect(() => {
+    let active = true;
     simHydratedSerialRef.current = null;
     if (!serial) return;
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`)
       .then(r => r.json())
       .then(d => {
+        if (!active) return;
         setDismissDir(d.dismissDirection ?? "auto");
         if (d.swipeGesture) setSwipeGesture({
           durationMinMs: 500, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, pauseMinMs: 150, pauseMaxMs: 600, settleMinMs: 100, settleMaxMs: 350, ...d.swipeGesture,
@@ -9649,8 +9651,9 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       .catch(() => {});
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-spec`)
       .then(r => r.json())
-      .then(d => { if (d.resolution?.w && d.resolution?.h) setSwipeResolution(d.resolution); })
+      .then(d => { if (active && d.resolution?.w && d.resolution?.h) setSwipeResolution(d.resolution); })
       .catch(() => {});
+    return () => { active = false; };
   }, [serial]);
   const saveMotherOverrides = async (next: MotherOverrides) => {
     if (!serial) return;
@@ -11741,7 +11744,7 @@ export function MobilePage() {
                     )}
                 </div>
                 {activeTab === "phonesettings" && (
-                  <PhoneSettingsPanel serial={activeSerial} />
+                  <PhoneSettingsPanel key={activeSerial ?? "no-device"} serial={activeSerial} />
                 )}
                 {activeTab === "actionlog" && (
                   <ActionLogPanel
