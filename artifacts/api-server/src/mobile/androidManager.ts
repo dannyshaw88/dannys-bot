@@ -8459,6 +8459,7 @@ export async function switchToInstagramAccount(
     useProfileTabLongPress?: boolean;
     holdDurationMs?: number;
   },
+  restrictionRecoveryAttempted = false,
 ): Promise<boolean> {
   if (!username.trim()) return false;
   const adbPath = findAdbPath();
@@ -8477,6 +8478,25 @@ export async function switchToInstagramAccount(
     onLog,
     preloadedXml,
   );
+  if (restrictionAtSwitchStart) {
+    if (restrictionRecoveryAttempted) {
+      onLog?.("⚠ Instagram account restriction returned after recovery — aborting account switch safely");
+      return false;
+    }
+    // Do not continue with the profile/switcher state captured before the
+    // popup was cleared. Instagram may have rebuilt the activity underneath
+    // the dialog, so restart the complete operation from a fresh dump.
+    onLog?.("↻ Instagram account restriction cleared — restarting account-switch flow from a fresh screen state");
+    return switchToInstagramAccount(
+      serial,
+      username,
+      onLog,
+      undefined,
+      swipeGesture,
+      switchMethod,
+      true,
+    );
+  }
   if (!restrictionAtSwitchStart && !preloadedXml) {
     const restrictionCheck = await getUiDump(serial).catch(() => "");
     const restrictionLower = restrictionCheck.toLowerCase();
