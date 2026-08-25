@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
 import { useParams, useSearch } from "wouter";
-import { _hstTimers, _hstStop, _hstNextRunAt } from "@/lib/hstRunner";
+import { _hstTimers, _hstStop, _hstNextRunAt, _hstUiMounted } from "@/lib/hstRunner";
 import { BrowserPanel } from "@/components/BrowserPanel";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
@@ -3610,6 +3610,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // component unmount (user navigating to another page).  This prevents the
   // running cycle from being killed just because the user switched tabs.
   const explicitToggleOffRef = useRef(false);
+
+  // When the slot runtime is mounted, it is the authoritative owner of the
+  // HST loop. This prevents the always-mounted app listener from also starting
+  // a background runner for the same Stats-page broadcast.
+  useEffect(() => {
+    if (!phone?.serial || slotIdx === undefined) return;
+    const key = `${phone.serial}:${slotIdx}`;
+    _hstUiMounted.add(key);
+    return () => { _hstUiMounted.delete(key); };
+  }, [phone?.serial, slotIdx]);
 
   // ── USB-reorder guard ────────────────────────────────────────────────────
   // The scheduling effect must NOT restart when the /usb-phones poll returns

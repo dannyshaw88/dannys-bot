@@ -11,6 +11,10 @@
 export const _hstTimers   = new Map<string, ReturnType<typeof setTimeout>>();
 export const _hstStop     = new Set<string>();
 export const _hstNextRunAt = new Map<string, number>();
+// Slot runtimes mounted by MobilePage own their timers and collision queue.
+// The app-level listener must not start a second background owner for the same
+// broadcast while one of these runtimes is present.
+export const _hstUiMounted = new Set<string>();
 const _hstStarting = new Set<string>();
 
 // ── Background loop ───────────────────────────────────────────────────────────

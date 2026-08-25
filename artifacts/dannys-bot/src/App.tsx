@@ -3,7 +3,7 @@ import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-q
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { useState, useEffect, Component, type ReactNode, type ErrorInfo } from "react";
-import { startHstLoop, stopHstLoop } from "@/lib/hstRunner";
+import { startHstLoop, stopHstLoop, _hstUiMounted } from "@/lib/hstRunner";
 
 import { Dashboard } from "@/pages/Dashboard";
 import { StatsPage } from "@/pages/StatsPage";
@@ -194,7 +194,13 @@ function HstToggleListener() {
         const { serial, slotIdx, enabled } = ev.data ?? {};
         if (typeof serial !== "string" || typeof slotIdx !== "number") return;
         if (enabled) {
-          startHstLoop(serial, slotIdx);
+          // MobilePage's mounted runtime owns this slot when present. Starting
+          // the background runner as well races its immediate schedule and can
+          // make the first toggle appear ignored. The listener is only needed
+          // for Stats-page toggles when MobilePage is not mounted.
+          if (!_hstUiMounted.has(`${serial}:${slotIdx}`)) {
+            startHstLoop(serial, slotIdx);
+          }
         } else {
           stopHstLoop(serial, slotIdx);
         }
