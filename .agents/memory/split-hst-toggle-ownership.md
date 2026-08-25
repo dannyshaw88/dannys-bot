@@ -25,3 +25,12 @@ runtime.
 
 **How to apply:** Track mounted runtime keys in shared HST state and let the
 app-level listener start only slots that have no mounted runtime.
+
+Reels watch duration is personality-adjusted at the shared effective-settings
+layer, so the visible editor and automation payload receive the same slot-specific range.
+
+**Why:** Reels previously varied watch percentage per clip but ignored the account's
+Attention and Consumption traits, making those personalities incomplete.
+
+**How to apply:** Keep the saved watch range as baseline; apply bounded Attention
+scaling primarily and a smaller inverse Consumption scaling, then clamp min/max.
