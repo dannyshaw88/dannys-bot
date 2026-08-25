@@ -921,6 +921,12 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
     const LOG_W    = 580;
     const PADDING  = 10;
     const LINE_H   = 16;
+    // The old compositor rendered one SVG <text> node per log entry and
+    // clipped each entry to 68 characters. That made the screenshot disagree
+    // with the live log (and, more importantly, hid the coordinates and error
+    // suffixes needed to diagnose device actions). Keep the same readable
+    // width, but wrap instead of truncating and grow the panel when necessary.
+    const LOG_CHARS_PER_LINE = 68;
 
     const composite = await withSharpNative(async () => {
       const phoneResized = await sharp(phonePngRaw)
@@ -932,35 +938,48 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
 
       // ── 3. Render the debug log panel as SVG ──────────────────────────────────
       const bufLines = debugLogBuffer.get(serial) ?? [];
-      const maxLines = Math.floor((TARGET_H - PADDING * 2) / LINE_H) - 1; // -1 for header
-      const visibleLines = bufLines.slice(-maxLines);
+      const wrappedLines = bufLines.flatMap((line) => {
+        if (!line.length) return [""];
+        const parts: string[] = [];
+        for (let offset = 0; offset < line.length; offset += LOG_CHARS_PER_LINE) {
+          parts.push(line.slice(offset, offset + LOG_CHARS_PER_LINE));
+        }
+        return parts;
+      });
+      // The rolling buffer is already bounded to the newest 40 source lines.
+      // Preserve every one of those lines; only the rendered panel height is
+      // allowed to expand for wrapping.
+      const logH = Math.max(
+        TARGET_H,
+        PADDING * 2 + LINE_H * (wrappedLines.length + 1),
+      );
 
       const headerY = PADDING + LINE_H;
-      const textRows = visibleLines.map((line, i) => {
+      const textRows = wrappedLines.map((line, i) => {
         const y = headerY + (i + 1) * LINE_H;
         const color = debugLogLineColor(line);
-        // Truncate long lines so they don't overflow the panel width.
-        const display = escapeXmlSvg(line.length > 68 ? line.slice(0, 68) + "…" : line);
+        const display = escapeXmlSvg(line);
         return `<text x="${PADDING}" y="${y}" fill="${color}">${display}</text>`;
       }).join("\n    ");
 
       const svgStr = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${LOG_W}" height="${TARGET_H}">
-  <rect width="${LOG_W}" height="${TARGET_H}" fill="#0f172a"/>
+ <svg xmlns="http://www.w3.org/2000/svg" width="${LOG_W}" height="${logH}">
+   <rect width="${LOG_W}" height="${logH}" fill="#0f172a"/>
   <text x="${PADDING}" y="${headerY}" fill="#94a3b8" font-weight="bold">── Debugging Log ──</text>
   ${textRows}
 </svg>`;
 
       // sharp rasterises SVG natively (libvips + librsvg).
       const logPanelPng = await sharp(Buffer.from(svgStr, "utf8"))
-        .resize(LOG_W, TARGET_H)
+        .resize(LOG_W, logH)
         .png()
         .toBuffer();
 
       // ── 4. Composite: phone (left) + log panel (right) ────────────────────────
       const totalW = phoneW + LOG_W;
+      const compositeH = Math.max(TARGET_H, logH);
       return await sharp({
-        create: { width: totalW, height: TARGET_H, channels: 4 as const,
+        create: { width: totalW, height: compositeH, channels: 4 as const,
                   background: { r: 15, g: 23, b: 42, alpha: 1 } },
       })
         .composite([
@@ -6285,7 +6304,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         follow: _activateTool("follow", "followEnabled", followActivatePctMin, followActivatePctMax),
         post: _activateTool("post", "makePostEnabled", makePostActivatePctMin, makePostActivatePctMax),
         postStory: _activateTool("postStory", "postStoryEnabled", postStoryActivatePctMin, postStoryActivatePctMax),
-        "Random Actions": _activateTool("Random Actions", "randomJitterEnabled", randomJitterActivatePctMin, randomJitterActivatePctMax),
+        // The master checkbox is a hard dispatch gate. Without this check,
+        // the default 100% activation range could still enqueue Random
+        // Actions while the UI showed the feature as disabled, resulting in
+        // misleading "activated" logs with no configured action taps.
+        "Random Actions": randomJitterEnabled &&
+          _activateTool("Random Actions", "randomJitterEnabled", randomJitterActivatePctMin, randomJitterActivatePctMax),
       };
       tLog(`[activation] ${JSON.stringify({
         trustScoreId: effectiveCycle.scoreId,
@@ -7524,7 +7548,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
             });
             if (!_jitterFired) {
-              tLog("▶ Random Actions: activated — both action rolls missed this cycle");
+              tLog("▶ Random Actions: activated — all configured action rolls missed this cycle");
               steps.push("jitter(activated,no-actions-rolled)");
             }
           } else if (randomJitterEnabled) {
