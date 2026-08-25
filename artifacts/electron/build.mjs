@@ -155,11 +155,13 @@ if (
 const likeIconReferenceName = "like-reference-reels.png";
 const likeIconReferenceTarget = path.join(dist, "server", "like-icon-refs");
 await mkdir(likeIconReferenceTarget, { recursive: true });
-const embeddedLikeIconBase64 =
-  "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAAAAABWESUoAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAACYktHRAD/h4/MvwAAABhREFUOMtjlGfAD5gYRhWMKhhVMEIVAAAH8ABfObtYzAAAAABJRU5ErkJggg==";
-await writeFile(
+const likeIconReferenceSource = path.join(__dirname, "assets", likeIconReferenceName);
+if (!existsSync(likeIconReferenceSource)) {
+  throw new Error(`Required Like icon reference is missing: ${likeIconReferenceSource}`);
+}
+await cp(
+  likeIconReferenceSource,
   path.join(likeIconReferenceTarget, likeIconReferenceName),
-  Buffer.from(embeddedLikeIconBase64, "base64"),
 );
 
 // Ship the visual Instagram back-arrow reference with the packaged API.

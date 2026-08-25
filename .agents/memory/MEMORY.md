@@ -126,3 +126,4 @@
 - [Update Bio screen gate](update-bio-screen-gate.md) — require the dedicated Bio editor marker; generic form markers also occur on Edit Profile and can select Name
 - [Debug screenshot text](debug-screenshot-text.md) — wrap complete buffered log lines in server composites instead of clipping them to one row
 - [Account-switch durable boundaries](account-switch-durable-boundaries.md) — persist switch boundaries in the API log; the rolling device trace can disappear on restart
+- [View Feed visual reference packaging](view-feed-visual-reference-packaging.md) — Like must use a real decodable heart PNG; never ship an unvalidated embedded placeholder

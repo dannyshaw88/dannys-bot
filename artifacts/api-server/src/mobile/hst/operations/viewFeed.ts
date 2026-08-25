@@ -222,26 +222,14 @@ export async function runCheckFeedLoop(serial: string, params: {
         });
       }
 
-      const isLike = (n: ViewFeedA11yNode) =>
-        n.rid.includes("row_feed_button_like") || /^(?:un)?like$/i.test(n.desc);
-      const likeByCoord = new Map<string, ViewFeedA11yNode>();
-      for (const node of nodes) {
-        // Instagram exposes the real Like control inconsistently: the
-        // row_feed_button_like child can be a non-clickable Button while its
-        // tappable parent ViewGroup owns the same bounds. The resource ID is
-        // an unambiguous action identity, so accept it using its live bounds.
-        // Label-only Like/Unlike matches remain strict and must be clickable.
-        if (!isLike(node)) continue;
-        const key = `${node.x},${node.y}`;
-        const previous = likeByCoord.get(key);
-        // Prefer the concrete resource-id node over a same-centre wrapper.
-        if (!previous || (node.rid.includes("row_feed_button_like") && !previous.rid.includes("row_feed_button_like"))) {
-          likeByCoord.set(key, node);
-        }
-      }
-      const likes = [...likeByCoord.values()];
-      if (likes.length === 0) {
-        onLog?.("View Feed a11y scan: no clickable Like/Unlike node");
+      // View Feed's Like anchor must come from the packaged visual heart
+      // reference. Accessibility Like nodes and media bounds are not safe
+      // anchors on every Instagram build: ads can expose Learn More buttons,
+      // and recycled rows can expose a Like from a different post. The visual
+      // matcher also performs the strict sponsored-card check.
+      const visualIcons = await findFeedActionIcons(serial, onLog, { strictViewFeed: true }).catch(() => null);
+      if (!visualIcons) {
+        onLog?.("View Feed visual scan: Like reference did not identify a safe Like target — skipping actions");
         // View Feed diagnostic only: preserve the raw node attributes that
         // explain a failed action-bar match. This is especially important for
         // carousels, whose media hierarchy differs from single-photo posts.
@@ -265,6 +253,23 @@ export async function runCheckFeedLoop(serial: string, params: {
         }
         return null;
       }
+      const visualLike = {
+        x: visualIcons.like.x,
+        y: visualIcons.like.y,
+        x1: visualIcons.like.x - 16,
+        y1: visualIcons.like.y - 16,
+        x2: visualIcons.like.x + 16,
+        y2: visualIcons.like.y + 16,
+        rid: "visual-like-reference",
+        desc: "",
+        text: "",
+        cls: "android.widget.ImageView",
+        clickable: true,
+      } satisfies ViewFeedA11yNode;
+      // Deliberately use only the visual anchor. The a11y tree remains useful
+      // for finding the optional comment/share/save controls on this same row,
+      // but it can never replace the verified Like coordinate.
+      const likes = [visualLike];
 
       const sameRow = (a: ViewFeedA11yNode, b: ViewFeedA11yNode, tolerance = 36) =>
         Math.abs(a.y - b.y) <= tolerance;
