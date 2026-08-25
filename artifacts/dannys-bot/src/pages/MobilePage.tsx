@@ -3635,6 +3635,20 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     || slotIdx < 0
     || slotIdx >= MAX_HST_ACCOUNT_SLOTS;
 
+  // ADB can briefly report a connected phone as offline while the USB poll
+  // still returns it. Do not put `phone.state` directly in the scheduler
+  // dependency list: that causes React to tear down a long-running HST timer
+  // on every transient state change. Only notify the scheduler when the
+  // device actually becomes usable again after an unavailable period.
+  const wasDeviceUnavailableRef = useRef(deviceUnavailable);
+  useEffect(() => {
+    const wasUnavailable = wasDeviceUnavailableRef.current;
+    wasDeviceUnavailableRef.current = deviceUnavailable;
+    if (wasUnavailable && !deviceUnavailable) {
+      setConnectedKey(key => key + 1);
+    }
+  }, [deviceUnavailable]);
+
   const setEnabledByUser = useCallback((enabled: boolean) => {
     if (enabled) {
       // A rapid off→on toggle can run the old effect cleanup after the new
@@ -4461,7 +4475,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       rescheduleFnRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.enabled, hydrated, phone?.serial, phone?.state, deviceUnavailable]);
+  }, [settings.enabled, hydrated, phone?.serial, connectedKey]);
 
   // Clamp: if the existing timer no longer fits within the new [min, max]
   // bounds, directly reschedule the module-level timer with a corrected delay.
