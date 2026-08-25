@@ -36,6 +36,7 @@ export function startHstLoop(
 ): void {
   const key = `${serial}:${slotIdx}`;
   if (_hstTimers.has(key) || _hstStarting.has(key)) return; // already owned/starting
+  console.info(`[HST-RECOVERY] starting loop ${key} immediate=${options.immediate !== false}`);
   _hstStop.delete(key);
   if (options.immediate !== false) {
     scheduleNextBg(serial, slotIdx, key, 0); // manual toggle-on
@@ -68,6 +69,7 @@ function scheduleNextBg(serial: string, slotIdx: number, key: string, delayMs: n
   const t = setTimeout(() => runCycleBg(serial, slotIdx, key), Math.round(delayMs));
   _hstTimers.set(key, t);
   _hstNextRunAt.set(key, Date.now() + Math.round(delayMs));
+  console.info(`[HST-RECOVERY] scheduled ${key} in ${(delayMs / 60000).toFixed(1)}m`);
 }
 
 async function scheduleRestartRecovery(serial: string, slotIdx: number, key: string): Promise<void> {
@@ -91,7 +93,10 @@ async function scheduleRestartRecovery(serial: string, slotIdx: number, key: str
     scheduleNextBg(serial, slotIdx, key, 60_000);
     return;
   }
-  if (!settings.enabled) return;
+  if (!settings.enabled) {
+    console.info(`[HST-RECOVERY] ${key} settings disabled after hydration; loop stopped`);
+    return;
+  }
 
   const safeMin = Math.max(1, Math.min(
     Number(settings.cycleIntervalMin ?? 20),
@@ -129,7 +134,10 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
     return;
   }
 
-  if (!s.enabled) return; // toggle was turned off in the DB
+  if (!s.enabled) {
+    console.info(`[HST-RECOVERY] ${key} settings disabled before cycle; loop stopped`);
+    return; // toggle was turned off in the DB
+  }
   if (_hstStop.has(key)) { _hstStop.delete(key); _hstNextRunAt.delete(key); return; }
 
   const feedMin = Math.max(1, Math.min(Number(s.feedScrollMin ?? 1), Number(s.feedScrollMax ?? 10)));

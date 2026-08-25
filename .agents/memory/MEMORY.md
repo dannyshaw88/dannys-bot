@@ -127,3 +127,4 @@
 - [Debug screenshot text](debug-screenshot-text.md) — wrap complete buffered log lines in server composites instead of clipping them to one row
 - [Account-switch durable boundaries](account-switch-durable-boundaries.md) — persist switch boundaries in the API log; the rolling device trace can disappear on restart
 - [View Feed visual reference packaging](view-feed-visual-reference-packaging.md) — Like must use a real decodable heart PNG; never ship an unvalidated embedded placeholder
+- [HST recovery and stable slot keys](hst-recovery-stable-slot-keys.md) — enumerate account slots and resolve persistent IDs before legacy numeric settings keys during startup recovery

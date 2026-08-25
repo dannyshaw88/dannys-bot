@@ -2829,19 +2829,39 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const slots: { serial: string; slotIdx: number }[] = [];
       for (const [serial, deviceCfg] of Object.entries(cfg)) {
         const slotAuto = (deviceCfg as InstanceConfig).slotAutomation ?? {};
+        const accountSlots = (deviceCfg as InstanceConfig).account?.slots ?? [];
+        const seen = new Set<number>();
+
+        // Current records are keyed by persistent slotId. Enumerate the
+        // account array to recover the numeric index needed by the route,
+        // then resolve the stable key first. The old numeric key remains a
+        // fallback for configs written before slot identity was introduced.
+        accountSlots.forEach((_slot, slotIdx) => {
+          if (slotIdx >= MAX_MOBILE_ACCOUNT_SLOTS) return;
+          const stableKey = slotAutomationKey(serial, slotIdx);
+          const settings = slotAuto[stableKey] ?? slotAuto[String(slotIdx)];
+          if ((settings as AutomationSettings | undefined)?.enabled === true) {
+            seen.add(slotIdx);
+          }
+        });
+
+        // Preserve recovery for legacy/device configs whose account array is
+        // temporarily absent, while still ignoring stable slotId keys and
+        // invalid indexes as scheduler identities.
         for (const [idxStr, settings] of Object.entries(slotAuto)) {
-          // slotAutomation also contains stable slotId keys and may retain
-          // legacy/out-of-range entries from before the slot split. Startup
-          // recovery must never turn those keys into invalid `/slots/N`
-          // requests.
-          if (!(settings as AutomationSettings).enabled) continue;
+          if ((settings as AutomationSettings).enabled !== true) continue;
           if (!/^(?:0|[1-9]\d*)$/.test(idxStr)) continue;
           const slotIdx = Number(idxStr);
           if (Number.isSafeInteger(slotIdx) && slotIdx < MAX_MOBILE_ACCOUNT_SLOTS) {
-            slots.push({ serial, slotIdx });
+            seen.add(slotIdx);
           }
         }
+
+        for (const slotIdx of [...seen].sort((a, b) => a - b)) {
+          slots.push({ serial, slotIdx });
+        }
       }
+      logger.info({ slotCount: slots.length, slots }, "[HST-RECOVERY] enabled slots discovered");
       res.json({ slots });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Failed to load enabled slots" });
