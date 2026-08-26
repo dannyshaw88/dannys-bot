@@ -579,7 +579,12 @@ export async function finishViewReels(
   onLog?.("View Reels: locating Home tab to leave the full-screen viewer…");
   const homeTab = await android.findHomeTab(serial).catch(() => null);
   if (!homeTab) {
-    throw new Error("View Reels cannot finish: Instagram Home tab was not found");
+    // The Reels loop has already completed its confirmed work at this point.
+    // A missed visual match is cleanup uncertainty, not a failed Reels action.
+    // Do not turn a successful viewer run into a cycle error or use a guessed
+    // coordinate after the detector has explicitly failed.
+    onLog?.("View Reels: Home tab was not visually confirmed after the run; leaving cleanup unconfirmed");
+    return;
   }
   await android.tap(serial, homeTab.x, homeTab.y, "manual");
   onLog?.(`View Reels: tapped Home tab at (${homeTab.x},${homeTab.y})`);
