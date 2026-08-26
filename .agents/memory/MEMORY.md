@@ -128,3 +128,4 @@
 - [Account-switch durable boundaries](account-switch-durable-boundaries.md) — persist switch boundaries in the API log; the rolling device trace can disappear on restart
 - [View Feed visual reference packaging](view-feed-visual-reference-packaging.md) — Like must use a real decodable heart PNG; never ship an unvalidated embedded placeholder
 - [HST recovery and stable slot keys](hst-recovery-stable-slot-keys.md) — enumerate account slots and resolve persistent IDs before legacy numeric settings keys during startup recovery
+- [Debug screenshot slot folders](debug-screenshot-slot-folders.md) — name evidence folders by persisted Phone Farm slot plus model, never USB serial order
