@@ -4171,10 +4171,17 @@ export async function findReelLikeByPixels(
  * exposes, this logs every right-edge clickable node instead of guessing, so
  * the next fix has real evidence rather than another blind attempt.
  */
-export async function findReelActionIcons(serial: string, onLog?: (msg: string) => void): Promise<ReelActionIcons | null> {
+export async function findReelActionIcons(
+  serial: string,
+  onLog?: (msg: string) => void,
+  options?: { uiXml?: string },
+): Promise<ReelActionIcons | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const xml = await _uiDump(adb, serial);
+  // View Reels already captures a complete dump while waiting for the
+  // player. Reuse it instead of paying for a second dump of the same frame;
+  // fall back to a fresh dump for external callers.
+  const xml = options?.uiXml || await _uiDump(adb, serial);
   if (!xml) return null;
   const { w, h: screenH } = getScreenSize(serial);
   void w;
@@ -5763,6 +5770,14 @@ type LikeReference = {
   height: number;
   source: string;
   bytes: number;
+  /** Foreground-only samples for hollow/transparent Reel hearts. */
+  outlineSamples: Array<{
+    x: number;
+    y: number;
+    weight: number;
+    gradientX: number;
+    gradientY: number;
+  }>;
 };
 
 let likeReferenceCache: LikeReference | null = null;
@@ -5808,12 +5823,40 @@ async function findFeedLikeIconByPixels(
     if (!likeReferenceCache || likeReferenceCache.source !== refPath) {
       try {
         const loaded = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
+        const outlineSamples: LikeReference["outlineSamples"] = [];
+        for (let y = 1; y < loaded.info.height - 1; y++) {
+          for (let x = 1; x < loaded.info.width - 1; x++) {
+            const value = loaded.data[y * loaded.info.width + x];
+            const gradientX = loaded.data[y * loaded.info.width + x + 1] -
+              loaded.data[y * loaded.info.width + x - 1];
+            const gradientY = loaded.data[(y + 1) * loaded.info.width + x] -
+              loaded.data[(y - 1) * loaded.info.width + x];
+            const gradientMagnitude = Math.hypot(gradientX, gradientY);
+            // The shipped reference has a near-white background and a dark
+            // heart outline. Keep only the outline; the Reel's transparent
+            // heart interior must be allowed to contain arbitrary video
+            // content instead of being treated as background to match.
+            // Also keep only actual edge pixels. This gives the live matcher
+            // a contour orientation to compare, rather than accepting any
+            // textured patch with enough local brightness changes.
+            if (value < 245 && gradientMagnitude >= 30) {
+              outlineSamples.push({
+                x,
+                y,
+                weight: Math.max(0.25, (255 - value) / 255),
+                gradientX: gradientX / gradientMagnitude,
+                gradientY: gradientY / gradientMagnitude,
+              });
+            }
+          }
+        }
         likeReferenceCache = {
           data: loaded.data,
           width: loaded.info.width,
           height: loaded.info.height,
           source: refPath,
           bytes: fs.statSync(refPath).size,
+          outlineSamples,
         };
       } catch (error: any) {
         onLog?.(`[feed-icons] Like visual reference read/decode failed at ${refPath}: ${error?.message ?? String(error)}`);
@@ -5824,7 +5867,8 @@ async function findFeedLikeIconByPixels(
     const reference = likeReferenceCache;
     onLog?.(
       `[feed-icons] Like reference resolved path="${reference.source}" ` +
-      `bytes=${reference.bytes} decodeSuccess=true dimensions=${reference.width}x${reference.height}`,
+      `bytes=${reference.bytes} decodeSuccess=true dimensions=${reference.width}x${reference.height} ` +
+      `outlineSamples=${reference.outlineSamples.length}`,
     );
 
     // Convert the capture once. The previous matcher repeatedly calculated
@@ -5868,6 +5912,54 @@ async function findFeedLikeIconByPixels(
       const tw = Math.max(10, Math.round(reference.width * scale));
       const th = Math.max(10, Math.round(reference.height * scale));
       if (x < 0 || y < 0 || x + tw > screen.width || y + th > screen.height) return 0;
+
+        if (searchRegion === "reel-right") {
+          // A Reel Like is a hollow white outline over moving video. Compare
+          // only the reference outline and measure local edge contrast, which
+          // is polarity-invariant and ignores whatever is inside the heart.
+          let weightedSignal = 0;
+          let totalWeight = 0;
+          let strongSamples = 0;
+          let sampledSamples = 0;
+          const radius = Math.max(1, Math.round(scale * 1.5));
+          for (const sample of reference.outlineSamples) {
+            if (sample.x % sampleStep !== 0 || sample.y % sampleStep !== 0) continue;
+            sampledSamples++;
+            const sx = x + Math.min(tw - 1, Math.round(sample.x * scale));
+            const sy = y + Math.min(th - 1, Math.round(sample.y * scale));
+            const left = screenGray[sy * screen.width + Math.max(0, sx - radius)];
+            const right = screenGray[sy * screen.width + Math.min(screen.width - 1, sx + radius)];
+            const top = screenGray[Math.max(0, sy - radius) * screen.width + sx];
+            const bottom = screenGray[Math.min(screen.height - 1, sy + radius) * screen.width + sx];
+            const screenGradientX = right - left;
+            const screenGradientY = bottom - top;
+            const screenGradientMagnitude = Math.hypot(screenGradientX, screenGradientY);
+            const orientation = screenGradientMagnitude < 1
+              ? 0
+              : Math.abs(
+                (screenGradientX * sample.gradientX + screenGradientY * sample.gradientY) /
+                screenGradientMagnitude,
+              );
+            const edgeSignal = Math.min(1, screenGradientMagnitude / 80);
+            // The Reels glyph is a white outline. Use brightness as the
+            // primary signal and contour orientation as a guard against
+            // arbitrary bright pixels in the video. The center of the heart
+            // is never sampled, so its contents remain irrelevant.
+            const whiteSignal = Math.max(0, Math.min(1, (center - 105) / 130));
+            const contourSignal = edgeSignal * orientation;
+            const signal = whiteSignal * 0.55 + contourSignal * 0.45;
+            weightedSignal += signal * sample.weight;
+            totalWeight += sample.weight;
+            if (signal >= 0.55) strongSamples++;
+          }
+          if (!totalWeight || reference.outlineSamples.length < 24) return 0;
+          const coverage = strongSamples / Math.max(1, sampledSamples);
+          const averageSignal = weightedSignal / totalWeight;
+          // Require both broad contour coverage and usable edge contrast.
+          // Textured video can produce isolated bright edges, but not usually
+          // the complete two-lobed heart contour.
+          return 0.5 + Math.min(1, averageSignal * 0.7 + coverage * 0.3) * 0.5;
+        }
 
       let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
       for (let ty = 0; ty < reference.height; ty += sampleStep) {
@@ -5933,16 +6025,23 @@ async function findFeedLikeIconByPixels(
       }
     }
 
-    const prefix = searchRegion === "top-right" ? "[notifications]" : "[feed-icons]";
+    const prefix = searchRegion === "top-right"
+      ? "[notifications]"
+      : searchRegion === "reel-right"
+        ? "[reel-pixels]"
+        : "[feed-icons]";
     if (!best) {
       onLog?.(
         searchRegion === "top-right"
           ? "[notifications] heart visual reference not matched in top-right header"
+          : searchRegion === "reel-right"
+            ? "[reel-pixels] Like outline not matched in right action column"
           : `[feed-icons] Like visual reference not matched near row y=${rowY}`,
       );
       return null;
     }
-    if (best.score < 0.72) {
+    const minimumScore = searchRegion === "reel-right" ? 0.78 : 0.72;
+    if (best.score < minimumScore) {
       onLog?.(`${prefix} Like visual match rejected as weak at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
       return null;
     }

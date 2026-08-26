@@ -277,7 +277,11 @@ export async function runViewReelsLoop(serial: string, params: {
       } else {
 
       onLog?.(`Reel ${i + 1}/${totalReels}: scanning right-side action column…`);
-      const icons = await android.findReelActionIcons(serial, (msg) => onLog?.(`  ${msg}`)).catch(() => null);
+      const icons = await android.findReelActionIcons(
+        serial,
+        (msg) => onLog?.(`  ${msg}`),
+        { uiXml: lastPollXml || undefined },
+      ).catch(() => null);
       // ── Like — require validated live action-node evidence ─────────────
       // Never guess a video coordinate when the action-column scan found no
       // Like/Unlike node. A double-tap fallback is unsafe here: the current
