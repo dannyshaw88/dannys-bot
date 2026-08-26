@@ -36,6 +36,7 @@ export async function runVisitSettings(
     logger.warn({ serial }, "[jitter-visit-settings] profile tab not found");
     return false;
   }
+  onLog?.(`Visit Settings: tapping Profile tab first at (${profileTab.x},${profileTab.y})`);
   await android.tap(serial, profileTab.x, profileTab.y);
   await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
 

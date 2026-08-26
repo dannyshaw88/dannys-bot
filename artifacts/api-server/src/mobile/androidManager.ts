@@ -7557,8 +7557,14 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
         screen.width - tw,
         Math.max(0, homeCenterMaxX - Math.round(tw / 2)),
       );
-      const yMin = Math.round(screen.height * 0.78);
-      const yMax = Math.min(screen.height - th, Math.round(screen.height * 0.95) - th);
+       // The Home glyph is anchored in the actual bottom navigation row.
+       // Searching from 78% allowed visually similar content from a profile
+       // or feed surface to win at roughly 86% (for example y=2065 on a
+       // 2400px device), even though the real Home glyph was near y=2268.
+       // Keep a generous margin for system insets, but exclude the content
+       // area above the navigation row.
+       const yMin = Math.round(screen.height * 0.90);
+       const yMax = Math.min(screen.height - th, Math.round(screen.height * 0.985) - th);
       for (let y = yMin; y <= yMax; y += scanStep) {
         for (let x = 0; x <= xMax; x += scanStep) {
            let bestPolarityScore = -Infinity;
