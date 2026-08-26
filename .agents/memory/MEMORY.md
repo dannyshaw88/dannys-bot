@@ -127,6 +127,7 @@
 - [Debug screenshot text](debug-screenshot-text.md) — wrap complete buffered log lines in server composites instead of clipping them to one row
 - [Account-switch durable boundaries](account-switch-durable-boundaries.md) — persist switch boundaries in the API log; the rolling device trace can disappear on restart
 - [View Feed visual reference packaging](view-feed-visual-reference-packaging.md) — Like must use a real decodable heart PNG; never ship an unvalidated embedded placeholder
+- [View Feed visual scan timing](view-feed-visual-scan-timing.md) — reuse the caller's complete UI dump; visual matching must stay coarse-to-fine and fail closed
 - [HST recovery and stable slot keys](hst-recovery-stable-slot-keys.md) — enumerate account slots and resolve persistent IDs before legacy numeric settings keys during startup recovery
 - [Debug screenshot slot folders](debug-screenshot-slot-folders.md) — name evidence folders by persisted Phone Farm slot plus model, never USB serial order
 - [Story tray feed-marker filter](story-tray-feed-marker-filter.md) — reject lower-feed “username’s story, Seen” markers before selecting tray bubbles

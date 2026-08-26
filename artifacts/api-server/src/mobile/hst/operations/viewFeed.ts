@@ -227,7 +227,13 @@ export async function runCheckFeedLoop(serial: string, params: {
       // anchors on every Instagram build: ads can expose Learn More buttons,
       // and recycled rows can expose a Like from a different post. The visual
       // matcher also performs the strict sponsored-card check.
-      const visualIcons = await findFeedActionIcons(serial, onLog, { strictViewFeed: true }).catch(() => null);
+      const visualIcons = await findFeedActionIcons(serial, onLog, {
+        strictViewFeed: true,
+        // Reuse this scan's complete XML. findFeedActionIcons still captures
+        // a fresh screenshot for the visual Like reference, but must not pay
+        // for a second UIAutomator dump of the same post.
+        uiXml: xml,
+      }).catch(() => null);
       if (!visualIcons) {
         onLog?.("View Feed visual scan: Like reference did not identify a safe Like target — skipping actions");
         // View Feed diagnostic only: preserve the raw node attributes that

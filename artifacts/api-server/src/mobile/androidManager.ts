@@ -3590,6 +3590,8 @@ export interface FeedActionIcons {
  */
 export interface FeedActionScanOptions {
   strictViewFeed?: boolean;
+  /** Reuse a caller's complete live dump when it already has one. */
+  uiXml?: string;
 }
 
 function _isSponsoredViewFeedXml(xml: string): boolean {
@@ -3660,7 +3662,7 @@ export async function findFeedActionIcons(
 ): Promise<FeedActionIcons | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const xml = await _uiDump(adb, serial);
+  const xml = options?.uiXml ?? await _uiDump(adb, serial);
   if (!xml) return null;
   if (options?.strictViewFeed && _isSponsoredViewFeedXml(xml)) {
     onLog?.("[feed-icons] View Feed sponsored/ad card detected — skipping all post actions");
@@ -3679,7 +3681,27 @@ export async function findFeedActionIcons(
   // The uploaded heart reference is the ONLY Like target source. Do not use
   // content-desc, resource IDs, icon order, or fixed coordinates: those
   // accessibility paths have resolved to the wrong control on other builds.
-  const like = await findFeedLikeIconByPixels(serial, screenH / 2, onLog);
+  // A media group's bottom edge is used only to narrow the visual search
+  // window; the returned Like coordinate still comes exclusively from the
+  // heart image match. Ratio-based bounds keep this safe when screencap
+  // pixels and the display's logical UI coordinates have different sizes.
+  let visualSearchRange: VisualSearchRange | undefined;
+  if (options?.strictViewFeed) {
+    const mediaForSearch =
+      _findBoundsByResId(xml, ":id/carousel_media_group") ??
+      _findBoundsByResId(xml, ":id/media_group");
+    if (mediaForSearch && mediaForSearch.y2 > screenH * 0.10 && mediaForSearch.y2 < screenH * 0.90) {
+      const mediaBottomRatio = mediaForSearch.y2 / screenH;
+      visualSearchRange = {
+        yMin: Math.max(0, mediaBottomRatio - 0.04),
+        yMax: Math.min(0.96, mediaBottomRatio + 0.18),
+        normalized: true,
+      };
+    }
+  }
+  const likeScanStartedAt = Date.now();
+  const like = await findFeedLikeIconByPixels(serial, screenH / 2, onLog, "feed-row", visualSearchRange);
+  onLog?.(`[feed-icons] Like visual scan completed in ${Date.now() - likeScanStartedAt}ms`);
   const alreadyLiked = false;
   if (!like) {
     onLog?.("[feed-icons] Like icon visual match not found — refusing every non-visual fallback");
@@ -5735,95 +5757,183 @@ async function findFeedRepostIconByPixels(
  * or pixel dimensions, because MIUI/Instagram themes invert the glyph and
  * device densities change its size.
  */
+type LikeReference = {
+  data: Buffer;
+  width: number;
+  height: number;
+  source: string;
+  bytes: number;
+};
+
+let likeReferenceCache: LikeReference | null = null;
+
+type VisualSearchRange = { yMin: number; yMax: number; normalized?: boolean };
+
+/**
+ * Finds the Like heart from the live screenshot using the packaged reference
+ * as the only target anchor.
+ *
+ * The old implementation evaluated every RGB pixel at every 3px position for
+ * nine scales. On a 1080x2400 capture that was hundreds of millions of JS
+ * operations, which made "scanning action bar" look hung for roughly 20s.
+ * This keeps the same polarity-invariant correlation, but converts the screen
+ * once, does a coarse search, then refines only the strongest candidates.
+ */
 async function findFeedLikeIconByPixels(
   serial: string,
   rowY: number,
   onLog?: (msg: string) => void,
   searchRegion: "feed-row" | "top-right" | "reel-right" = "feed-row",
+  searchRange?: VisualSearchRange,
 ): Promise<{ x: number; y: number } | null> {
   const screen = await _captureScreenPixels(serial);
-  if (!screen) return null;
+  if (!screen || screen.channels < 3) return null;
+
   try {
-     const refCandidates = [
-       path.resolve(process.cwd(), "attached_assets/like-reference-reels.png"),
-       path.resolve(process.cwd(), "../../attached_assets/like-reference-reels.png"),
-       path.resolve(__dirname, "../../../attached_assets/like-reference-reels.png"),
-        // Electron packages the API under resources/app/dist/server, where
-        // build.mjs copies the reference to this directory.
-        path.resolve(__dirname, "like-icon-refs/like-reference-reels.png"),
-        path.resolve(__dirname, "../like-icon-refs/like-reference-reels.png"),
-     ];
-     const refPath = refCandidates.find(candidate => fs.existsSync(candidate));
-     if (!refPath) {
-        onLog?.(`[feed-icons] Like visual reference unavailable — checked ${refCandidates.join(" | ")}`);
-       return null;
-     }
-     let data: Buffer;
-     let info: { width: number; height: number };
-     try {
-       const loaded = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
-       data = loaded.data;
-       info = loaded.info;
-     } catch (error: any) {
-       onLog?.(`[feed-icons] Like visual reference read failed at ${refPath}: ${error?.message ?? String(error)}`);
-       return null;
-     }
-    const sample = (x: number, y: number) => {
-      const i = (y * screen.width + x) * screen.channels;
-      return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
+    const refCandidates = [
+      path.resolve(process.cwd(), "attached_assets/like-reference-reels.png"),
+      path.resolve(process.cwd(), "../../attached_assets/like-reference-reels.png"),
+      path.resolve(__dirname, "../../../attached_assets/like-reference-reels.png"),
+      // Electron packages the API under resources/app/dist/server, where
+      // build.mjs copies the reference to this directory.
+      path.resolve(__dirname, "like-icon-refs/like-reference-reels.png"),
+      path.resolve(__dirname, "../like-icon-refs/like-reference-reels.png"),
+    ];
+    const refPath = refCandidates.find(candidate => fs.existsSync(candidate));
+    if (!refPath) {
+      onLog?.(`[feed-icons] Like visual reference unavailable — checked ${refCandidates.join(" | ")}`);
+      return null;
+    }
+
+    if (!likeReferenceCache || likeReferenceCache.source !== refPath) {
+      try {
+        const loaded = await sharp(refPath).greyscale().raw().toBuffer({ resolveWithObject: true });
+        likeReferenceCache = {
+          data: loaded.data,
+          width: loaded.info.width,
+          height: loaded.info.height,
+          source: refPath,
+          bytes: fs.statSync(refPath).size,
+        };
+      } catch (error: any) {
+        onLog?.(`[feed-icons] Like visual reference read/decode failed at ${refPath}: ${error?.message ?? String(error)}`);
+        return null;
+      }
+    }
+
+    const reference = likeReferenceCache;
+    onLog?.(
+      `[feed-icons] Like reference resolved path="${reference.source}" ` +
+      `bytes=${reference.bytes} decodeSuccess=true dimensions=${reference.width}x${reference.height}`,
+    );
+
+    // Convert the capture once. The previous matcher repeatedly calculated
+    // RGB offsets inside its innermost template loop.
+    const screenGray = new Uint8Array(screen.width * screen.height);
+    for (let i = 0, p = 0; i < screenGray.length; i++, p += screen.channels) {
+      screenGray[i] = Math.round((screen.pixels[p] + screen.pixels[p + 1] + screen.pixels[p + 2]) / 3);
+    }
+
+    const scales = [0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7];
+    const coarseScanStep = 6;
+    const coarseSampleStep = 4;
+    const exactSampleStep = 2;
+    const candidates: Array<{ x: number; y: number; scale: number; score: number }> = [];
+    const keepCandidate = (candidate: { x: number; y: number; scale: number; score: number }) => {
+      candidates.push(candidate);
+      candidates.sort((a, b) => b.score - a.score);
+      if (candidates.length > 12) candidates.length = 12;
     };
-    let best: { x: number; y: number; score: number } | null = null;
-    const { width: screenW, height: screenH } = screen;
-    for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7]) {
-      const tw = Math.max(10, Math.round(info.width * scale));
-      const th = Math.max(10, Math.round(info.height * scale));
+
+    const defaultRange: VisualSearchRange = searchRegion === "top-right"
+      ? { yMin: 0, yMax: screen.height * 0.22 }
+      : searchRegion === "reel-right"
+        ? { yMin: screen.height * 0.15, yMax: screen.height * 0.82 }
+        // Do not anchor the feed search to screenH / 2. The actual action row
+        // is commonly in the lower portion of the viewport after a scroll.
+        : { yMin: screen.height * 0.18, yMax: screen.height * 0.94 };
+    const range = searchRange ?? defaultRange;
+    const rangeYMin = range.normalized ? range.yMin * screen.height : range.yMin;
+    const rangeYMax = range.normalized ? range.yMax * screen.height : range.yMax;
+    const xMin = searchRegion === "top-right" || searchRegion === "reel-right"
+      ? Math.round(screen.width * 0.72)
+      : 0;
+
+    const scoreAt = (
+      scale: number,
+      x: number,
+      y: number,
+      sampleStep: number,
+    ): number => {
+      const tw = Math.max(10, Math.round(reference.width * scale));
+      const th = Math.max(10, Math.round(reference.height * scale));
+      if (x < 0 || y < 0 || x + tw > screen.width || y + th > screen.height) return 0;
+
+      let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
+      for (let ty = 0; ty < reference.height; ty += sampleStep) {
+        const sy = y + Math.min(th - 1, Math.round(ty * scale));
+        for (let tx = 0; tx < reference.width; tx += sampleStep) {
+          const sx = x + Math.min(tw - 1, Math.round(tx * scale));
+          const screenValue = screenGray[sy * screen.width + sx];
+          const refValue = reference.data[ty * reference.width + tx];
+          screenSum += screenValue;
+          screenSum2 += screenValue * screenValue;
+          refSum += refValue;
+          refSum2 += refValue * refValue;
+          cross += screenValue * refValue;
+          count++;
+        }
+      }
+      if (count < 64) return 0;
+      const screenMean = screenSum / count;
+      const refMean = refSum / count;
+      const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
+      const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
+      const covariance = cross / count - screenMean * refMean;
+      // Absolute correlation accepts light and dark theme variants.
+      return 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
+    };
+
+    for (const scale of scales) {
+      const tw = Math.max(10, Math.round(reference.width * scale));
+      const th = Math.max(10, Math.round(reference.height * scale));
       if (tw >= screen.width || th >= screen.height) continue;
-      // Feed action rows occur below the header and above the bottom nav.
-      const yMin = searchRegion === "top-right"
-        ? 0
-        : searchRegion === "reel-right"
-          ? Math.max(0, Math.round(screenH * 0.15))
-        : Math.max(0, Math.round(rowY - screen.height * 0.22));
-      const yMax = searchRegion === "top-right"
-        ? Math.min(screen.height - th, Math.round(screenH * 0.22))
-        : searchRegion === "reel-right"
-          ? Math.min(screen.height - th, Math.round(screenH * 0.82))
-          : Math.min(screen.height - th, Math.round(rowY + screen.height * 0.22));
-      const xMin = searchRegion === "top-right" || searchRegion === "reel-right"
-        ? Math.round(screenW * 0.72) : 0;
-      const xMax = searchRegion === "top-right" ? screen.width - tw : screen.width - tw;
-      for (let y = yMin; y <= yMax; y += 3) {
-        for (let x = xMin; x <= xMax; x += 3) {
-          let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
-          for (let ty = 0; ty < info.height; ty += 2) {
-            for (let tx = 0; tx < info.width; tx += 2) {
-              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
-              const sy = y + Math.min(th - 1, Math.round(ty * scale));
-              const screenValue = sample(sx, sy);
-              const refValue = data[ty * info.width + tx];
-              screenSum += screenValue;
-              screenSum2 += screenValue * screenValue;
-              refSum += refValue;
-              refSum2 += refValue * refValue;
-              cross += screenValue * refValue;
-              count++;
-            }
-          }
-          if (count < 100) continue;
-          const screenMean = screenSum / count;
-          const refMean = refSum / count;
-          const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
-          const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
-          const covariance = cross / count - screenMean * refMean;
-          // Correlate the heart's internal geometry, not its absolute colour.
-          // Absolute correlation accepts light and dark theme variants.
-          const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
-          if (score > (best?.score ?? 0.86)) {
+      const yMin = Math.max(0, Math.round(rangeYMin));
+      const yMax = Math.min(screen.height - th, Math.round(rangeYMax) - th);
+      const xMax = screen.width - tw;
+      if (yMax < yMin || xMax < xMin) continue;
+
+      for (let y = yMin; y <= yMax; y += coarseScanStep) {
+        for (let x = xMin; x <= xMax; x += coarseScanStep) {
+          keepCandidate({ x, y, scale, score: scoreAt(scale, x, y, coarseSampleStep) });
+        }
+        // Yield between scan lines so a slow visual lookup cannot starve the
+        // API request loop or device cancellation/status polling.
+        if ((y - yMin) % 60 === 0) {
+          await new Promise<void>(resolve => setImmediate(resolve));
+        }
+      }
+    }
+
+    let best: { x: number; y: number; score: number } | null = null;
+    for (const candidate of candidates) {
+      const tw = Math.max(10, Math.round(reference.width * candidate.scale));
+      const th = Math.max(10, Math.round(reference.height * candidate.scale));
+      // Refine the coarse top-left around each strong candidate. This removes
+      // the small positional error introduced by the 6px coarse scan.
+      for (let dy = -coarseScanStep; dy <= coarseScanStep; dy += 2) {
+        for (let dx = -coarseScanStep; dx <= coarseScanStep; dx += 2) {
+          const x = candidate.x + dx;
+          const y = candidate.y + dy;
+          const score = scoreAt(candidate.scale, x, y, exactSampleStep);
+          if (score > (best?.score ?? -Infinity)) {
             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score };
           }
         }
       }
     }
+
+    const prefix = searchRegion === "top-right" ? "[notifications]" : "[feed-icons]";
     if (!best) {
       onLog?.(
         searchRegion === "top-right"
@@ -5833,21 +5943,16 @@ async function findFeedLikeIconByPixels(
       return null;
     }
     if (best.score < 0.72) {
-      onLog?.(
-        searchRegion === "top-right"
-          ? `[notifications] top-right heart visual match rejected as weak at (${best.x},${best.y}) score=${best.score.toFixed(3)}`
-          : `[feed-icons] Like visual match rejected as weak at (${best.x},${best.y}) score=${best.score.toFixed(3)}`,
-      );
+      onLog?.(`${prefix} Like visual match rejected as weak at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
       return null;
     }
     onLog?.(
-      searchRegion === "top-right"
-        ? `[notifications] top-right heart visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`
-        : `[feed-icons] Like visual reference matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`,
+      `${prefix} Like visual reference matched at (${best.x},${best.y}) ` +
+      `score=${best.score.toFixed(3)} screenshot=${screen.width}x${screen.height}`,
     );
     return { x: best.x, y: best.y };
-   } catch (error: any) {
-     onLog?.(`[feed-icons] Like visual matcher failed: ${error?.message ?? String(error)}`);
+  } catch (error: any) {
+    onLog?.(`[feed-icons] Like visual matcher failed: ${error?.message ?? String(error)}`);
     return null;
   }
 }
