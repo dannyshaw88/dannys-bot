@@ -82,6 +82,20 @@ const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
 
 const CHANGELOG: { version: string; date: string; items: { category: string; text: string; technical?: string[] }[] }[] = [
   {
+    version: "1.2.3",
+    date: "26 Aug 2026",
+    items: [
+      {
+        category: "Fixed",
+        text: "Make a Post now gives its visual Instagram Home-button lookup one bounded second pass when account-switch navigation is still settling, instead of aborting immediately even though Home becomes visible moments later.",
+        technical: [
+          "The retry is scoped only to Make a Post. It does not change the shared Home detector, its fail-closed safety gate, or the navigation behavior of View Feed, Stories, Explore, Notifications, or Random Actions.",
+          "The failure log now correctly identifies this as a visual Home-match failure rather than claiming that an accessibility Home node was missing.",
+        ],
+      },
+    ],
+  },
+  {
     version: "1.2.2",
     date: "11 Aug 2026",
     items: [

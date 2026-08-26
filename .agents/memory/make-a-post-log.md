@@ -7,6 +7,13 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 **Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
 
+### 2026-08-26 — Home lookup is shared, but the recovery pass is Make a Post-only
+- Investigation of the real-device failure screenshot and git history showed that Make a Post calls the same shared visual `findHomeTab` detector used by Feed, Stories, Explore, Notifications, and Random Actions. The Reels matcher work did not change it.
+- The shared detector had previously been tightened globally to the first navigation slot and the lower navigation band. A single pass can still capture the account-switch settling frame before that row is visually ready.
+- **Fix:** Make a Post now performs one explicit, logged second visual pass after an 800ms navigation wait, then fails closed. The shared detector and all other HST operations are unchanged.
+- The previous failure message said the Home “node” was not exposed, which was inaccurate because this detector is visual-only; the message now says the visual match was unavailable.
+- Status: API/frontend package builds and workflow restart still required; physical-device confirmation is required.
+
 ### 2026-08-21 — Preparation must precede Instagram navigation
 - The mobile cycle was tapping Home before selecting and preparing the image, so the expected Fix AI Slop stripping/audit block never appeared before navigation.
 - The cycle caller also passed `fixAiSlop` to `runMakePostStep`, whose option is `doFixAiSlop`; that silently disabled the preparation branch in the pre-switch path.

@@ -54,10 +54,27 @@ export async function runMakePostStep(serial: string, opts: {
 // processing. This ordering is intentional: Home is the first Make a Post
 // action, before Fix AI Slop, alteration, custom image settings, media
 // preparation, or any other post feature.
-onLog?.("Make a Post: locating Instagram Home button before image preparation…");
-const homeTab = await android.findHomeTab(serial).catch(() => null);
+//
+// Home is a visual detector. A single screenshot can catch the account-switch
+// transition even though the Home row is visible a moment later, so Make a
+// Post gets one bounded second pass. This retry is deliberately local to this
+// operation; it does not loosen or change the shared detector for other HSTs.
+let homeTab: { x: number; y: number } | null = null;
+const homeDetectionAttempts = 2;
+for (let attempt = 1; attempt <= homeDetectionAttempts; attempt++) {
+  onLog?.(
+    `Make a Post: locating Instagram Home button before image preparation ` +
+    `(visual pass ${attempt}/${homeDetectionAttempts})…`,
+  );
+  homeTab = await android.findHomeTab(serial).catch(() => null);
+  if (homeTab) break;
+  if (attempt < homeDetectionAttempts) {
+    onLog?.("Make a Post: Home visual pass missed during navigation settling — waiting 0.8s before one retry…");
+    await sleepOrAbort(serial, 800, "navigation", "computed");
+  }
+}
 if (!homeTab) {
-  onLog?.("Make a Post: validated Instagram Home node not exposed — aborting before any tap");
+  onLog?.("Make a Post: Instagram Home visual match unavailable after 2 passes — aborting before any tap");
   return { posted: false };
 }
 if (

@@ -7830,8 +7830,8 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
         serial,
         screen: [screen.width, screen.height],
         scan: {
-           x: [0, homeCenterMaxX],
-          y: [Math.round(screen.height * 0.78), Math.round(screen.height * 0.95)],
+          x: [0, homeCenterMaxX],
+          y: [Math.round(screen.height * 0.90), Math.round(screen.height * 0.985)],
         },
         reference: { source: reference.source, size: [reference.width, reference.height] },
         best: best
