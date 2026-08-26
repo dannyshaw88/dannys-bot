@@ -12,7 +12,6 @@ export interface RandomActionsOperationContext {
   deviceProfileSwipe: (...args: any[]) => Promise<void>;
   sleepOrAbort: (serial: string, milliseconds: number, category?: any) => Promise<void>;
   hstRandomDelay: (serial: string, minimumMs: number, maximumMs: number) => Promise<void>;
-  returnToHomeSafely: (serial: string) => Promise<boolean>;
   rollRange: (minimum: number, maximum: number) => number;
   logger: any;
   isCycleAborted?: (serial: string) => boolean;

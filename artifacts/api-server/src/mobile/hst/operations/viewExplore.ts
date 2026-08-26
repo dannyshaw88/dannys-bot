@@ -2,11 +2,6 @@ export interface ViewExploreOperationContext {
   android: typeof import("../../androidManager");
   deviceProfileSwipe: (...args: any[]) => Promise<any>;
   dismissSaveCollectionPrompt: (...args: any[]) => Promise<any>;
-  findButtonByLabel: (...args: any[]) => Promise<any>;
-  findFeedActionIcons: (...args: any[]) => Promise<any>;
-  findReelActionIcons: (...args: any[]) => Promise<any>;
-  findInstagramSearchTab: (...args: any[]) => Promise<any>;
-  findHomeTab: (...args: any[]) => Promise<any>;
   getScreenSize: (serial: string) => { w: number; h: number };
   isCycleAborted: (serial: string) => boolean;
   loadInstanceConfigs: () => any;
@@ -40,8 +35,7 @@ export async function runViewExplorePage(serial: string, params: {
   } = params;
 
   const {
-    android, deviceProfileSwipe, dismissSaveCollectionPrompt, findButtonByLabel,
-    findFeedActionIcons, findReelActionIcons, findInstagramSearchTab, findHomeTab,
+    android, deviceProfileSwipe, dismissSaveCollectionPrompt,
     getScreenSize, isCycleAborted, loadInstanceConfigs, logger,
     rollFeedConsumptionGesture, sleepOrAbort, _viewExploreLastDmRecipient,
   } = context;

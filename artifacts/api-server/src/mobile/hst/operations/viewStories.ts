@@ -9,7 +9,7 @@ export interface ViewStoriesOperationContext {
 }
 
 export async function pickAndOpenRandomStory(serial: string, w: number, h: number, onLog?: (msg: string) => void, context?: ViewStoriesOperationContext): Promise<{ slot: number; opened: boolean }> {
-    const { android, getScreenSize } = context!;
+    const { android } = context!;
   
     // ── Find story bubbles directly from UIAutomator dump ──
     //
@@ -126,13 +126,13 @@ export async function pickAndOpenRandomStory(serial: string, w: number, h: numbe
     }
 
     if (storyBubbles.length === 0) {
-      onLog?.(`Story tray: no bubbles after initial Home check — tapping Home once more and re-checking…`);
+      onLog?.(`Story tray: no bubbles after initial Home check — confirming Home once more and re-checking…`);
       const retryHome = await android.findHomeTab(serial).catch(() => null);
       if (retryHome) {
         await android.tap(serial, retryHome.x, retryHome.y);
       } else {
-        const { w: retryW, h: retryH } = getScreenSize(serial);
-        await android.tap(serial, Math.round(retryW * 0.10), Math.round(retryH * 0.975));
+        onLog?.("Story tray: Home tab was not positively detected during retry — refusing a coordinate fallback");
+        return { slot: 0, opened: false };
       }
       await new Promise(r => setTimeout(r, 500));
       trayXml = await android.dumpUi(serial).catch(() => "");
@@ -194,6 +194,47 @@ export async function pickAndOpenRandomStory(serial: string, w: number, h: numbe
     onLog?.(`Story tray: exhausted ${maxAttempts} attempt(s) — no story opened this cycle`);
     return { slot: maxAttempts, opened: false };
   }
+
+/** Establish the Story tool's starting surface before its viewer loop runs. */
+export async function prepareViewStoriesEntry(
+  serial: string,
+  onLog: (message: string) => void,
+  context: ViewStoriesOperationContext,
+): Promise<{ alreadyInStoryViewer: boolean; slot: number; opened: boolean }> {
+  const { android, getScreenSize, sleepOrAbort } = context;
+  const alreadyInStoryViewer = await android.isInStoryViewerSlow(serial).catch(() => false);
+  if (alreadyInStoryViewer) {
+    onLog("Stories: already in Story viewer — skipping Home and story-bubble taps");
+    return { alreadyInStoryViewer: true, slot: 0, opened: true };
+  }
+
+  onLog("Stories: locating Home before opening the story tray…");
+  const homeTab = await android.findHomeTab(serial).catch(() => null);
+  if (!homeTab) {
+    onLog("Stories: Home tab not positively detected — refusing story navigation");
+    return { alreadyInStoryViewer: false, slot: 0, opened: false };
+  }
+  await android.tap(serial, homeTab.x, homeTab.y);
+  await sleepOrAbort(serial, 1200);
+
+  const confirmedHome = await android.findHomeTab(serial).catch(() => null);
+  if (!confirmedHome) {
+    onLog("Stories: Home tab confirmation failed — refusing to open the story tray");
+    return { alreadyInStoryViewer: false, slot: 0, opened: false };
+  }
+  const popup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+  if (popup) {
+    onLog(`Stories: dismissed pre-tray popup (${popup})`);
+    await sleepOrAbort(serial, 600);
+  }
+  onLog("Stories: checking story tray readiness…");
+  await sleepOrAbort(serial, 800);
+
+  const { w, h } = getScreenSize(serial);
+  const entry = await pickAndOpenRandomStory(serial, w, h, onLog, context);
+  return { alreadyInStoryViewer: false, ...entry };
+}
+
 export async function runViewStoriesFromFeedLoop(serial: string, params: {
     slidesMin: number; slidesMax: number;
     slideWatchPctMin: number; slideWatchPctMax: number;
@@ -202,6 +243,7 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
     commentPercentMin: number; commentPercentMax: number;
     clickAuthorPercentMin: number; clickAuthorPercentMax: number;
     alreadyInStoryViewer?: boolean;
+    storyEntry?: { slot: number; opened: boolean };
     onLog?: (msg: string) => void;
   }, context: ViewStoriesOperationContext): Promise<{ storiesWatched: number; storyLikes: number }> {
     const { android, deviceProfileSwipe, getScreenSize, isCycleAborted, logger, sleepOrAbort, _viewStoriesLastDmRecipient } = context;
@@ -318,7 +360,9 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
 
     // If the caller already confirmed the Story viewer, do not scan or tap
     // Home-feed story bubbles inside the viewer.
-    const { slot: picked, opened: storyOpened } = params.alreadyInStoryViewer
+    const { slot: picked, opened: storyOpened } = params.storyEntry
+      ? (onLog?.("Story entry already prepared by the Stories operation"), params.storyEntry)
+      : params.alreadyInStoryViewer
       ? (onLog?.("Story viewer already active — skipping story-bubble picker"), { slot: 0, opened: true })
       : await pickAndOpenRandomStory(serial, w, h, onLog, context);
     logger.info({ serial, picked, totalStories, storyOpened }, "[view-stories] story open attempt");
@@ -904,100 +948,5 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
       "back",
     );
     await sleepOrAbort(serial, 800);
-    return { storiesWatched, storyLikes };
-
-    // ── Ad / deviation recovery ───────────────────────────────────────────
-    // A "next story" advance tap that lands on a sponsored post's CTA button
-    // (or a swipe Instagram intercepts for a full-screen ad) can open Chrome
-    // or Instagram's in-app WebView, taking us completely out of the story
-    // viewer — and possibly out of the Instagram app entirely.  Every
-    // subsequent scripted tap would land on the wrong app.  Check the
-    // foreground package and press Back until we are back in Instagram before
-    // doing anything else (including the exit-swipe below).
-    const _stPkg = await android.getForegroundPackage(serial).catch(() => null);
-    if (_stPkg && _stPkg !== "com.instagram.android") {
-      onLog?.(`Story loop: deviated — foreground app is "${_stPkg}" (expected Instagram) — pressing Back to recover`);
-      logger.info({ serial, pkg: _stPkg }, "[view-stories] deviated to external app — pressing Back to recover");
-      for (let _stRi = 0; _stRi < 5; _stRi++) {
-        await android.pressBack(serial);
-        await sleepOrAbort(serial, 700);
-        const _stNowPkg = await android.getForegroundPackage(serial).catch(() => null);
-        if (!_stNowPkg || _stNowPkg === "com.instagram.android") {
-          onLog?.(`Story loop: recovered — back in Instagram after ${_stRi + 1} Back press(es)`);
-          logger.info({ serial, attempts: _stRi + 1 }, "[view-stories] recovered to Instagram after ad deviation");
-          break;
-        }
-      }
-    }
-
-    // Exit the story viewer with Android Back — only if we're actually still
-    // in it. Do not use a swipe here: the established Story exit contract is
-    // Back, and a swipe can leave Instagram in the viewer or advance content.
-    if (await stillInStoryViewer()) {
-      onLog?.("Story exit: pressing Android Back");
-      logger.info({ serial }, "[view-stories] exiting story viewer with Android Back");
-      await android.pressBack(serial);
-    }
-    await sleepOrAbort(serial, 800);
-
-    // ── Home-feed recovery ─────────────────────────────────────────────────
-    // Even at x=97%, an advance tap can occasionally land on a mention/collab
-    // sticker placed near the right edge, navigating to the story author's
-    // profile page.  The ad-deviation block above only catches non-Instagram
-    // apps; this block catches the intra-Instagram case where we're left on a
-    // non-feed surface.
-    //
-    // Detection: findHomeTab looks for content-desc="Home" or the feed_tab
-    // resource-id in the accessibility tree.
-    //
-    // Recovery: ALWAYS tap the Home tab when it is visible rather than just
-    // checking for its presence.  The Reels full-screen player still shows the
-    // bottom nav (Home tab visible), so the old null-only guard passed through
-    // it without navigating back to the feed.  Tapping Home is safe on the
-    // feed (stays/refreshes) AND correctly exits the Reels player back to the
-    // home feed.  When the Home tab is absent entirely (Chrome, deep link,
-    // etc.) fall back to pressing Back once.
-    //
-    // Root cause (observed Jul 2026): after all story slides ended naturally,
-    // Instagram auto-navigated to the Reels full-screen player.  findHomeTab
-    // returned non-null (bottom nav still visible in Reels), so the old
-    // null-only guard did nothing and the automation cycle continued inside
-    // the Reels player instead of the home feed.
-    {
-      const _stFeedTab = await android.findHomeTab(serial).catch(() => null);
-      if (_stFeedTab) {
-        onLog?.("Story exit: tapping Home tab to return to home feed (guards against Reels/profile auto-navigation after story end)");
-        logger.info({ serial }, "[view-stories] tapping Home tab post-exit to ensure home feed");
-        await android.tap(serial, _stFeedTab.x, _stFeedTab.y);
-        await sleepOrAbort(serial, 700);
-      } else {
-        // When the reply composer/keyboard is focused, Back dismisses only the
-        // keyboard. Returning immediately here leaves Instagram inside the
-        // story viewer and the next dispatcher tool starts on that screen.
-        // Recover in bounded steps, re-dumping after every Back, until Home is
-        // positively visible or the viewer is positively gone.
-        for (let _stRecovery = 0; _stRecovery < 3; _stRecovery++) {
-          onLog?.(
-            `Story exit: home tab absent after story loop — pressing Back ` +
-            `(${_stRecovery + 1}/3) and rechecking`,
-          );
-          logger.info({ serial, attempt: _stRecovery + 1 }, "[view-stories] home tab absent post-exit — pressing Back and rechecking");
-          await android.pressBack(serial);
-          await sleepOrAbort(serial, 600);
-          const _stRecoveredHome = await android.findHomeTab(serial).catch(() => null);
-          if (_stRecoveredHome) {
-            onLog?.("Story exit: Home tab confirmed after Back recovery — returning to home feed");
-            await android.tap(serial, _stRecoveredHome.x, _stRecoveredHome.y);
-            await sleepOrAbort(serial, 700);
-            break;
-          }
-          if (!(await android.isInStoryViewerSlow(serial).catch(() => false))) {
-            onLog?.("Story exit: Story viewer no longer detected after Back recovery");
-            break;
-          }
-        }
-      }
-    }
-
     return { storiesWatched, storyLikes };
   }

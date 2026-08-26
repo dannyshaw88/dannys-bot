@@ -16,16 +16,6 @@ export interface MakePostOperationContext {
   recordPostedProfileMedia: (...args: any[]) => void;
   auditDeviceMediaCopy: (...args: any[]) => Promise<any>;
   effectiveTypingProfile: (...args: any[]) => any;
-  findMakeAPostSuccessSignal?: (...args: any[]) => Promise<any>;
-  findButtonByLabel?: (...args: any[]) => Promise<any>;
-  findComposeButton?: (...args: any[]) => Promise<any>;
-  findPostNextButton?: (...args: any[]) => Promise<any>;
-  findShareFooterButton?: (...args: any[]) => Promise<any>;
-  findExpandPhotoButton?: (...args: any[]) => Promise<any>;
-  findLocationSearchField?: (...args: any[]) => Promise<any>;
-  findLocationMapPreviewAdd?: (...args: any[]) => Promise<any>;
-  isOnNotificationsOrDirectScreenLive?: (...args: any[]) => Promise<any>;
-  isOnStoryCreator?: (...args: any[]) => Promise<any>;
 }
 
 export async function runMakePostStep(serial: string, opts: {
@@ -39,10 +29,7 @@ export async function runMakePostStep(serial: string, opts: {
   const { android, path, fsPromises, sleepOrAbort, pickLocalFolderImage,
     prepareMakePostImage, recordPostedLocalFile, recordPostedProfileMedia,
     auditDeviceMediaCopy, effectiveTypingProfile,
-    findMakeAPostSuccessSignal, findButtonByLabel, findComposeButton,
-    findPostNextButton, findShareFooterButton, findExpandPhotoButton,
-    findLocationSearchField, findLocationMapPreviewAdd,
-    isOnNotificationsOrDirectScreenLive, isOnStoryCreator } = context;
+    } = context;
   const {
     localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
     captionText, doFixAiSlop, alterationEnabled, alterationLevel,

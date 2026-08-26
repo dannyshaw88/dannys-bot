@@ -1,6 +1,7 @@
 export interface VisitSavedOperationContext {
   android: {
     findInstagramProfileTab(serial: string): Promise<{ x: number; y: number } | null>;
+    findHomeTab(serial: string): Promise<{ x: number; y: number } | null>;
     tap(serial: string, x: number, y: number): Promise<void>;
     dismissInstagramInterstitials(serial: string): Promise<string | null>;
     findInstagramProfileOptionsButton(serial: string): Promise<{ x: number; y: number } | null>;
@@ -15,7 +16,6 @@ export interface VisitSavedOperationContext {
     mode: "normal",
   ): Promise<void>;
   sleepOrAbort(serial: string, milliseconds: number): Promise<void>;
-  returnToHomeSafely(serial: string): Promise<boolean>;
   rollRange(minimum: number, maximum: number): number;
   logger: { warn(payload: unknown, message: string): void };
   onLog?: (message: string) => void;
@@ -27,7 +27,18 @@ export async function runVisitSaved(
   context: VisitSavedOperationContext,
 ): Promise<void> {
   const { android, getScreenSize, deviceProfileSwipe, sleepOrAbort,
-    returnToHomeSafely, rollRange, logger, onLog } = context;
+    rollRange, logger, onLog } = context;
+
+  const returnHome = async (): Promise<boolean> => {
+    const homeTab = await android.findHomeTab(serial).catch(() => null);
+    if (!homeTab) {
+      onLog?.("Visit Saved: Home tab not positively detected during cleanup");
+      logger.warn({ serial }, "[jitter-visit-saved] Home tab not found during cleanup");
+      return false;
+    }
+    await android.tap(serial, homeTab.x, homeTab.y);
+    return true;
+  };
 
   const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
   if (!profileTab) {
@@ -45,7 +56,7 @@ export async function runVisitSaved(
   if (!optionsButton) {
     onLog?.("Visit Saved: Options button not found — skipping");
     logger.warn({ serial }, "[jitter-visit-saved] Options/hamburger button not found");
-    await returnToHomeSafely(serial);
+    await returnHome();
     await sleepOrAbort(serial, 600);
     return;
   }
@@ -59,7 +70,7 @@ export async function runVisitSaved(
     logger.warn({ serial }, "[jitter-visit-saved] Saved row not found");
     await android.pressBack(serial);
     await sleepOrAbort(serial, 600);
-    await returnToHomeSafely(serial);
+    await returnHome();
     await sleepOrAbort(serial, 600);
     return;
   }
@@ -83,7 +94,7 @@ export async function runVisitSaved(
   await sleepOrAbort(serial, 600);
   await android.pressBack(serial);
   await sleepOrAbort(serial, 600);
-  await returnToHomeSafely(serial);
+  await returnHome();
   await sleepOrAbort(serial, 600);
   onLog?.("Visit Saved: ✓ done, returned to home feed");
 }

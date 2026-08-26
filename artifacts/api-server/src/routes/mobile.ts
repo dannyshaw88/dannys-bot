@@ -40,17 +40,20 @@ import { runCheckNotifications as runCheckNotificationsOperation } from "../mobi
 import { runCheckDmLoop as runCheckDmLoopOperation } from "../mobile/hst/operations/checkDm";
 import { runCheckFeedLoop as runCheckFeedLoopOperation } from "../mobile/hst/operations/viewFeed";
 import {
-  pickAndOpenRandomStory,
+  prepareViewStoriesEntry,
   runViewStoriesFromFeedLoop as runViewStoriesFromFeedLoopOperation,
 } from "../mobile/hst/operations/viewStories";
 import { runViewExplorePage as runViewExplorePageOperation } from "../mobile/hst/operations/viewExplore";
-import { runViewReelsLoop as runViewReelsLoopOperation } from "../mobile/hst/operations/viewReels";
+import {
+  finishViewReels,
+  runViewReelsLoop as runViewReelsLoopOperation,
+} from "../mobile/hst/operations/viewReels";
 import { runMakePostStep as runMakePostStepOperation } from "../mobile/hst/operations/makePost";
 import { runMakePostStoryStep as runMakePostStoryStepOperation } from "../mobile/hst/operations/postStory";
 import { runUpdateProfilePicture as runUpdateProfilePictureOperation } from "../mobile/hst/operations/updateProfilePicture";
 import { runUpdateBio as runUpdateBioOperation } from "../mobile/hst/operations/updateBio";
 import { runRandomActionsStep, type RandomActionsOperationContext } from "../mobile/hst/operations/randomActions";
-import { runFollowUsersStep } from "../mobile/hst/operations/follow";
+import { finishSpreadFollowSearch, runFollowUsersStep } from "../mobile/hst/operations/follow";
 import {
   startSlotCycleNotebook,
   appendSlotCycleNotebook,
@@ -4773,12 +4776,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (dwellMs <= 0) { clearTimeout(t); finish(); }
     });
   };
-  const returnToHomeSafely = async (serial: string): Promise<boolean> => {
-    const home = await android.findHomeTab(serial).catch(() => null);
-    if (!home) return false;
-    await android.tap(serial, home.x, home.y);
-    return true;
-  };
   const hstRandomDelay = (serial: string, minMs: number, maxMs: number) =>
     sleepOrAbort(serial, minMs + Math.floor(Math.random() * (maxMs - minMs + 1)), "actionPacing", "computed");
 
@@ -4976,12 +4973,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   const hstOperationContext: any = {
     android, fs, fsPromises, path, storage, logger, deviceProfileSwipe,
-    getScreenSize, isCycleAborted, sleepOrAbort, hstRandomDelay, returnToHomeSafely,
+    getScreenSize, isCycleAborted, sleepOrAbort, hstRandomDelay,
     rollRange, getDeviceDensity: (s: string) => android.getDeviceDensity(s),
     loadInstanceConfigs, consumptionScrollWeights, rollFeedConsumptionGesture, rollScrollVelocity,
-    findButtonByLabel: android.findButtonByLabel, findFeedActionIcons: android.findFeedActionIcons,
-    findReelActionIcons: android.findReelActionIcons, findHomeTab: android.findHomeTab,
-    findInstagramSearchTab: android.findInstagramSearchTab,
     _viewFeedLastDmRecipient, _viewStoriesLastDmRecipient, _viewExploreLastDmRecipient,
     _viewReelsLastDmRecipient, _injectBrowsingLastDmRecipient, dismissSaveCollectionPrompt,
     pickLocalFolderImage, prepareMakePostImage, recordPostedLocalFile, recordPostedProfileMedia,
@@ -6632,12 +6626,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // default sequence: Feed → Stories → Reels → Follow → Post → Jitter.
       //
       // Exit safety guarantee:
-      //   • Stories: runViewStoriesFromFeedLoop already swipe-exits the
-      //     viewer internally (ad-deviation recovery + swipe-down). The
-      //     caller receives control only after the phone is back on the feed.
-      //   • Reels: after runViewReelsLoop returns we press Back up to 3
-      //     times polling findHomeTab, so the full-screen viewer is confirmed
-      //     closed before the next tool starts.
+      //   • Stories: the Stories operation owns entry, viewer actions, and
+      //     its exit gesture before returning control to this dispatcher.
+      //   • Reels: the Reels operation owns the full-screen viewer exit before
+      //     returning control to this dispatcher.
       //   • All other tools self-navigate to their own starting position
       //     (Search tab, Home tab, compose "+") so they work from any screen.
       // (likes, sharesFeed, etc. already hoisted before try — no re-declaration needed)
@@ -6893,8 +6885,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       for (const [_toolIndex, _tool] of _toolSeq.entries()) {
         if (isCycleAborted(serial)) break;
-        const _isFirst = _toolsRan === 0;
-        trace(`tool-start index=${_toolIndex + 1}/${_toolSeq.length} tool=${_tool.startsWith("follow_spread:") ? "follow" : _tool} first=${_isFirst}`);
+        trace(`tool-start index=${_toolIndex + 1}/${_toolSeq.length} tool=${_tool.startsWith("follow_spread:") ? "follow" : _tool} first=${_toolsRan === 0}`);
         const _currentToolLabels: Record<string, string> = {
           feed: "View Feed",
           stories: "Stories",
@@ -6927,26 +6918,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 ),
               ),
             );
-            // When this is not the first tool the previous one may have left
-            // the phone anywhere — navigate back to the home feed before
-            // starting the scroll sequence.
-            if (!_isFirst) {
-              tLog("▶ View Feed: navigating to home feed…");
-              const _fHome = await android.findHomeTab(serial).catch(() => null);
-              if (_fHome) {
-                await android.tap(serial, _fHome.x, _fHome.y);
-              } else {
-                // Coordinate fallback — same as Stories uses — taps the leftmost
-                // bottom-nav icon (Home) when uiautomator can't find it by node.
-                const { w: sw, h: sh } = getScreenSize(serial);
-                await android.tap(serial, Math.round(sw * 0.10), Math.round(sh * 0.975));
-              }
-              await sleepOrAbort(serial, 2000);
-            }
             tLog(`▶ Starting feed scroll — ${feedRunCount} posts (fresh pass roll)`);
             ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits } = await runCheckFeedLoop(serial, {
               count: feedRunCount, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
-              homeAlreadyEstablished: !_isFirst,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
               savePercentMin, savePercentMax,
@@ -6971,62 +6945,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         // ── Stories ─────────────────────────────────────────────────────
         } else if (_tool === 'stories') {
           if (_toolActivated[_tool]) { // pre-rolled above
-            // Always establish the Home feed first, even when Stories is the
-            // first tool in the cycle. The phone can still be on a nested
-            // screen from a previous cycle or app resume.
-            const _alreadyInStory = await android.isInStoryViewerSlow(serial).catch(() => false);
-            let storyEntry: { slot: number; opened: boolean };
-            if (_alreadyInStory) {
-              // The story tool may be entered while the phone is already
-              // showing a story (for example, the preceding Feed action
-              // opened one). That is a valid starting state. Do not tap Home
-              // or press a story bubble: those actions would operate on the
-              // viewer and can focus the reply composer.
-              tLog("▶ Stories: already in Story viewer — skipping Home and story-bubble taps");
-              storyEntry = { slot: 0, opened: true };
-            } else {
-              tLog("▶ Tapping Home tab for stories…");
-              // Only navigate to Home when we positively know we are not
-              // already in the Story viewer.
-              const homeTab = await android.findHomeTab(serial).catch(() => null);
-              if (homeTab) {
-                await android.tap(serial, homeTab.x, homeTab.y);
-              } else {
-                steps.push("stories(aborted — Home tab not positively detected)");
-                tLog("▶ Stories aborted — Home tab not positively detected; refusing coordinate fallback");
-                continue;
-              }
-              await sleepOrAbort(serial, 1200);
-              const _homeConfirmed = await android.findHomeTab(serial).catch(() => null);
-              if (!_homeConfirmed) {
-                steps.push("stories(aborted — Home tab confirmation failed)");
-                tLog("▶ Stories aborted — Home tab confirmation failed; refusing to open story tray");
-                continue;
-              }
-              const preStoriesPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
-              if (preStoriesPopup) {
-                steps.push(`pre-stories-popup-dismissed(${preStoriesPopup})`);
-                await sleepOrAbort(serial, 600);
-              }
-              // The story scanner performs the live accessibility check itself.
-              // A long fixed sleep here only delays the first dump when the tray
-              // is already rendered; keep a short settle window for animation.
-              tLog("▶ Checking story tray readiness…");
-              await sleepOrAbort(serial, 800);
-              tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
-              storyEntry = await pickAndOpenRandomStory(
-                serial,
-                getScreenSize(serial).w,
-                getScreenSize(serial).h,
-                (msg) => tLog(`  ${msg}`),
-                hstOperationContext,
-              );
-            }
+            const storyEntry = await prepareViewStoriesEntry(
+              serial,
+              (msg) => tLog(`  ${msg}`),
+              hstOperationContext,
+            );
             if (!storyEntry.opened) {
-              steps.push("stories(aborted — no story bubbles after Home retry)");
+              steps.push("stories(aborted — Stories operation could not establish entry)");
               tLog("▶ Stories aborted — no story bubbles available");
               continue;
             }
+            tLog(`▶ Starting stories (up to ${viewStoriesSlidesMax})`);
             const result = await runViewStoriesFromFeedLoop(serial, {
               slidesMin: viewStoriesSlidesMin, slidesMax: viewStoriesSlidesMax,
               slideWatchPctMin: viewStoriesSlideWatchPctMin, slideWatchPctMax: viewStoriesSlideWatchPctMax,
@@ -7034,7 +6963,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shareDmPercentMin: viewStoriesShareDmPercentMin, shareDmPercentMax: viewStoriesShareDmPercentMax,
               commentPercentMin: viewStoriesCommentPercentMin, commentPercentMax: viewStoriesCommentPercentMax,
               clickAuthorPercentMin: viewStoriesClickAuthorPercentMin, clickAuthorPercentMax: viewStoriesClickAuthorPercentMax,
-              alreadyInStoryViewer: _alreadyInStory,
+              alreadyInStoryViewer: storyEntry.alreadyInStoryViewer,
+              storyEntry,
               onLog: (msg) => tLog(`  ${msg}`),
             });
             // runViewStoriesFromFeedLoop exits the viewer internally (ad-
@@ -7123,17 +7053,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             reelsLikes = reelsResult.likes;
             steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares, ${reelsResult.saves} saves)`);
             tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
-             // Reels owns one deterministic exit action: tap the leftmost
-             // Instagram bottom-navigation slot. Try the shared visual Home
-             // detector first; it checks both normal and inverted polarity.
-             // If the icon is not visually matchable in the viewer, the slot
-             // itself remains the authoritative target.
-            tLog("▶ View Reels — exiting full-screen viewer via Home tab…");
-             const detectedHome = await android.findHomeTab(serial).catch(() => null);
-             const homeTab = detectedHome ?? await android.getBottomLeftHomeFallback(serial);
-             const homeTapSource = detectedHome ? "dual-polarity visual match" : "bottom-left navigation slot";
-             await android.tap(serial, homeTab.x, homeTab.y, "manual");
-             tLog(`▶ View Reels — tapped Home tab at (${homeTab.x},${homeTab.y}) via ${homeTapSource}`);
+             await finishViewReels(serial, {
+               android,
+               sleepOrAbort,
+               onLog: (msg) => tLog(`  ${msg}`),
+             });
           } else if (!viewReelsEnabled) {
             steps.push("reels(skipped — View Reels disabled)");
             tLog("▶ View Reels disabled — skipping reels");
@@ -7302,21 +7226,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
             }
 
-            // The complete spread is now finished: the primary candidate,
-            // backups, and any replacement scrape candidates have all been
-            // exhausted or one has succeeded. Restore the normal Instagram UI
-            // exactly once for the next tool/dispatcher entry.
-            try {
-              await android.clearInstagramSearchBar(serial, (msg) => tLog(`  Spread Follow: final cleanup — ${msg}`));
-              await android.pressBack(serial);
-              await sleepOrAbort(serial, 500, "accountSwitching");
-              await android.pressBack(serial);
-              await sleepOrAbort(serial, 500);
-              tLog("  Spread Follow: final cleanup — pressed Back twice to restore normal UI");
-            } catch (e: any) {
-              if (e?.message === "cycle-aborted") throw e;
-              tLog(`  Spread Follow: final cleanup failed — ${e?.message ?? "unknown error"}`);
-            }
+            // The complete spread is now finished: the Follow operation owns
+            // restoring the search surface for the next dispatcher entry.
+            await finishSpreadFollowSearch(serial, {
+              android,
+              sleepOrAbort,
+              onLog: (msg) => tLog(`  ${msg}`),
+            });
 
             followedCount += _sfCount;
             steps.push(`follow_spread(@${_spreadUsername}${_sfCount > 0 ? '' : ',skipped'})`);

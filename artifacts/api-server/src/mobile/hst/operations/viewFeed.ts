@@ -1,9 +1,6 @@
 export interface ViewFeedOperationContext {
   android: any;
   deviceProfileSwipe: (...args: any[]) => Promise<any>;
-  findButtonByLabel: (...args: any[]) => Promise<any>;
-  findFeedActionIcons: (...args: any[]) => Promise<any>;
-  findHomeTab: (...args: any[]) => Promise<any>;
   getScreenSize: (...args: any[]) => any;
   isCycleAborted: (...args: any[]) => boolean;
   logger: any;
@@ -31,7 +28,7 @@ export async function runCheckFeedLoop(serial: string, params: {
     onLog?: (msg: string) => void;
   } , context: ViewFeedOperationContext): Promise<{
  count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number; hashtagTaps: number; authorVisits: number }> {
-    const { android, deviceProfileSwipe, findButtonByLabel, findFeedActionIcons, findHomeTab, getScreenSize, isCycleAborted, logger, sleepOrAbort, consumptionScrollWeights, rollFeedConsumptionGesture, loadInstanceConfigs, _viewFeedLastDmRecipient, dismissSaveCollectionPrompt } = context;
+    const { android, deviceProfileSwipe, getScreenSize, isCycleAborted, logger, sleepOrAbort, consumptionScrollWeights, rollFeedConsumptionGesture, loadInstanceConfigs, _viewFeedLastDmRecipient, dismissSaveCollectionPrompt } = context;
     params.onLog?.("[TRACE] feed: start");
     const {
       count, delayMinSec = 5, delayMaxSec = 10, likePercentMin: rawLikePercentMin = 0, likePercentMax: rawLikePercentMax = 0, likesMin, likesMax,
@@ -227,7 +224,7 @@ export async function runCheckFeedLoop(serial: string, params: {
       // anchors on every Instagram build: ads can expose Learn More buttons,
       // and recycled rows can expose a Like from a different post. The visual
       // matcher also performs the strict sponsored-card check.
-      const visualIcons = await findFeedActionIcons(serial, onLog, {
+      const visualIcons = await android.findFeedActionIcons(serial, onLog, {
         strictViewFeed: true,
         // Reuse this scan's complete XML. findFeedActionIcons still captures
         // a fresh screenshot for the visual Like reference, but must not pay

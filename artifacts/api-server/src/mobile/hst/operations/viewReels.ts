@@ -2,7 +2,6 @@ export interface ViewReelsOperationContext {
   android: typeof import("../../androidManager");
   deviceProfileSwipe: (...args: any[]) => Promise<any>;
   dismissSaveCollectionPrompt: (...args: any[]) => Promise<any>;
-  findButtonByLabel: (...args: any[]) => Promise<any>;
   getScreenSize: (serial: string) => { w: number; h: number };
   isCycleAborted: (serial: string) => boolean;
   loadInstanceConfigs: () => any;
@@ -36,7 +35,7 @@ export async function runViewReelsLoop(serial: string, params: {
   } = params;
 
   const {
-    android, deviceProfileSwipe, dismissSaveCollectionPrompt, findButtonByLabel,
+    android, deviceProfileSwipe, dismissSaveCollectionPrompt,
     getScreenSize, isCycleAborted, loadInstanceConfigs, logger, rollRange,
     rollScrollVelocity, sleepOrAbort, _viewReelsLastDmRecipient,
   } = context;
@@ -567,5 +566,23 @@ export async function runViewReelsLoop(serial: string, params: {
   }
 
   return { reelsViewed, likes, sharesFeed, sharesDm, saves };
+}
+
+/** Reels owns its viewer exit; the cycle dispatcher only records the result. */
+export async function finishViewReels(
+  serial: string,
+  context: Pick<ViewReelsOperationContext, "android" | "sleepOrAbort"> & {
+    onLog?: (message: string) => void;
+  },
+): Promise<void> {
+  const { android, sleepOrAbort, onLog } = context;
+  onLog?.("View Reels: locating Home tab to leave the full-screen viewer…");
+  const homeTab = await android.findHomeTab(serial).catch(() => null);
+  if (!homeTab) {
+    throw new Error("View Reels cannot finish: Instagram Home tab was not found");
+  }
+  await android.tap(serial, homeTab.x, homeTab.y, "manual");
+  onLog?.(`View Reels: tapped Home tab at (${homeTab.x},${homeTab.y})`);
+  await sleepOrAbort(serial, 700);
 }
 

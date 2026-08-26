@@ -31,6 +31,31 @@ function rollRange(min: number, max: number): number {
   return lo + Math.random() * (hi - lo);
 }
 
+/** Finish one Spread Follow assignment without leaking search cleanup policy. */
+export async function finishSpreadFollowSearch(
+  serial: string,
+  context: {
+    android: any;
+    sleepOrAbort: (...args: any[]) => Promise<void>;
+    onLog?: (message: string) => void;
+  },
+): Promise<void> {
+  const { android, sleepOrAbort, onLog } = context;
+  try {
+    await android.clearInstagramSearchBar(serial, (message: string) =>
+      onLog?.(`Spread Follow: final cleanup — ${message}`),
+    );
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 500, "accountSwitching");
+    await android.pressBack(serial);
+    await sleepOrAbort(serial, 500);
+    onLog?.("Spread Follow: final cleanup — pressed Back twice to restore normal UI");
+  } catch (error: any) {
+    if (error?.message === "cycle-aborted") throw error;
+    onLog?.(`Spread Follow: final cleanup failed — ${error?.message ?? "unknown error"}`);
+  }
+}
+
 /**
  * Activate Percentage gate — rolls once per tool per automation-cycle
  * execution ("execution" = one full run of the whole toggle-tick loop,
@@ -269,7 +294,7 @@ async function runProfileBrowsingSequence(
   context?: FollowOperationContext,
 ): Promise<number> {
   const { android, isCycleAborted, getScreenSize, deviceProfileSwipe, sleepOrAbort, logger,
-    findFeedActionIcons, findButtonByLabel, dismissSaveCollectionPrompt } = context!;
+    dismissSaveCollectionPrompt } = context!;
   const _injectBrowsingLastDmRecipient = context!._injectBrowsingLastDmRecipient as Map<string, { x: number; y: number }>;
   const { w, h } = getScreenSize(serial);
 
