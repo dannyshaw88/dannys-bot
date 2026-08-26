@@ -51,6 +51,16 @@ export async function pickAndOpenRandomStory(serial: string, w: number, h: numbe
         const rid   = (attrs.match(/resource-id="([^"]*)"/)   ?? [])[1] ?? "";
         const bm    = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
         if (!bm) continue;
+        const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
+        const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
+
+        // Story-tray bubbles live in Instagram's upper feed header. A feed
+        // post can expose an accessibility label such as
+        // "<username>'s story, 1 of 0, Seen." on its author avatar, which
+        // matches the broad story-label patterns below but is not a tray item.
+        // Keep candidates in the generous upper 45% band; this still covers
+        // the tray on tall/compact devices while excluding lower-feed avatars.
+        if (cy > Math.round(h * 0.45)) continue;
 
         // ── EXCLUSION: upload / own-story controls ────────────────────────────
         // "Add to story", "Add to your story", "Your story", etc. all end with
@@ -78,8 +88,6 @@ export async function pickAndOpenRandomStory(serial: string, w: number, h: numbe
 
         if (!isStoryDesc) continue;
 
-        const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
-        const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
         bubbles.push({ cx, cy, desc: desc || rid });
       }
 

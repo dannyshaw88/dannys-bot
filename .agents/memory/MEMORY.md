@@ -129,3 +129,4 @@
 - [View Feed visual reference packaging](view-feed-visual-reference-packaging.md) — Like must use a real decodable heart PNG; never ship an unvalidated embedded placeholder
 - [HST recovery and stable slot keys](hst-recovery-stable-slot-keys.md) — enumerate account slots and resolve persistent IDs before legacy numeric settings keys during startup recovery
 - [Debug screenshot slot folders](debug-screenshot-slot-folders.md) — name evidence folders by persisted Phone Farm slot plus model, never USB serial order
+- [Story tray feed-marker filter](story-tray-feed-marker-filter.md) — reject lower-feed “username’s story, Seen” markers before selecting tray bubbles
