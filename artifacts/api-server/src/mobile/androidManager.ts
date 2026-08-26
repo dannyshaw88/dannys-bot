@@ -8,6 +8,7 @@ import sharp from "sharp";
 import { randomBytes } from "node:crypto";
 import { logger } from "../lib/logger";
 import * as recorder from "./sessionRecorder";
+import { getDebugScreenshotFolderName } from "./debugScreenshotPaths";
 
 const execFileP = promisify(execFile);
 
@@ -7292,7 +7293,7 @@ export async function logScreenLayout(
  * around every risky tap in a flow, and the evidence is already sitting on
  * disk the next time something goes wrong, with zero effort from the user.
  *
- * Files are written to `debug-captures/<serial>/<timestamp>_<label>/`:
+ * Files are written to `debug-captures/SLOT-<n>-<model>/<timestamp>_<label>/`:
  *   - `screen.png`  — raw screencap at the moment of capture
  *   - `dump.xml`    — full uiautomator accessibility-tree dump
  * Never throws — a failed capture (missing tool, device disconnected) logs
@@ -7304,7 +7305,7 @@ export async function captureDebugEvidence(serial: string, label: string): Promi
     const tools = detectToolset();
     const adb = requireTool(tools.adb, "adb");
     const safeLabel = label.replace(/[^a-zA-Z0-9_.\-]+/g, "_").slice(0, 80);
-    const dir = path.join(process.cwd(), "debug-captures", serial.replace(/[^a-zA-Z0-9_.\-]+/g, "_"), `${Date.now()}_${safeLabel}`);
+    const dir = path.join(process.cwd(), "debug-captures", getDebugScreenshotFolderName(serial), `${Date.now()}_${safeLabel}`);
     fs.mkdirSync(dir, { recursive: true });
 
     const [{ stdout: pngBuf } , xml] = await Promise.all([
@@ -7327,8 +7328,16 @@ export async function captureDebugEvidence(serial: string, label: string): Promi
 
 /** Remove the prior per-device screenshot run before a new recording starts. */
 export function resetDebugCaptures(serial: string): void {
-  const root = path.join(process.cwd(), "debug-captures", serial.replace(/[^a-zA-Z0-9_.\-]+/g, "_"));
-  try { fs.rmSync(root, { recursive: true, force: true }); } catch (e: any) {
+  const debugRoot = path.join(process.cwd(), "debug-captures");
+  const root = path.join(debugRoot, getDebugScreenshotFolderName(serial));
+  const legacyRoot = path.join(debugRoot, serial.replace(/[^a-zA-Z0-9_.\-]+/g, "_"));
+  try {
+    fs.rmSync(root, { recursive: true, force: true });
+    // Session Recorder used serial-named roots before the Phone Farm slot
+    // naming was introduced. Remove that exact legacy root at reset time so
+    // old device-ID folders do not remain beside the new ordered folder.
+    if (legacyRoot !== root) fs.rmSync(legacyRoot, { recursive: true, force: true });
+  } catch (e: any) {
     logger.warn?.(`[resetDebugCaptures] failed for ${serial}: ${e?.message ?? e}`);
   }
 }
@@ -7339,9 +7348,8 @@ export async function captureDebugScreenshot(serial: string, ts: number, label: 
   try {
     const tools = detectToolset();
     const adb = requireTool(tools.adb, "adb");
-    const safeSerial = serial.replace(/[^a-zA-Z0-9_.\-]+/g, "_");
     const safeLabel = label.replace(/[^a-zA-Z0-9_.\-]+/g, "_").slice(0, 80);
-    const dir = path.join(process.cwd(), "debug-captures", safeSerial, `${ts}_${safeLabel}`);
+    const dir = path.join(process.cwd(), "debug-captures", getDebugScreenshotFolderName(serial), `${ts}_${safeLabel}`);
     fs.mkdirSync(dir, { recursive: true });
     const result = await execFileP(adb, ["-s", serial, "exec-out", "screencap", "-p"], {
       encoding: "buffer", timeout: 3000, maxBuffer: 20 * 1024 * 1024,
@@ -10051,7 +10059,7 @@ export async function findInstagramSettingsRow(
   // Instagram uses both spellings across builds. Accounts Centre/Center is
   // the header card, not a settings row; without this exclusion its label
   // contains "Account" and can be misclassified as the Account row below it.
-  const excluded = /^(Settings and activity|Accounts? Cent(?:er|re)|Log out|Add account|Switch account|Meta Verified)$/i;
+  const excluded = /^(Settings and activity|Search|Your account|Meta|How you use Instagram|Your insights and tools|Accounts? Cent(?:er|re)|Log out|Add account|Switch account|Meta Verified)$/i;
   const candidates: Array<{ x: number; y: number; label: string }> = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let match: RegExpExecArray | null;
@@ -10072,7 +10080,14 @@ export async function findInstagramSettingsRow(
     const text = attrs.match(/\btext="([^"]*)"/)?.[1] ?? "";
     const desc = attrs.match(/\bcontent-desc="([^"]*)"/)?.[1] ?? "";
     const label = text || desc;
-    if (!label || excluded.test(label) || /^Manage your connected experiences\b/i.test(label)) continue;
+    const clickable = /\bclickable="true"/i.test(attrs);
+    const className = attrs.match(/\bclass="([^"]*)"/i)?.[1] ?? "";
+    // Section headings are exposed as wide text nodes but are not interactive.
+    // Requiring an interactive accessibility node prevents "Your account",
+    // "How you use Instagram", and similar headings from being selected even
+    // when a build gives them row-sized bounds.
+    if (!label || !clickable || /EditText/i.test(className) || excluded.test(label.trim()) ||
+        /^Manage your connected experiences\b/i.test(label)) continue;
     const known = knownLabels.find(candidate => label.toLowerCase().includes(candidate.toLowerCase()));
     if (!known && !/^[A-Za-z][A-Za-z '&·.-]{2,48}$/.test(label)) continue;
     candidates.push({ x, y, label: known ?? label });
@@ -10087,6 +10102,53 @@ export async function findInstagramSettingsRow(
   );
   if (deduped.length === 0) return null;
   return deduped[Math.floor(Math.random() * deduped.length)];
+}
+
+/**
+ * Confirm that a settings-row tap opened the selected row's detail surface.
+ *
+ * A coordinate tap succeeding at the input layer is not enough: on the farm,
+ * the tap can land on the Settings and activity list without navigating. The
+ * list has a stable "Settings and activity" heading; a detail surface should
+ * remove that heading and retain the selected label as its title/content. The
+ * selected-label check also prevents a stray tap from opening Instagram's
+ * Create sheet from being mistaken for a successful settings visit.
+ */
+export async function confirmInstagramSettingsRowOpened(
+  serial: string,
+  selectedLabel: string,
+): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) {
+    logger.warn({ serial, selectedLabel }, "[jitter-visit-settings] confirmation dump empty");
+    return false;
+  }
+
+  const hasSettingsHeading =
+    /\btext="Settings and activity"/i.test(xml) ||
+    /\bcontent-desc="Settings and activity"/i.test(xml);
+  if (hasSettingsHeading) {
+    logger.warn({ serial, selectedLabel }, "[jitter-visit-settings] row tap did not leave Settings and activity");
+    return false;
+  }
+
+  const decodeXmlText = (value: string) => value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+  const wanted = decodeXmlText(selectedLabel).trim().toLowerCase();
+  const hasSelectedLabel = [...xml.matchAll(/\b(?:text|content-desc)="([^"]*)"/gi)]
+    .some(match => decodeXmlText(match[1] ?? "").trim().toLowerCase() === wanted);
+  if (!hasSelectedLabel) {
+    logger.warn({ serial, selectedLabel }, "[jitter-visit-settings] row tap left no selected-setting marker");
+    return false;
+  }
+
+  return true;
 }
 
 

@@ -78,8 +78,8 @@ export async function runRandomActionsStep(
   const settingsChance = rollRange(opts.visitSettingsPctMin, opts.visitSettingsPctMax) / 100;
   if (settingsChance > 0 && Math.random() < settingsChance) {
     onLog("Random Actions: visiting random settings…");
-    await runVisitSettings(serial, { ...context, onLog: (message: string) => onLog(`  ${message}`) });
-    fired = true;
+    const settingsVisited = await runVisitSettings(serial, { ...context, onLog: (message: string) => onLog(`  ${message}`) });
+    fired = settingsVisited || fired;
   }
   const appSwitchChance = rollRange(opts.appSwitchPctMin, opts.appSwitchPctMax) / 100;
   if (appSwitchChance > 0 && Math.random() < appSwitchChance) {

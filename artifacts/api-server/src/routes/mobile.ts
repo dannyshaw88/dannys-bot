@@ -11,6 +11,7 @@ import sharp from "sharp";
 import { createHash } from "node:crypto";
 import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
+import { getDebugScreenshotFolderName } from "../mobile/debugScreenshotPaths";
 import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
 import { getDeviceLabel } from "./usb-phones";
@@ -879,7 +880,7 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
   try {
     const adb = android.detectToolset().adb.path;
     if (!adb) return;
-    const dir = path.join(SCREENSHOTS_DIR, getDeviceLabel(serial));
+    const dir = path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial, getDeviceLabel(serial)));
     const legacySerialDir = path.join(
       SCREENSHOTS_DIR,
       serial.replace(/[^a-zA-Z0-9_\-]/g, "_"),
@@ -6179,7 +6180,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Clear debug screenshots from the previous account's cycle so the new
       // account starts fresh with its own 50-frame sequence.
       await fsPromises.rm(
-        path.join(SCREENSHOTS_DIR, getDeviceLabel(serial)),
+        path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial, getDeviceLabel(serial))),
         { recursive: true, force: true },
       ).catch(() => {});
       debugScreenshotTimestamps.delete(serial);
@@ -8705,7 +8706,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/mobile/devices/:serial/debug-screenshots.zip", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const label  = getDeviceLabel(serial);
+      const label  = getDebugScreenshotFolderName(serial, getDeviceLabel(serial));
       const dir    = path.join(SCREENSHOTS_DIR, label);
 
       const AdmZip = (await import("adm-zip")).default;
