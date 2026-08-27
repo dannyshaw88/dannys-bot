@@ -7749,6 +7749,7 @@ async function findHomeTabInternal(
     const scales = [0.35, 0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.2, 3.8];
     const scanStep = 4;
     const sampleStep = 2;
+    const minimumConfidence = 0.72;
     for (const scale of scales) {
       const tw = Math.max(10, Math.round(reference.width * scale));
       const th = Math.max(10, Math.round(reference.height * scale));
@@ -7757,7 +7758,10 @@ async function findHomeTabInternal(
       const xMax = screen.width - tw;
       const yMin = 0;
       const yMax = screen.height - th;
-      for (let y = yMin; y <= yMax; y += scanStep) {
+      // Traverse from the bottom-left corner inward. This preserves the
+      // semantic Home location without encoding a device-specific percentage
+      // or coordinate. The reference image remains the only identity check.
+      for (let y = yMax; y >= yMin; y -= scanStep) {
         for (let x = 0; x <= xMax; x += scanStep) {
            let bestPolarityScore = -Infinity;
            let bestPolarity: "normal" | "inverted" = "normal";
@@ -7800,6 +7804,9 @@ async function findHomeTabInternal(
            if (score > (best?.score ?? -Infinity)) {
             best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, scale, polarity: bestPolarity };
           }
+            if (score >= minimumConfidence) {
+              return { x: Math.round(x + tw / 2), y: Math.round(y + th / 2) };
+            }
         }
       }
       // Do not let a full Home-region scan monopolize the API process.
@@ -7810,7 +7817,6 @@ async function findHomeTabInternal(
       await new Promise<void>(resolve => setImmediate(resolve));
     }
 
-    const minimumConfidence = 0.72;
     if (!best || best.score < minimumConfidence) {
       logger.warn({
         serial,
