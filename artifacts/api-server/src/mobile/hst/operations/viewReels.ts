@@ -577,7 +577,7 @@ export async function finishViewReels(
 ): Promise<void> {
   const { android, sleepOrAbort, onLog } = context;
   onLog?.("View Reels: locating Home tab to leave the full-screen viewer…");
-  const homeTab = await android.findHomeTab(serial).catch(() => null);
+  const homeTab = await android.findReelsHomeTab(serial).catch(() => null);
   if (!homeTab) {
     // The Reels loop has already completed its confirmed work at this point.
     // A missed visual match is cleanup uncertainty, not a failed Reels action.
