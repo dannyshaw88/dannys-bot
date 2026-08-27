@@ -1,5 +1,5 @@
 import type { Express, Request, Response } from "express";
-import { spawnSync, spawn, execFile } from "child_process";
+import { spawn, execFile } from "child_process";
 import { promisify } from "util";
 import { z } from "zod/v4";
 import fs from "fs";
@@ -203,7 +203,7 @@ async function findVisualPostControl(
   kind: "home" | "compose" | "post" | "expand" | "next" | "caption" | "share",
   onLog?: (msg: string) => void,
 ): Promise<VisualPostControl> {
-  const adb = android.detectToolset().adb.path;
+  const adb = (await android.detectToolsetAsync()).adb.path;
   if (!adb) return null;
   try {
     const png = await capturePng(adb, serial);
@@ -881,7 +881,7 @@ function debugLogLineColor(line: string): string {
 
 async function captureDebugScreenshot(serial: string, label: string): Promise<void> {
   try {
-    const adb = android.detectToolset().adb.path;
+    const adb = (await android.detectToolsetAsync()).adb.path;
     if (!adb) return;
     const dir = path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial, getDeviceLabel(serial)));
     const legacySerialDir = path.join(
@@ -1142,9 +1142,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // not to call socket.destroy() on it — it destroys every socket it doesn't
     // recognise, which kills this connection after we've already claimed it.
     (socket as any).__wsHandled = true;
-    screenWss.handleUpgrade(request, socket as any, head, (ws) => {
+    screenWss.handleUpgrade(request, socket as any, head, async (ws) => {
       logger.info({ serial }, "[mobile-ws] WebSocket handshake complete");
-      const tools = android.detectToolset();
+      const tools = await android.detectToolsetAsync();
       const adbPath = tools.adb.path;
       logger.info({ adbFound: !!adbPath, adbPath }, "[mobile-ws] ADB toolset check");
       if (!adbPath) {
@@ -1155,8 +1155,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       // Check that the device is actually connected before starting the loop
-      const deviceCheck = spawnSync(adbPath, ["devices"], { encoding: "utf8", timeout: 5000 });
-      const devicesOutput = deviceCheck.stdout ?? "";
+      let devicesOutput = "";
+      try {
+        const deviceCheck = await execFileP(adbPath, ["devices"], {
+          encoding: "utf8",
+          timeout: 5000,
+        } as any);
+        devicesOutput = String(deviceCheck.stdout ?? "");
+      } catch (error: any) {
+        logger.error({ serial, error }, "[mobile-ws] adb devices check failed");
+        ws.send(JSON.stringify({ error: `Unable to query device state: ${error?.message ?? "adb failed"}` }));
+        ws.close();
+        return;
+      }
       logger.info({ serial, devicesOutput }, "[mobile-ws] adb devices output at connection time");
       const deviceLine = devicesOutput.split("\n").find(l => l.startsWith(serial));
       if (!deviceLine) {
@@ -1186,8 +1197,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // We save the original value and restore it on disconnect.
       let originalScreenTimeout = "30000"; // fallback default
       try {
-        const st = spawnSync(adbPath, ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"], { encoding: "utf8", timeout: 3000 });
-        const val = st.stdout?.trim();
+        const st = await execFileP(adbPath, ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"], {
+          encoding: "utf8",
+          timeout: 3000,
+        } as any);
+        const val = String(st.stdout ?? "").trim();
         if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
       } catch { /* ignore */ }
       adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
@@ -1386,7 +1400,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const t0 = Date.now();
       const elapsed = () => Date.now() - t0;
 
-      const tools = android.detectToolset();
+      const tools = await android.detectToolsetAsync();
       const adbPath = tools.adb.path;
       if (!adbPath) {
         ws.send(JSON.stringify({ error: "ADB not found on this machine" }));
@@ -1394,7 +1408,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         return;
       }
 
-      const deviceCheck = spawnSync(adbPath, ["devices"], { encoding: "utf8", timeout: 5000 });
+      let deviceCheck: { stdout?: string };
+      try {
+        deviceCheck = await execFileP(adbPath, ["devices"], {
+          encoding: "utf8",
+          timeout: 5000,
+        } as any);
+      } catch (error: any) {
+        logger.error({ serial, error, elapsedMs: elapsed() }, "[mobile-video] adb devices check failed");
+        ws.send(JSON.stringify({ error: `Unable to query device state: ${error?.message ?? "adb failed"}` }));
+        ws.close();
+        return;
+      }
       logger.info({ serial, elapsedMs: elapsed() }, "[mobile-video] timing: adb devices check done");
       const deviceLine = (deviceCheck.stdout ?? "").split("\n").find(l => l.startsWith(serial));
       if (!deviceLine || deviceLine.split("\t")[1]?.trim() !== "device") {
@@ -1415,8 +1440,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // actually powers off, screenrecord stops producing frames entirely.
       let originalScreenTimeout = "30000";
       try {
-        const st = spawnSync(adbPath, ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"], { encoding: "utf8", timeout: 3000 });
-        const val = st.stdout?.trim();
+        const st = await execFileP(adbPath, ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"], {
+          encoding: "utf8",
+          timeout: 3000,
+        } as any);
+        const val = String(st.stdout ?? "").trim();
         if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
       } catch { /* ignore */ }
       adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
@@ -1661,7 +1689,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // second connection to the same device can never kill a sibling
       // session's own live screenrecord out from under it.
       if (!videoSessionActive.has(serial)) {
-        spawnSync(adbPath, ["-s", serial, "shell", "pkill", "-f", "screenrecord"], { encoding: "utf8", timeout: 3000 });
+        await execFileP(adbPath, ["-s", serial, "shell", "pkill", "-f", "screenrecord"], {
+          encoding: "utf8",
+          timeout: 3000,
+        } as any).catch(() => {});
       }
       videoSessionActive.add(serial);
       videoSessionWS.set(serial, ws);
@@ -1714,7 +1745,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Screen size ────────────────────────────────────────────────────────────
   app.get("/api/mobile/devices/:serial/screen-size", async (req: Request, res: Response) => {
     try {
-      const tools = android.detectToolset();
+      const tools = await android.detectToolsetAsync();
       const adbPath = tools.adb.path;
       if (!adbPath) { res.status(503).json({ error: "ADB not found" }); return; }
       const { stdout } = await execFileP(adbPath, ["-s", p(req, "serial"), "shell", "wm", "size"], { timeout: 5000 } as any);
@@ -1740,7 +1771,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // offset), so the diagnostic is reinstated rather than re-guessed.
   app.get("/api/mobile/devices/:serial/screen-info", async (req: Request, res: Response) => {
     try {
-      const tools = android.detectToolset();
+      const tools = await android.detectToolsetAsync();
       const adbPath = tools.adb.path;
       if (!adbPath) { res.status(503).json({ error: "ADB not found" }); return; }
       const serial = p(req, "serial");
@@ -1845,7 +1876,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   app.get("/api/mobile/status", async (_req: Request, res: Response) => {
     try {
-      const toolset = android.detectToolset();
+      const toolset = await android.detectToolsetAsync();
       res.json({
         platform: process.platform,
         toolset,
@@ -4068,7 +4099,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Device spec — auto-detect hardware & software via adb getprop ──────────
   app.get("/api/mobile/devices/:serial/device-spec", async (req: Request, res: Response) => {
     try {
-      const tools = android.detectToolset();
+      const tools = await android.detectToolsetAsync();
       const adbPath = tools.adb.path;
       if (!adbPath) { res.status(503).json({ error: "ADB not found" }); return; }
       const serial = p(req, "serial");
@@ -8076,15 +8107,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // pillarboxed) relative to the device's real resolution, so tap
   // coordinates captured against the video's pixel size need rescaling
   // through the real content sub-rect before they're sent to adb.
-  function rescaleForDevice(serial: string, x: number, y: number, videoW?: number, videoH?: number): { x: number; y: number; rescaled: boolean; video: [number,number]; device: [number,number]; from: [number,number]; to: [number,number] } {
+  async function rescaleForDevice(serial: string, x: number, y: number, videoW?: number, videoH?: number): Promise<{ x: number; y: number; rescaled: boolean; video: [number,number]; device: [number,number]; from: [number,number]; to: [number,number] }> {
     const noOp = { x, y, rescaled: false, video: [videoW ?? 0, videoH ?? 0] as [number,number], device: [0,0] as [number,number], from: [x,y] as [number,number], to: [x,y] as [number,number] };
     if (!videoW || !videoH) return noOp;
     try {
-      const tools = android.detectToolset();
+      const tools = await android.detectToolsetAsync();
       const adbPath = tools.adb.path;
       if (!adbPath) return noOp;
-      const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
-      const out = wm.stdout ?? "";
+      const wm = await execFileP(adbPath, ["-s", serial, "shell", "wm", "size"], {
+        encoding: "utf8",
+        timeout: 3000,
+      } as any);
+      const out = String(wm.stdout ?? "");
       // `wm size` can print BOTH a "Physical size" and an "Override size"
       // line when a display-size override is active (e.g. a prior
       // testing/scaling change). Touch input is interpreted against the
@@ -8139,7 +8173,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = tapSchema.parse(req.body);
       const serial = p(req, "serial");
-      const result = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
+      const result = await rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
       // Tag as manual and, when recording, capture the screen state immediately
       // after the tap so the macro export shows what was on screen at each step.
       await android.tap(serial, result.x, result.y, "manual");
@@ -8162,7 +8196,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = tapSchema.parse(req.body);
       const serial = p(req, "serial");
-      const result = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
+      const result = await rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
       await android.swipe(serial, result.x, result.y, result.x, result.y, 2000);
       res.json({ ok: true, rescaled: result.rescaled, video: result.video, device: result.device, from: result.from, to: result.to });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
@@ -8195,7 +8229,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = tapSchema.parse(req.body);
       const serial = p(req, "serial");
-      const result = rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
+      const result = await rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
       await android.doubleTap(serial, result.x, result.y);
       res.json({ ok: true, rescaled: result.rescaled, video: result.video, device: result.device, from: result.from, to: result.to });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
@@ -8431,7 +8465,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/mobile/devices/:serial/screencap-base64", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const tools = android.detectToolset();
+      const tools = await android.detectToolsetAsync();
       if (!tools.adb.found || !tools.adb.path) { res.status(503).json({ ok: false, error: "adb not found" }); return; }
       const adbPath = tools.adb.path;
        let frame = await capturePng(adbPath, serial);
@@ -8456,7 +8490,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/mobile/devices/:serial/screencap.png", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const tools = android.detectToolset();
+      const tools = await android.detectToolsetAsync();
       if (!tools.adb.found || !tools.adb.path) { res.status(503).end(); return; }
       const adbPath = tools.adb.path;
        let frame = await capturePng(adbPath, serial);
@@ -8635,11 +8669,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       let { x1, y1, x2, y2 } = input;
       if (input.videoW && input.videoH) {
         try {
-          const tools = android.detectToolset();
+          const tools = await android.detectToolsetAsync();
           const adbPath = tools.adb.path;
           if (adbPath) {
-            const wm = spawnSync(adbPath, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
-            const m = (wm.stdout ?? "").match(/(\d+)x(\d+)/);
+            const wm = await execFileP(adbPath, ["-s", serial, "shell", "wm", "size"], {
+              encoding: "utf8",
+              timeout: 3000,
+            } as any);
+            const m = String(wm.stdout ?? "").match(/(\d+)x(\d+)/);
             if (m) {
               const realW = parseInt(m[1]);
               const realH = parseInt(m[2]);
@@ -8898,9 +8935,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // 5. Disconnect the device from ADB so it disappears from the device list
       try {
-        const tools = android.detectToolset();
+        const tools = await android.detectToolsetAsync();
         if (tools.adb.path) {
-          spawnSync(tools.adb.path, ["disconnect", serial], { encoding: "utf8", timeout: 5000 });
+          await execFileP(tools.adb.path, ["disconnect", serial], {
+            encoding: "utf8",
+            timeout: 5000,
+          } as any).catch(() => {});
         }
       } catch { /* non-fatal */ }
 
@@ -8940,9 +8980,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // 5. Disconnect ADB
       try {
-        const tools = android.detectToolset();
+        const tools = await android.detectToolsetAsync();
         if (tools.adb.path) {
-          spawnSync(tools.adb.path, ["disconnect", serial], { encoding: "utf8", timeout: 5000 });
+          await execFileP(tools.adb.path, ["disconnect", serial], {
+            encoding: "utf8",
+            timeout: 5000,
+          } as any).catch(() => {});
         }
       } catch { /* non-fatal */ }
 

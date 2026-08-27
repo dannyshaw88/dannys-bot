@@ -59,6 +59,9 @@ export type AndroidToolset = {
 // Node event loop for several seconds per tool.
 const TOOLSET_CACHE_TTL_MS = 30_000;
 let cachedToolset: { value: AndroidToolset; checkedAt: number } | null = null;
+let asyncToolsetInFlight: Promise<AndroidToolset> | null = null;
+const screenSizeCache = new Map<string, { value: { w: number; h: number }; checkedAt: number }>();
+const screenSizeInFlight = new Map<string, Promise<{ w: number; h: number }>>();
 
 export type AvdInfo = {
   name: string;
@@ -174,6 +177,17 @@ function getVersion(toolPath: string, args: string[] = ["--version"]): string | 
   } catch { return null; }
 }
 
+async function getVersionAsync(toolPath: string, args: string[] = ["--version"]): Promise<string | null> {
+  try {
+    const { stdout, stderr } = await execFileP(toolPath, args, {
+      encoding: "utf8",
+      timeout: 5000,
+    } as any);
+    const out = String(stdout || stderr || "").trim().split("\n")[0];
+    return out || null;
+  } catch { return null; }
+}
+
 // ── Emulator-bundled ADB search paths ──────────────────────────────────────────
 // BlueStacks, LDPlayer, Nox etc. all ship their own adb.exe — we look there
 // first so users never need to install Android Studio.
@@ -251,6 +265,13 @@ export function detectToolset(): AndroidToolset {
   if (cachedToolset && now - cachedToolset.checkedAt < TOOLSET_CACHE_TTL_MS) {
     return cachedToolset.value;
   }
+  if (cachedToolset) {
+    // Never synchronously refresh an already-known toolset from a live request
+    // path. Return the last known-good paths immediately and refresh in the
+    // background; the async detector coalesces this refresh with any in flight.
+    void detectToolsetAsync().catch(() => {});
+    return cachedToolset.value;
+  }
 
   const sdkCandidates = candidateSdkRoots();
   const sdkRoot = sdkCandidates.find(p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } }) ?? null;
@@ -277,6 +298,70 @@ export function detectToolset(): AndroidToolset {
   };
   cachedToolset = { value, checkedAt: now };
   return value;
+}
+
+/**
+ * Non-blocking tool discovery for request paths that can run while the mirror,
+ * screenshot polling, or automation is active. The synchronous detector remains
+ * for startup/device-management callers, but must not be used from high-frequency
+ * request handlers: its version probes can hold the Windows API process hostage
+ * until their child-process timeouts expire.
+ */
+export async function detectToolsetAsync(): Promise<AndroidToolset> {
+  const now = Date.now();
+  if (cachedToolset && now - cachedToolset.checkedAt < TOOLSET_CACHE_TTL_MS) {
+    return cachedToolset.value;
+  }
+  if (asyncToolsetInFlight) return asyncToolsetInFlight;
+
+  asyncToolsetInFlight = (async () => {
+    const sdkCandidates = candidateSdkRoots();
+    const sdkRoot = sdkCandidates.find(p => {
+      try { return fs.statSync(p).isDirectory(); } catch { return false; }
+    }) ?? null;
+
+    const locatePath = (name: string): string | null => {
+      let p: string | null = null;
+      if (name === "adb") {
+        p = findAdbPath();
+      } else {
+        p = which(name);
+        if (!p && sdkRoot) p = findInSdk(name, sdkRoot);
+        if (!p && name === "scrcpy") p = findScrcpyInCommonLocations();
+      }
+      return p;
+    };
+
+    const paths = {
+      adb: locatePath("adb"),
+      emulator: locatePath("emulator"),
+      avdmanager: locatePath("avdmanager"),
+      scrcpy: locatePath("scrcpy"),
+    };
+    const [adbVersion, emulatorVersion, avdmanagerVersion, scrcpyVersion] =
+      await Promise.all([
+        paths.adb ? getVersionAsync(paths.adb) : Promise.resolve(null),
+        paths.emulator ? getVersionAsync(paths.emulator) : Promise.resolve(null),
+        paths.avdmanager ? getVersionAsync(paths.avdmanager) : Promise.resolve(null),
+        paths.scrcpy ? getVersionAsync(paths.scrcpy) : Promise.resolve(null),
+      ]);
+
+    const value: AndroidToolset = {
+      adb: { found: !!paths.adb, path: paths.adb, version: adbVersion },
+      emulator: { found: !!paths.emulator, path: paths.emulator, version: emulatorVersion },
+      avdmanager: { found: !!paths.avdmanager, path: paths.avdmanager, version: avdmanagerVersion },
+      scrcpy: { found: !!paths.scrcpy, path: paths.scrcpy, version: scrcpyVersion },
+      sdkRoot,
+    };
+    cachedToolset = { value, checkedAt: Date.now() };
+    return value;
+  })();
+
+  try {
+    return await asyncToolsetInFlight;
+  } finally {
+    asyncToolsetInFlight = null;
+  }
 }
 
 // ── Emulator auto-discovery ────────────────────────────────────────────────────
@@ -2289,7 +2374,7 @@ export async function runYoutubeApp(
  * 5–15 s on a loaded device; sharing one saves up to 30 s per cycle.
  */
 export async function getUiDump(serial: string): Promise<string> {
-  const tools = detectToolset();
+  const tools = await detectToolsetAsync();
   const adb = requireTool(tools.adb, "adb");
   return _uiDump(adb, serial);
 }
@@ -2820,12 +2905,12 @@ export async function doubleTap(
   onLog?: (msg: string) => void,
   targetBounds?: { x1: number; y1: number; x2: number; y2: number },
 ): Promise<void> {
-  const tools = detectToolset();
+  const tools = await detectToolsetAsync();
   const adb = requireTool(tools.adb, "adb");
   // Choose one offset for the whole gesture, not a separate offset per tap.
   // Both taps must land together closely enough for Android/Instagram to
   // recognize a double-tap. Keep the offset inside the logical display.
-  const screen = getScreenSize(serial);
+  const screen = await getScreenSizeAsync(serial);
   const offset = () => Math.floor(Math.random() * 51) - 25;
   const offsetX = offset();
   const offsetY = offset();
@@ -2860,12 +2945,17 @@ export async function doubleTap(
     `— inter-tap delay ${interTapDelayMs}ms`,
   );
   const cmd = `input tap ${dispatchedX} ${dispatchedY}; sleep ${interTapDelaySeconds}; input tap ${dispatchedX} ${dispatchedY}`;
-  const r = spawnSync(adb, ["-s", serial, "shell", cmd], { encoding: "utf8", timeout: 5000 });
-  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
-  if (r.status !== 0 || r.error || /error|exception|permission denied/i.test(out)) {
-    throw new Error(
-      `adb shell double-tap failed (exit=${r.status ?? "spawn-error"})${out ? `: ${out}` : r.error ? `: ${r.error.message}` : ""}`
-    );
+  try {
+    const r = await execFileP(adb, ["-s", serial, "shell", cmd], {
+      encoding: "utf8",
+      timeout: 5000,
+    } as any);
+    const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
+    if (/error|exception|permission denied/i.test(out)) {
+      throw new Error(out);
+    }
+  } catch (error: any) {
+    throw new Error(`adb shell double-tap failed: ${error?.message ?? "adb failed"}`);
   }
 }
 
@@ -2883,7 +2973,7 @@ export async function swipe(
   // swipes all eventually use this helper.  A swipe that starts or ends in the
   // Android edge zones can invoke launcher/Recents/floating-window navigation
   // instead of staying inside Instagram.
-  const { w: screenW, h: screenH } = getScreenSize(serial);
+  const { w: screenW, h: screenH } = await getScreenSizeAsync(serial);
   const safeX = Math.max(1, Math.round(screenW * 0.04));
   // Keep a larger exclusion zone around Android's system gesture areas. On
   // 720x1600 devices this keeps endpoints at least 192px from the bottom and
@@ -2994,6 +3084,43 @@ export function getScreenSize(serial: string): { w: number; h: number } {
     if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
   } catch { /* fall back to defaults above */ }
   return { w, h };
+}
+
+/**
+ * Async counterpart for the hot gesture path. A synchronous `wm size` probe
+ * before every swipe can pause the API process while ADB is busy on Windows.
+ * Display dimensions are stable during a session, so cache them briefly and
+ * coalesce concurrent probes per device. Probe failures stay explicit: gesture
+ * callers must not silently tap using a guessed coordinate space.
+ */
+export async function getScreenSizeAsync(serial: string): Promise<{ w: number; h: number }> {
+  const cached = screenSizeCache.get(serial);
+  if (cached && Date.now() - cached.checkedAt < 30_000) return cached.value;
+  const existing = screenSizeInFlight.get(serial);
+  if (existing) return existing;
+
+  const job = (async () => {
+    const tools = await detectToolsetAsync();
+    const adb = requireTool(tools.adb, "adb");
+    const wm = await execFileP(adb, ["-s", serial, "shell", "wm", "size"], {
+      encoding: "utf8",
+      timeout: 3000,
+    } as any);
+    const out = String(wm.stdout ?? "");
+    const override = out.match(/Override\s+size:\s*(\d+)x(\d+)/i);
+    const anySize = out.match(/(\d+)x(\d+)/);
+    const match = override ?? anySize;
+    if (!match) throw new Error(`Could not read screen size for ${serial}`);
+    const value = { w: Number(match[1]), h: Number(match[2]) };
+    screenSizeCache.set(serial, { value, checkedAt: Date.now() });
+    return value;
+  })();
+  screenSizeInFlight.set(serial, job);
+  try {
+    return await job;
+  } finally {
+    if (screenSizeInFlight.get(serial) === job) screenSizeInFlight.delete(serial);
+  }
 }
 
 /**
@@ -8419,7 +8546,7 @@ function _sleep(ms: number): Promise<void> {
  * instead of guessing again.
  */
 export async function dumpUi(serial: string): Promise<string> {
-  const tools = detectToolset();
+  const tools = await detectToolsetAsync();
   const adb = requireTool(tools.adb, "adb");
   return _uiDump(adb, serial);
 }
@@ -8433,7 +8560,7 @@ export async function dumpUi(serial: string): Promise<string> {
  * when the on-screen keyboard is visible.
  */
 export async function dumpUiWithIme(serial: string): Promise<{ xml: string; imeIncluded: boolean }> {
-  const tools = detectToolset();
+  const tools = await detectToolsetAsync();
   const adb = requireTool(tools.adb, "adb");
 
   // Try --include-ime first (Android 6+ / uiautomator 2.x)
