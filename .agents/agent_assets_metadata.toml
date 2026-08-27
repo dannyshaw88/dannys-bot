@@ -70,3 +70,17 @@ mtime_ms = 1787563072354
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/c6eb61df-8147-4d6f-a892-5e6d001211aa/f46eeb41-83d1-49f0-b057-c19d1b6f9b87"
 storage_version_token = "1787837788577096"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "G_0Nm1xsX0STfa70w0wBd"
+uri = "file://attached_assets/reelshome_1787817853997.jpg"
+type = "image"
+title = "Reels Home icon reference image"
+description = "Exact reference image file used by the Reels exit Home-button detector."
+logical_id = "463920d8-f954-4731-9cca-9f2d68d21c51"
+content_hash = "sha256:22037ea20e28354d1efc6cd27f8f373c877f93ea15f1679a1d04c8646d66ff4e"
+size = 12963
+mtime_ms = 1787817854131
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/463920d8-f954-4731-9cca-9f2d68d21c51/e645e014-dad9-4cdc-a3ef-66e3391bb064"
+storage_version_token = "1787838059654412"
+content_type = "image/jpeg"
