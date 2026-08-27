@@ -132,3 +132,4 @@
 - [HST recovery and stable slot keys](hst-recovery-stable-slot-keys.md) — enumerate account slots and resolve persistent IDs before legacy numeric settings keys during startup recovery
 - [Debug screenshot slot folders](debug-screenshot-slot-folders.md) — name evidence folders by persisted Phone Farm slot plus model, never USB serial order
 - [Story tray feed-marker filter](story-tray-feed-marker-filter.md) — reject lower-feed “username’s story, Seen” markers before selecting tray bubbles
+- [Jarvee import session persistence](jarvee-import-session-persistence.md) — retain parsed details across Settings tabs, but never store raw exports or extracted secrets in browser storage

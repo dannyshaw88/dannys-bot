@@ -23,7 +23,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw, NotebookPen,
   Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles, Shuffle,
-  Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2, ScanSearch,
+  Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2,
 } from "lucide-react";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
@@ -2505,45 +2505,6 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
     }
   };
 
-  const auditSelectedImage = async () => {
-    const selected = selectedFiles[0];
-    if (!selected) return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      const body: Record<string, unknown> = {
-        fileName: selected.name,
-        fixAiSlop: true,
-        alterationEnabled: true,
-        alterationLevel: "small",
-        frequencyDisruption: false,
-      };
-      if (selected.path) body.localPath = selected.path;
-      else if (selected.file) {
-        body.fileData = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = () => reject(new Error(`Could not read ${selected.name}`));
-          reader.onload = () => resolve(String(reader.result));
-          reader.readAsDataURL(selected.file!);
-        });
-      }
-      const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/media-audit`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      });
-      const result = await r.json().catch(() => null);
-      if (!r.ok || !result?.ok) throw new Error(result?.error ?? `Audit failed (${r.status})`);
-      const match = result.matchesProcessed ? "MATCH" : "DIFFERENT";
-      const summary = `Media audit: ${match} — source ${result.source?.processedSha256 ?? "unknown"} / device ${result.device?.sha256 ?? "unknown"}`;
-      onLog?.(summary);
-      setMessage(`${match}: image was copied and removed without opening Instagram.`);
-    } catch (e: any) {
-      setMessage(e?.message ?? "Media audit failed");
-      onLog?.(`Media audit failed — ${e?.message ?? "unknown error"}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const deleteFromPhone = async (media: { devicePath: string; fileName: string }) => {
     setBusy(true);
     setMessage(null);
@@ -2615,16 +2576,6 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
         >
           {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
           Load to phone
-        </button>
-        <button
-          type="button"
-          onClick={auditSelectedImage}
-          disabled={busy || selectedFiles.length === 0}
-          className="inline-flex items-center gap-1.5 rounded border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Process, copy, verify, and remove without opening Instagram"
-        >
-          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ScanSearch className="w-3 h-3" />}
-          Audit transfer
         </button>
         {selectedFiles.length > 0 && (
           <span className="text-[10px] text-white/55 truncate max-w-[260px]">

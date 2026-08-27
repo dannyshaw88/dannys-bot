@@ -110,7 +110,7 @@ export function JarveeBinaryViewerContent() {
           <div className="p-2.5 rounded-xl bg-primary/10 text-primary"><FileSearch className="w-5 h-5" /></div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Import Jarvee Binary File</h1>
-            <p className="text-sm text-muted-foreground mt-1">Temporary reader — inspect a Jarvee profile file without importing accounts.</p>
+            <p className="text-sm text-muted-foreground mt-1">Inspect Jarvee profile details without importing accounts.</p>
           </div>
         </div>
 
@@ -119,7 +119,7 @@ export function JarveeBinaryViewerContent() {
             <div className="p-2 rounded-lg bg-primary/10 text-primary"><Upload className="w-4 h-4" /></div>
             <div className="flex-1">
               <h2 className="text-sm font-semibold">Choose a Jarvee binary file</h2>
-              <p className="text-xs text-muted-foreground mt-1">The file is read locally and converted to text. Nothing is saved, uploaded, or added to Accounts.</p>
+              <p className="text-xs text-muted-foreground mt-1">Details remain available while you move between Settings tabs. The source file is not stored or added to Accounts.</p>
               <input ref={inputRef} type="file" className="hidden" onChange={e => void readFile(e.target.files?.[0])} />
               <div className="flex items-center gap-3 mt-4">
                 <Button onClick={() => inputRef.current?.click()}><Upload className="w-4 h-4 mr-2" />Browse</Button>
@@ -128,7 +128,7 @@ export function JarveeBinaryViewerContent() {
             </div>
           </div>
           {error && <div className="mt-4 flex items-center gap-2 text-sm text-destructive"><AlertCircle className="w-4 h-4" />{error}</div>}
-          {fileName && !error && !loading && <div className="mt-4 flex items-center gap-2 text-xs text-emerald-600"><CheckCircle2 className="w-4 h-4" />Account data extracted — display only; no account import occurred.</div>}
+          {fileName && !error && !loading && <div className="mt-4 flex items-center gap-2 text-xs text-emerald-600"><CheckCircle2 className="w-4 h-4" />Account data extracted — retained for this Settings session; no account import occurred.</div>}
         </div>
 
         <div className="desktop-card overflow-hidden">

@@ -1183,6 +1183,38 @@ export function MobileDevicesPage() {
     usbPhones.filter(p => p.state === "device").map(p => p.serial)
   );
 
+  const openDeviceMirror = useCallback(async (device: FarmDevice) => {
+    const serial = device.serial;
+    const started = performance.now();
+    writeUiSpeedLog("device-card-clicked", {
+      serial,
+      slotIndex: device.slotIndex,
+      online: onlineSerials.has(serial),
+      startedAt: new Date().toISOString(),
+    });
+    sessionStorage.setItem("mobile_device_nav_started_at", String(started));
+    sessionStorage.setItem("mobile_autopower_serial", serial);
+
+    // The video stream no longer wakes devices on connect by design. Send the
+    // user-initiated wake command before opening the detail mirror so a click
+    // from the farm always wakes the selected screen.
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/key`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: 224 /* KEYCODE_WAKEUP */ }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? `Wake failed (${response.status})`);
+      }
+    } catch (error) {
+      console.error(`[mobile] failed to wake ${serial} before opening mirror`, error);
+    }
+
+    setLocation(`/mobile/farm/${encodeURIComponent(serial)}?autopower=1`);
+  }, [onlineSerials, setLocation]);
+
   const registeredSerials = new Set(devices.map(d => d.serial));
 
   // Build the visible slots.
@@ -1255,18 +1287,7 @@ export function MobileDevicesPage() {
                       active={activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial)}
                       isStreaming={streamingSerials.has(device.serial) || (activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial))}
                       currentTool={currentTools.get(device.serial) ?? null}
-                      onClick={() => {
-                        const started = performance.now();
-                        writeUiSpeedLog("device-card-clicked", {
-                          serial: device.serial,
-                          slotIndex: device.slotIndex,
-                          online: onlineSerials.has(device.serial),
-                          startedAt: new Date().toISOString(),
-                        });
-                        sessionStorage.setItem("mobile_device_nav_started_at", String(started));
-                        sessionStorage.setItem("mobile_autopower_serial", device.serial);
-                        setLocation(`/mobile/farm/${encodeURIComponent(device.serial)}?autopower=1`);
-                      }}
+                       onClick={() => void openDeviceMirror(device)}
                        powered={manualPowerSerials.has(device.serial) || streamingSerials.has(device.serial)}
                        onPower={() => void toggleDevicePower(device.serial)}
                       onRemove={() => handleRemove(device.slotIndex)}

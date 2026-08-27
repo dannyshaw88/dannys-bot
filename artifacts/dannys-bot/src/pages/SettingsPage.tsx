@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, ScanSearch, Activity, Globe } from "lucide-react";
+import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, Activity, Globe } from "lucide-react";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -25,7 +25,6 @@ const SETTINGS_TABS = [
   { label: "General", icon: Settings },
   { label: "Trust Scores", icon: Shield },
   { label: "Fix Images", icon: Palette },
-  { label: "Transfer Inspector", icon: ScanSearch },
   { label: "Import", icon: Upload },
   { label: "Jarvee Import", icon: Upload },
   { label: "Scraping", icon: Database },
@@ -85,179 +84,6 @@ function ThemePicker() {
           {THEME_COLORS.find(t => t.key === themeColor)?.label ?? ""}
         </p>
       </div>
-    </div>
-  );
-}
-
-function MediaAuditTabContent() {
-  const [phones, setPhones] = useState<Array<{ serial: string; model?: string; marketName?: string }>>([]);
-  const [selectedSerials, setSelectedSerials] = useState<string[]>([]);
-  const [selected, setSelected] = useState<{ path?: string; name: string; file?: File } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [auditLog, setAuditLog] = useState<Array<{ serial: string; name: string; ok: boolean; message: string; result?: any }>>([]);
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const refreshPhones = useCallback(async () => {
-    try {
-      const response = await fetch("/api/mobile/usb-phones");
-      const data = await response.json();
-      const next = Array.isArray(data.phones) ? data.phones : [];
-      setPhones(next);
-      setSelectedSerials(current => {
-        const available = new Set(next.map((phone: any) => phone.serial));
-        const kept = current.filter(serial => available.has(serial));
-        return kept.length ? kept : next.map((phone: any) => phone.serial);
-      });
-    } catch {
-      setPhones([]);
-      setSelectedSerials([]);
-    }
-  }, []);
-
-  useEffect(() => { void refreshPhones(); }, [refreshPhones]);
-
-  const chooseImage = async () => {
-    setError(null);
-    const api = (window as any).electronAPI;
-    if (api?.openMediaFileDialog) {
-      const picked = await api.openMediaFileDialog().catch((e: any) => ({ error: e?.message ?? "Picker failed" }));
-      if (picked?.error) { setError(picked.error); return; }
-      if (picked?.canceled) return;
-      const file = Array.isArray(picked?.files) ? picked.files[0] : picked;
-      if (file?.filePath) setSelected({ path: String(file.filePath), name: String(file.fileName ?? file.filePath.split(/[\\/]/).pop() ?? "image") });
-      return;
-    }
-    inputRef.current?.click();
-  };
-
-  const runAudit = async () => {
-    if (!selectedSerials.length || !selected) return;
-    setBusy(true);
-    setError(null);
-    setAuditLog([]);
-    try {
-      let fileData: string | undefined;
-      if (selected.file) {
-        fileData = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = () => reject(new Error("Could not read selected image"));
-          reader.onload = () => resolve(String(reader.result));
-          reader.readAsDataURL(selected.file!);
-        });
-      }
-      const body: Record<string, unknown> = {
-        serials: selectedSerials, fileName: selected.name, fixAiSlop: true,
-        alterationEnabled: true, alterationLevel: "small", frequencyDisruption: false,
-      };
-      if (selected.path) body.localPath = selected.path;
-      else if (fileData) body.fileData = fileData;
-      const response = await fetch("/api/mobile/media-audit-batch", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.ok) throw new Error(data?.error ?? `Audit failed (${response.status})`);
-      setAuditLog(data.results.map((entry: any) => {
-        const phone = phones.find(item => item.serial === entry.serial);
-        return {
-          serial: entry.serial,
-          name: phone?.marketName ?? phone?.model ?? entry.serial,
-          ok: entry.ok && entry.matchesSharedProcessed,
-          message: !entry.ok ? entry.error : entry.matchesSharedProcessed
-            ? (entry.matchesOtherDevices ? "Exact shared processed bytes verified" : "Matches processed bytes but differs from another device")
-            : "Device copy differs from shared processed bytes",
-          result: { ...entry, sharedProcessed: data.sharedProcessed, crossDevice: data.crossDevice },
-        };
-      }));
-    } catch (e: any) {
-      setError(e?.message ?? "Media audit failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const exportAudit = () => {
-    if (!auditLog.length) return;
-    const report = {
-      exportedAt: new Date().toISOString(),
-      tool: "Aura Farming PC-to-Phone Transfer Inspector",
-      instagramOpened: false,
-      inspection: "pc-to-phone-transfer-channel",
-      sourceFile: selected?.name ?? null,
-      devices: auditLog,
-    };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `pc-phone-transfer-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-      <div className="desktop-card p-6 space-y-5">
-      <div>
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-amber-100 text-amber-700"><ScanSearch className="w-4 h-4" /></div>
-          <h2 className="text-lg font-semibold">PC → Phone Transfer Inspector</h2>
-        </div>
-        <p className="text-sm text-muted-foreground mt-2">
-          Inspect the complete PC-to-phone transfer channel. This does not inspect Instagram or image metadata;
-          it records the exact host path, pushed filename, Android destination, ADB stages, and scan stages.
-        </p>
-      </div>
-      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={e => {
-        const file = e.target.files?.[0];
-        if (file) setSelected({ file, name: file.name });
-      }} />
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Android devices</Label>
-            <button type="button" className="text-xs text-primary hover:underline" onClick={() => setSelectedSerials(selectedSerials.length === phones.length ? [] : phones.map(phone => phone.serial))}>
-              {selectedSerials.length === phones.length ? "Deselect all" : "Select all"}
-            </button>
-          </div>
-          <div className="rounded-md border border-input divide-y divide-border max-h-44 overflow-auto">
-            {phones.length === 0 && <div className="px-3 py-2 text-sm text-muted-foreground">No connected devices</div>}
-            {phones.map(phone => (
-              <label key={phone.serial} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-muted/40">
-                <input type="checkbox" checked={selectedSerials.includes(phone.serial)} onChange={e => setSelectedSerials(current => e.target.checked ? [...current, phone.serial] : current.filter(serial => serial !== phone.serial))} />
-                <span>{phone.marketName ?? phone.model ?? phone.serial}</span>
-                <span className="text-xs text-muted-foreground ml-auto">{phone.serial}</span>
-              </label>
-            ))}
-          </div>
-          <Button variant="outline" onClick={() => void refreshPhones()} disabled={busy}><RefreshCw className="w-4 h-4 mr-2" />Refresh devices</Button>
-        </div>
-        <Button variant="outline" onClick={() => void chooseImage()} disabled={busy}><FolderOpen className="w-4 h-4 mr-2" />Choose image from PC</Button>
-      </div>
-      {selected && <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm truncate">Selected: {selected.name}</div>}
-      <Button onClick={() => void runAudit()} disabled={busy || !selectedSerials.length || !selected} className="bg-amber-600 hover:bg-amber-700">
-        {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ScanSearch className="w-4 h-4 mr-2" />}
-        {busy ? `Inspecting ${selectedSerials.length} device${selectedSerials.length === 1 ? "" : "s"}…` : `Inspect PC → phone transfer (${selectedSerials.length || "all"} device${selectedSerials.length === 1 ? "" : "s"})`}
-      </Button>
-      {error && <div className="text-sm text-destructive">{error}</div>}
-      {auditLog.length > 0 && (
-        <div className="rounded-md border border-border overflow-hidden">
-          <div className="px-4 py-2 bg-muted/40 flex items-center justify-between gap-3">
-            <span className="text-sm font-semibold">Audit log</span>
-            <Button variant="outline" size="sm" onClick={exportAudit}><Download className="w-3.5 h-3.5 mr-1.5" />Export report</Button>
-          </div>
-          <div className="divide-y divide-border">
-            {auditLog.map(entry => (
-              <div key={entry.serial} className="px-4 py-3 text-sm">
-                <div className={`font-semibold ${entry.ok ? "text-emerald-600" : "text-destructive"}`}>
-                  {entry.ok ? "✓" : "✕"} {entry.name} <span className="font-normal text-xs text-muted-foreground">({entry.serial})</span>
-                </div>
-                <div className="text-xs mt-1">{entry.message}</div>
-                {entry.result && <div className="font-mono text-[10px] text-muted-foreground mt-1 break-all">prepared={entry.result.transfer?.preparedFilePath} · preScan={entry.result.preScan?.sha256} · postScan={entry.result.postScan?.sha256} · changed={entry.result.transferChangedFile ? "YES" : "NO"}</div>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -821,19 +647,20 @@ export function SettingsPage() {
         <ImagesPage embedded />
       )}
 
-      {settingsTab === "transfer inspector" && (
-        <MediaAuditTabContent />
-      )}
-
       {settingsTab === "import" && (
         <div>
           <BulkImportTabContent />
         </div>
       )}
 
-      {settingsTab === "jarvee import" && <JarveeBinaryViewerContent />}
+      {/* Keep this mounted while switching tabs so parsed account details survive
+          tab navigation. Raw file contents are intentionally not persisted to
+          browser storage because Jarvee files may contain credentials/cookies. */}
+      <div className={settingsTab === "jarvee import" ? "" : "hidden"}>
+        <JarveeBinaryViewerContent />
+      </div>
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "transfer inspector", "import", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button
