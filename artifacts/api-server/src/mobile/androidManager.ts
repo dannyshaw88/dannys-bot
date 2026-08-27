@@ -7743,34 +7743,20 @@ async function findHomeTabInternal(
       return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
     };
     let best: { x: number; y: number; score: number; scale: number; polarity: "normal" | "inverted" } | null = null;
-    // Match the proven View Feed heart detector's scoring/search parameters.
-    // Only the Home-specific search rectangle below differs.
-    const scales = [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7];
-    const scanStep = 3;
+    // Match the reference image against the complete live screen. Do not
+    // assume a device resolution, navigation inset, bottom-nav percentage, or
+    // fixed Home-button coordinate: the reference image is the locator.
+    const scales = [0.35, 0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.2, 3.8];
+    const scanStep = 4;
     const sampleStep = 2;
-    const homeCenterMaxX = Math.round(screen.width * 0.20);
     for (const scale of scales) {
       const tw = Math.max(10, Math.round(reference.width * scale));
       const th = Math.max(10, Math.round(reference.height * scale));
-      if (tw >= screen.width * 0.18 || th >= screen.height * 0.10) continue;
+      if (tw >= screen.width || th >= screen.height) continue;
 
-      // Home is the leftmost icon in Instagram's bottom navigation. The next
-      // tab (Reels) is normally centered near 30% of the width, so a broad
-      // "left side" search can legally select Reels when its glyph happens to
-      // correlate better than Home. Limit the candidate CENTER to the first
-      // navigation slot, leaving margin for OEM/Instagram spacing variation.
-      const xMax = Math.min(
-        screen.width - tw,
-        Math.max(0, homeCenterMaxX - Math.round(tw / 2)),
-      );
-       // The Home glyph is anchored in the actual bottom navigation row, but
-       // its relative Y differs across devices because the Android navigation
-       // inset is included in screencap pixels. On the Redmi A2 capture the
-       // visible Home glyph is at about 86.9% of the full screen height; the
-       // old 90% lower bound excluded it before matching began. Start below
-       // the content area while retaining the strict visual confidence gate.
-       const yMin = Math.round(screen.height * 0.82);
-       const yMax = Math.min(screen.height - th, Math.round(screen.height * 0.985) - th);
+      const xMax = screen.width - tw;
+      const yMin = 0;
+      const yMax = screen.height - th;
       for (let y = yMin; y <= yMax; y += scanStep) {
         for (let x = 0; x <= xMax; x += scanStep) {
            let bestPolarityScore = -Infinity;
@@ -7811,10 +7797,8 @@ async function findHomeTabInternal(
             // renders are diagnosable. The explicit final 0.72 gate below is
             // the safety decision; do not turn every sub-threshold result
             // into an opaque `best: null`.
-           const candidateCenterX = Math.round(x + tw / 2);
-           if (candidateCenterX > homeCenterMaxX) continue;
            if (score > (best?.score ?? -Infinity)) {
-               best = { x: candidateCenterX, y: Math.round(y + th / 2), score, scale, polarity: bestPolarity };
+            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score, scale, polarity: bestPolarity };
           }
         }
       }
@@ -7832,8 +7816,8 @@ async function findHomeTabInternal(
         serial,
         screen: [screen.width, screen.height],
         scan: {
-          x: [0, homeCenterMaxX],
-          y: [Math.round(screen.height * 0.90), Math.round(screen.height * 0.985)],
+          x: [0, screen.width],
+          y: [0, screen.height],
         },
         reference: { source: reference.source, size: [reference.width, reference.height] },
         best: best
