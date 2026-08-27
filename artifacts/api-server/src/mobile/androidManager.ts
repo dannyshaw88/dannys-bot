@@ -7763,13 +7763,13 @@ async function findHomeTabInternal(
         screen.width - tw,
         Math.max(0, homeCenterMaxX - Math.round(tw / 2)),
       );
-       // The Home glyph is anchored in the actual bottom navigation row.
-       // Searching from 78% allowed visually similar content from a profile
-       // or feed surface to win at roughly 86% (for example y=2065 on a
-       // 2400px device), even though the real Home glyph was near y=2268.
-       // Keep a generous margin for system insets, but exclude the content
-       // area above the navigation row.
-       const yMin = Math.round(screen.height * 0.90);
+       // The Home glyph is anchored in the actual bottom navigation row, but
+       // its relative Y differs across devices because the Android navigation
+       // inset is included in screencap pixels. On the Redmi A2 capture the
+       // visible Home glyph is at about 86.9% of the full screen height; the
+       // old 90% lower bound excluded it before matching began. Start below
+       // the content area while retaining the strict visual confidence gate.
+       const yMin = Math.round(screen.height * 0.82);
        const yMax = Math.min(screen.height - th, Math.round(screen.height * 0.985) - th);
       for (let y = yMin; y <= yMax; y += scanStep) {
         for (let x = 0; x <= xMax; x += scanStep) {
