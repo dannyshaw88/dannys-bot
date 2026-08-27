@@ -6189,20 +6189,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         reels: "VIEW REELS", checkDm: "CHECK INBOX", follow: "FOLLOW USERS",
         post: "MAKE A POST", postStory: "POST A STORY", "Random Actions": "RANDOM ACTIONS",
       };
-      const _mainToolSeq = ["feed", "stories", "explore", "reels", "checkDm", "follow", "post", "postStory"]
+      const _toolSeq = ["feed", "stories", "explore", "reels", "checkDm", "follow", "post", "postStory", "Random Actions"]
         .filter(t => _toolActivated[t]);
-      const _toolSeq = [..._mainToolSeq];
       if (shuffleToolOrder) {
         for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
           const _sj = Math.floor(Math.random() * (_si + 1));
           [_toolSeq[_si], _toolSeq[_sj]] = [_toolSeq[_sj], _toolSeq[_si]];
         }
-      }
-      // Random Actions is deliberately not part of the main-tool shuffle.
-      // The main tools may run in any shuffled order, but Random Actions must
-      // only run after every main-tool dispatch has completed.
-      if (_toolActivated["Random Actions"]) _toolSeq.push("Random Actions");
-      if (shuffleToolOrder) {
         tLog(`▶ Tool order shuffled: ${_toolSeq.length ? _toolSeq.map(name => _toolOrderLabels[name] ?? name).join(" → ") : "(no tools active this execution)"}`);
       }
       if (
@@ -6687,15 +6680,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 }
 
                 _toolSeq.splice(0, _toolSeq.length, ..._spreadSeq);
-                // Spread Follows rebuilds the sequence from the non-follow
-                // entries. Restore the same invariant after that rewrite:
-                // Random Actions is the final tool, after all main tools and
-                // injected follow entries.
-                const _randomActionsIndex = _toolSeq.indexOf("Random Actions");
-                if (_randomActionsIndex >= 0 && _randomActionsIndex !== _toolSeq.length - 1) {
-                  _toolSeq.splice(_randomActionsIndex, 1);
-                  _toolSeq.push("Random Actions");
-                }
                 tLog(`▶ Spread Follows active (${_sfPool.length} user(s)) → ${_spreadSeq.join(' → ')}`);
               } else if (_sfPool.length < 2) {
                 tLog(`▶ Spread Follows: only ${_sfPool.length} candidate(s) fetched — falling back to normal follow`);
@@ -6725,12 +6709,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const hi = Math.max(min, max);
         const chance = lo + Math.random() * (hi - lo);
         if (chance > 0 && Math.random() * 100 < chance) {
-          const _randomActionsIndex = _toolSeq.indexOf("Random Actions");
-          if (_randomActionsIndex >= 0) {
-            _toolSeq.splice(_randomActionsIndex, 0, tool);
-          } else {
-            _toolSeq.push(tool);
-          }
+          _toolSeq.push(tool);
           tLog(`▶ ${label} re-run rolled (${Math.round(chance)}%) — appended at end of cycle`);
         }
       };
