@@ -2412,6 +2412,327 @@ function CalibrationDialog({
   );
 }
 
+type NavigationControlId =
+  | "home" | "reels" | "directMessages" | "search" | "profile"
+  | "createPost" | "userSearch" | "notifications" | "settingsBack";
+type NavigationPoint = { x: number; y: number };
+type NavigationMap = {
+  version: 1;
+  serial: string;
+  screen: { w: number; h: number };
+  points: Partial<Record<NavigationControlId, NavigationPoint>>;
+};
+
+const NAVIGATION_CONTROLS: Array<{
+  id: NavigationControlId;
+  label: string;
+  instruction: string;
+}> = [
+  { id: "home", label: "Home", instruction: "Show the Instagram home feed, then tap the Home tab on the physical phone." },
+  { id: "reels", label: "Reels", instruction: "Show Instagram's bottom navigation, then tap the Reels tab on the physical phone." },
+  { id: "directMessages", label: "Direct Messages", instruction: "Show the Instagram home header, then tap the Direct Messages icon on the physical phone." },
+  { id: "search", label: "Search", instruction: "Show Instagram's bottom navigation, then tap the Search tab on the physical phone." },
+  { id: "profile", label: "Profile", instruction: "Show Instagram's bottom navigation, then tap the Profile tab on the physical phone." },
+  { id: "createPost", label: "Plus / create post", instruction: "Show the Instagram surface where the post + button is visible, then tap that + on the physical phone." },
+  { id: "userSearch", label: "Central user-search field", instruction: "Open Instagram Search/Explore and tap the central user-search field on the physical phone." },
+  { id: "notifications", label: "Notifications", instruction: "Show the Instagram home header, then tap the Notifications icon on the physical phone." },
+  { id: "settingsBack", label: "Instagram Settings Back", instruction: "Open an Instagram Settings detail page, then tap its upper-left Instagram Back arrow (not Android system Back)." },
+];
+
+function NavigationCalibrationDialog({
+  serial,
+  open,
+  onOpenChange,
+  onLog,
+  onCalibrationPosition,
+}: {
+  serial: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onLog?: (msg: string) => void;
+  onCalibrationPosition?: (position: CalibrationPosition) => void;
+}) {
+  const [map, setMap] = useState<NavigationMap | null>(null);
+  const [mode, setMode] = useState<"intro" | "wizard" | "edit">("intro");
+  const [step, setStep] = useState(0);
+  const [capturing, setCapturing] = useState<NavigationControlId | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [testing, setTesting] = useState<NavigationControlId | null>(null);
+
+  const loadMap = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/navigation-calibration`);
+      const body = await response.json();
+      if (body.ok) setMap(body.map ?? null);
+      else setMessage(body.error ?? "Could not load navigation calibration");
+    } catch {
+      setMessage("Could not load navigation calibration — check server logs");
+    }
+  }, [serial]);
+
+  useEffect(() => {
+    if (!open) return;
+    setMode("intro");
+    setStep(0);
+    setCapturing(null);
+    setMessage(null);
+    onCalibrationPosition?.(null);
+    void loadMap();
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/navigation-calibration/prefetch`, { method: "POST" }).catch(() => {});
+  }, [open, serial, loadMap, onCalibrationPosition]);
+
+  const points = map?.points ?? {};
+  const mappedCount = NAVIGATION_CONTROLS.filter(control => !!points[control.id]).length;
+  const current = NAVIGATION_CONTROLS[step] ?? null;
+  const savePoints = async (nextPoints: Partial<Record<NavigationControlId, NavigationPoint>>) => {
+    const response = await fetch(
+      `/api/mobile/devices/${encodeURIComponent(serial)}/navigation-calibration/save`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ points: nextPoints }),
+      },
+    );
+    const body = await response.json();
+    if (!response.ok || !body.ok) throw new Error(body.error ?? "Navigation calibration save failed");
+    setMap(body.map);
+    onLog?.(`[navigation-calibration] saved ${Object.keys(body.map.points ?? {}).length} controls for ${serial}`);
+  };
+
+  const capture = async (control: (typeof NAVIGATION_CONTROLS)[number]) => {
+    if (capturing || testing) return;
+    setCapturing(control.id);
+    setMessage(`Listening for ${control.label} — tap it on the physical phone now…`);
+    try {
+      const response = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/navigation-calibration/capture`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ timeoutMs: 15_000 }),
+        },
+      );
+      const body = await response.json();
+      if (!response.ok || !body.ok || body.x == null || body.y == null) {
+        throw new Error(body.error ?? "No physical tap detected");
+      }
+      const capturedScreen = body.screen && Number.isInteger(body.screen.w) && Number.isInteger(body.screen.h)
+        ? { w: body.screen.w, h: body.screen.h }
+        : null;
+      const sameScreen = !!capturedScreen && !!map?.screen &&
+        capturedScreen.w === map.screen.w && capturedScreen.h === map.screen.h;
+      const nextPoints = {
+        ...(map && (!capturedScreen || sameScreen) ? points : {}),
+        [control.id]: { x: body.x, y: body.y },
+      };
+      const discardedForResize = map && capturedScreen && !sameScreen;
+      if (map && capturedScreen && !sameScreen) {
+        setMessage(`Display changed from ${map.screen.w}×${map.screen.h} to ${capturedScreen.w}×${capturedScreen.h}; old points were discarded`);
+      }
+      await savePoints(nextPoints);
+      setMessage(`✓ ${control.label} captured at (${body.x}, ${body.y}) and saved${discardedForResize ? " (previous-size points discarded)" : ""}`);
+      onLog?.(`[navigation-calibration] '${control.label}' → (${body.x}, ${body.y})`);
+      if (mode === "wizard") setTimeout(() => setStep(value => value + 1), 500);
+    } catch (error: any) {
+      setMessage(`✗ ${error?.message ?? "Navigation capture failed"}`);
+    } finally {
+      setCapturing(null);
+    }
+  };
+
+  const test = async (control: NavigationControlId) => {
+    if (capturing || testing) return;
+    setTesting(control);
+    setMessage(`Testing calibrated ${NAVIGATION_CONTROLS.find(item => item.id === control)?.label ?? control}…`);
+    try {
+      const response = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/navigation-calibration/test`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ control }),
+        },
+      );
+      const body = await response.json();
+      if (!response.ok || !body.ok) throw new Error(body.error ?? "Navigation test failed");
+      setMessage(`✓ Test tapped ${control} at (${body.x}, ${body.y})`);
+      onLog?.(`[navigation-calibration] TEST ${control} → (${body.x}, ${body.y})`);
+    } catch (error: any) {
+      setMessage(`✗ ${error?.message ?? "Navigation test failed"}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const clearMap = async () => {
+    if (capturing || testing) return;
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/navigation-calibration`, { method: "DELETE" });
+      const body = await response.json();
+      if (!response.ok || !body.ok) throw new Error(body.error ?? "Could not clear map");
+      setMap(null);
+      setMessage("Navigation calibration cleared");
+      onCalibrationPosition?.(null);
+      onLog?.(`[navigation-calibration] cleared map for ${serial}`);
+    } catch (error: any) {
+      setMessage(`✗ ${error?.message ?? "Could not clear navigation calibration"}`);
+    }
+  };
+
+  const clearPoint = async (control: NavigationControlId) => {
+    if (capturing || testing) return;
+    try {
+      const response = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/navigation-calibration/${encodeURIComponent(control)}`,
+        { method: "DELETE" },
+      );
+      const body = await response.json();
+      if (!response.ok || !body.ok) throw new Error(body.error ?? "Could not clear control");
+      setMap(body.map ?? null);
+      setMessage(`Cleared ${NAVIGATION_CONTROLS.find(item => item.id === control)?.label ?? control}`);
+      onCalibrationPosition?.(null);
+      onLog?.(`[navigation-calibration] cleared ${control} for ${serial}`);
+    } catch (error: any) {
+      setMessage(`✗ ${error?.message ?? "Could not clear control"}`);
+    }
+  };
+
+  return (
+    <Dialog open={open} modal={false} onOpenChange={value => { if (!capturing && !testing) onOpenChange(value); }}>
+      <DialogContent
+        hideOverlay
+        className="fixed right-4 top-4 left-auto w-[38.5rem] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] translate-x-0 translate-y-0 overflow-y-auto border-amber-700/70 bg-slate-950 text-slate-100"
+      >
+        <DialogHeader>
+          <DialogTitle className="text-sm">Fixed Navigation Calibration</DialogTitle>
+        </DialogHeader>
+
+        <div className="rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 py-2.5">
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-200">DEVICE-SPECIFIC CONTROLS</p>
+          <p className="mt-1 text-[11px] leading-4 text-amber-100/80">
+            These nine fixed controls are tapped only from this physical device&apos;s saved map.
+            Missing, stale, or invalid points stop automation; no image, accessibility, or coordinate fallback is used.
+          </p>
+        </div>
+
+        {message && (
+          <p className={`rounded-md border px-2.5 py-2 text-[11px] font-mono ${message.startsWith("✓") ? "border-green-700/50 bg-green-950/30 text-green-300" : message.startsWith("✗") ? "border-red-700/50 bg-red-950/30 text-red-300" : "border-slate-700 bg-slate-900 text-slate-300"}`}>
+            {message}
+          </p>
+        )}
+
+        {mode === "intro" && (
+          <div className="space-y-3">
+            <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-5 text-slate-300">
+              <li>Keep the physical phone awake and Instagram visible.</li>
+              <li>For each prompt, put the named control on screen before starting capture.</li>
+              <li>Press Capture, then tap the matching control on the physical phone.</li>
+              <li>Instagram Settings Back means the in-app arrow, not Android system Back.</li>
+            </ol>
+            <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300">
+              {map ? <>Saved: <span className="font-semibold text-green-400">{mappedCount}</span> / {NAVIGATION_CONTROLS.length} controls</> : <span className="font-semibold text-red-300">No valid saved map loaded</span>}
+              {map?.screen && <span className="ml-2 font-mono text-slate-500">at {map.screen.w}×{map.screen.h}</span>}
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => { setStep(0); setMode("wizard"); }}>
+                {mappedCount ? "Re-run missing controls" : "Start calibration"}
+              </Button>
+              <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => setMode("edit")}>
+                View &amp; fix
+              </Button>
+              <Button variant="outline" className="border-red-800 text-red-300 hover:bg-red-950/50" onClick={() => void clearMap()} disabled={!map}>
+                Clear
+              </Button>
+              <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {mode === "wizard" && (
+          <div className="space-y-3">
+            {step >= NAVIGATION_CONTROLS.length ? (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-green-400">✓ Navigation calibration walk complete</p>
+                <p className="text-xs text-slate-300">Captured {mappedCount} / {NAVIGATION_CONTROLS.length} controls. Missing controls will fail closed during automation.</p>
+                <Button className="w-full" onClick={() => setMode("intro")}>Done</Button>
+              </div>
+            ) : current && (
+              <>
+                <div className="flex justify-between text-[10px] text-slate-400">
+                  <span>{step} / {NAVIGATION_CONTROLS.length} controls</span>
+                  <span>{Math.round((step / NAVIGATION_CONTROLS.length) * 100)}%</span>
+                </div>
+                <div className="h-1 overflow-hidden rounded-full bg-slate-700">
+                  <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${Math.round((step / NAVIGATION_CONTROLS.length) * 100)}%` }} />
+                </div>
+                <div className="rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 py-3">
+                  <p className="text-sm font-semibold text-amber-100">{current.label}</p>
+                  <p className="mt-1 text-xs leading-5 text-amber-100/80">{current.instruction}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={() => void capture(current)} disabled={!!capturing}>
+                    {capturing ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Listening…</> : "Capture physical tap"}
+                  </Button>
+                  <Button variant="outline" className="border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => setStep(value => value + 1)} disabled={!!capturing}>
+                    Skip
+                  </Button>
+                </div>
+                <p className="text-center text-[9px] text-slate-400">The capture uses the existing physical getevent tap workflow.</p>
+              </>
+            )}
+          </div>
+        )}
+
+        {mode === "edit" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-400">{mappedCount} / {NAVIGATION_CONTROLS.length} controls mapped</p>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-300 hover:bg-slate-800" onClick={() => setMode("intro")} disabled={!!capturing || !!testing}>
+                ← Back
+              </Button>
+            </div>
+            {NAVIGATION_CONTROLS.map(control => {
+              const point = points[control.id];
+              const isCapturing = capturing === control.id;
+              const isTesting = testing === control.id;
+              return (
+                <div key={control.id} className={`rounded-md border px-2.5 py-2 ${isCapturing || isTesting ? "border-amber-600/70 bg-amber-950/30" : "border-slate-800 bg-slate-900"}`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold ${point ? "text-green-400" : "text-red-400"}`}>{point ? "✓" : "✗"}</span>
+                    <span className="min-w-0 flex-1 text-xs text-slate-200">{control.label}</span>
+                    {point && <span className="font-mono text-[10px] text-slate-500">({point.x}, {point.y})</span>}
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-slate-300 hover:bg-slate-700" onClick={() => void capture(control)} disabled={!!capturing || !!testing}>
+                      {isCapturing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Re-tap"}
+                    </Button>
+                    {point && (
+                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-cyan-300 hover:bg-cyan-950/50" onClick={() => onCalibrationPosition?.({ ...point, label: control.label })} disabled={!!capturing || !!testing}>
+                        Position
+                      </Button>
+                    )}
+                    {point && (
+                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-red-300 hover:bg-red-950/50" onClick={() => void clearPoint(control.id)} disabled={!!capturing || !!testing}>
+                        Clear
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-amber-300 hover:bg-amber-950/50" onClick={() => void test(control.id)} disabled={!point || !!capturing || !!testing}>
+                      {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+            <Button variant="outline" className="mt-2 w-full border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => onOpenChange(false)} disabled={!!capturing || !!testing}>
+              Done
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type PhoneSlotHandle = { getVideoSize: () => { w: number; h: number } | null };
 
 function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: string; onLog?: (msg: string) => void; open: boolean; onClose: () => void }) {
@@ -2630,6 +2951,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const [clickTestMode, setClickTestMode] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
   const [showCalibration, setShowCalibration] = useState(false);
+  const [showNavigationCalibration, setShowNavigationCalibration] = useState(false);
   const [calibrationPosition, setCalibrationPosition] = useState<CalibrationPosition>(null);
   const [showManualMedia, setShowManualMedia] = useState(false);
   const toggleManualPower = useCallback(() => {
@@ -3280,6 +3602,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
            <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={toggleManualPower} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
+           <NavBtn icon={<Settings2   className="w-3 h-3" />}     label="Controls" onClick={() => setShowNavigationCalibration(true)} />
         </div>
       )}
 
@@ -3298,6 +3621,19 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           open={showCalibration}
           onOpenChange={nextOpen => {
             setShowCalibration(nextOpen);
+            if (!nextOpen) setCalibrationPosition(null);
+          }}
+          onLog={onLog}
+          onCalibrationPosition={setCalibrationPosition}
+        />
+      )}
+
+      {phone && (
+        <NavigationCalibrationDialog
+          serial={phone.serial}
+          open={showNavigationCalibration}
+          onOpenChange={nextOpen => {
+            setShowNavigationCalibration(nextOpen);
             if (!nextOpen) setCalibrationPosition(null);
           }}
           onLog={onLog}

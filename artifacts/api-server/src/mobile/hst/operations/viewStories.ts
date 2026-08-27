@@ -127,13 +127,7 @@ export async function pickAndOpenRandomStory(serial: string, w: number, h: numbe
 
     if (storyBubbles.length === 0) {
       onLog?.(`Story tray: no bubbles after initial Home check — confirming Home once more and re-checking…`);
-      const retryHome = await android.findHomeTab(serial).catch(() => null);
-      if (retryHome) {
-        await android.tap(serial, retryHome.x, retryHome.y);
-      } else {
-        onLog?.("Story tray: Home tab was not positively detected during retry — refusing a coordinate fallback");
-        return { slot: 0, opened: false };
-      }
+      await android.tapCalibratedNavigationControl(serial, "home", onLog);
       await new Promise(r => setTimeout(r, 500));
       trayXml = await android.dumpUi(serial).catch(() => "");
       storyBubbles = extractStoryBubbles(trayXml);
@@ -209,19 +203,10 @@ export async function prepareViewStoriesEntry(
   }
 
   onLog("Stories: locating Home before opening the story tray…");
-  const homeTab = await android.findHomeTab(serial).catch(() => null);
-  if (!homeTab) {
-    onLog("Stories: Home tab not positively detected — refusing story navigation");
-    return { alreadyInStoryViewer: false, slot: 0, opened: false };
-  }
-  await android.tap(serial, homeTab.x, homeTab.y);
+  await android.tapCalibratedNavigationControl(serial, "home", onLog);
   await sleepOrAbort(serial, 1200);
 
-  const confirmedHome = await android.findHomeTab(serial).catch(() => null);
-  if (!confirmedHome) {
-    onLog("Stories: Home tab confirmation failed — refusing to open the story tray");
-    return { alreadyInStoryViewer: false, slot: 0, opened: false };
-  }
+  onLog("Stories: calibrated Home tap completed — confirming story tray after settling");
   const popup = await android.dismissInstagramInterstitials(serial).catch(() => null);
   if (popup) {
     onLog(`Stories: dismissed pre-tray popup (${popup})`);
@@ -306,7 +291,7 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
     // This check must run before every single tap below, not just once at
     // story-open time.
     //
-    // Root-cause fix (Jul 2026, follow-up): this used to call findHomeTab
+    // Root-cause fix (Jul 2026, follow-up): this used to resolve Home through
     // directly on every check, which requires a full uiautomator dump +
     // adb pull (~3-4s per call). Called up to 5-6 times inside one ~5-6s
     // story slide, THAT was consuming the slide's entire timer on safety
@@ -349,7 +334,7 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
       // isInStoryViewerSlow checks for POSITIVE story-viewer markers first
       // (reel_viewer/toolbar_like_button resource IDs), then for the home tab
       // via content-desc/resource-id only — no positional fallback.  The old
-      // findHomeTab-based check used strategy-3 positional fallback which
+      // the old Home-based check used a strategy-3 positional fallback which
       // matched the story viewer's own bottom-bar clickables ("Send message"
       // input + heart/share icons all sit at y > 88%), making it return
       // non-null and falsely concluding the viewer was closed.

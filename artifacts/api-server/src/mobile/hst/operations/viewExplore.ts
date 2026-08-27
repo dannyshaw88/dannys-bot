@@ -45,14 +45,8 @@ export async function runViewExplorePage(serial: string, params: {
   onLog?.(`Explore loop: device resolution ${w}×${h}`);
 
   // Navigate to the Search/Explore tab — identical to the Follow tool.
-  const searchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
-  if (!searchTab) {
-    onLog?.("View Explore Page: Search tab not found — skipping");
-    logger.warn({ serial }, "[view-explore] Search tab not found");
-    return { postsScrolled: 0, postsClicked: 0, likes: 0, sharesFeed: 0, sharesDm: 0, saves: 0, authorVisits: 0 };
-  }
+  const searchTab = await android.tapCalibratedNavigationControl(serial, "search", onLog);
   onLog?.("[TRACE] explore: tap-search-tab");
-  await android.tap(serial, searchTab.x, searchTab.y);
   // Same 2500ms settle used by Follow — enough for the Explore grid to render.
   await sleepOrAbort(serial, 2500);
 
@@ -582,14 +576,8 @@ export async function runViewExplorePage(serial: string, params: {
   // Use the live accessibility tree for the exit tap. The screenshot-based
   // brightness scan is unsafe here: Home and Reels are adjacent, and the
   // brightest tile in the bottom-nav region is not necessarily Home.
-  const homeTab = await android.findHomeTab(serial).catch(() => null);
-  if (!homeTab) {
-    onLog?.("View Explore Page: Home tab was not semantically detected — refusing an unsafe guessed tap");
-    logger.warn({ serial }, "[view-explore] Home tab not found at exit; skipping guessed tap");
-    return { postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves, authorVisits };
-  }
+  const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
   onLog?.(`View Explore Page: tapping semantic Home tab at (${homeTab.x}, ${homeTab.y})`);
-  await android.tap(serial, homeTab.x, homeTab.y);
     await sleepOrAbort(serial, 1000);
 
   return { postsScrolled, postsClicked, likes, sharesFeed, sharesDm, saves, authorVisits };

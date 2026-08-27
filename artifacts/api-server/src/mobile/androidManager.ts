@@ -8847,129 +8847,10 @@ export async function switchToInstagramAccount(
     }
   }
 
-  // 1. Find the profile tab.
-  //    Try the preloaded XML first (same screen state, no extra dump needed).
-  //    Fall back to a poll loop if the tab isn't found there.
-  //
-  //    Poll loop rationale: on a cold-start (first cycle after launch, or
-  //    shortly after airplane-mode reconnect) Instagram's process is alive and
-  //    the screen reports as "open", but the bottom navigation bar — including
-  //    the profile tab — hasn't rendered into the accessibility tree yet.  A
-  //    single dump fired immediately after the "open" confirmation sees an
-  //    empty or bare-skeleton UI and returns null, causing the switch to fail
-  //    before the switcher-sheet polling logic is even reached.
-  //    The poll mirrors the existing switcher-sheet poll: up to 5 × 1500 ms
-  //    (7.5 s total budget), exits the moment the tab appears, zero extra
-  //    wait on a warm Instagram where the nav bar is already rendered.
-  let profileTab: { x: number; y: number } | null = null;
-  let profileTabSource = "unknown";
-  if (preloadedXml) {
-    profileTab =
-      _findBottomProfileResource(preloadedXml)
-       ?? _findBottomProfileLabel(preloadedXml);
-    if (profileTab) profileTabSource = "preloaded accessibility tree";
-  }
-  if (!profileTab) {
-    const PROFILE_TAB_POLL_MIN_MS = 1500;
-    const PROFILE_TAB_POLL_MAX_MS = 5000;
-    // Some Instagram/Xiaomi builds expose the bottom-nav container later than
-    // its child icon. Keep this short, then inspect the live tree again using
-    // node bounds only; never synthesize a screen coordinate.
-    const PROFILE_TAB_MAX_POLL = 2;
-    for (let pt = 0; pt < PROFILE_TAB_MAX_POLL; pt++) {
-      profileTab = await findInstagramProfileTab(serial).catch(() => null);
-      if (profileTab) {
-        profileTabSource = `live accessibility poll ${pt + 1}/${PROFILE_TAB_MAX_POLL}`;
-        break;
-      }
-      // Do not call dismissInstagramInterstitials() here. That helper performs
-      // another full UIAutomator dump. On a cold/overloaded device one dump can
-      // take 18–20 seconds, so the old "1.5 s" retry actually stacked two
-      // blocking dumps and made the result depend on transient ADB load.
-      if (pt < PROFILE_TAB_MAX_POLL - 1) {
-        const pollWaitMs = PROFILE_TAB_POLL_MIN_MS + Math.floor(Math.random() * (PROFILE_TAB_POLL_MAX_MS - PROFILE_TAB_POLL_MIN_MS + 1));
-        onLog?.(`  ↳ Profile tab not yet visible — waiting ${pollWaitMs}ms for nav bar to render (accessibility poll ${pt + 1}/${PROFILE_TAB_MAX_POLL})…`);
-        await _sleep(pollWaitMs);
-      }
-    }
-  }
-  if (!profileTab) {
-    // Capture a compact, serial-specific explanation instead of leaving the
-    // operator with only "not found". This distinguishes a missing/stale
-    // accessibility tree from a profile node that exists but is outside the
-    // bottom-nav bounds used by the detector.
-    const failureXml = await _uiDump(adbPath, serial).catch(() => "");
-    const failureBounds = failureXml.match(/<hierarchy[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
-    const failureW = failureBounds ? Number(failureBounds[3]) : 0;
-    const failureH = failureBounds ? Number(failureBounds[4]) : 0;
-    const bottomMin = failureH ? Math.round(failureH * 0.82) : 0;
-    const nodeMatches = [...failureXml.matchAll(/<node\b([^>]*)>/gi)];
-    let bottomNodes = 0;
-    let profileLabels = 0;
-    let profileResourceIds = 0;
-    for (const match of nodeMatches) {
-      const attrs = match[1];
-      const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!bm) continue;
-      const cy = (Number(bm[2]) + Number(bm[4])) / 2;
-      if (cy >= bottomMin) bottomNodes++;
-      const label = attrs.match(/(?:content-desc|text)="([^"]*)"/i)?.[1] ?? "";
-      if (/^profil(e|o)?$/i.test(label.trim())) profileLabels++;
-      const resourceId = attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "";
-      if (/(?:profile_tab|tab_profile|nav_profile|avatar_tab)/i.test(resourceId)) profileResourceIds++;
-    }
-    const reason = !failureXml
-      ? "UIAutomator dump was empty"
-      : nodeMatches.length === 0
-        ? "UIAutomator dump contained no node records"
-        : bottomNodes === 0
-          ? `no nodes in bottom navigation band (y >= ${bottomMin})`
-          : profileLabels === 0 && profileResourceIds === 0
-            ? "bottom nodes existed, but none had Profile/Profil text or a recognized profile resource ID"
-            : "profile evidence existed but did not produce a valid candidate after bounds/shape guards";
-    // The profile control is a fixed rightmost slot in Instagram's bottom
-    // navigation. A missing/variant accessibility ID must not prevent the
-    // account switch: use the rightmost live bottom-band node when available,
-    // otherwise tap the rightmost bottom-nav slot from the live screen size.
-    const fallbackNodes: { x: number; y: number }[] = [];
-    for (const match of nodeMatches) {
-      const attrs = match[1];
-      const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!bm) continue;
-      const x1 = Number(bm[1]), y1 = Number(bm[2]);
-      const x2 = Number(bm[3]), y2 = Number(bm[4]);
-      const x = Math.round((x1 + x2) / 2);
-      const y = Math.round((y1 + y2) / 2);
-      if (failureH > 0 && y >= Math.round(failureH * 0.82)) {
-        fallbackNodes.push({ x, y });
-      }
-    }
-    if (fallbackNodes.length > 0) {
-      fallbackNodes.sort((a, b) => a.x - b.x || a.y - b.y);
-      profileTab = fallbackNodes[fallbackNodes.length - 1];
-      profileTabSource = "rightmost live bottom-nav node fallback";
-    } else if (failureW > 0 && failureH > 0) {
-      profileTab = {
-        x: Math.round(failureW * 0.90),
-        y: Math.round(failureH * 0.94),
-      };
-      profileTabSource = "rightmost bottom-nav coordinate fallback";
-    } else {
-      onLog?.(
-        `  ⚠ Profile tab unavailable [serial=${serial}] — ${reason}; ` +
-        `xmlLength=${failureXml.length}, screen=${failureW}x${failureH}, ` +
-        `nodes=${nodeMatches.length}, bottomNodes=${bottomNodes}, ` +
-        `profileLabels=${profileLabels}, profileResourceIds=${profileResourceIds}; ` +
-        "no live screen dimensions available for fallback tap",
-      );
-      return false;
-    }
-    onLog?.(
-      `  ↳ Profile tab selector fallback: tapping (${profileTab.x},${profileTab.y}) via ${profileTabSource}; ` +
-      `${reason}`,
-    );
-  }
-
+  // 1. Resolve the calibrated Profile control. Account switching is a fixed
+  // control operation, so a live-tree/image/positional selector is unsafe.
+  const profileTab = getCalibratedNavigationControl(serial, "profile");
+  const profileTabSource = "calibrated navigation map";
   // The profile tab can appear in the accessibility tree before Instagram has
   // finished rendering the feed/navigation surface (especially when this
   // coordinate came from the launch-time preload dump).  Starting the hold at
@@ -11405,6 +11286,172 @@ function _calibrationPath(serial: string): string {
   const safeSerial = serial.replace(/[^a-z0-9]/gi, "-");
   const dir = process.env.EQUINOX_DATA_DIR ?? process.cwd();
   return path.join(dir, `keyboard-cal-${safeSerial}.json`);
+}
+
+// Fixed Instagram controls are calibrated separately from the keyboard.  Do
+// not add these to KeyCalibrationMap: keyboard maps may be partial, change
+// layers, and are intentionally allowed to merge over time.
+export const NAVIGATION_CONTROL_IDS = [
+  "home",
+  "reels",
+  "directMessages",
+  "search",
+  "profile",
+  "createPost",
+  "userSearch",
+  "notifications",
+  "settingsBack",
+] as const;
+export type NavigationControlId = typeof NAVIGATION_CONTROL_IDS[number];
+export type NavigationPoint = { x: number; y: number };
+export type NavigationCalibrationMap = {
+  version: 1;
+  serial: string;
+  screen: { w: number; h: number };
+  points: Partial<Record<NavigationControlId, NavigationPoint>>;
+};
+
+function _navigationCalibrationPath(serial: string): string {
+  const safeSerial = serial.replace(/[^a-z0-9]/gi, "-");
+  const dir = process.env.EQUINOX_DATA_DIR ?? process.cwd();
+  return path.join(dir, `navigation-cal-${safeSerial}.json`);
+}
+
+function _isNavigationControlId(value: unknown): value is NavigationControlId {
+  return typeof value === "string" &&
+    (NAVIGATION_CONTROL_IDS as readonly string[]).includes(value);
+}
+
+function _parseNavigationMap(raw: unknown): NavigationCalibrationMap | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as any;
+  if (value.version !== 1 || typeof value.serial !== "string" ||
+      !value.screen || !Number.isInteger(value.screen.w) ||
+      !Number.isInteger(value.screen.h) || value.screen.w <= 0 || value.screen.h <= 0 ||
+      !value.points || typeof value.points !== "object" || Array.isArray(value.points)) {
+    return null;
+  }
+  const points: Partial<Record<NavigationControlId, NavigationPoint>> = {};
+  for (const [key, point] of Object.entries(value.points)) {
+    if (!_isNavigationControlId(key)) return null;
+    if (!point || typeof point !== "object") return null;
+    const { x, y } = point as any;
+    if (!Number.isFinite(x) || !Number.isFinite(y) ||
+        x < 0 || x >= value.screen.w || y < 0 || y >= value.screen.h) return null;
+    points[key] = { x, y };
+  }
+  return { version: 1, serial: value.serial, screen: { w: value.screen.w, h: value.screen.h }, points };
+}
+
+/** Load a fixed-control map without accepting malformed data. */
+export function loadNavigationCalibrationMap(serial: string): NavigationCalibrationMap | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(_navigationCalibrationPath(serial), "utf8"));
+    const parsed = _parseNavigationMap(raw);
+    return parsed && parsed.serial === serial ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save fixed-control points against the display size they were captured for.
+ * The wrapper owns screen metadata so callers cannot accidentally omit it or
+ * save a point from one logical display against another.
+ */
+export function saveNavigationCalibrationMap(
+  serial: string,
+  points: Partial<Record<NavigationControlId, NavigationPoint>>,
+): NavigationCalibrationMap {
+  const { w, h } = getScreenSize(serial);
+  if (!Number.isInteger(w) || !Number.isInteger(h) || w <= 0 || h <= 0) {
+    throw new Error(`Navigation calibration cannot save: invalid device display size ${w}x${h}`);
+  }
+  for (const [key, point] of Object.entries(points)) {
+    if (!_isNavigationControlId(key)) throw new Error(`Unknown navigation control '${key}'`);
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) ||
+        point.x < 0 || point.x >= w || point.y < 0 || point.y >= h) {
+      throw new Error(`Navigation calibration point '${key}' is outside ${w}x${h}`);
+    }
+  }
+  const map: NavigationCalibrationMap = {
+    version: 1,
+    serial,
+    screen: { w, h },
+    points: { ...points },
+  };
+  fs.writeFileSync(_navigationCalibrationPath(serial), JSON.stringify(map, null, 2), "utf8");
+  return map;
+}
+
+export function deleteNavigationCalibrationMap(serial: string): void {
+  try { fs.unlinkSync(_navigationCalibrationPath(serial)); } catch { /**/ }
+}
+
+export function deleteNavigationCalibrationControl(
+  serial: string,
+  control: NavigationControlId,
+): NavigationCalibrationMap | null {
+  if (!_isNavigationControlId(control)) {
+    throw new Error(`Unknown calibrated navigation control '${String(control)}'`);
+  }
+  const map = loadNavigationCalibrationMap(serial);
+  if (!map) return null;
+  const points = { ...map.points };
+  delete points[control];
+  const nextMap: NavigationCalibrationMap = { ...map, points };
+  fs.writeFileSync(_navigationCalibrationPath(serial), JSON.stringify(nextMap, null, 2), "utf8");
+  return nextMap;
+}
+
+/**
+ * Strictly tap one fixed Instagram control. This is the only fixed-control
+ * lookup used by HST operations: no reference image, accessibility, or
+ * positional fallback is permitted here.
+ */
+export async function tapCalibratedNavigationControl(
+  serial: string,
+  control: NavigationControlId,
+  onLog?: (msg: string) => void,
+): Promise<NavigationPoint> {
+  const point = getCalibratedNavigationControl(serial, control);
+  const x = Math.round(point.x);
+  const y = Math.round(point.y);
+  const { w, h } = getScreenSize(serial);
+  onLog?.(`[cal-navigation] tapping ${control} at (${x},${y}) on ${w}x${h}`);
+  await tap(serial, x, y, "bot");
+  return { x, y };
+}
+
+/** Resolve a fixed control without dispatching input (used for long-press). */
+export function getCalibratedNavigationControl(
+  serial: string,
+  control: NavigationControlId,
+): NavigationPoint {
+  if (!_isNavigationControlId(control)) {
+    throw new Error(`Unknown calibrated navigation control '${String(control)}'`);
+  }
+  const map = loadNavigationCalibrationMap(serial);
+  if (!map) {
+    throw new Error(`No valid navigation calibration map for device ${serial}`);
+  }
+  const { w, h } = getScreenSize(serial);
+  if (map.screen.w !== w || map.screen.h !== h) {
+    throw new Error(
+      `Navigation calibration is stale for ${serial}: captured ${map.screen.w}x${map.screen.h}, current display is ${w}x${h}`,
+    );
+  }
+  const point = map.points[control];
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) ||
+      point.x < 0 || point.x >= w || point.y < 0 || point.y >= h) {
+    throw new Error(`Navigation calibration is missing or invalid for '${control}' on ${serial}`);
+  }
+  const x = Math.round(point.x);
+  const y = Math.round(point.y);
+  if (x < 0 || x >= w || y < 0 || y >= h) {
+    throw new Error(`Navigation calibration rounded point is outside ${w}x${h} for '${control}'`);
+  }
+  return { x, y };
 }
 
 /** Load the saved calibration map for a device. Returns null if none exists. */

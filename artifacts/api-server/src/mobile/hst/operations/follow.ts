@@ -835,15 +835,13 @@ export async function runFollowUsersStep(
       { skipNodeLookup: true },
     );
     const recoverySearchBar = lastKnownSearchBar
-      ?? await android.findInstagramSearchBar(serial, onLog).catch(() => null);
-    if (!recoverySearchBar) {
-      onLog?.("Follow: skipped-user cleanup — cleared search bar not found");
-      return false;
+      ?? await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
+    if (lastKnownSearchBar) {
+      onLog?.(`Follow: skipped-user cleanup — reusing calibrated user-search field at (${lastKnownSearchBar.x}, ${lastKnownSearchBar.y})`);
     }
     if (lastKnownSearchBar) {
-      onLog?.(`Follow: skipped-user cleanup — reusing confirmed visual search field at (${lastKnownSearchBar.x}, ${lastKnownSearchBar.y})`);
+      await android.tap(serial, recoverySearchBar.x, recoverySearchBar.y);
     }
-    await android.tap(serial, recoverySearchBar.x, recoverySearchBar.y);
     await sleepOrAbort(serial, 500);
     const focused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
     if (!focused) {
@@ -1047,7 +1045,7 @@ export async function runFollowUsersStep(
   // accessibility dump reports the window's own bounds as the root — e.g.
   // 720×1709 instead of the real 1080×2460 screen. This shifts the
   // bottom-nav detection cutoff to a position where the nav bar no longer
-  // sits, causing findInstagramSearchTab to return null every time even
+  // sits, causing the old live Search-tab selector to miss every time even
   // though Instagram's layout is unchanged. Detection: compare the
   // ui-dump-derived root-bounds height against the real device height from
   // `adb shell wm size`. If mismatched by more than 12%, Instagram is in a
@@ -1069,13 +1067,7 @@ export async function runFollowUsersStep(
     await sleepOrAbort(serial, 3000);
   }
 
-    const searchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
-    if (!searchTab) {
-      onLog?.("Follow: Search tab not found — skipping");
-      await finishFollowNavigation();
-      return 0;
-    }
-    await android.tap(serial, searchTab.x, searchTab.y);
+    const searchTab = await android.tapCalibratedNavigationControl(serial, "search", onLog);
     onLog?.("[TRACE] follow: tap-search-tab");
     await sleepOrAbort(serial, 2500);
   } else {
@@ -1170,19 +1162,12 @@ export async function runFollowUsersStep(
       // before looking for the input bar.
       if (_fi > 1 && !searchReadyForReuse) {
         onLog?.("[TRACE] follow: re-enter-search-after-profile");
-        const recoverySearchTab = await android.findInstagramSearchTab(serial, onLog).catch(() => null);
-        if (!recoverySearchTab) {
-          onLog?.("Follow: Search tab not confirmed after profile navigation — stopping");
-          break;
-        }
-        await android.tap(serial, recoverySearchTab.x, recoverySearchTab.y);
+        await android.tapCalibratedNavigationControl(serial, "search", onLog);
         await sleepOrAbort(serial, 2500);
       }
-      const searchBar = await android.findInstagramSearchBar(serial, onLog).catch(() => null);
-      if (!searchBar) { onLog?.("Follow: search bar accessibility node not found — stopping"); break; }
+      const searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
       lastKnownSearchBar = searchBar;
       onLog?.("[TRACE] follow: tap-search-field");
-      await android.tap(serial, searchBar.x, searchBar.y);
       await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));
       const searchFocused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
       if (!searchFocused) {

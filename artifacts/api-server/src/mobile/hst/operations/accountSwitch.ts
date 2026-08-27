@@ -11,28 +11,20 @@ export type ManualProfileTabLongPressResult =
   | { ok: false; status: 404; error: string };
 
 /**
- * Resolve Instagram's live Profile tab and open the account switcher.
+ * Resolve the calibrated Instagram Profile control and open the account switcher.
  *
  * This is kept separate from the generic manual long-press operation because
- * the account-switch gesture must target the accessibility-discovered tab,
- * rather than a coordinate supplied by the mirrored screen.
+ * the account-switch gesture must target the device calibration map, rather
+ * than a coordinate supplied by the mirrored screen.
  */
 export async function runManualProfileTabLongPress(
   context: ManualProfileTabLongPressOperationContext,
 ): Promise<ManualProfileTabLongPressResult> {
   const { android, serial } = context;
   logger.info({ serial }, "[manual-account-switch] resolving profile tab before long-press");
-  const profileTab = await android.findInstagramProfileTab(serial);
-  if (!profileTab) {
-    logger.warn({ serial }, "[manual-account-switch] profile tab unavailable; long-press not dispatched");
-    return {
-      ok: false,
-      status: 404,
-      error: "Instagram Profile tab was not found in the live accessibility tree",
-    };
-  }
+  const profileTab = android.getCalibratedNavigationControl(serial, "profile");
 
-  logger.info({ serial, profileTab }, "[manual-account-switch] profile target resolved; dispatching long-press");
+  logger.info({ serial, profileTab }, "[manual-account-switch] calibrated profile target resolved; dispatching long-press");
   const holdDurationMs = 2000 + Math.floor(Math.random() * 3001);
   await android.swipe(serial, profileTab.x, profileTab.y, profileTab.x, profileTab.y, holdDurationMs);
   logger.info({ serial, profileTab, holdDurationMs }, "[manual-account-switch] long-press dispatched");
@@ -72,14 +64,9 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
   // Pre-switch tools may leave Instagram on Stories, Reels, Inbox, or another
   // nested surface. Return to the live Profile tab before opening the switcher.
   if (preSwitchActionsRan) {
-    const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
-    if (profileTab) {
-      log(`▶ Pre-switch complete: tapping Profile tab again at (${profileTab.x}, ${profileTab.y}) before account switch…`);
-      await android.tap(serial, profileTab.x, profileTab.y);
-      await sleepOrAbort(serial, 800);
-    } else {
-      log("⚠ Pre-switch complete: Profile tab was not found for the required return tap; account switch will perform its own lookup");
-    }
+    const profileTab = await android.tapCalibratedNavigationControl(serial, "profile", log);
+    log(`▶ Pre-switch complete: tapped calibrated Profile tab at (${profileTab.x}, ${profileTab.y}) before account switch…`);
+    await sleepOrAbort(serial, 800);
   }
 
   log("[TRACE] step-1 account-switch: begin");

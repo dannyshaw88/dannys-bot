@@ -51,12 +51,8 @@ export async function runCheckFeedLoop(serial: string, params: {
     // were the feed causes every downstream action to target the wrong UI.
     if (!homeAlreadyEstablished) {
       onLog?.("[TRACE] feed: find-home");
-      const homeTab = await android.findHomeTab(serial).catch(() => null);
-      if (!homeTab) {
-        throw new Error("View Feed cannot start: Instagram Home tab was not found");
-      }
+      const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
       onLog?.(`View Feed: tapping Home tab before execution at (${homeTab.x}, ${homeTab.y})`);
-      await android.tap(serial, homeTab.x, homeTab.y, "bot");
       onLog?.("[TRACE] feed: tap-home");
       await new Promise(resolve => setTimeout(resolve, 150 + Math.floor(Math.random() * 351)));
     } else {

@@ -1,7 +1,6 @@
 export interface VisitSavedOperationContext {
   android: {
-    findInstagramProfileTab(serial: string): Promise<{ x: number; y: number } | null>;
-    findHomeTab(serial: string): Promise<{ x: number; y: number } | null>;
+    tapCalibratedNavigationControl(serial: string, control: "profile" | "home", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
     dismissInstagramInterstitials(serial: string): Promise<string | null>;
     findInstagramProfileOptionsButton(serial: string): Promise<{ x: number; y: number } | null>;
@@ -30,23 +29,11 @@ export async function runVisitSaved(
     rollRange, logger, onLog } = context;
 
   const returnHome = async (): Promise<boolean> => {
-    const homeTab = await android.findHomeTab(serial).catch(() => null);
-    if (!homeTab) {
-      onLog?.("Visit Saved: Home tab not positively detected during cleanup");
-      logger.warn({ serial }, "[jitter-visit-saved] Home tab not found during cleanup");
-      return false;
-    }
-    await android.tap(serial, homeTab.x, homeTab.y);
+    await android.tapCalibratedNavigationControl(serial, "home", onLog);
     return true;
   };
 
-  const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
-  if (!profileTab) {
-    onLog?.("Visit Saved: profile tab not found — skipping");
-    logger.warn({ serial }, "[jitter-visit-saved] profile tab not found");
-    return;
-  }
-  await android.tap(serial, profileTab.x, profileTab.y);
+  const profileTab = await android.tapCalibratedNavigationControl(serial, "profile", onLog);
   await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
 
   const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);

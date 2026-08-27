@@ -46,13 +46,7 @@ export async function runViewReelsLoop(serial: string, params: {
   const { w, h } = getScreenSize(serial);
   onLog?.(`Reels loop: device resolution ${w}×${h}`);
 
-  const reelsTab = await android.findReelsTab(serial, onLog).catch(() => null);
-  if (!reelsTab) {
-    onLog?.("Reels tab not found — a11y miss and positional fallback found < 2 bottom-nav nodes; skipping View Reels");
-    logger.warn({ serial }, "[view-reels] Reels tab not found");
-    return { reelsViewed: 0, likes: 0, sharesFeed: 0, sharesDm: 0, saves: 0 };
-  }
-  await android.tap(serial, reelsTab.x, reelsTab.y);
+  const reelsTab = await android.tapCalibratedNavigationControl(serial, "reels", onLog);
   onLog?.(`Tapped Reels tab at (${reelsTab.x},${reelsTab.y}) — waiting for Reels to load`);
   await sleepOrAbort(serial, 1500);
 
@@ -206,7 +200,7 @@ export async function runViewReelsLoop(serial: string, params: {
         for (let p = 0; p < MAX_POLLS && !reelReady; p++) {
           const pollXml = await android.dumpUi(serial).catch(() => "");
           lastPollXml = pollXml;
-          // This poll is entered only after findReelsTab() succeeded and the
+          // This poll is entered only after the calibrated Reels tap succeeded and the
           // Reels tab was tapped.  Some Xiaomi/Instagram builds render the
           // full-screen Reels player without exposing any reel_viewer_* or
           // reels_feed_media_view_* nodes to UIAutomator.  In that case the

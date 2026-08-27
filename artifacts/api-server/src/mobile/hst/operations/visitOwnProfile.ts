@@ -1,9 +1,8 @@
 export interface VisitOwnProfileOperationContext {
   android: {
-    findInstagramProfileTab(serial: string): Promise<{ x: number; y: number } | null>;
+    tapCalibratedNavigationControl(serial: string, control: "profile" | "home", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
     dismissInstagramInterstitials(serial: string): Promise<string | null>;
-    findHomeTab(serial: string): Promise<{ x: number; y: number } | null>;
     pressBack(serial: string): Promise<void>;
   };
   hstRandomDelay(serial: string, minimumMs: number, maximumMs: number): Promise<void>;
@@ -17,13 +16,7 @@ export async function runVisitOwnProfile(
   context: VisitOwnProfileOperationContext,
 ): Promise<void> {
   const { android, hstRandomDelay, logger, onLog } = context;
-  const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
-  if (!profileTab) {
-    onLog?.("Random Actions: profile tab not found — skipping visit profile");
-    logger.warn({ serial }, "[jitter-visit-profile] profile tab not found by scan");
-    return;
-  }
-  await android.tap(serial, profileTab.x, profileTab.y);
+  const profileTab = await android.tapCalibratedNavigationControl(serial, "profile", onLog);
   await hstRandomDelay(serial, 1500, 10000);
 
   const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
@@ -33,11 +26,6 @@ export async function runVisitOwnProfile(
   }
 
   onLog?.("Random Actions: ✓ visited own profile");
-  const homeTab = await android.findHomeTab(serial).catch(() => null);
-  if (homeTab) {
-    await android.tap(serial, homeTab.x, homeTab.y);
-  } else {
-    await android.pressBack(serial);
-  }
+  await android.tapCalibratedNavigationControl(serial, "home", onLog);
   await hstRandomDelay(serial, 250, 10000);
 }

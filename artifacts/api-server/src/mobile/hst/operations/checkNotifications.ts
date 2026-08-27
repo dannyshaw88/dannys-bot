@@ -1,8 +1,7 @@
 export interface CheckNotificationsOperationContext {
   android: {
-    findHomeTab(serial: string): Promise<{ x: number; y: number } | null>;
+    tapCalibratedNavigationControl(serial: string, control: "home" | "notifications", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
-    findInstagramNotificationsIcon(serial: string, onLog?: (message: string) => void): Promise<{ x: number; y: number } | null>;
     findRandomNotificationItem(serial: string): Promise<{ x: number; y: number } | null>;
     pressBack(serial: string): Promise<void>;
   };
@@ -35,23 +34,11 @@ export async function runCheckNotifications(
     hstRandomDelay, rollRange, logger, onLog } = context;
   const { scrollsMin, scrollsMax, clickPctMin, clickPctMax } = options;
 
-  const homeTab = await android.findHomeTab(serial).catch(() => null);
-  if (!homeTab) {
-    onLog?.("Random Actions: Home tab not positively detected — skipping check notifications");
-    logger.warn({ serial }, "[jitter-check-notif] Home tab not found; refusing notification navigation");
-    return;
-  }
+  const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
   onLog?.(`Random Actions: tapping Home before notifications at (${homeTab.x},${homeTab.y})`);
-  await android.tap(serial, homeTab.x, homeTab.y);
   await sleepOrAbort(serial, 1000);
 
-  const icon = await android.findInstagramNotificationsIcon(serial, onLog).catch(() => null);
-  if (!icon) {
-    onLog?.("Random Actions: notifications icon not found — skipping check notifications");
-    logger.warn({ serial }, "[jitter-check-notif] notifications icon not found by scan");
-    return;
-  }
-  await android.tap(serial, icon.x, icon.y);
+  const icon = await android.tapCalibratedNavigationControl(serial, "notifications", onLog);
   await hstRandomDelay(serial, 1500, 10000);
   onLog?.("Random Actions: ✓ opened notifications");
 

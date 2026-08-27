@@ -42,41 +42,13 @@ export async function runMakePostStep(serial: string, opts: {
 // action, before Fix AI Slop, alteration, custom image settings, media
 // preparation, or any other post feature.
 //
-// Home is a visual detector. A single screenshot can catch the account-switch
-// transition even though the Home row is visible a moment later, so Make a
-// Post gets one bounded second pass. This retry is deliberately local to this
-// operation; it does not loosen or change the shared detector for other HSTs.
-let homeTab: { x: number; y: number } | null = null;
-const homeDetectionAttempts = 2;
-for (let attempt = 1; attempt <= homeDetectionAttempts; attempt++) {
-  onLog?.(
-    `Make a Post: locating Instagram Home button before image preparation ` +
-    `(visual pass ${attempt}/${homeDetectionAttempts})…`,
-  );
-  homeTab = await android.findHomeTab(serial).catch(() => null);
-  if (homeTab) break;
-  if (attempt < homeDetectionAttempts) {
-    onLog?.("Make a Post: Home visual pass missed during navigation settling — waiting 0.8s before one retry…");
-    await sleepOrAbort(serial, 800, "navigation", "computed");
-  }
-}
-if (!homeTab) {
-  onLog?.("Make a Post: Instagram Home visual match unavailable after 2 passes — aborting before any tap");
-  return { posted: false };
-}
-if (
-  !Number.isFinite(homeTab.x) ||
-  !Number.isFinite(homeTab.y) ||
-  homeTab.x < 0 ||
-  homeTab.y < 0
-) {
-  onLog?.(`Make a Post: invalid Home coordinates (${homeTab.x}, ${homeTab.y}) — aborting before any tap`);
-  return { posted: false };
-}
+// Home is a per-device calibrated fixed control. A missing, stale, or invalid
+// map throws explicitly before any image preparation or upload begins.
+const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
 const taps = Math.max(1, Math.round(homeTapCount));
 for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
   onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
-  await android.tap(serial, homeTab.x, homeTab.y);
+  if (tapIndex > 0) await android.tap(serial, homeTab.x, homeTab.y);
   if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
 }
 // Do not immediately continue after the tab tap. On slower phones the
@@ -127,14 +99,9 @@ onLog?.(`Make a Post: ✓ pushed to ${devicePath}, media-scanner notified — pr
 await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
 onLog?.("Make a Post: media-scan settle complete; looking for compose icon");
 
-onLog?.("Make a Post: looking for the \"+\" compose icon…");
-const composeBtn = await android.findComposeButton(serial).catch(() => null);
-if (!composeBtn) {
-  onLog?.("Make a Post: compose \"+\" icon not found — skipping (selector likely needs real-device tuning)");
-  return { posted: false };
-}
+onLog?.("Make a Post: using calibrated \"+\" compose icon…");
+const composeBtn = await android.tapCalibratedNavigationControl(serial, "createPost", onLog);
 onLog?.("Make a Post: tapping the \"+\" compose icon…");
-await android.tap(serial, composeBtn.x, composeBtn.y);
 // 3.5 s — Instagram's compose picker takes >1.8 s to finish its opening
 // animation on this device; a shorter sleep means the layout dump (and
 // every subsequent UIAutomator call) runs against a blank transitioning
@@ -149,10 +116,10 @@ await android.logScreenLayout(serial, "Make a Post: after '+' tap", onLog);
 
 // ── Wrong-header-icon guard ───────────────────────────────────────────────
 // Confirmed real-device regressions (13 Jul 2026): two different blind
-// positional fallbacks in findComposeButton have each mismatched a
+// positional fallbacks in the old compose selector have each mismatched a
 // different wrong screen — a top-right header scan hit Notifications,
 // and a bottom-nav-centre guess hit Direct/Messages (this device's
-// bottom nav has no create tab at all). findComposeButton now uses the
+// bottom nav has no create tab at all). The calibrated control now uses the
 // user-confirmed top-left header icon position, but this check stays as
 // a safety net: if a label/resource-id match ever points at
 // Notifications or Direct again, recover by backing out and retrying
@@ -198,7 +165,7 @@ if (postTab) {
 // ── Story-picker guard ────────────────────────────────────────────────────
 // The story "+" button in the stories tray carries content-desc="Add" and
 // appears before the compose "+" in the accessibility tree, so
-// findComposeButton can find it first and open the "Add to story" picker
+// the old compose selector could find it first and open the "Add to story" picker
 // instead of the post compose sheet.  Detect this early — before any
 // thumbnail tap or Next tap — and abort cleanly.
 //

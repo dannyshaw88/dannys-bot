@@ -58,15 +58,9 @@ export async function runMakePostStoryStep(serial: string, opts: {
   onLog?.(`Make a Post (Story): ✓ pushed to ${devicePath} — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
   await sleepOrAbort(serial, 1200);
 
-  onLog?.("Make a Post (Story): looking for the \"+\" compose icon…");
-  const composeBtn = await android.findComposeButton(serial).catch(() => null);
-  if (!composeBtn) {
-    onLog?.("Make a Post (Story): compose \"+\" icon not found — aborting");
-    await android.removeDeviceFile(serial, devicePath).catch(() => {});
-    return { posted: false };
-  }
+  onLog?.("Make a Post (Story): using calibrated \"+\" compose icon…");
+  const composeBtn = await android.tapCalibratedNavigationControl(serial, "createPost", onLog);
   onLog?.("Make a Post (Story): tapping the \"+\" compose icon…");
-  await android.tap(serial, composeBtn.x, composeBtn.y);
   await sleepOrAbort(serial, 3500);
   await android.logScreenLayout(serial, "Make a Post (Story): after '+' tap", onLog);
   await android.dismissInstagramInterstitials(serial).catch(() => null);

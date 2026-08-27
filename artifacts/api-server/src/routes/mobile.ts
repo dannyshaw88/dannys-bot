@@ -9607,6 +9607,79 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Captures one physical tap via getevent so the UI can build a per-device
   // key map for real-tap keyboard typing (each keystroke = real OS touch event).
 
+  // Fixed Instagram controls use a separate strict map. Runtime HST navigation
+  // never falls back to accessibility, reference images, or guessed positions.
+  app.post("/api/mobile/devices/:serial/navigation-calibration/prefetch", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      res.json({ ok: await android.prefetchCalibrationData(serial) });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
+  app.get("/api/mobile/devices/:serial/navigation-calibration", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      res.json({ ok: true, map: android.loadNavigationCalibrationMap(serial), controlIds: android.NAVIGATION_CONTROL_IDS });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
+  app.post("/api/mobile/devices/:serial/navigation-calibration/capture", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { timeoutMs } = z.object({
+        timeoutMs: z.number().int().min(1000).max(30_000).default(15_000),
+      }).parse(req.body);
+      const result = await android.captureOneTap(serial, timeoutMs, message => {
+        req.log.info({ serial, message }, "[navigation-calibration]");
+      });
+      if (!result) return void res.status(408).json({ ok: false, error: "No tap detected within timeout — tap the named control on the physical phone" });
+      const screen = android.getScreenSize(serial);
+      res.json({ ok: true, x: result.x, y: result.y, screen });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
+  app.post("/api/mobile/devices/:serial/navigation-calibration/save", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { points } = z.object({
+        points: z.record(z.string(), z.object({ x: z.number().finite(), y: z.number().finite() })),
+      }).parse(req.body);
+      const map = android.saveNavigationCalibrationMap(serial, points as any);
+      res.json({ ok: true, map, count: Object.keys(map.points).length });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
+  app.post("/api/mobile/devices/:serial/navigation-calibration/test", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { control } = z.object({ control: z.enum(android.NAVIGATION_CONTROL_IDS) }).parse(req.body);
+      const point = await android.tapCalibratedNavigationControl(serial, control, message => {
+        req.log.info({ serial, message }, "[navigation-calibration]");
+      });
+      res.json({ ok: true, control, x: point.x, y: point.y });
+    } catch (e: any) {
+      req.log.warn({ err: e }, "[navigation-calibration] test failed");
+      res.status(422).json({ ok: false, error: e?.message });
+    }
+  });
+
+  app.delete("/api/mobile/devices/:serial/navigation-calibration", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      android.deleteNavigationCalibrationMap(serial);
+      res.json({ ok: true });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
+  app.delete("/api/mobile/devices/:serial/navigation-calibration/:control", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const { control } = z.object({ control: z.enum(android.NAVIGATION_CONTROL_IDS) }).parse(req.params);
+      const map = android.deleteNavigationCalibrationControl(serial, control);
+      res.json({ ok: true, map, count: map ? Object.keys(map.points).length : 0 });
+    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+  });
+
   /** Pre-warm device-info + screen-size caches so subsequent captures are instant. */
   app.post("/api/mobile/devices/:serial/keyboard-calibration/prefetch", async (req: Request, res: Response) => {
     try {

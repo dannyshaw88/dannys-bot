@@ -1,6 +1,6 @@
 export interface CheckDmOperationContext {
   android: {
-    findInstagramDmTab(serial: string): Promise<{ x: number; y: number } | null>;
+    tapCalibratedNavigationControl(serial: string, control: "directMessages", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
     dismissInstagramInterstitials(serial: string): Promise<string | null>;
     findDmConversationItem(serial: string): Promise<{ x: number; y: number } | null>;
@@ -34,13 +34,7 @@ export async function runCheckDmLoop(
     rollRange, logger, onLog } = context;
   const { scrollsMin, scrollsMax, clickPctMin, clickPctMax } = options;
 
-  const dmTab = await android.findInstagramDmTab(serial).catch(() => null);
-  if (!dmTab) {
-    onLog?.("Check Inbox: DM icon not found — skipping");
-    logger.warn({ serial }, "[check-dm] DM icon not found by scan");
-    return;
-  }
-  await android.tap(serial, dmTab.x, dmTab.y);
+  const dmTab = await android.tapCalibratedNavigationControl(serial, "directMessages", onLog);
   await sleepOrAbort(serial, 2000);
   const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
   if (dismissed) {

@@ -1,6 +1,6 @@
 export interface VisitSettingsOperationContext {
   android: {
-    findInstagramProfileTab(serial: string): Promise<{ x: number; y: number } | null>;
+    tapCalibratedNavigationControl(serial: string, control: "profile" | "settingsBack", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
     dismissInstagramInterstitials(serial: string): Promise<string | null>;
     findInstagramProfileOptionsButton(serial: string): Promise<{ x: number; y: number } | null>;
@@ -10,7 +10,6 @@ export interface VisitSettingsOperationContext {
     pressBack(serial: string): Promise<void>;
   };
   getScreenSize(serial: string): { w: number; h: number };
-  getDeviceDensity(serial: string): Promise<number>;
   deviceProfileSwipe(
     serial: string,
     gesture: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
@@ -27,17 +26,11 @@ export async function runVisitSettings(
   serial: string,
   context: VisitSettingsOperationContext,
 ): Promise<boolean> {
-  const { android, getScreenSize, getDeviceDensity, deviceProfileSwipe,
+  const { android, getScreenSize, deviceProfileSwipe,
     sleepOrAbort, logger, onLog } = context;
 
-  const profileTab = await android.findInstagramProfileTab(serial).catch(() => null);
-  if (!profileTab) {
-    onLog?.("Visit Settings: profile tab not found — skipping");
-    logger.warn({ serial }, "[jitter-visit-settings] profile tab not found");
-    return false;
-  }
+  const profileTab = await android.tapCalibratedNavigationControl(serial, "profile", onLog);
   onLog?.(`Visit Settings: tapping Profile tab first at (${profileTab.x},${profileTab.y})`);
-  await android.tap(serial, profileTab.x, profileTab.y);
   await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 800));
 
   const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
@@ -97,20 +90,16 @@ export async function runVisitSettings(
     onLog?.("Visit Settings: ✓ scrolled once");
   }
 
-  const density = await getDeviceDensity(serial).catch(() => 160);
-  const dp = density / 160;
-  const topLeftBackX = Math.max(1, Math.round(24 * dp));
-  const topLeftBackY = Math.max(1, Math.round(48 * dp));
-  await android.tap(serial, topLeftBackX, topLeftBackY);
+  const settingsBack = await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
   await sleepOrAbort(serial, 800);
-   onLog?.(`Visit Settings: ✓ tapped upper-left Back button at (${topLeftBackX},${topLeftBackY}) — returning from selected setting`);
+   onLog?.(`Visit Settings: ✓ tapped calibrated Instagram Settings Back button at (${settingsBack.x},${settingsBack.y}) — returning from selected setting`);
 
    // A random top-level row opens a second Instagram surface. The first Back
    // exits that selected setting to "Settings and activity"; the second Back
    // exits "Settings and activity" back to the profile/home flow.
-   await android.tap(serial, topLeftBackX, topLeftBackY);
+   const settingsListBack = await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
    await sleepOrAbort(serial, 800);
-   onLog?.(`Visit Settings: ✓ tapped upper-left Back button at (${topLeftBackX},${topLeftBackY}) — leaving Settings and activity`);
+   onLog?.(`Visit Settings: ✓ tapped calibrated Instagram Settings Back button at (${settingsListBack.x},${settingsListBack.y}) — leaving Settings and activity`);
    onLog?.("Visit Settings: ✓ done after two visual Backs");
     return true;
 }
