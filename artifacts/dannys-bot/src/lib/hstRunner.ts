@@ -17,6 +17,135 @@ export const _hstNextRunAt = new Map<string, number>();
 export const _hstUiMounted = new Set<string>();
 const _hstStarting = new Set<string>();
 
+type CollisionConfig = { enabled: boolean; restMinMin: number; restMinMax: number };
+type CollisionQueueEntry = {
+  slotIdx: number;
+  readyAt: number;
+  resolve: (collisionPrevented: boolean) => void;
+};
+type CollisionState = {
+  config: CollisionConfig;
+  configLoadedAt: number;
+  configLoading: Promise<CollisionConfig> | null;
+  queue: CollisionQueueEntry[];
+  busy: boolean;
+  activeSlot: number | null;
+  restTimer: ReturnType<typeof setTimeout> | null;
+};
+const collisionStates = new Map<string, CollisionState>();
+const DEFAULT_COLLISION_CONFIG: CollisionConfig = {
+  enabled: true,
+  restMinMin: 5,
+  restMinMax: 10,
+};
+
+function getCollisionState(serial: string): CollisionState {
+  const existing = collisionStates.get(serial);
+  if (existing) return existing;
+  const created: CollisionState = {
+    config: DEFAULT_COLLISION_CONFIG,
+    configLoadedAt: 0,
+    configLoading: null,
+    queue: [],
+    busy: false,
+    activeSlot: null,
+    restTimer: null,
+  };
+  collisionStates.set(serial, created);
+  return created;
+}
+
+async function loadCollisionConfig(serial: string): Promise<CollisionConfig> {
+  const state = getCollisionState(serial);
+  if (state.configLoading) return state.configLoading;
+  if (Date.now() - state.configLoadedAt < 2_000) return state.config;
+
+  state.configLoading = fetch(
+    `/api/mobile/devices/${encodeURIComponent(serial)}/collision-preventer`,
+  ).then(async response => {
+    const body = await response.json().catch(() => null);
+    const raw = body?.config;
+    if (raw && typeof raw === "object") {
+      state.config = {
+        enabled: raw.enabled !== false,
+        restMinMin: Math.max(0, Number(raw.restMinMin) || 0),
+        restMinMax: Math.max(0, Number(raw.restMinMax) || 0),
+      };
+    }
+    state.configLoadedAt = Date.now();
+    return state.config;
+  }).catch(() => {
+    // The fail-closed default protects a device if the settings request races
+    // API startup. A missing config is also initialized with these defaults by
+    // the Phone Settings panel.
+    state.configLoadedAt = Date.now();
+    return state.config;
+  }).finally(() => {
+    state.configLoading = null;
+  });
+  return state.configLoading;
+}
+
+function processCollisionQueue(serial: string): void {
+  const state = getCollisionState(serial);
+  state.restTimer = null;
+  if (state.queue.length === 0) {
+    state.busy = false;
+    state.activeSlot = null;
+    return;
+  }
+  state.queue.sort((a, b) => a.readyAt - b.readyAt || a.slotIdx - b.slotIdx);
+  const next = state.queue.shift()!;
+  state.busy = true;
+  state.activeSlot = next.slotIdx;
+  next.resolve(true);
+}
+
+async function requestCollisionSlot(
+  serial: string,
+  slotIdx: number,
+  readyAt: number,
+): Promise<boolean> {
+  const config = await loadCollisionConfig(serial);
+  const state = getCollisionState(serial);
+  if (!config.enabled) return false;
+
+  return new Promise<boolean>(resolve => {
+    if (!state.busy) {
+      state.busy = true;
+      state.activeSlot = slotIdx;
+      resolve(false);
+      return;
+    }
+    state.queue.push({ slotIdx, readyAt, resolve });
+  });
+}
+
+function releaseCollisionSlot(serial: string, slotIdx: number, skipRest = false): void {
+  const state = getCollisionState(serial);
+  if (state.activeSlot !== slotIdx) {
+    state.queue = state.queue.filter(entry => entry.slotIdx !== slotIdx);
+    return;
+  }
+  state.activeSlot = null;
+  if (skipRest || !state.config.enabled) {
+    processCollisionQueue(serial);
+    return;
+  }
+  if (state.restTimer !== null) return;
+  const min = Math.min(state.config.restMinMin, state.config.restMinMax);
+  const max = Math.max(state.config.restMinMin, state.config.restMinMax);
+  const restMs = (min + Math.random() * Math.max(0, max - min)) * 60_000;
+  state.restTimer = setTimeout(() => processCollisionQueue(serial), Math.round(restMs));
+}
+
+function cancelCollisionSlot(serial: string, slotIdx: number): void {
+  const state = getCollisionState(serial);
+  const queued = state.queue.filter(entry => entry.slotIdx === slotIdx);
+  state.queue = state.queue.filter(entry => entry.slotIdx !== slotIdx);
+  for (const entry of queued) entry.resolve(false);
+}
+
 // ── Background loop ───────────────────────────────────────────────────────────
 
 /**
@@ -61,6 +190,7 @@ export function stopHstLoop(serial: string, slotIdx: number): void {
   _hstStarting.delete(key);
   _hstStop.add(key);
   _hstNextRunAt.delete(key);
+  cancelCollisionSlot(serial, slotIdx);
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -109,6 +239,8 @@ async function scheduleRestartRecovery(serial: string, slotIdx: number, key: str
 
 async function runCycleBg(serial: string, slotIdx: number, key: string): Promise<void> {
   _hstTimers.delete(key);
+  const hstTurnAt = _hstNextRunAt.get(key) ?? Date.now();
+  _hstNextRunAt.delete(key);
 
   if (_hstStop.has(key)) { _hstStop.delete(key); _hstNextRunAt.delete(key); return; }
 
@@ -144,6 +276,12 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
   const feedMax = Math.max(feedMin, Number(s.feedScrollMax ?? 10));
   const count   = Math.floor(Math.random() * (feedMax - feedMin + 1)) + feedMin;
   const cycleId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  await requestCollisionSlot(serial, slotIdx, hstTurnAt);
+  if (_hstStop.has(key)) {
+    _hstStop.delete(key);
+    releaseCollisionSlot(serial, slotIdx, true);
+    return;
+  }
 
   try {
     const cycleResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
@@ -355,6 +493,8 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
     // retry is safer than relying on MobilePage to be mounted.
     scheduleNextBg(serial, slotIdx, key, 60_000);
     return;
+  } finally {
+    releaseCollisionSlot(serial, slotIdx);
   }
 
   if (_hstStop.has(key)) { _hstStop.delete(key); _hstNextRunAt.delete(key); return; }
