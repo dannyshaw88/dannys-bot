@@ -34,6 +34,7 @@ import { AuraFarmingBot } from "@/components/EquinoxBot";
 import { queryClient } from "@/lib/queryClient";
 import { useStatusEvents } from "@/hooks/use-profiles";
 import { Loader2 } from "lucide-react";
+import feedHomeReference from "@assets/home_1787131461428.jpg";
 
 // ── Top-level Error Boundary ─────────────────────────────────────────────────
 // React 18 in production mode: if ANY component throws during render and there
@@ -215,12 +216,45 @@ function HstToggleListener() {
 
 function AppInner() {
   useStatusEvents();
+  const showFeedHomeReference =
+    import.meta.env.DEV && window.location.pathname === "/dashboard";
   return (
     <>
       <HstAutoRestart />
       <HstToggleListener />
       <Router />
       <BrowserLayer />
+      {showFeedHomeReference && (
+        <div
+          style={{
+            position: "fixed",
+            top: 72,
+            right: 24,
+            zIndex: 10000,
+            padding: 16,
+            borderRadius: 12,
+            background: "#111827",
+            color: "#f9fafb",
+            boxShadow: "0 16px 40px rgba(0, 0, 0, 0.35)",
+            textAlign: "center",
+            fontFamily: "system-ui, sans-serif",
+          }}
+        >
+          <div style={{ marginBottom: 10, fontSize: 14, fontWeight: 600 }}>
+            View Feed Home reference
+          </div>
+          <img
+            src={feedHomeReference}
+            alt="View Feed Home reference image"
+            width={160}
+            height={160}
+            style={{ display: "block", imageRendering: "pixelated" }}
+          />
+          <div style={{ marginTop: 10, fontSize: 11, color: "#9ca3af" }}>
+            home_1787131461428.jpg
+          </div>
+        </div>
+      )}
     </>
   );
 }
