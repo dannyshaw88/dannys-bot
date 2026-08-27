@@ -570,18 +570,9 @@ export async function finishViewReels(
   },
 ): Promise<void> {
   const { android, sleepOrAbort, onLog } = context;
-  onLog?.("View Reels: locating Home tab to leave the full-screen viewer…");
-  const homeTab = await android.findReelsHomeTab(serial).catch(() => null);
-  if (!homeTab) {
-    // The Reels loop has already completed its confirmed work at this point.
-    // A missed visual match is cleanup uncertainty, not a failed Reels action.
-    // Do not turn a successful viewer run into a cycle error or use a guessed
-    // coordinate after the detector has explicitly failed.
-    onLog?.("View Reels: Home tab was not visually detected after the run; leaving cleanup unconfirmed");
-    return;
-  }
-  await android.tap(serial, homeTab.x, homeTab.y, "manual");
-  onLog?.(`View Reels: tapped Home tab at (${homeTab.x},${homeTab.y})`);
+  onLog?.("View Reels: tapping calibrated Home control to leave the full-screen viewer…");
+  const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
+  onLog?.(`View Reels: tapped calibrated Home control at (${homeTab.x},${homeTab.y})`);
   await sleepOrAbort(serial, 700);
 }
 
