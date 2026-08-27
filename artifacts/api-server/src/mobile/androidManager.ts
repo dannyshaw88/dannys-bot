@@ -7701,10 +7701,14 @@ async function findHomeTabInternal(
   }
 
   try {
+    const runtimeDir = path.dirname(path.resolve(process.argv[1] ?? __filename));
     const referenceRoots = [
+      // The API workflow runs from artifacts/api-server, while uploaded
+      // references live in the workspace-level attached_assets directory.
       path.resolve(process.cwd(), "attached_assets"),
+      path.resolve(process.cwd(), "..", "..", "attached_assets"),
       // Packaged Electron build: build.mjs ships this beside the API bundle.
-      path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "home-icon-refs"),
+      path.resolve(runtimeDir, "home-icon-refs"),
     ];
     let reference: HomeReference | null = null;
     for (const root of referenceRoots) {
