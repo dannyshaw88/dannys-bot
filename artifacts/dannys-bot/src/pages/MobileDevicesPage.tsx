@@ -1195,23 +1195,12 @@ export function MobileDevicesPage() {
     sessionStorage.setItem("mobile_device_nav_started_at", String(started));
     sessionStorage.setItem("mobile_autopower_serial", serial);
 
-    // The video stream no longer wakes devices on connect by design. Send the
-    // user-initiated wake command before opening the detail mirror so a click
-    // from the farm always wakes the selected screen.
-    try {
-      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/key`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: 224 /* KEYCODE_WAKEUP */ }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.error ?? `Wake failed (${response.status})`);
-      }
-    } catch (error) {
-      console.error(`[mobile] failed to wake ${serial} before opening mirror`, error);
-    }
-
+    // Opening a device is an explicit request for its live mirror. The mirror
+    // stream performs the conditional ensureScreenOn check after it connects:
+    // an awake phone is left alone, while a sleeping phone is woken so the
+    // mirror can produce frames. Do not send a standalone wake before the
+    // mirror opens — that was waking the physical device without opening the
+    // requested mirror yet.
     setLocation(`/mobile/farm/${encodeURIComponent(serial)}?autopower=1`);
   }, [onlineSerials, setLocation]);
 
