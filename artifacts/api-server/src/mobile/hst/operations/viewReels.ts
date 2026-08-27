@@ -577,14 +577,7 @@ export async function finishViewReels(
 ): Promise<void> {
   const { android, sleepOrAbort, onLog } = context;
   onLog?.("View Reels: locating Home tab to leave the full-screen viewer…");
-  // Try the Reels-specific reference first, then the shared Home reference.
-  // The bottom-nav Home glyph can vary between the viewer and the normal
-  // Instagram shell; either match is safe because both are visual references.
-  let homeTab = await android.findReelsHomeTab(serial).catch(() => null);
-  if (!homeTab) {
-    onLog?.("View Reels: Reels-specific Home visual pass missed — retrying shared Home reference…");
-    homeTab = await android.findHomeTab(serial).catch(() => null);
-  }
+  const homeTab = await android.findHomeTab(serial).catch(() => null);
   if (!homeTab) {
     // The Reels loop has already completed its confirmed work at this point.
     // A missed visual match is cleanup uncertainty, not a failed Reels action.
