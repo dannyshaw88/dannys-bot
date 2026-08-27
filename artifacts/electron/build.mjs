@@ -135,8 +135,11 @@ const reelsHomeIconReferenceName = "reelshome_1787817853997.jpg";
 const homeIconReferenceTarget = path.join(dist, "server", "home-icon-refs");
 await mkdir(homeIconReferenceTarget, { recursive: true });
 const homeIconSource = path.join(searchReferenceSource, homeIconReferenceName);
-const reelsHomeIconSource = path.join(searchReferenceSource, reelsHomeIconReferenceName);
 const bundledHomeIconSource = path.join(__dirname, "assets", "home-icon-reference.svg");
+const bundledReelsHomeIconSource = path.join(__dirname, "assets", reelsHomeIconReferenceName);
+const reelsHomeIconSource = existsSync(path.join(searchReferenceSource, reelsHomeIconReferenceName))
+  ? path.join(searchReferenceSource, reelsHomeIconReferenceName)
+  : bundledReelsHomeIconSource;
 if (existsSync(homeIconSource)) {
   await cp(homeIconSource, path.join(homeIconReferenceTarget, homeIconReferenceName));
 } else if (existsSync(bundledHomeIconSource)) {
@@ -145,7 +148,9 @@ if (existsSync(homeIconSource)) {
   throw new Error(`Required Home icon reference is missing: ${homeIconSource}`);
 }
 if (!existsSync(reelsHomeIconSource)) {
-  throw new Error(`Required Reels Home icon reference is missing: ${reelsHomeIconSource}`);
+  throw new Error(
+    `Required Reels Home icon reference is missing from both ${path.join(searchReferenceSource, reelsHomeIconReferenceName)} and ${bundledReelsHomeIconSource}`,
+  );
 }
 await cp(reelsHomeIconSource, path.join(homeIconReferenceTarget, reelsHomeIconReferenceName));
 if (
