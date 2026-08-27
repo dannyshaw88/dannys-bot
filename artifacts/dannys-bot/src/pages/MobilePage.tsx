@@ -4646,6 +4646,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             // waiting for the full HST interval and appearing inactive.
             retryBusy = true;
             onLog?.("Cycle deferred — server cycle already in progress, will retry shortly");
+          } else if (body?.deviceUnavailable) {
+            const acctTag = slotUsername ? `@${slotUsername} — ` : "";
+            onLog?.(`${acctTag}Cycle stopped — ${body?.error ?? "device disconnected"}. Reconnect the device before retrying.`);
           } else {
             const acctTag = slotUsername ? `@${slotUsername} — ` : "";
             onLog?.(`${acctTag}Cycle failed — ${body?.error ?? r.status}${body?.steps?.length ? ` (reached: ${body.steps.join(", ")})` : ""}`);

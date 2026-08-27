@@ -143,11 +143,13 @@ function capturePng(adbPath: string, serial: string): Promise<Buffer> {
   const job = new Promise<Buffer>((resolve, reject) => {
     const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);
     const chunks: Buffer[] = [];
+    const errorChunks: Buffer[] = [];
     const timer = setTimeout(() => {
       try { child.kill(); } catch {}
       reject(new Error(`screencap timed out after ${SCREENCAP_TIMEOUT_MS}ms`));
     }, SCREENCAP_TIMEOUT_MS);
     child.stdout.on("data", (d: Buffer) => chunks.push(d));
+    child.stderr.on("data", (d: Buffer) => errorChunks.push(d));
     child.on("error", (error) => {
       clearTimeout(timer);
       reject(error);
@@ -155,7 +157,10 @@ function capturePng(adbPath: string, serial: string): Promise<Buffer> {
     child.on("close", (code) => {
       clearTimeout(timer);
       if (code !== 0) {
-        reject(new Error(`screencap exited with code ${code ?? "null"}`));
+        const detail = Buffer.concat(errorChunks).toString("utf8").trim();
+        reject(new Error(
+          `screencap exited with code ${code ?? "null"}${detail ? `: ${detail}` : ""}`,
+        ));
         return;
       }
       resolve(Buffer.concat(chunks));
@@ -7576,6 +7581,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         automationCycleCurrentId.get(serial) !== undefined &&
         automationCycleAbortedId.get(serial) === automationCycleCurrentId.get(serial);
       const aborted = e?.message === "cycle-aborted" || abortRequested;
+      const deviceUnavailable = android.isAndroidDeviceUnavailableError(e);
+      const cycleFailure = deviceUnavailable
+        ? (e instanceof android.AndroidDeviceUnavailableError
+          ? e.message
+          : `Android device ${serial} became unavailable during the active cycle`)
+        : (e?.message ?? "unknown error");
       // Emit a log-stream message so the Action Log tab always gets an entry,
       // even when the cycle errors or is aborted before reaching the end.
       {
@@ -7591,8 +7602,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const summary = ` — ${cycleMetricSummary()}`;
         if (aborted) {
           tLog(`${cycleMetricSummary()} — Cycle aborted`);
+        } else if (deviceUnavailable) {
+          tLog(`Cycle stopped — ${cycleFailure}. Reconnect the device before retrying.`);
         } else {
-          tLog(`Cycle failed — ${e?.message ?? "unknown error"}${summary}`);
+          tLog(`Cycle failed — ${cycleFailure}${summary}`);
         }
       }
       // Always stamp COMPLETE so the Dashboard never leaves a dangling STARTED.
@@ -7609,7 +7622,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (saves) parts.push(`${saves} saved`);
         if (postsUploaded) parts.push(`${postsUploaded} post${postsUploaded === 1 ? "" : "s"} uploaded`);
         if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
-         if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
+        if (exploreScrolled) parts.push(`${exploreScrolled} Explore scroll${exploreScrolled === 1 ? "" : "s"}`);
         // Aborted cycles are still real cycles for Statistics. Persist the
         // partial counters collected before the abort, including the cycle
         // itself, just as the normal completion path does.
@@ -7634,19 +7647,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           toolId: 0,
           action: "tool_complete",
           targetUsername: _slotUsername,
-           detail: aborted
-             ? `${dashboardMetricSummary()} — Cycle aborted`
-             : `${dashboardMetricSummary()} — Cycle error: ${e?.message ?? "unknown"}`,
+          detail: aborted
+            ? `${dashboardMetricSummary()} — Cycle aborted`
+            : deviceUnavailable
+              ? `${dashboardMetricSummary()} — ${cycleFailure}`
+              : `${dashboardMetricSummary()} — Cycle error: ${cycleFailure}`,
           result: aborted ? "ok" : "error",
           sourceValue: `${serial}:${incomingSlotIdx}`,
           sourceType: "phone",
           timestamp: new Date().toISOString(),
         }).catch(() => {});
       }
-      res.status(aborted ? 200 : 400).json({
+      res.status(aborted ? 200 : deviceUnavailable ? 503 : 400).json({
         ok: aborted,
         aborted,
-        error: aborted ? undefined : (e?.message ?? "Automation cycle failed"),
+        deviceUnavailable,
+        error: aborted ? undefined : cycleFailure,
         steps,
         executionTrace,
       });
@@ -7655,7 +7671,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           finishSlotCycleNotebook({
             serial, slotId, cycleId: incomingCycleId,
             status: aborted ? "aborted" : "failed",
-            summary: aborted ? "Cycle aborted" : `Cycle failed: ${e?.message ?? "unknown error"}`,
+            summary: aborted
+              ? "Cycle aborted"
+              : deviceUnavailable
+                ? `Cycle stopped — ${cycleFailure}`
+                : `Cycle failed: ${cycleFailure}`,
           });
         } catch (error) {
           logger.warn({ err: error, serial, slotId }, "[mobile-cycle] notebook failure stamp failed");
@@ -8463,22 +8483,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // the user can visually identify custom-drawn elements that have no
   // accessibility node and pin them with a name for the developer's index.
   app.get("/api/mobile/devices/:serial/screencap-base64", async (req: Request, res: Response) => {
+    const serial = p(req, "serial");
     try {
-      const serial = p(req, "serial");
       const tools = await android.detectToolsetAsync();
       if (!tools.adb.found || !tools.adb.path) { res.status(503).json({ ok: false, error: "adb not found" }); return; }
       const adbPath = tools.adb.path;
-       let frame = await capturePng(adbPath, serial);
+      let frame = await capturePng(adbPath, serial);
       // Strip CRLF line endings that some Windows ADB versions inject
       if (frame.length > 8 && !isPng(frame)) {
         frame = stripCrlf(frame);
       }
       if (!isPng(frame)) {
-         res.json({ ok: false, error: `Not a valid PNG (${frame.length} bytes)` });
+        res.json({ ok: false, error: `Not a valid PNG (${frame.length} bytes)` });
         return;
       }
       res.json({ ok: true, image: "data:image/png;base64," + frame.toString("base64") });
-    } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
+    } catch (e: any) {
+      if (android.isAndroidDeviceUnavailableError(e)) {
+        res.status(503).json({
+          ok: false,
+          deviceUnavailable: true,
+          error: `Android device ${serial} is disconnected or unavailable`,
+        });
+        return;
+      }
+      res.status(400).json({ ok: false, error: e?.message });
+    }
   });
 
   // ── Screencap — raw PNG (for farm-grid thumbnails) ────────────────────────
@@ -8502,7 +8532,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         "Content-Length": String(frame.length),
       });
       res.end(frame);
-    } catch { res.status(500).end(); }
+    } catch (error) {
+      if (android.isAndroidDeviceUnavailableError(error)) {
+        res.set("X-Mobile-Device-State", "unavailable").status(503).end();
+        return;
+      }
+      res.status(500).end();
+    }
   });
 
   // ── Debug screenshots ZIP download ───────────────────────────────────────

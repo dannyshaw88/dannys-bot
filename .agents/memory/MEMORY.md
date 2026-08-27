@@ -134,3 +134,4 @@
 - [Debug screenshot slot folders](debug-screenshot-slot-folders.md) — name evidence folders by persisted Phone Farm slot plus model, never USB serial order
 - [Story tray feed-marker filter](story-tray-feed-marker-filter.md) — reject lower-feed “username’s story, Seen” markers before selecting tray bubbles
 - [Jarvee import session persistence](jarvee-import-session-persistence.md) — retain parsed details across Settings tabs, but never store raw exports or extracted secrets in browser storage
+- [ADB device-loss race handling](adb-device-loss-race.md) — reuse successful screen dimensions and classify mid-cycle ADB disappearance explicitly, never fall back to guessed gesture coordinates

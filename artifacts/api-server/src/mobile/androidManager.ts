@@ -13,6 +13,38 @@ import { getDebugScreenshotFolderName } from "./debugScreenshotPaths";
 const execFileP = promisify(execFile);
 
 /**
+ * A device can disappear between the initial cycle readiness check and any
+ * later ADB command. Keep this distinct from an automation/UI failure so the
+ * route and clients can tell the user to reconnect the phone without exposing
+ * a Windows command line or a misleading coordinate fallback.
+ */
+export class AndroidDeviceUnavailableError extends Error {
+  readonly serial: string;
+  readonly operation: string;
+
+  constructor(serial: string, operation: string) {
+    super(`Android device ${serial} became unavailable during ${operation}`);
+    this.name = "AndroidDeviceUnavailableError";
+    this.serial = serial;
+    this.operation = operation;
+  }
+}
+
+const ADB_DEVICE_UNAVAILABLE_RE =
+  /(?:device\s+['"]?[^'"\r\n]+['"]?\s+(?:not found|offline|unauthorized)|no devices?(?:\/emulators?)?\s+found|device offline|transport(?:\s+error)?)/i;
+
+export function isAndroidDeviceUnavailableError(error: unknown): boolean {
+  if (error instanceof AndroidDeviceUnavailableError) return true;
+  const value = error as { message?: unknown; stderr?: unknown; stdout?: unknown } | null;
+  const detail = [
+    value?.message,
+    value?.stderr,
+    value?.stdout,
+  ].filter((part): part is string => typeof part === "string").join("\n");
+  return ADB_DEVICE_UNAVAILABLE_RE.test(detail);
+}
+
+/**
  * Non-blocking ADB runner. Returns stdout on success OR on timeout/error
  * (empty string), never throws. Keeps the event loop free — unlike spawnSync.
  */
@@ -2752,6 +2784,9 @@ async function runInputShell(serial: string, args: string[], label: string): Pro
     }
   } catch (e: any) {
     const out = `${e.stderr ?? ""}${e.stdout ?? ""}`.trim();
+    if (isAndroidDeviceUnavailableError(e)) {
+      throw new AndroidDeviceUnavailableError(serial, `input ${label}`);
+    }
     const detail = out || (e.killed || e.signal ? "adb timed out" : e.message) || "unknown error";
     throw new Error(
       `adb shell input ${label} failed${detail ? `: ${detail}` : ""}`,
@@ -3068,7 +3103,10 @@ export function getScreenSize(serial: string): { w: number; h: number } {
     const tools = detectToolset();
     const adb = requireTool(tools.adb, "adb");
     const wm = spawnSync(adb, ["-s", serial, "shell", "wm", "size"], { encoding: "utf8", timeout: 3000 });
-    const out = wm.stdout ?? "";
+    const out = `${wm.stdout ?? ""}\n${wm.stderr ?? ""}`;
+    if ((wm.status ?? 0) !== 0 && isAndroidDeviceUnavailableError({ message: out })) {
+      throw new AndroidDeviceUnavailableError(serial, "screen-size probe");
+    }
     // UIAutomator accessibility-tree coordinates and `adb shell input tap` both use
     // the display's OVERRIDE (logical) coordinate space, not the physical pixel space.
     // `wm size` on Xiaomi / OEM devices often prints:
@@ -3081,8 +3119,15 @@ export function getScreenSize(serial: string): { w: number; h: number } {
     const mOverride = out.match(/Override\s+size:\s*(\d+)x(\d+)/i);
     const mAny = out.match(/(\d+)x(\d+)/);
     const m = mOverride ?? mAny;
-    if (m) { w = parseInt(m[1]); h = parseInt(m[2]); }
-  } catch { /* fall back to defaults above */ }
+    if (m) {
+      w = parseInt(m[1]);
+      h = parseInt(m[2]);
+      screenSizeCache.set(serial, { value: { w, h }, checkedAt: Date.now() });
+    }
+  } catch (error) {
+    if (error instanceof AndroidDeviceUnavailableError) throw error;
+    /* fall back to defaults above for non-device-specific probe failures */
+  }
   return { w, h };
 }
 
@@ -3102,10 +3147,18 @@ export async function getScreenSizeAsync(serial: string): Promise<{ w: number; h
   const job = (async () => {
     const tools = await detectToolsetAsync();
     const adb = requireTool(tools.adb, "adb");
-    const wm = await execFileP(adb, ["-s", serial, "shell", "wm", "size"], {
-      encoding: "utf8",
-      timeout: 3000,
-    } as any);
+    let wm: { stdout?: unknown; stderr?: unknown };
+    try {
+      wm = await execFileP(adb, ["-s", serial, "shell", "wm", "size"], {
+        encoding: "utf8",
+        timeout: 3000,
+      } as any);
+    } catch (error: any) {
+      if (isAndroidDeviceUnavailableError(error)) {
+        throw new AndroidDeviceUnavailableError(serial, "screen-size probe");
+      }
+      throw error;
+    }
     const out = String(wm.stdout ?? "");
     const override = out.match(/Override\s+size:\s*(\d+)x(\d+)/i);
     const anySize = out.match(/(\d+)x(\d+)/);
