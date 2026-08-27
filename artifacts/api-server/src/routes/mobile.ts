@@ -3978,17 +3978,47 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/account", async (req: Request, res: Response) => {
     try {
       const parsed = deviceAccountSchema.parse(req.body);
+      const serial = p(req, "serial");
+      const preserveExistingSlotState = req.body?.preserveExistingSlotState === true;
+      const cfg = loadInstanceConfigs();
+      const previousSlots = Array.isArray(cfg[serial]?.account?.slots)
+        ? cfg[serial]!.account!.slots
+        : [];
+      const normalizeUsername = (value: unknown) =>
+        String(value ?? "").trim().replace(/^@/, "").toLowerCase();
+      const previousByUsername = new Map(
+        previousSlots
+          .filter(slot => typeof slot?.slotId === "string" && slot.slotId.length >= 8)
+          .map(slot => [normalizeUsername(slot.username), slot.slotId!] as const)
+          .filter(([username]) => username.length > 0),
+      );
+      const previousBySlotId = new Map(
+        previousSlots
+          .filter(slot => typeof slot?.slotId === "string" && slot.slotId.length >= 8)
+          .map(slot => [slot.slotId!, slot.slotId!] as const),
+      );
       const input = {
         ...parsed,
-        slots: parsed.slots.map(slot => ({ ...slot, slotId: slot.slotId ?? crypto.randomUUID() })),
+        slots: parsed.slots.map(slot => {
+          // Prefer the currently persisted identity when the incoming save
+          // contains the same slot. This protects imported saves and stale
+          // account-panel writes from replacing a slotId and orphaning its
+          // TrustScore assignment/countdown.
+          const incomingSlotId = typeof slot.slotId === "string" && slot.slotId.length >= 8
+            ? slot.slotId
+            : undefined;
+          const slotId = (incomingSlotId && previousBySlotId.get(incomingSlotId))
+            ?? previousByUsername.get(normalizeUsername(slot.username))
+            ?? incomingSlotId
+            ?? crypto.randomUUID();
+          return { ...slot, slotId };
+        }),
       };
       // Previously forced a minimum of SLOT_COUNT (5) slots, padding with
       // empty entries.  That caused deleted slots to silently reappear every
       // time the panel reloaded — the save wrote 2 slots, the pad restored
       // 5, and the UI loaded 5 again.  Now we store exactly what the UI
       // sent so the displayed count always matches what was saved.
-      const serial = p(req, "serial");
-      const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], account: input };
       saveInstanceConfigs(cfg);
       await Promise.all(input.slots.map(slot => persistSlotPersonalityToDatabase(serial, slot)));
@@ -3997,48 +4027,55 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // the separate DELETE request finishes. Purge every slot-owned record
       // whose stable identity is no longer present, so a replacement slot
       // cannot inherit the deleted account's HST toggle/settings or TrustScore.
-      const liveAutomationKeys = new Set(
-        input.slots.map(slot => `${serial}:${slot.slotId}`),
-      );
-      const savedAutomation = cfg[serial]?.slotAutomation ?? {};
-      const nextAutomation = Object.fromEntries(
-        Object.entries(savedAutomation).filter(([key]) =>
-          liveAutomationKeys.has(key) ||
-          (!/^\d+$/.test(key) && !key.startsWith(`${serial}:`)),
-        ),
-      );
-      cfg[serial] = { ...cfg[serial], slotAutomation: nextAutomation };
-      saveInstanceConfigs(cfg);
-      const allSettings = await storage.getGlobalSettings();
-      const liveTrustPrefixes = new Set(
-        input.slots.flatMap(slot => [
-          `mobile_trust_score_${serial}_${slot.slotId}`,
-          `mobile_trust_score_timer_${serial}_${slot.slotId}`,
-        ]),
-      );
-      await Promise.all(
-        Object.keys(allSettings)
-          .filter(key =>
-            key.startsWith(`mobile_trust_score_${serial}_`) &&
-            !liveTrustPrefixes.has(key),
-          )
-          .map(key => storage.deleteGlobalSetting(key)),
-      );
-      const livePersonalityKeys = new Set(
-        input.slots.flatMap(slot => slot.slotId ? [
-          slotPersonalityKey(serial, slot.slotId),
-          slotPersonalityOverridesKey(serial, slot.slotId),
-        ] : []),
-      );
-      await Promise.all(
-        Object.keys(allSettings)
-          .filter(key =>
-            (key.startsWith(`mobile_slot_personality_${serial}_`) ||
-             key.startsWith(`mobile_slot_personality_overrides_${serial}_`)) &&
-            !livePersonalityKeys.has(key),
-          )
-          .map(key => storage.deleteGlobalSetting(key)),
-      );
+      if (!preserveExistingSlotState) {
+        const liveAutomationKeys = new Set(
+          input.slots.map(slot => `${serial}:${slot.slotId}`),
+        );
+        const savedAutomation = cfg[serial]?.slotAutomation ?? {};
+        const nextAutomation = Object.fromEntries(
+          Object.entries(savedAutomation).filter(([key]) =>
+            liveAutomationKeys.has(key) ||
+            (!/^\d+$/.test(key) && !key.startsWith(`${serial}:`)),
+          ),
+        );
+        cfg[serial] = { ...cfg[serial], slotAutomation: nextAutomation };
+        saveInstanceConfigs(cfg);
+        const allSettings = await storage.getGlobalSettings();
+        const liveTrustPrefixes = new Set(
+          input.slots.flatMap(slot => [
+            `mobile_trust_score_${serial}_${slot.slotId}`,
+            `mobile_trust_score_timer_${serial}_${slot.slotId}`,
+          ]),
+        );
+        await Promise.all(
+          Object.keys(allSettings)
+            .filter(key =>
+              key.startsWith(`mobile_trust_score_${serial}_`) &&
+              !liveTrustPrefixes.has(key),
+            )
+            .map(key => storage.deleteGlobalSetting(key)),
+        );
+        const livePersonalityKeys = new Set(
+          input.slots.flatMap(slot => slot.slotId ? [
+            slotPersonalityKey(serial, slot.slotId),
+            slotPersonalityOverridesKey(serial, slot.slotId),
+          ] : []),
+        );
+        await Promise.all(
+          Object.keys(allSettings)
+            .filter(key =>
+              (key.startsWith(`mobile_slot_personality_${serial}_`) ||
+               key.startsWith(`mobile_slot_personality_overrides_${serial}_`)) &&
+              !livePersonalityKeys.has(key),
+            )
+            .map(key => storage.deleteGlobalSetting(key)),
+        );
+      } else {
+        logger.info(
+          { serial, preservedSlotIds: input.slots.map(slot => slot.slotId) },
+          "[mobile-account] import save preserved existing slot-owned state",
+        );
+      }
       res.json({ ok: true, account: input });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save the account" }); }
   });

@@ -546,7 +546,7 @@ export function BulkImportTabContent() {
     sourceRows: ImportParsedRow[] = rows,
   ) => {
     // Load current slots, merge new ones in (skip duplicates by username), save back
-    let existingSlots: Array<{ username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string }> = [];
+    let existingSlots: Array<{ slotId?: string; username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string }> = [];
     try {
       const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account`);
       if (r.ok) {
@@ -579,7 +579,11 @@ export function BulkImportTabContent() {
       const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slots: merged }),
+        // Importing a new account must not be treated as a destructive
+        // account-slot replacement. The existing slots are included in
+        // `merged`, but their TrustScore assignments and countdowns must stay
+        // untouched even if another settings view is saving concurrently.
+        body: JSON.stringify({ slots: merged, preserveExistingSlotState: true }),
       });
       if (!r.ok) throw new Error(await r.text());
       // Mark added/error based on whether each username made it in
