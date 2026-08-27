@@ -46,6 +46,21 @@ export async function runViewReelsLoop(serial: string, params: {
   const { w, h } = getScreenSize(serial);
   onLog?.(`Reels loop: device resolution ${w}×${h}`);
 
+  // Establish Instagram Home before looking for the Reels tab. View Reels can
+  // follow another tool that leaves Instagram on a profile, share sheet, or
+  // another tab; searching for Reels from that state is unreliable. Home is
+  // located only by the live reference-image detector — never by a guessed
+  // coordinate or accessibility fallback.
+  const startupHome = await android.findHomeTab(serial).catch(() => null);
+  if (!startupHome) {
+    onLog?.("View Reels: Instagram Home tab was not visually detected at startup — skipping tool");
+    logger.warn({ serial }, "[view-reels] startup Home tab not found");
+    return { reelsViewed: 0, likes: 0, sharesFeed: 0, sharesDm: 0, saves: 0 };
+  }
+  await android.tap(serial, startupHome.x, startupHome.y, "manual");
+  onLog?.(`View Reels: tapped Home tab at startup (${startupHome.x},${startupHome.y})`);
+  await sleepOrAbort(serial, 700);
+
   const reelsTab = await android.findReelsTab(serial, onLog).catch(() => null);
   if (!reelsTab) {
     onLog?.("Reels tab not found — a11y miss and positional fallback found < 2 bottom-nav nodes; skipping View Reels");
