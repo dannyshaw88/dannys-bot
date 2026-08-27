@@ -7690,7 +7690,10 @@ type HomeReference = {
 };
 const homeReferenceCache = new Map<string, HomeReference>();
 
-async function findHomeTabInternal(serial: string): Promise<{ x: number; y: number } | null> {
+async function findHomeTabInternal(
+  serial: string,
+  referenceNames: string[] = ["home_1787131461428.jpg", "home-icon-reference.svg"],
+): Promise<{ x: number; y: number } | null> {
   const screen = await _captureScreenPixels(serial);
   if (!screen || screen.channels < 3) {
     logger.warn({ serial }, "[home-tab] screenshot capture/decode failed");
@@ -7704,7 +7707,6 @@ async function findHomeTabInternal(serial: string): Promise<{ x: number; y: numb
       path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "home-icon-refs"),
     ];
     let reference: HomeReference | null = null;
-    const referenceNames = ["home_1787131461428.jpg", "home-icon-reference.svg"];
     for (const root of referenceRoots) {
       for (const referenceName of referenceNames) {
         try {
@@ -9415,6 +9417,32 @@ export async function findHomeTab(serial: string): Promise<{ x: number; y: numbe
   } finally {
     if (homeTabMatchesInFlight.get(serial) === current) {
       homeTabMatchesInFlight.delete(serial);
+    }
+  }
+}
+
+/**
+ * Reels-only Home-tab detector.
+ *
+ * Reels can render the bottom navigation glyph with a different crop/stroke
+ * from the Home icon used by the other mobile tools. Keep this reference
+ * isolated so changing the Reels viewer exit check cannot alter Feed, Stories,
+ * Explore, Make a Post, or profile cleanup.
+ */
+const reelsHomeTabMatchesInFlight = new Map<string, Promise<{ x: number; y: number } | null>>();
+const REELS_HOME_REFERENCE_NAMES = ["reelshome_1787817853997.jpg"];
+
+export async function findReelsHomeTab(serial: string): Promise<{ x: number; y: number } | null> {
+  const existing = reelsHomeTabMatchesInFlight.get(serial);
+  if (existing) return existing;
+
+  const current = findHomeTabInternal(serial, REELS_HOME_REFERENCE_NAMES);
+  reelsHomeTabMatchesInFlight.set(serial, current);
+  try {
+    return await current;
+  } finally {
+    if (reelsHomeTabMatchesInFlight.get(serial) === current) {
+      reelsHomeTabMatchesInFlight.delete(serial);
     }
   }
 }

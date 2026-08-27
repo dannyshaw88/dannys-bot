@@ -131,9 +131,11 @@ for (const name of searchReferenceNames) {
 
 // Ship the visual Instagram Home-tab icon reference with the packaged API.
 const homeIconReferenceName = "home_1787131461428.jpg";
+const reelsHomeIconReferenceName = "reelshome_1787817853997.jpg";
 const homeIconReferenceTarget = path.join(dist, "server", "home-icon-refs");
 await mkdir(homeIconReferenceTarget, { recursive: true });
 const homeIconSource = path.join(searchReferenceSource, homeIconReferenceName);
+const reelsHomeIconSource = path.join(searchReferenceSource, reelsHomeIconReferenceName);
 const bundledHomeIconSource = path.join(__dirname, "assets", "home-icon-reference.svg");
 if (existsSync(homeIconSource)) {
   await cp(homeIconSource, path.join(homeIconReferenceTarget, homeIconReferenceName));
@@ -142,6 +144,10 @@ if (existsSync(homeIconSource)) {
 } else {
   throw new Error(`Required Home icon reference is missing: ${homeIconSource}`);
 }
+if (!existsSync(reelsHomeIconSource)) {
+  throw new Error(`Required Reels Home icon reference is missing: ${reelsHomeIconSource}`);
+}
+await cp(reelsHomeIconSource, path.join(homeIconReferenceTarget, reelsHomeIconReferenceName));
 if (
   !existsSync(path.join(homeIconReferenceTarget, homeIconReferenceName)) &&
   !existsSync(path.join(homeIconReferenceTarget, "home-icon-reference.svg"))
