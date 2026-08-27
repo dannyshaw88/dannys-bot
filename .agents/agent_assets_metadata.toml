@@ -7,6 +7,7 @@ uri = "file://screenshots/dashboard-metric-alignment-test.jpg"
 type = "image"
 title = "Dashboard metric alignment test"
 description = "Temporary dashboard test showing 25 likes done, 3 follows done, and 5 reels watched centered in the top activity ticker."
+logical_id = "417a3df5-d29c-492f-b7c3-89a7987b1351"
 
 [[outputs]]
 id = "Yi2iute4SEYkG68PSkJRf"
@@ -14,6 +15,7 @@ uri = "file://attached_assets/alterego_fitness_hks_redacted.eqx"
 type = "unspecified"
 title = "Redacted EQX export"
 description = "Valid EQX export with the account username preserved and credential, 2FA, token, cookie, and session fields redacted."
+logical_id = "144aa788-2e96-4502-8c0b-c0a9d0bac7f8"
 
 [[outputs]]
 id = "EVTNAHNDGP6BVwaTh1FOi"
@@ -21,6 +23,7 @@ uri = "file://attached_assets/alterego_fitness_hks_decoded.json"
 type = "unspecified"
 title = "Decoded EQX account export"
 description = "Original EQX export decrypted with the project’s built-in decoder and saved as local JSON. Contains the original account fields and values."
+logical_id = "25cba9e2-4a38-4dc6-aad8-45c65b77677a"
 
 [[outputs]]
 id = "Fb-haYAB8he9qlCWxj3eJ"
@@ -28,6 +31,7 @@ uri = "file://attached_assets/AlterEgo_Fitness_IQQ_1786468586556_decoded.json"
 type = "unspecified"
 title = "Decoded IQQ EQX export"
 description = "Full locally decoded JSON export from the uploaded IQQ EQX file."
+logical_id = "52821baf-9675-420a-84d7-a14fce4a3a62"
 
 [[outputs]]
 id = "GuScSigG1_fDoc_JtaEI0"
@@ -35,6 +39,7 @@ uri = "file://attached_assets/AlterEgo_Fitness_WRE_1786468586557_decoded.json"
 type = "unspecified"
 title = "Decoded WRE EQX export"
 description = "Full locally decoded JSON export from the uploaded WRE EQX file."
+logical_id = "7bc51783-b4b8-41f9-8e29-38284a2d6835"
 
 [[outputs]]
 id = "RZG0ZPgK1_k9jKonI0zBl"
@@ -42,6 +47,7 @@ uri = "file://attached_assets/AlterEgo_Fitness_WRE_imported-account.json"
 type = "unspecified"
 title = "AlterEgo Fitness WRE — Corrected Full Export"
 description = "Corrected export: email is cdgfswetuobf@outlook.com, email password is preserved as the literal [] value, and the unknown Instagram password is left null."
+logical_id = "f0d7caf3-d8f9-47b7-91a4-57bba2530b46"
 
 [[outputs]]
 id = "_z86nWfhRgPGSPL8QzX9I"
@@ -49,3 +55,18 @@ uri = "file://attached_assets/spy-icon-options.html"
 type = "text"
 title = "Ghost Browser icon options"
 description = "Visual comparison sheet for five spy-themed sidebar icon directions."
+logical_id = "92f01516-1acd-4197-9512-4c63c71899d5"
+
+[[outputs]]
+id = "xleXsZnfLpD3HoARbXqS3"
+uri = "file://attached_assets/home_1787131461428.jpg"
+type = "image"
+title = "Home icon reference used by Reels"
+description = "The exact 32×32 Home icon reference image currently used by the Reels Home-tab detector."
+logical_id = "c6eb61df-8147-4d6f-a892-5e6d001211aa"
+content_hash = "sha256:1f059d1c58231ae04d7a5a32168ae533db049d1019b71e8cc0be86fa139148ab"
+size = 12816
+mtime_ms = 1787563072354
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/c6eb61df-8147-4d6f-a892-5e6d001211aa/06adba0f-d574-40c2-8a5e-b76835c04a08"
+storage_version_token = "1787817770705732"
+content_type = "image/jpeg"
