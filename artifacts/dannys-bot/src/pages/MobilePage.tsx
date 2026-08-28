@@ -2943,6 +2943,10 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   // hidden by the black canvas background whenever the phone screen is off
   // (locked between automation cycles, awaiting connection, etc.).
   const [canvasStreaming, setCanvasStreaming] = useState(false);
+  const handleCanvasStatus = useCallback((status: "connecting" | "waiting" | "live" | "asleep" | "error") => {
+    const streaming = status === "live";
+    setCanvasStreaming(previous => previous === streaming ? previous : streaming);
+  }, []);
   // Reset to false the moment we stop asking for a live mirror so the
   // wallpaper reappears immediately rather than waiting for the next status
   // transition inside LiveCanvas (which is unmounted when live turns off).
@@ -3297,7 +3301,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
             logMarkers={logMarkers}
             calibrationPosition={calibrationPosition}
             onExpectedTap={onExpectedTap}
-            onStatusChange={s => setCanvasStreaming(s === "live")}
+            onStatusChange={handleCanvasStatus}
           />
         )}
         {isReady && phone && !live && (
@@ -11526,6 +11530,13 @@ export function MobilePage() {
   const [error,   setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [phoneDims, setPhoneDims] = useState<{ w: number; h: number } | null>(null);
+  const handlePhoneDimensions = useCallback((w: number, h: number) => {
+    setPhoneDims(previous => (
+      previous && previous.w === w && previous.h === h
+        ? previous
+        : { w, h }
+    ));
+  }, []);
   // Measured size of the pane the phone shell lives in — feeds PhoneSlot's
   // exact-fit sizing (see PhoneSlot's "Exact shell sizing" block). Must be
   // the real available box, not derived from CSS aspect-ratio math, or the
@@ -11544,7 +11555,11 @@ export function MobilePage() {
     if (!paneEl) return;
     const measure = () => {
       const r = paneEl.getBoundingClientRect();
-      setPaneSize({ w: r.width, h: r.height });
+      setPaneSize(previous => (
+        previous && previous.w === r.width && previous.h === r.height
+          ? previous
+          : { w: r.width, h: r.height }
+      ));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -11927,7 +11942,7 @@ export function MobilePage() {
                   phone={phone}
                   idx={i}
                   onLog={addLog}
-                  onDimensions={(w, h) => setPhoneDims({ w, h })}
+                  onDimensions={handlePhoneDimensions}
                   phoneDims={phoneDims}
                   paneSize={paneSize}
                   // Mirror activates under exactly three conditions — nothing else:
