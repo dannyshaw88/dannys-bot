@@ -744,6 +744,15 @@ export class DatabaseStorage implements IStorage {
       if (row.date === today) daily[key] = (daily[key] ?? 0) + row.count;
       else if (row.date === 'lifetime') lifetime[key] = (lifetime[key] ?? 0) + row.count;
     }
+    // Older mobile cycles persisted completed Reels under `reels` but did not
+    // populate the Farm table's `reel_scrolls` key. Preserve that history in
+    // the read model until new cycles write the dedicated key.
+    if (daily.reel_scrolls === undefined && daily.reels !== undefined) {
+      daily.reel_scrolls = daily.reels;
+    }
+    if (lifetime.reel_scrolls === undefined && lifetime.reels !== undefined) {
+      lifetime.reel_scrolls = lifetime.reels;
+    }
     return { daily, lifetime };
   }
 

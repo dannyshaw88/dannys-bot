@@ -6477,7 +6477,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             exploreScrolled: exploreScrolled - preSwitchStatsStart.exploreScrolled,
           };
           if (preSwitchLastUsername) {
-            storage.incrementMobileStats(preSwitchLastUsername, {
+            await storage.incrementMobileStats(preSwitchLastUsername, {
               likes: Math.max(0, preSwitchStatsDelta.likes),
               follows: Math.max(0, preSwitchStatsDelta.follows),
               stories: Math.max(0, preSwitchStatsDelta.stories),
@@ -6486,6 +6486,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               feedShares: Math.max(0, preSwitchStatsDelta.feedShares),
               saves: Math.max(0, preSwitchStatsDelta.saves),
               cycles: 0,
+              // The Reels operation counts each completed reel/view as one
+              // reel-scroll metric for the Phone Farm performance table.
+              reelScrolls: Math.max(0, preSwitchStatsDelta.reels),
               feedScrolls: Math.max(0, preSwitchStatsDelta.feedScrolled),
               exploreScrolls: Math.max(0, preSwitchStatsDelta.exploreScrolled),
             }).catch(() => {});
@@ -7505,7 +7508,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         feedScrolled > 0 ||
         exploreScrolled > 0;
       if (slotUsername && hasCycleStatistics) {
-        storage.incrementMobileStats(slotUsername, {
+        await storage.incrementMobileStats(slotUsername, {
           likes: likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes,
           follows: followedCount,
           stories: storiesWatched,
@@ -7516,6 +7519,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           feedShares: sharesFeed + sharesDm,
           saves,
           cycles: 1,
+          // The Reels operation increments reelsViewed once per completed
+          // reel; persist the same count for the Farm table's Reel column.
+          reelScrolls: reelsViewed,
           feedScrolls: feedScrolled,
           exploreScrolls: exploreScrolled,
         }).catch((e: any) => logger.warn({ err: e }, "[mobile-cycle] stat persist error"));
@@ -7636,6 +7642,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             feedShares: sharesFeed + sharesDm,
             saves,
             cycles: 1,
+            reelScrolls: reelsViewed,
             feedScrolls: feedScrolled,
             exploreScrolls: exploreScrolled,
           }).catch((statError: any) => {
