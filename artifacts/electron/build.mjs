@@ -187,10 +187,11 @@ await cp(
 const saveIconReferenceName = "save_1787133131184.jpg";
 const saveIconReferenceTarget = path.join(dist, "server", "save-icon-refs");
 await mkdir(saveIconReferenceTarget, { recursive: true });
-const saveIconSource = path.join(searchReferenceSource, saveIconReferenceName);
-if (existsSync(saveIconSource)) {
-  await cp(saveIconSource, path.join(saveIconReferenceTarget, saveIconReferenceName));
+const saveIconSource = path.join(__dirname, "assets", saveIconReferenceName);
+if (!existsSync(saveIconSource)) {
+  throw new Error(`Required Save icon reference is missing: ${saveIconSource}`);
 }
+await cp(saveIconSource, path.join(saveIconReferenceTarget, saveIconReferenceName));
 
 // 3. Copy built frontend
 const frontendSrc = path.join(__dirname, "../dannys-bot/dist/public");

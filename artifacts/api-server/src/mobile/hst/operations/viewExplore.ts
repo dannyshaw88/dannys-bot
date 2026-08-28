@@ -165,7 +165,9 @@ export async function runViewExplorePage(serial: string, params: {
           await sleepOrAbort(serial, 600); // settle before scanning action bar
 
           onLog?.(`View Explore ${i + 1}/${scrollCount}: scanning action bar…`);
-          let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
+          let icons = await android.findFeedActionIcons(serial, onLog, {
+            allowUnconfirmedLikeAnchor: true,
+          }).catch(() => null);
 
           // ── Explore-only: Reels column fallback (null path) ─────────────
           // findFeedActionIcons looks for Like/Unlike near screen centre-x
@@ -213,7 +215,9 @@ export async function runViewExplorePage(serial: string, params: {
             logger.info({ serial }, "[view-explore] opened post has no action bar");
           } else {
             // ── Like ──────────────────────────────────────────────────────
-            if (wantLike) {
+            if (wantLike && !icons.likeConfirmed) {
+              onLog?.(`View Explore ${i + 1}/${scrollCount}: like skipped — visual Like target was not confirmed`);
+            } else if (wantLike) {
               if (icons.alreadyLiked) {
                 onLog?.(`View Explore ${i + 1}/${scrollCount}: already liked — skipping like`);
               } else {

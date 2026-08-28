@@ -3741,6 +3741,8 @@ function _findCentermostLikeNode(xml: string, screenH: number): { x: number; y: 
 
 export interface FeedActionIcons {
   like: { x: number; y: number };
+  /** True only when Like was located by the visual heart matcher. */
+  likeConfirmed?: boolean;
   comment: { x: number; y: number } | null;
   shareFeed: { x: number; y: number } | null; // repost / share-to-feed (double-arrow icon)
   shareDm: { x: number; y: number } | null;   // send / share-via-DM (paper-plane icon)
@@ -3772,6 +3774,12 @@ export interface FeedActionScanOptions {
   strictViewFeed?: boolean;
   /** Reuse a caller's complete live dump when it already has one. */
   uiXml?: string;
+  /**
+   * When true, retain a live accessibility Like node as a row anchor if the
+   * visual Like matcher fails. Callers may use this for independently
+   * confirmed share/save controls, but must not tap the unconfirmed Like.
+   */
+  allowUnconfirmedLikeAnchor?: boolean;
 }
 
 function _isSponsoredViewFeedXml(xml: string): boolean {
@@ -3880,12 +3888,26 @@ export async function findFeedActionIcons(
     }
   }
   const likeScanStartedAt = Date.now();
-  const like = await findFeedLikeIconByPixels(serial, screenH / 2, onLog, "feed-row", visualSearchRange);
+  const visualLike = await findFeedLikeIconByPixels(serial, screenH / 2, onLog, "feed-row", visualSearchRange);
   onLog?.(`[feed-icons] Like visual scan completed in ${Date.now() - likeScanStartedAt}ms`);
+  const likeConfirmed = Boolean(visualLike);
+  let like = visualLike;
   const alreadyLiked = false;
   if (!like) {
-    onLog?.("[feed-icons] Like icon visual match not found — refusing every non-visual fallback");
-    return null;
+    if (!options?.allowUnconfirmedLikeAnchor) {
+      onLog?.("[feed-icons] Like icon visual match not found — refusing every non-visual fallback");
+      return null;
+    }
+    // The accessibility Like node is used only to establish the current
+    // action-row Y coordinate for independently confirmed Share/Save scans.
+    // It is never returned as a safe Like target to callers that did not
+    // explicitly opt into this non-like action path.
+    like = _findCentermostLikeNode(xml, screenH);
+    if (!like) {
+      onLog?.("[feed-icons] Like visual match and live accessibility row anchor both unavailable");
+      return null;
+    }
+    onLog?.("[feed-icons] Like visual match unavailable — retaining live Like node only as a non-like action-row anchor");
   }
   const rowTolerance = 20;
   // Keep the far-right bookmark slot out of the unlabeled share-icon pool.
@@ -4243,7 +4265,7 @@ export async function findFeedActionIcons(
     }
   }
 
-  return { like, comment, shareFeed, shareDm, save, alreadyLiked, isVideoPost, hasInteractiveMediaOverlay, mediaBounds };
+  return { like, likeConfirmed, comment, shareFeed, shareDm, save, alreadyLiked, isVideoPost, hasInteractiveMediaOverlay, mediaBounds };
 }
 
 export interface ReelActionIcons {
@@ -6255,7 +6277,15 @@ async function findSaveIconByPixels(
   try {
     const referenceRoots = [
       path.resolve(process.cwd(), "attached_assets"),
+      // The development API workflow runs with artifacts/api-server as its
+      // cwd, while uploaded references live at the workspace root.
+      path.resolve(process.cwd(), "../../attached_assets"),
+      path.resolve(__dirname, "../../../attached_assets"),
+      // The Electron build places this reference beside the bundled server.
+      path.resolve(__dirname, "../../electron/assets"),
       path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "save-icon-refs"),
+      path.resolve(__dirname, "save-icon-refs"),
+      path.resolve(__dirname, "../save-icon-refs"),
     ];
     let reference: { data: Buffer; width: number; height: number } | null = null;
     for (const root of referenceRoots) {

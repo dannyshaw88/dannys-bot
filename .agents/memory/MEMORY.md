@@ -136,3 +136,4 @@
 - [Jarvee import session persistence](jarvee-import-session-persistence.md) — retain parsed details across Settings tabs, but never store raw exports or extracted secrets in browser storage
 - [ADB device-loss race handling](adb-device-loss-race.md) — reuse successful screen dimensions and classify mid-cycle ADB disappearance explicitly, never fall back to guessed gesture coordinates
 - [Mobile metric write parity](mobile-metric-write-parity.md) — every new HST counter must cover normal, pre-switch, and aborted writes, with legacy read aliases when history used another key
+- [Feed action detector independence](feed-action-detector-independence.md) — Like visual failure must not suppress independently validated Share/DM/Save; bundle references in both dev and packaged roots

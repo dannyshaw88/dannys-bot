@@ -174,6 +174,7 @@ export async function runCheckFeedLoop(serial: string, params: {
     };
     type ViewFeedScan = {
       like: { x: number; y: number };
+      likeConfirmed: boolean;
       alreadyLiked: boolean;
       comment: { x: number; y: number } | null;
       shareFeed: { x: number; y: number } | null;
@@ -222,13 +223,14 @@ export async function runCheckFeedLoop(serial: string, params: {
       // matcher also performs the strict sponsored-card check.
       const visualIcons = await android.findFeedActionIcons(serial, onLog, {
         strictViewFeed: true,
+        allowUnconfirmedLikeAnchor: true,
         // Reuse this scan's complete XML. findFeedActionIcons still captures
         // a fresh screenshot for the visual Like reference, but must not pay
         // for a second UIAutomator dump of the same post.
         uiXml: xml,
       }).catch(() => null);
       if (!visualIcons) {
-        onLog?.("View Feed visual scan: Like reference did not identify a safe Like target — skipping actions");
+        onLog?.("View Feed action scan: no usable live action row — skipping actions");
         // View Feed diagnostic only: preserve the raw node attributes that
         // explain a failed action-bar match. This is especially important for
         // carousels, whose media hierarchy differs from single-photo posts.
@@ -259,7 +261,7 @@ export async function runCheckFeedLoop(serial: string, params: {
         y1: visualIcons.like.y - 16,
         x2: visualIcons.like.x + 16,
         y2: visualIcons.like.y + 16,
-        rid: "visual-like-reference",
+        rid: visualIcons.likeConfirmed ? "visual-like-reference" : "a11y-like-row-anchor",
         desc: "",
         text: "",
         cls: "android.widget.ImageView",
@@ -413,6 +415,7 @@ export async function runCheckFeedLoop(serial: string, params: {
 
       return {
         like: pos(like),
+        likeConfirmed: visualIcons.likeConfirmed ?? false,
         alreadyLiked: /^unlike$/i.test(like.desc),
         comment, shareFeed, shareDm,
         save: saveNode ? pos(saveNode) : null,
@@ -549,6 +552,9 @@ export async function runCheckFeedLoop(serial: string, params: {
               if (!likeScan) {
                 likeFailures++;
                 onLog?.(`View Feed ${i + 1}/${count}: like skipped — current Like node was not confirmed`);
+              } else if (!likeScan.likeConfirmed) {
+                likeFailures++;
+                onLog?.(`View Feed ${i + 1}/${count}: like skipped — visual Like target was not confirmed (share/save row may still be usable)`);
               } else if (likeScan.alreadyLiked) {
                 onLog?.(`View Feed ${i + 1}/${count}: already liked — skipping like`);
               } else {
