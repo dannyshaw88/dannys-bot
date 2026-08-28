@@ -38,6 +38,16 @@ the device mirror and settings tree.
 slot-status map, especially when the parent callback also controls live mirror
 state.
 
+Context hooks that expose callbacks alongside store-derived data must depend on
+the stable callback members, not the whole context object.
+
+**Why:** Store updates commonly recreate the provider value and can otherwise
+change callbacks on every log/status update, retriggering effects that write
+back into the same store.
+
+**How to apply:** Destructure stable command functions from the context and use
+those functions in callback dependency arrays; keep store selectors separate.
+
 Reels watch duration is personality-adjusted at the shared effective-settings
 layer, so the visible editor and automation payload receive the same slot-specific range.
 

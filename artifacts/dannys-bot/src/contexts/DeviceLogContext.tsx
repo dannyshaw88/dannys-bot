@@ -157,19 +157,20 @@ export function DeviceLogProvider({ children }: { children: ReactNode }) {
  */
 export function useDeviceLog(serial: string | null | undefined) {
   const ctx = useContext(DeviceLogContext);
-  const logs = serial ? ctx.getSerialLogs(serial) : { logLines: [], actionLogLines: [] };
+  const { getSerialLogs, addClientLog, clearLogLines: clearSerialLogLines, clearActionLogLines: clearSerialActionLogLines } = ctx;
+  const logs = serial ? getSerialLogs(serial) : { logLines: [], actionLogLines: [] };
 
   const addLog = useCallback(
-    (msg: string) => { if (serial) ctx.addClientLog(serial, msg); },
-    [ctx, serial],
+    (msg: string) => { if (serial) addClientLog(serial, msg); },
+    [addClientLog, serial],
   );
   const clearLogLines = useCallback(
-    () => { if (serial) ctx.clearLogLines(serial); },
-    [ctx, serial],
+    () => { if (serial) clearSerialLogLines(serial); },
+    [clearSerialLogLines, serial],
   );
   const clearActionLogLines = useCallback(
-    () => { if (serial) ctx.clearActionLogLines(serial); },
-    [ctx, serial],
+    () => { if (serial) clearSerialActionLogLines(serial); },
+    [clearSerialActionLogLines, serial],
   );
 
   return {
