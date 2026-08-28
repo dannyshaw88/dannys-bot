@@ -26,6 +26,18 @@ runtime.
 **How to apply:** Track mounted runtime keys in shared HST state and let the
 app-level listener start only slots that have no mounted runtime.
 
+Lifted automation-status snapshots must be equality-preserving before they
+update a parent-owned map; repeated identical child reports should return the
+existing map reference.
+
+**Why:** A child status effect can legitimately run during route hydration, but
+allocating a new parent map for an unchanged snapshot amplifies rerenders across
+the device mirror and settings tree.
+
+**How to apply:** Compare the relevant primitive fields before spreading a
+slot-status map, especially when the parent callback also controls live mirror
+state.
+
 Reels watch duration is personality-adjusted at the shared effective-settings
 layer, so the visible editor and automation payload receive the same slot-specific range.
 

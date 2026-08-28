@@ -8877,7 +8877,18 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         ? Math.round((performance.now() - navStarted) * 10) / 10
         : null,
     });
-    setSlotAutomationStates(prev => ({ ...prev, [slotIdx]: state }));
+    setSlotAutomationStates(prev => {
+      const previous = prev[slotIdx];
+      if (
+        previous &&
+        previous.enabled === state.enabled &&
+        previous.running === state.running &&
+        previous.nextRunAt === state.nextRunAt
+      ) {
+        return prev;
+      }
+      return { ...prev, [slotIdx]: state };
+    });
   }, [phone?.serial]);
   const { config: collisionConfig, requestSlot, releaseSlot, cancelQueuedSlot, resetCollision } = useCollisionPreventer(phone?.serial ?? null);
 
@@ -11679,7 +11690,11 @@ export function MobilePage() {
   useEffect(() => {
     if (!targetSerial) return;
     if (!autoPowerOn) return;
-    setLiveOn(previous => ({ ...previous, [targetSerial]: true }));
+    setLiveOn(previous => (
+      previous[targetSerial]
+        ? previous
+        : { ...previous, [targetSerial]: true }
+    ));
     if (sessionStorage.getItem("mobile_autopower_serial") === targetSerial) {
       sessionStorage.removeItem("mobile_autopower_serial");
     }

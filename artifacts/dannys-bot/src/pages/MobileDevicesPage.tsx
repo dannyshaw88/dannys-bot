@@ -12,7 +12,7 @@
  * reassigns slots because the serial travels with the hardware, not the wire.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
@@ -1179,8 +1179,9 @@ export function MobileDevicesPage() {
     return () => clearInterval(id);
   }, [refreshCurrentTools]);
 
-  const onlineSerials = new Set(
-    usbPhones.filter(p => p.state === "device").map(p => p.serial)
+  const onlineSerials = useMemo(
+    () => new Set(usbPhones.filter(p => p.state === "device").map(p => p.serial)),
+    [usbPhones],
   );
 
   const openDeviceMirror = useCallback(async (device: FarmDevice) => {
