@@ -500,7 +500,7 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
         // fill the full bar width), briefly opening the keyboard and
         // disrupting the story before we back out.
         //
-        // Fix: run findStoryActionIcons() first.  When sharing is disabled
+        // Fix: resolve the live toolbar share node first. When sharing is disabled
         // only the heart icon is visible — the scan returns 0 or 1 cluster.
         // When sharing is enabled the heart AND paper-plane both appear — the
         // scan returns ≥2 clusters, and the rightmost cluster IS the
@@ -522,28 +522,10 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
         // was REMOVED in v1.1.581 — it reliably returned the text-input field
         // centre (~60 % of screen width) rather than the paper-plane (~88–93 %),
         // burning the slide timer with three keyboard-opening retries.
-        let shareIconPos: { x: number; y: number } | null = null;
-        const a11yPos = await android.findStoryShareButtonViaA11y(serial, (msg) => onLog?.(msg)).catch(() => null);
-        if (a11yPos) {
-          shareIconPos = a11yPos;
-          onLog?.(`View Stories ${s + 1}: share button located via a11y at (${a11yPos.x},${a11yPos.y})`);
-        } else {
-          // Strategy 2: pixel scan.
-          const iconScan = await android.findStoryActionIcons(serial).catch(() => null);
-          const rawPos = (iconScan && iconScan.length >= 2) ? iconScan[iconScan.length - 1] : null;
-          onLog?.(`View Stories ${s + 1}: pixel scan — ${iconScan == null ? "screenshot unavailable" : `${iconScan.length} cluster(s) found`}${rawPos ? ` — rightmost at (${rawPos.x},${rawPos.y})` : " — <2 clusters (sharing disabled or scan miss)"}`);
-          // Sanity check: the paper-plane is always in the rightmost ~15–20 %
-          // of the screen.  The v1.1.580 threshold of 40 % was too permissive
-          // and would accept false content-cluster matches in the centre of the
-          // frame.  Raised to 65 % — anything left of that is not the paper-
-          // plane regardless of device resolution.
-          if (rawPos && rawPos.x > w * 0.65) {
-            shareIconPos = rawPos;
-          } else if (rawPos) {
-            onLog?.(`View Stories ${s + 1}: pixel scan result rejected — x=${rawPos.x} < 65% of w=${w}; false content match — skipping share`);
-            logger.warn({ serial, story: s + 1, rawX: rawPos.x, w }, "[view-stories] share pixel-scan rejected — x too far left");
-          }
-        }
+        const shareIconPos = await android.findStoryShareButtonViaA11y(
+          serial,
+          (msg: string) => onLog?.(msg),
+        ).catch(() => null);
 
         let opened = false;
         if (!shareIconPos) {
@@ -648,17 +630,9 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
               onLog?.(`View Stories ${s + 1}: shared via DM — sheet auto-dismissed (sent by recipient tap)`);
               await sleepOrAbort(serial, 150 + Math.floor(Math.random() * 4851));
             } else {
-              const _stFbX = Math.round(w * 0.50), _stFbY = Math.round(h * 0.982);
-              onLog?.(`View Stories ${s + 1}: Send button not found via a11y — tapping coordinate fallback (${_stFbX},${_stFbY})`);
-              await android.tap(serial, _stFbX, _stFbY);
-              await sleepOrAbort(serial, 300 + Math.floor(Math.random() * 4701));
-              if (!(await _stIsOpen())) {
-                onLog?.(`View Stories ${s + 1}: ✓ shared via DM — sent via coordinate fallback`);
-                await sleepOrAbort(serial, 200 + Math.floor(Math.random() * 4801));
-              } else {
-                await android.pressBack(serial);
-                await sleepOrAbort(serial, 200 + Math.floor(Math.random() * 4801));
-              }
+              onLog?.(`View Stories ${s + 1}: Send node not found via accessibility — closing without sending`);
+              await android.pressBack(serial);
+              await sleepOrAbort(serial, 200 + Math.floor(Math.random() * 4801));
             }
           }
           } // closes sheetSendBtn else

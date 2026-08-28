@@ -160,21 +160,6 @@ if (
   throw new Error(`Home icon reference was not copied to: ${homeIconReferenceTarget}`);
 }
 
-// Ship the visual Reels Like-heart reference with the packaged API.
-// The Reels detector intentionally refuses an unverified coordinate, so this
-// asset must be present in the Windows bundle rather than workspace-only.
-const likeIconReferenceName = "like-reference-reels.png";
-const likeIconReferenceTarget = path.join(dist, "server", "like-icon-refs");
-await mkdir(likeIconReferenceTarget, { recursive: true });
-const likeIconReferenceSource = path.join(__dirname, "assets", likeIconReferenceName);
-if (!existsSync(likeIconReferenceSource)) {
-  throw new Error(`Required Like icon reference is missing: ${likeIconReferenceSource}`);
-}
-await cp(
-  likeIconReferenceSource,
-  path.join(likeIconReferenceTarget, likeIconReferenceName),
-);
-
 // Ship the visual Instagram back-arrow reference with the packaged API.
 const backIconReferenceTarget = path.join(dist, "server", "back-icon-refs");
 await mkdir(backIconReferenceTarget, { recursive: true });
@@ -182,16 +167,6 @@ await cp(
   path.join(__dirname, "assets", "back-icon-reference.svg"),
   path.join(backIconReferenceTarget, "back-icon-reference.svg"),
 );
-
-// Ship the visual Instagram Save/bookmark reference with the packaged API.
-const saveIconReferenceName = "save_1787133131184.jpg";
-const saveIconReferenceTarget = path.join(dist, "server", "save-icon-refs");
-await mkdir(saveIconReferenceTarget, { recursive: true });
-const saveIconSource = path.join(__dirname, "assets", saveIconReferenceName);
-if (!existsSync(saveIconSource)) {
-  throw new Error(`Required Save icon reference is missing: ${saveIconSource}`);
-}
-await cp(saveIconSource, path.join(saveIconReferenceTarget, saveIconReferenceName));
 
 // 3. Copy built frontend
 const frontendSrc = path.join(__dirname, "../dannys-bot/dist/public");

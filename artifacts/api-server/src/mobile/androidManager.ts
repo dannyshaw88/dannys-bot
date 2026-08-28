@@ -3741,8 +3741,6 @@ function _findCentermostLikeNode(xml: string, screenH: number): { x: number; y: 
 
 export interface FeedActionIcons {
   like: { x: number; y: number };
-  /** True only when Like was located by the visual heart matcher. */
-  likeConfirmed?: boolean;
   comment: { x: number; y: number } | null;
   shareFeed: { x: number; y: number } | null; // repost / share-to-feed (double-arrow icon)
   shareDm: { x: number; y: number } | null;   // send / share-via-DM (paper-plane icon)
@@ -3751,35 +3749,12 @@ export interface FeedActionIcons {
    *  Callers must skip the like tap to avoid accidental unlike, but MUST still
    *  continue with ShareFeed/ShareDM actions — the icon row is fully present. */
   alreadyLiked?: boolean;
-  /** True when the post is a video/Reel in-feed. Callers must NOT double-tap
-   *  the media area on video posts (that opens the full-screen Reel player);
-   *  they must fall back to the heart-icon tap instead. */
-  isVideoPost?: boolean;
-  /** True when the media contains an interactive sticker/prompt overlay
-   * (question, poll, quiz, link CTA, etc.) that can intercept a double-tap. */
-  hasInteractiveMediaOverlay?: boolean;
-  /** Bounding box of the post's media area, when Instagram exposes a
-   *  carousel_media_group or media_group node above the action bar. Callers
-   *  use this to place the double-tap in the upper portion of the image,
-   *  staying away from sponsored-post CTA banners that appear at the bottom
-   *  of the media content. */
-  mediaBounds?: { x1: number; y1: number; x2: number; y2: number };
 }
 
-/**
- * View Feed-only safety options. Other tools keep the historical behaviour
- * unless they explicitly opt into this strict scan.
- */
 export interface FeedActionScanOptions {
   strictViewFeed?: boolean;
   /** Reuse a caller's complete live dump when it already has one. */
   uiXml?: string;
-  /**
-   * When true, retain a live accessibility Like node as a row anchor if the
-   * visual Like matcher fails. Callers may use this for independently
-   * confirmed share/save controls, but must not tap the unconfirmed Like.
-   */
-  allowUnconfirmedLikeAnchor?: boolean;
 }
 
 function _isSponsoredViewFeedXml(xml: string): boolean {
@@ -3803,6 +3778,65 @@ function _isSponsoredViewFeedXml(xml: string): boolean {
     }
   }
   return false;
+}
+
+type LiveActionNode = {
+  x: number;
+  y: number;
+  resourceId: string;
+  contentDesc: string;
+  text: string;
+};
+
+function _liveActionNodes(xml: string): LiveActionNode[] {
+  const nodes: LiveActionNode[] = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    if (x2 <= x1 || y2 <= y1) continue;
+    nodes.push({
+      x: Math.round((x1 + x2) / 2),
+      y: Math.round((y1 + y2) / 2),
+      resourceId: attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "",
+      contentDesc: attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "",
+      text: attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+    });
+  }
+  return nodes;
+}
+
+function _findUniqueLiveActionNode(
+  xml: string,
+  resourceIdSuffixes: string[],
+  contentDescriptions: string[],
+  onLog?: (message: string) => void,
+): { x: number; y: number } | null {
+  const nodes = _liveActionNodes(xml);
+  const byResource = nodes.filter(node =>
+    resourceIdSuffixes.some(suffix => node.resourceId === suffix || node.resourceId.endsWith(suffix)),
+  );
+  if (byResource.length > 1) {
+    onLog?.(`[live-action] ambiguous resource-id match (${byResource.length}) for ${resourceIdSuffixes.join(", ")}`);
+    return null;
+  }
+  if (byResource.length === 1) return { x: byResource[0].x, y: byResource[0].y };
+
+  const byDescription = nodes.filter(node =>
+    contentDescriptions.some(description => node.contentDesc.trim().toLowerCase() === description.toLowerCase()),
+  );
+  if (byDescription.length > 1) {
+    onLog?.(`[live-action] ambiguous content-desc match (${byDescription.length}) for ${contentDescriptions.join(", ")}`);
+    return null;
+  }
+  if (byDescription.length === 1) return { x: byDescription[0].x, y: byDescription[0].y };
+  return null;
 }
 
 /**
@@ -3857,415 +3891,41 @@ export async function findFeedActionIcons(
     return null;
   }
 
-  // Use the adb-queried screen dimensions, NOT _getScreenSize(xml). The XML-parsed
-  // fallback returns w=1600 (landscape desktop) / h=900 when the root bounds attribute
-  // is absent. Using the wrong width sets saveCutoffX = 1280 — well above the
-  // bookmark icon's real X (~950 px on 1080 px phone) so it leaks into rowNodes
-  // and breaks icon counting. Using the wrong height (h=900 → centerY=450) makes
-  // _findCentermostLikeNode pick a Like node near the screen top (y≈276 header
-  // area) instead of the real feed action bar (y≈1900), poisoning every icon coord.
-  // getScreenSize(serial) uses `adb shell wm size` and defaults to 1080×2400.
-  const { w, h: screenH } = getScreenSize(serial);
-  // The uploaded heart reference is the ONLY Like target source. Do not use
-  // content-desc, resource IDs, icon order, or fixed coordinates: those
-  // accessibility paths have resolved to the wrong control on other builds.
-  // A media group's bottom edge is used only to narrow the visual search
-  // window; the returned Like coordinate still comes exclusively from the
-  // heart image match. Ratio-based bounds keep this safe when screencap
-  // pixels and the display's logical UI coordinates have different sizes.
-  let visualSearchRange: VisualSearchRange | undefined;
-  if (options?.strictViewFeed) {
-    const mediaForSearch =
-      _findBoundsByResId(xml, ":id/carousel_media_group") ??
-      _findBoundsByResId(xml, ":id/media_group");
-    if (mediaForSearch && mediaForSearch.y2 > screenH * 0.10 && mediaForSearch.y2 < screenH * 0.90) {
-      const mediaBottomRatio = mediaForSearch.y2 / screenH;
-      visualSearchRange = {
-        yMin: Math.max(0, mediaBottomRatio - 0.04),
-        yMax: Math.min(0.96, mediaBottomRatio + 0.18),
-        normalized: true,
-      };
-    }
+  const liveLike = _findUniqueLiveActionNode(
+    xml,
+    [":id/row_feed_button_like"],
+    ["Like", "Unlike"],
+    onLog,
+  );
+  if (!liveLike) {
+    onLog?.("[feed-icons] live row_feed_button_like node not found or ambiguous — skipping post actions");
+    return null;
   }
-  const likeScanStartedAt = Date.now();
-  const visualLike = await findFeedLikeIconByPixels(serial, screenH / 2, onLog, "feed-row", visualSearchRange);
-  onLog?.(`[feed-icons] Like visual scan completed in ${Date.now() - likeScanStartedAt}ms`);
-  const likeConfirmed = Boolean(visualLike);
-  let like = visualLike;
-  const alreadyLiked = false;
-  if (!like) {
-    if (!options?.allowUnconfirmedLikeAnchor) {
-      onLog?.("[feed-icons] Like icon visual match not found — refusing every non-visual fallback");
-      return null;
-    }
-    // The accessibility Like node is used only to establish the current
-    // action-row Y coordinate for independently confirmed Share/Save scans.
-    // It is never returned as a safe Like target to callers that did not
-    // explicitly opt into this non-like action path.
-    like = _findCentermostLikeNode(xml, screenH);
-    if (!like) {
-      onLog?.("[feed-icons] Like visual match and live accessibility row anchor both unavailable");
-      return null;
-    }
-    onLog?.("[feed-icons] Like visual match unavailable — retaining live Like node only as a non-like action-row anchor");
-  }
-  const rowTolerance = 20;
-  // Keep the far-right bookmark slot out of the unlabeled share-icon pool.
-  // The bookmark itself is located only by the screenshot matcher below.
-  const saveCutoffX = Math.round(w * 0.95);
-  // Instagram's Comment/Repost/Send icons are small square glyphs (roughly
-  // the same width as the Like heart). A message/reply compose field (the
-  // quick-reaction bar Instagram shows under a Reel/repost card in-feed)
-  // is `clickable="true"` too and can land on the same row by coincidence,
-  // but it's much wider than a single icon — cap accepted width generously
-  // above the Like button's own width so real icons always pass while a
-  // full-width text field never does.
-  const maxIconWidth = Math.max(120, Math.round(w * 0.12));
+  const liveShareFeed = _findUniqueLiveActionNode(xml, [":id/reposts_ufi_icon"], ["Repost"], onLog);
+  const liveShareDm = _findUniqueLiveActionNode(xml, [":id/row_feed_button_share"], ["Send", "Direct", "Message"], onLog);
+  const liveSave = _findUniqueLiveActionNode(
+    xml,
+    [":id/row_feed_button_save"],
+    ["Add to Saved", "Remove from Saved"],
+    onLog,
+  );
+  const liveAlreadyLiked = _liveActionNodes(xml).some(node =>
+    (node.resourceId === "com.instagram.android:id/row_feed_button_like" ||
+      node.resourceId.endsWith(":id/row_feed_button_like")) &&
+    node.contentDesc.trim().toLowerCase() === "unlike",
+  );
+  onLog?.(
+    `[feed-icons] live nodes — like:(${liveLike.x},${liveLike.y}) ` +
+    `shareFeed:${liveShareFeed ? `(${liveShareFeed.x},${liveShareFeed.y})` : "null"} ` +
+    `shareDm:${liveShareDm ? `(${liveShareDm.x},${liveShareDm.y})` : "null"} ` +
+    `save:${liveSave ? `(${liveSave.x},${liveSave.y})` : "null"}`,
+  );
+  return { like: liveLike, comment: null, shareFeed: liveShareFeed, shareDm: liveShareDm, save: liveSave, alreadyLiked: liveAlreadyLiked };
 
-  type RowNode = { x: number; y: number; cd: string; rid: string; cls: string; txt: string; width: number };
-  const rowNodes: RowNode[] = [];
-  // Nodes that match the audio-disc profile (ImageView, no content-desc, no digit
-  // text) are NOT immediately discarded. They are saved here and used as a
-  // last-resort positional fallback for shareFeed/shareDm when all label-based
-  // and pool-based detection has failed.
-  //
-  // Why keep them at all: on Xiaomi MIUI + certain Instagram builds the Repost
-  // and Send icons are rendered as plain ImageViews with clickable="true" but
-  // zero accessibility labelling — no content-desc, no text. They are
-  // indistinguishable from the audio-disc node on other devices/builds. Dropping
-  // them unconditionally causes ShareFeed:✗ / ShareDM:✗ on those phones even
-  // when both icons are plainly visible on screen.
-  //
-  // Safety: these nodes are only used when everything else fails, AND only when
-  // they sit at least (iconGap × 0.6) to the right of the Comment icon — the
-  // audio disc appears immediately after Comment (close in x), while Repost and
-  // Send are one and two icon-gaps further right.
-  const unlabeledImgViews: RowNode[] = [];
-  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-  let nm: RegExpExecArray | null;
-  while ((nm = nodeRe.exec(xml)) !== null) {
-    const attrs = nm[1];
-    if (/class="android\.widget\.EditText"/.test(attrs)) continue; // message/reply/comment compose field, never an action icon
-    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
-    if (!bm) continue;
-    const c = _parseCenter(bm[1]);
-    if (!c) continue;
-    const nodeWidth = +bm[4] - +bm[2];
-    if (nodeWidth > maxIconWidth) continue; // too wide to be a single action icon (e.g. a reply/compose bar)
-    if (Math.abs(c.y - like.y) > rowTolerance) continue;
-    if (c.x < like.x + 20) continue; // Like itself, or the phantom accessibility container that wraps it (always within 20 px of like.x)
-    const cdM = attrs.match(/content-desc="([^"]*)"/);
-    const cd = cdM ? cdM[1] : "";
-    if (c.x > saveCutoffX) continue; // bookmark, unlabeled — far-right heuristic
-    const clsM = attrs.match(/class="([^"]*)"/);
-    const cls = clsM ? clsM[1] : "";
-    const txtM = attrs.match(/\btext="([^"]*)"/);
-    const txt = txtM ? txtM[1] : "";
-    const ridM = attrs.match(/resource-id="([^"]*)"/);
-    const rid = ridM ? ridM[1] : "";
-    if (cls === "android.widget.ImageView" && !cd && !/\d/.test(txt)) {
-      // Potential audio disc OR unlabeled Repost/Send — save separately, don't
-      // add to rowNodes (keeps the disc-tapping regression fix intact for devices
-      // where the disc is present and Repost/Send ARE labeled).
-      unlabeledImgViews.push({ x: c.x, y: c.y, cd, rid, cls, txt, width: nodeWidth });
-      continue;
-    }
-    rowNodes.push({ x: c.x, y: c.y, cd, rid, cls, txt, width: nodeWidth });
-  }
-  rowNodes.sort((a, b) => a.x - b.x);
-  unlabeledImgViews.sort((a, b) => a.x - b.x);
 
-  // Diagnostic: log every node in the action-bar row so we know the exact
-  // content-desc / resource-id / class Instagram puts on this device/build.
-  // v1.1.570's cd dump came back with EVERY node's content-desc empty, and
-  // v1.1.571's resource-id dump came back empty too — this build/device
-  // strips both. The v1.1.571 run showed a clean alternating
-  // Button/ViewGroup/Button/ViewGroup pattern (4 Buttons, 3 ViewGroups
-  // interleaved), which suggests each real icon renders as a
-  // `android.widget.Button` node while its count label (e.g. "64" reposts)
-  // renders as a separate clickable `android.view.ViewGroup` wrapper — but
-  // that needs `text` and `width` to confirm before it's used for anything.
-  // text should reveal which nodes carry a visible count number, and width
-  // should show whether Buttons are narrow (icon-sized) vs ViewGroups wider
-  // (label-sized) or vice versa.
-  const fmt = (n: RowNode) => `x=${n.x} w=${n.width} cd="${n.cd || ""}" rid="${n.rid || ""}" cls="${n.cls || ""}" txt="${n.txt || ""}"`;
-  const rowDump = rowNodes.map(fmt).join(" | ");
-  onLog?.(`[feed-icons] row cd dump: ${rowDump}`);
-  if (unlabeledImgViews.length) {
-    onLog?.(`[feed-icons] unlabeled ImageView dump: ${unlabeledImgViews.map(fmt).join(" | ")}`);
-  }
 
-  const pos = (n: RowNode) => ({ x: n.x, y: n.y });
-  let comment: { x: number; y: number } | null = null;
-  let shareFeed: { x: number; y: number } | null = null;
-  let shareDm: { x: number; y: number } | null = null;
 
-  // --- Icon identification: content-desc first, positional fallback ---
-  //
-  // Relying solely on position (node[0]=Comment, node[1]=Repost, node[2]=Send)
-  // breaks when accounts have Repost disabled — the icon roster shrinks and
-  // every position shifts left, mapping node[0] to Comment but node[1] now to
-  // Send instead of Repost. The software then taps the wrong icon.
-  //
-  // Primary strategy: match each role by its Instagram accessibility label.
-  // Instagram consistently labels these icons in English regardless of account
-  // locale (the content-desc is set by the apk, not the system language).
-  //   Comment → "Comment"
-  //   Share to Feed (Repost) → "Repost"
-  //   Share to DM (Send) → "Send" | "Direct" | "Message"
-  //
-  // Fallback strategy: for any role whose label was not found, consume the
-  // next unassigned node in left-to-right order. This preserves correct
-  // behaviour on devices/versions where content-desc attributes are absent.
-  // Use anchored / exact matches for Comment and Repost so that count-badge
-  // elements don't steal the slot.  Instagram renders a "N comments" count
-  // node (content-desc="1,844 comments") on the same Y row as the action
-  // icons; /\bcomment\b/i matches that node and returns x≈71 (5 px from Like),
-  // which (a) claims the comment slot for a non-icon element and (b) collapses
-  // iconGap to 5 px, making the unlabeled-ImageView minX filter exclude the
-  // real Repost/Send icons at their true positions.
-  //
-  // Additional guard: a node labeled "Comment" that is within 20 px of the
-  // Like button's centre CANNOT be the real comment-bubble icon — Instagram's
-  // action-bar icons are at minimum ~60 px apart. This phantom element is an
-  // accessibility container (parent ViewGroup) that wraps the Like heart and
-  // its sibling text, not the comment icon itself. Requiring n.x > like.x + 20
-  // excludes it while still accepting the real Comment icon further right.
-  const commentNode  = rowNodes.find(n => /^comment$/i.test(n.cd) && n.x > like.x + 20) ?? null;
-  // Some IG builds label Repost as "Share", "Share to Feed", or "Repost to
-  // your story" rather than the bare "Repost" string; all of these refer to
-  // the same in-feed reshare icon and must be matched.  Exclude any candidate
-  // that also matches the Send/DM slot (Send can be labelled "Share via DM"
-  // or "Share" on older builds, so always prefer the rightmost "Share" node
-  // as Send and the leftmost as Repost — handled by left→right pool order).
-  const repostNode   = rowNodes.find(n => /\brepost\b/i.test(n.cd) || /^share$/i.test(n.cd)) ?? null;
-  const sendNode     = rowNodes.find(n => /\b(send|direct|message)\b/i.test(n.cd) || (/^share$/i.test(n.cd) && n !== repostNode)) ?? null;
 
-  comment   = commentNode  ? pos(commentNode)  : null;
-  shareFeed = repostNode   ? pos(repostNode)   : null;
-  shareDm   = sendNode     ? pos(sendNode)     : null;
-  const visualShareFeed = await findFeedRepostIconByPixels(serial, like.y, onLog);
-  if (visualShareFeed) {
-    shareFeed = visualShareFeed;
-  } else {
-    // A missing visual match means Share to Feed is not confirmed. Do not
-    // retain a label-derived coordinate that may point at a different icon.
-    shareFeed = null;
-  }
-
-  // Whether Repost is available at all is genuinely account/post-specific
-  // (Instagram lets an account or a specific post disable resharing to
-  // feed, the same way Comment can be disabled per-post) — it is NOT tied
-  // to whether the post is a Reel or a normal feed post, and it must not
-  // be assumed either way from post type. A prior version of this code
-  // special-cased Reels to skip positional fallback for shareFeed, based
-  // on a single misread screenshot rather than real accessibility-tree
-  // evidence — that assumption was wrong and has been removed.
-  //
-  // What IS true generally: unlike Comment/Send (whose content-desc labels
-  // are consistently present, so their positions are known with
-  // confidence), a missing "Repost" content-desc match is genuinely
-  // ambiguous — it could mean Repost is disabled for this
-  // account/post (nothing to find, correctly null), or it could mean the
-  // label just isn't set on this device/build (present, but unlabeled).
-  // Positionally guessing in that situation risks grabbing an unrelated
-  // leftover control (e.g. a "More options" icon) and mislabelling it
-  // `shareFeed` — confirmed from a live run where that happened. So
-  // `shareFeed` is only ever set from a positive "Repost" content-desc
-  // match; it is never filled in positionally. `null` here always means
-  // "skip this action for this post" per this function's contract,
-  // regardless of whether the post disabled repost or the label is just
-  // missing — both cases are handled identically and safely by callers.
-
-  // --- Device-specific fallback: icon-class structural identification ---
-  //
-  // Confirmed 14 Jul 2026 against a live screenshot + matching row dump on a
-  // device/build where content-desc AND resource-id are BOTH empty on every
-  // action-bar node (v1.1.570/571 dumps), so no label exists to match at
-  // all. The row dump showed a consistent pattern: each real action icon
-  // renders as a content-desc-less `android.view.ViewGroup` with empty
-  // `text` (the tappable icon graphic itself). When a visible count exists,
-  // Instagram renders it as a SEPARATE content-desc-less `android.widget.
-  // Button` immediately after the icon (e.g. txt="2,340") — but that count
-  // node is NOT relied on for identification, only the ViewGroup icon is.
-  //
-  // Why not require the adjacent count node (v1.1.573's original approach):
-  // a post can have a genuine zero count on any of Comment/Repost/Send —
-  // possibly on all three, or all four including Like — and it is unknown
-  // whether Instagram then renders the count Button with blank text or
-  // omits the node from the tree entirely. Requiring a paired Button either
-  // way would risk silently losing icons on exactly the zero-count posts
-  // this is meant to handle. The icon's own class/content-desc/text is
-  // constant regardless of whether a count node exists next to it, so
-  // identification uses ONLY that: a candidate action icon is any rowNode
-  // that is a content-desc-less, text-less ViewGroup.
-  //
-  // Live confirmation: screenshot showed comment=34, repost=2,340, send=30.9K
-  // on a post; the row dump for that exact post had exactly 3 such
-  // ViewGroups (each followed by its own Button count, coincidentally, but
-  // that adjacency isn't what's being trusted here) in that left-to-right
-  // order — matching Comment/Repost/Send exactly.
-  //
-  // This is a structural/type read of the live tree (class + content-desc +
-  // text), not a fixed pixel-percentage guess, but it is still
-  // elimination-based like the label matching above: it only fires when
-  // NONE of comment/shareFeed/shareDm were found by label (this device has
-  // none), and only trusts the result when EXACTLY 3 candidate icons are
-  // found. Anything else (an icon disabled, extra unrelated ViewGroups,
-  // fewer than 3) is genuinely ambiguous with no label to confirm which
-  // slot is missing or spurious, so it's left null rather than guessed —
-  // same safety contract as the rest of this function.
-  if (!visualShareFeed && !comment && !shareDm) {
-    // ── Structural fallback A: ViewGroup icon pattern ──
-    // Confirmed 14 Jul 2026: content-desc-less, text-less ViewGroup nodes are
-    // the tappable icon glyphs on some device/build combos.  Exactly 3 required.
-    const iconCandidates = rowNodes.filter(n => n.cls === "android.view.ViewGroup" && !n.cd && !n.txt);
-    if (iconCandidates.length === 3) {
-      const countFor = (icon: RowNode) => {
-        const idx = rowNodes.indexOf(icon);
-        const next = rowNodes[idx + 1];
-        return next && next.cls === "android.widget.Button" && !next.cd && (next.x - icon.x) < maxIconWidth * 2
-          ? next.txt || "(blank/zero)"
-          : "(no count node)";
-      };
-      onLog?.(`[feed-icons] structural icon-class match found exactly 3 candidates — assigning Comment/Repost/Send by elimination: ${iconCandidates.map(n => `icon@${n.x} count=${countFor(n)}`).join(" | ")}`);
-      comment   = pos(iconCandidates[0]);
-      shareFeed = pos(iconCandidates[1]);
-      shareDm   = pos(iconCandidates[2]);
-    } else {
-      // ── Structural fallback B: Button icon pattern ──
-      // Some builds (confirmed 15 Jul 2026 from live dump: alternating
-      // ViewGroup/Button at y=2202 with all cd/rid empty) render each action
-      // icon as an unlabelled android.widget.Button rather than a ViewGroup.
-      // The ViewGroups in that pattern are parent CONTAINERS (wrapping icon +
-      // count), not the tappable glyph — they may be wider than maxIconWidth
-      // and excluded from rowNodes by the width filter.  The Button children
-      // ARE narrow/icon-sized and pass the filter.  Same elimination rule: only
-      // trust the result when EXACTLY 3 such Buttons are found.
-      const btnCandidates = rowNodes.filter(n => n.cls === "android.widget.Button" && !n.cd && !n.txt);
-      if (btnCandidates.length === 3) {
-        onLog?.(`[feed-icons] structural Button-class match found exactly 3 candidates — assigning Comment/Repost/Send by elimination: ${btnCandidates.map(n => `btn@${n.x}`).join(" | ")}`);
-        comment   = pos(btnCandidates[0]);
-        shareFeed = pos(btnCandidates[1]);
-        shareDm   = pos(btnCandidates[2]);
-      }
-    }
-  }
-
-  // No fixed-percentage positional fallback. Every icon must be confirmed by
-  // its accessibility label, or — only when no label exists anywhere on this
-  // device/build — by the structural icon/count pairing above. Guessing by
-  // raw left-to-right order among unrelated clickable nodes violates the
-  // project rule that all detection uses live element structure, never
-  // coordinates. If neither strategy confirms a role, that slot stays null
-  // and callers skip the action.
-
-  // Save is independently confirmed from the live screenshot. If the ribbon
-  // is absent (for example, an ad or a Reel surface with no Save action), this
-  // returns null and callers must skip saving.
-  const save = await findSaveIconByPixels(serial, like.y, "feed", onLog);
-
-  // Detect video/Reel posts in the feed using the already-fetched xml dump.
-  // A video post exposes a SurfaceView, TextureView, or VideoView node for its
-  // player — none of these appear in a regular photo post.  When this flag is
-  // true callers MUST NOT double-tap the media area (that opens the full-screen
-  // Reel player); they must fall back to the heart-icon tap instead.
-  const isVideoPost =
-    xml.includes("android.view.SurfaceView") ||
-    xml.includes("android.view.TextureView") ||
-    xml.includes("android.widget.VideoView") ||
-    xml.includes(":id/video_player") ||
-    xml.includes(":id/row_feed_video") ||
-    // Embedded Reels often expose neither a VideoView nor a video_player
-    // resource-id in the Feed hierarchy. Their accessibility text/resource
-    // markers are still enough to prove that a media double-tap would open
-    // the full-screen Reel viewer instead of liking the Feed post.
-    hasEmbeddedReelMarker;
-  const hasInteractiveMediaOverlay =
-    /(?:text|content-desc)="[^"]*(?:ask me anything|why pick a|poll|quiz|question sticker|add yours|link sticker|shop now|learn more)[^"]*"/i.test(xml) ||
-    /resource-id="[^"]*(?:question|poll|quiz|sticker|link_sticker|interactive)[^"]*"/i.test(xml);
-
-  // Find the media container bounding box from the same dump (zero extra cost).
-  // Used by callers to place the double-tap in the upper portion of the image,
-  // away from sponsored-post CTA banners that Instagram overlays near the
-  // bottom of the media area.
-  //
-  // Two resource-ids cover the common cases:
-  //   carousel_media_group — multi-image / carousel posts
-  //   media_group          — single-photo posts
-  //
-  // Safety filter: the bounds must lie ABOVE the Like button row (y2 < like.y)
-  // to avoid accidentally matching an element that is not the post's main media
-  // (e.g. a suggested-users or ad card further down the hierarchy).
-  let mediaBounds: { x1: number; y1: number; x2: number; y2: number } | undefined;
-  {
-    const mediaRids = [":id/carousel_media_group", ":id/media_group"];
-    for (const rid of mediaRids) {
-      const b = _findBoundsByResId(xml, rid);
-      if (b && b.y2 < like.y) {
-        mediaBounds = b;
-        onLog?.(`[feed-icons] media bounds found via "${rid}": [${b.x1},${b.y1}][${b.x2},${b.y2}]`);
-        break;
-      }
-    }
-    // Some Instagram builds strip both media_group resource IDs. In that
-    // case, recover the border from the live node tree itself: choose the
-    // largest ImageView/media-like rectangle above this post's action row.
-    // This is still node-derived targeting; no screen pixel or fixed
-    // coordinate is used.
-    if (!mediaBounds) {
-      const { w, h: screenH } = getScreenSize(serial);
-      const candidates: Array<{ bounds: { x1: number; y1: number; x2: number; y2: number }; area: number }> = [];
-      for (const segment of xml.split("<node ")) {
-        const boundsMatch = segment.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-        if (!boundsMatch) continue;
-        const b = {
-          x1: Number(boundsMatch[1]), y1: Number(boundsMatch[2]),
-          x2: Number(boundsMatch[3]), y2: Number(boundsMatch[4]),
-        };
-        const width = b.x2 - b.x1;
-        const height = b.y2 - b.y1;
-        const rid = (segment.match(/resource-id="([^"]*)"/) || [])[1] ?? "";
-        const cls = (segment.match(/class="([^"]*)"/) || [])[1] ?? "";
-        const desc = (segment.match(/content-desc="([^"]*)"/) || [])[1] ?? "";
-        const text = (segment.match(/\btext="([^"]*)"/) || [])[1] ?? "";
-        const mediaLike = /media|photo|image|carousel|video/i.test(`${rid} ${cls} ${desc} ${text}`);
-        const imageClass = /ImageView|TextureView|SurfaceView|VideoView/i.test(cls);
-        if (!mediaLike && !imageClass) continue;
-        // An author/header/profile container can be large and "media-like" in
-        // the accessibility tree, but it is short and not the post canvas.
-        // Require a near-full-width, genuinely tall rectangle so this fallback
-        // cannot return the author row as media.
-        if (width < w * 0.80 || height < screenH * 0.30) continue;
-        if (height < width * 0.55) continue;
-        // RecyclerView can retain a media container for a post that has
-        // scrolled mostly out of view. A large rectangle above Like is not
-        // sufficient: its bottom edge must be close to the current action row
-        // and it must contain a meaningful visible interval immediately above
-        // that row. Otherwise a double-tap can land on a header/CTA belonging
-        // to the post that was scrolled past.
-        const visibleBottom = Math.min(b.y2, like.y - Math.max(24, Math.round(screenH * 0.02)));
-        const visibleTop = Math.max(b.y1, Math.round(screenH * 0.08));
-        if (visibleBottom <= visibleTop) continue;
-        if (like.y - b.y2 > screenH * 0.18) continue;
-        if (b.y1 < screenH * 0.06) continue;
-        candidates.push({ bounds: b, area: width * height });
-      }
-      candidates.sort((a, b) => b.area - a.area);
-      if (candidates[0]) {
-        mediaBounds = candidates[0].bounds;
-        onLog?.(`[feed-icons] media bounds found from node tree: [${mediaBounds.x1},${mediaBounds.y1}][${mediaBounds.x2},${mediaBounds.y2}]`);
-      }
-    }
-    if (!mediaBounds) {
-      onLog?.("[feed-icons] media bounds not found — no node-confirmed double-tap target");
-      // Keep the action-bar result even when the media border is unavailable.
-      // View Feed can safely fall back to the node-confirmed Like heart, while
-      // Save/Share remain independently usable from their own nodes.
-    }
-  }
-
-  return { like, likeConfirmed, comment, shareFeed, shareDm, save, alreadyLiked, isVideoPost, hasInteractiveMediaOverlay, mediaBounds };
 }
 
 export interface ReelActionIcons {
@@ -4278,81 +3938,6 @@ export interface ReelActionIcons {
   alreadyLiked?: boolean;
   /** True when the Save button resolved to "Saved" — reel is already saved. */
   alreadySaved: boolean;
-}
-
-/**
- * Locate the visible Reel heart from the current screenshot.
- *
- * Deprecated: Reel action taps now use the top icon in the validated vertical
- * action column. Kept temporarily for compatibility with any external callers;
- * View Reels does not call this pixel heuristic.
- */
-export async function findReelLikeByPixels(
-  serial: string,
-  onLog?: (msg: string) => void,
-): Promise<{ x: number; y: number } | null> {
-  const img = await _captureScreenPixels(serial);
-  if (!img) return null;
-  const { width, height, channels, pixels } = img;
-  if (!width || !height) return null;
-
-  const luminance = (x: number, y: number) => {
-    const i = (y * width + x) * channels;
-    return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
-  };
-  const isBright = (x: number, y: number) => {
-    const i = (y * width + x) * channels;
-    const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
-    return Math.min(r, g, b) > 155 && Math.max(r, g, b) - Math.min(r, g, b) < 75;
-  };
-
-  type Candidate = { x: number; y: number; score: number };
-  const candidates: Candidate[] = [];
-  const box = Math.max(28, Math.round(Math.min(width, height) * 0.055));
-  const half = Math.floor(box / 2);
-  const xStart = Math.round(width * 0.74);
-  const xEnd = Math.round(width * 0.98);
-  const yStart = Math.round(height * 0.18);
-  const yEnd = Math.round(height * 0.80);
-
-  for (let cy = yStart; cy <= yEnd; cy += 4) {
-    for (let cx = xStart; cx <= xEnd; cx += 4) {
-      const rows: number[] = [];
-      let total = 0;
-      for (let y = cy - half; y <= cy + half; y++) {
-        if (y < 0 || y >= height) continue;
-        let row = 0;
-        for (let x = cx - half; x <= cx + half; x++) {
-          if (x >= 0 && x < width && isBright(x, y)) row++;
-        }
-        rows.push(row);
-        total += row;
-      }
-      if (total < 16 || total > box * box * 0.30) continue;
-
-      const mid = Math.floor(rows.length / 2);
-      const top = rows.slice(0, Math.max(1, Math.floor(mid * 0.55)));
-      const lower = rows.slice(Math.floor(mid * 0.65));
-      const topPeak = Math.max(...top, 0);
-      const lowerPeak = Math.max(...lower, 0);
-      const lowerTotal = lower.reduce((sum, n) => sum + n, 0);
-      const topTotal = top.reduce((sum, n) => sum + n, 0);
-      // A heart has two bright upper lobes and a narrowing lower point:
-      // substantial upper detail, followed by a smaller lower footprint.
-      if (topPeak < 3 || topTotal < lowerTotal * 0.75 || lowerPeak > topPeak * 1.15) continue;
-      const score = topTotal * 2 - lowerTotal + Math.abs(topPeak - lowerPeak);
-      candidates.push({ x: cx, y: cy, score });
-    }
-  }
-
-  candidates.sort((a, b) => b.score - a.score);
-  const best = candidates[0];
-  if (!best) {
-    onLog?.(`[reel-pixels] Like heart not found in right action band (${width}x${height})`);
-    return null;
-  }
-  onLog?.(`[reel-pixels] Like heart found at (${best.x},${best.y}) from screenshot (${width}x${height})`);
-  return { x: best.x, y: best.y };
 }
 
 /**
@@ -4385,8 +3970,37 @@ export async function findReelActionIcons(
   // fall back to a fresh dump for external callers.
   const xml = options?.uiXml || await _uiDump(adb, serial);
   if (!xml) return null;
-  const { w, h: screenH } = getScreenSize(serial);
-  void w;
+  const liveLike = _findUniqueLiveActionNode(xml, [":id/like_button"], ["Like", "Unlike"], onLog);
+  if (!liveLike) {
+    onLog?.("[reel-icons] live like_button node not found or ambiguous — skipping reel actions");
+    return null;
+  }
+  const liveShareFeed = _findUniqueLiveActionNode(xml, [], ["Repost"], onLog);
+  const liveShareDm = _findUniqueLiveActionNode(xml, [":id/direct_share_button"], ["Share", "Send", "Direct", "Message"], onLog);
+  const liveSave = _findUniqueLiveActionNode(xml, [":id/save_button"], ["Save", "Saved"], onLog);
+  const liveAlreadyLiked = _liveActionNodes(xml).some(node =>
+    node.resourceId.endsWith(":id/like_button") &&
+    node.contentDesc.trim().toLowerCase() === "unlike",
+  );
+  const liveAlreadySaved = _liveActionNodes(xml).some(node =>
+    node.resourceId.endsWith(":id/save_button") &&
+    node.contentDesc.trim().toLowerCase() === "saved",
+  );
+  onLog?.(
+    `[reel-icons] live nodes — like:(${liveLike.x},${liveLike.y}) ` +
+    `shareFeed:${liveShareFeed ? `(${liveShareFeed.x},${liveShareFeed.y})` : "null"} ` +
+    `shareDm:${liveShareDm ? `(${liveShareDm.x},${liveShareDm.y})` : "null"} ` +
+    `save:${liveSave ? `(${liveSave.x},${liveSave.y})` : "null"}`,
+  );
+  return {
+    like: liveLike,
+    comment: null,
+    shareFeed: liveShareFeed,
+    shareDm: liveShareDm,
+    save: liveSave,
+    alreadyLiked: liveAlreadyLiked,
+    alreadySaved: liveAlreadySaved,
+  };
 
   // Reels uses the same proven visual Like target as View Feed. The only
   // layout difference is that the Reel heart is in the transparent,
@@ -5157,9 +4771,16 @@ export async function findStoryShareButtonViaA11y(
 ): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const { w, h } = getScreenSize(serial);
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
+  const share = _findUniqueLiveActionNode(
+    xml,
+    [":id/toolbar_reshare_button"],
+    ["Share"],
+    onLog,
+  );
+  if (!share) onLog?.("[story-share] live toolbar_reshare_button node not found or ambiguous — skipping share");
+  return share;
 
   // ── Diagnostic: emit every node whose vertical centre sits in the lower
   //    35 % of the screen (the story reply-bar zone).  class, resource-id,
@@ -5271,12 +4892,20 @@ export async function findStoryShareButtonViaA11y(
  */
 export async function findStoryLikeButtonViaA11y(
   serial: string,
+  onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const { h } = getScreenSize(serial);
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
+  const like = _findUniqueLiveActionNode(
+    xml,
+    [":id/toolbar_like_button"],
+    ["Like Story"],
+    onLog,
+  );
+  if (!like) onLog?.("[story-like] live toolbar_like_button node not found or ambiguous — skipping like");
+  return like;
 
   // Strategy 1: resource-id lookup (primary).
   const RID = "com.instagram.android:id/toolbar_like_button";
@@ -10033,20 +9662,13 @@ export async function installInstagramFromPlayStore(serial: string): Promise<{ o
   }
 }
 
-/**
- * Find Instagram's Activity/Notifications heart from the live screenshot.
- *
- * This deliberately uses the same visual matcher as View Feed Like, but limits
- * the search to the top-right header. Accessibility labels/resource IDs are not
- * safe here: on some Instagram builds they are absent or describe a stale
- * hierarchy while the visible heart is still present.
- */
 export async function findInstagramNotificationsIcon(
   serial: string,
   onLog?: (msg: string) => void,
 ): Promise<{ x: number; y: number } | null> {
-  const { h } = getScreenSize(serial);
-  return findFeedLikeIconByPixels(serial, h * 0.10, onLog, "top-right");
+  const live = await findButtonByLabel(serial, "Activity").catch(() => null);
+  if (!live) onLog?.("[notifications] live Activity node not found — skipping notifications tap");
+  return live;
 }
 
 /**

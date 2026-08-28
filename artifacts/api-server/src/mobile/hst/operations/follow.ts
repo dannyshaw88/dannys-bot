@@ -494,24 +494,8 @@ async function runProfileBrowsingSequence(
       logger.info({ serial }, "[inject-browsing] post already liked (Unlike button found) — skipped like tap, share/DM actions will still run");
     } else {
       try {
-        // ~93 % double-tap on the post image; ~7 % heart-icon tap for variety.
-         const useDoubleTap = Math.random() < 0.93 && Boolean(icons.mediaBounds);
-         if (useDoubleTap && icons.mediaBounds) {
-           const mb = icons.mediaBounds;
-           const xFraction = 0.35 + Math.random() * 0.30;
-           const yFraction = 0.35 + Math.random() * 0.30;
-           const dtX = Math.round(mb.x1 + (mb.x2 - mb.x1) * xFraction);
-           const dtY = Math.round(mb.y1 + (mb.y2 - mb.y1) * yFraction);
-           onLog?.(`Inject Browsing: double-tap using central media bounds (${Math.round(xFraction * 100)}%,${Math.round(yFraction * 100)}%)`);
-           onLog?.(`Inject Browsing: double-tapping image at (${dtX},${dtY})…`);
-           await android.doubleTap(serial, dtX, dtY, undefined, mb);
-         } else {
-           if (!icons.mediaBounds) {
-             onLog?.("Inject Browsing: media bounds unavailable — using confirmed Like icon instead of double-tap");
-           }
-          onLog?.(`Inject Browsing: tapping heart icon at (${icons.like.x},${icons.like.y})…`);
-          await android.tap(serial, icons.like.x, icons.like.y);
-        }
+         onLog?.(`Inject Browsing: tapping live Like node at (${icons.like.x},${icons.like.y})…`);
+         await android.tap(serial, icons.like.x, icons.like.y);
         onLike?.();
         onLog?.("Inject Browsing: ✓ liked the post");
         await sleepOrAbort(serial, 300);
@@ -529,20 +513,7 @@ async function runProfileBrowsingSequence(
     onLog?.("Inject Browsing: share-to-feed roll missed — skipping");
   } else {
     try {
-      // findButtonByLabel("Repost") is the trusted source — it only
-      // returns a node whose content-desc literally matches "Repost", so
-      // it can never point at the wrong icon. `icons.shareFeed` (from
-      // findFeedActionIcons) is NOT equally trustworthy: when this
-      // post's Repost icon has no content-desc, findFeedActionIcons
-      // falls back to positional guessing (leftmost unclaimed node),
-      // which silently mis-assigns the Comment icon's coordinates to
-      // `shareFeed` whenever an icon is missing/unlabeled on this
-      // device/build. That regression (Comment tapped instead of
-      // Share, previously fixed in v1.1.499/v1.1.500) came back when
-      // this code briefly preferred `icons.shareFeed` over the label
-      // scan — do NOT invert this priority again. `icons.shareFeed` is
-      // only used as a last resort when the label scan finds nothing.
-      const repostIcon = await android.findButtonByLabel(serial, "Repost").catch(() => null) ?? icons.shareFeed;
+      const repostIcon = icons.shareFeed;
       if (!repostIcon) {
         onLog?.("Inject Browsing: Repost icon not found on this post — skipping share-to-feed");
         logger.warn({ serial }, "[inject-browsing] neither findFeedActionIcons row-scan nor findButtonByLabel('Repost') found the icon — likely absent on this post (sharing disabled by poster)");
@@ -652,7 +623,7 @@ async function runProfileBrowsingSequence(
             return _x.includes("direct_private_share") || _x.includes("grid_view_pog_avatar_view") ||
                    _x.includes("android.widget.EditText") || _x.includes("Copy link");
           };
-          const _ibSb = _ibSendBtn0 ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
+          const _ibSb = _ibScan.sendBtn ?? await android.findButtonByLabel(serial, "Send").catch(() => null);
           if (_ibSb) {
             await android.tap(serial, _ibSb.x, _ibSb.y);
             await sleepOrAbort(serial, 300);
@@ -671,17 +642,9 @@ async function runProfileBrowsingSequence(
             onLog?.("Inject Browsing: ✓ shared via DM — sheet auto-dismissed (sent by recipient tap)");
             await sleepOrAbort(serial, 200);
           } else {
-            const _ibFbX = Math.round(w * 0.50), _ibFbY = Math.round(h * 0.982);
-            onLog?.(`Inject Browsing: Send button not found via a11y — tapping coordinate fallback (${_ibFbX},${_ibFbY})`);
-            await android.tap(serial, _ibFbX, _ibFbY);
-            await sleepOrAbort(serial, 300);
-            if (!(await _ibIsOpen())) {
-              onLog?.("Inject Browsing: ✓ shared via DM — sent via coordinate fallback");
-              await sleepOrAbort(serial, 300);
-            } else {
-              await android.pressBack(serial);
-              await sleepOrAbort(serial, 200);
-            }
+            onLog?.("Inject Browsing: Send node not found via accessibility — closing without sending");
+            await android.pressBack(serial);
+            await sleepOrAbort(serial, 200);
           }
         }
       }

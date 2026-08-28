@@ -165,9 +165,7 @@ export async function runViewExplorePage(serial: string, params: {
           await sleepOrAbort(serial, 600); // settle before scanning action bar
 
           onLog?.(`View Explore ${i + 1}/${scrollCount}: scanning action bar…`);
-          let icons = await android.findFeedActionIcons(serial, onLog, {
-            allowUnconfirmedLikeAnchor: true,
-          }).catch(() => null);
+          let icons = await android.findFeedActionIcons(serial, onLog).catch(() => null);
 
           // ── Explore-only: Reels column fallback (null path) ─────────────
           // findFeedActionIcons looks for Like/Unlike near screen centre-x
@@ -195,52 +193,17 @@ export async function runViewExplorePage(serial: string, params: {
             }
           }
 
-          // ── Explore-only: vertical column overlay (non-null path) ────────
-          // If findFeedActionIcons DID return icons but Like is in the right
-          // column (x > 80%), the horizontal row scan will have returned null
-          // for shareFeed/shareDm. Overlay those from findReelActionIcons.
-          if (icons && icons.like.x > Math.round(w * 0.80)) {
-            onLog?.(`View Explore ${i + 1}/${scrollCount}: vertical column layout detected (like.x=${icons.like.x}) — re-scanning shareFeed/shareDm via column scan`);
-            const _veColIcons = await android.findReelActionIcons(serial, onLog).catch(() => null);
-            if (_veColIcons) {
-              icons = { ...icons, shareFeed: _veColIcons.shareFeed, shareDm: _veColIcons.shareDm };
-            }
-            // Save remains null unless the shared screenshot matcher found
-            // the attached ribbon icon. Never restore an accessibility or
-            // positional Save fallback for the vertical Reel layout.
-          }
-
           if (!icons) {
             onLog?.(`View Explore ${i + 1}/${scrollCount}: no action bar found — skipping actions`);
             logger.info({ serial }, "[view-explore] opened post has no action bar");
           } else {
             // ── Like ──────────────────────────────────────────────────────
-            if (wantLike && !icons.likeConfirmed) {
-              onLog?.(`View Explore ${i + 1}/${scrollCount}: like skipped — visual Like target was not confirmed`);
-            } else if (wantLike) {
+            if (wantLike) {
               if (icons.alreadyLiked) {
                 onLog?.(`View Explore ${i + 1}/${scrollCount}: already liked — skipping like`);
               } else {
-                // ~93 % double-tap on image; ~7 % heart-icon tap for variety.
-                 const useDoubleTap = Math.random() < 0.93 && Boolean(icons.mediaBounds);
-                 if (useDoubleTap && icons.mediaBounds) {
-                   const mb = icons.mediaBounds;
-                   const xFraction = 0.35 + Math.random() * 0.30;
-                   const yFraction = 0.35 + Math.random() * 0.30;
-                   const dtX = Math.round(mb.x1 + (mb.x2 - mb.x1) * xFraction);
-                   const dtY = Math.round(mb.y1 + (mb.y2 - mb.y1) * yFraction);
-                   onLog?.(`View Explore ${i + 1}/${scrollCount}: double-tap using central media bounds (${Math.round(xFraction * 100)}%,${Math.round(yFraction * 100)}%)`);
-                   onLog?.(`View Explore ${i + 1}/${scrollCount}: double-tapping image at (${dtX},${dtY})…`);
-                   await android.doubleTap(serial, dtX, dtY, undefined, mb);
-                 } else {
-                   if (!icons.mediaBounds) {
-                     onLog?.(`View Explore ${i + 1}/${scrollCount}: media bounds unavailable — using confirmed Like icon instead of double-tap`);
-                   }
-                  const jx = icons.like.x + Math.round((Math.random() - 0.5) * 6);
-                  const jy = icons.like.y + Math.round((Math.random() - 0.5) * 6);
-                  onLog?.(`View Explore ${i + 1}/${scrollCount}: tapping heart icon at (${jx},${jy})…`);
-                  await android.tap(serial, jx, jy);
-                }
+                onLog?.(`View Explore ${i + 1}/${scrollCount}: tapping live Like node at (${icons.like.x},${icons.like.y})…`);
+                await android.tap(serial, icons.like.x, icons.like.y);
                 likes++;
                 onLog?.(`View Explore ${i + 1}/${scrollCount}: ✓ liked`);
                 await sleepOrAbort(serial, 300);
@@ -362,18 +325,9 @@ export async function runViewExplorePage(serial: string, params: {
                       onLog?.(`${_vePfx}: ✓ shared via DM — sheet auto-dismissed`);
                       await sleepOrAbort(serial, 200);
                     } else {
-                      const _veFbX = Math.round(w * 0.50), _veFbY = Math.round(h * 0.982);
-                      onLog?.(`${_vePfx}: Send not found via a11y — tapping coordinate fallback (${_veFbX},${_veFbY})`);
-                      await android.tap(serial, _veFbX, _veFbY);
-                      await sleepOrAbort(serial, 1500);
-                      if (!(await _veIsOpen())) {
-                        _veDmSent = true;
-                        onLog?.(`${_vePfx}: ✓ shared via DM — sent via coordinate fallback`);
-                        await sleepOrAbort(serial, 300);
-                      } else {
-                        await android.pressBack(serial);
-                        await sleepOrAbort(serial, 200);
-                      }
+                      onLog?.(`${_vePfx}: Send node not found via accessibility — closing without sending`);
+                      await android.pressBack(serial);
+                      await sleepOrAbort(serial, 200);
                     }
                   }
                 }

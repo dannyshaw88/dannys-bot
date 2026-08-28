@@ -183,7 +183,6 @@ export async function runCheckFeedLoop(serial: string, params: {
       saveLabel: string;
       author: { x: number; y: number; name: string } | null;
       audio: { x: number; y: number } | null;
-      mediaBounds?: { x1: number; y1: number; x2: number; y2: number };
       isVideoPost: boolean;
       xml: string;
     };
@@ -216,6 +215,40 @@ export async function runCheckFeedLoop(serial: string, params: {
         });
       }
 
+      const actionIcons = await android.findFeedActionIcons(serial, onLog, {
+        strictViewFeed: true,
+        uiXml: xml,
+      }).catch(() => null);
+      if (!actionIcons) {
+        onLog?.("View Feed action scan: no usable live action row — skipping actions");
+        return null;
+      }
+      const strictSaveNode = nodes.find(n => n.rid.endsWith("row_feed_button_save")) ?? null;
+      const strictAuthorNode = nodes
+        .filter(n => n.clickable && n.rid.includes("row_feed_photo_profile_name") && n.y < actionIcons.like.y)
+        .sort((a, b) => b.y - a.y)[0] ?? null;
+      const strictAudioNode = nodes
+        .filter(n =>
+          n.y < actionIcons.like.y - 20 &&
+          !/action_bar|like_button|comment_|share_|send_|save_/i.test(n.rid) &&
+          (/audio|music|sound|song/i.test(n.rid) ||
+            /\b(?:audio|music|song|original)\b/i.test(`${n.desc} ${n.text}`)),
+        )
+        .sort((a, b) => b.y - a.y)[0] ?? null;
+      return {
+        like: actionIcons.like,
+        likeConfirmed: true,
+        alreadyLiked: actionIcons.alreadyLiked ?? false,
+        comment: actionIcons.comment,
+        shareFeed: actionIcons.shareFeed,
+        shareDm: actionIcons.shareDm,
+        save: actionIcons.save,
+        saveLabel: strictSaveNode?.desc || strictSaveNode?.text || "",
+        author: strictAuthorNode ? { x: strictAuthorNode.x, y: strictAuthorNode.y, name: strictAuthorNode.desc || strictAuthorNode.text || "unknown" } : null,
+        audio: strictAudioNode ? { x: strictAudioNode.x, y: strictAudioNode.y } : null,
+        xml,
+      };
+
       // View Feed's Like anchor must come from the packaged visual heart
       // reference. Accessibility Like nodes and media bounds are not safe
       // anchors on every Instagram build: ads can expose Learn More buttons,
@@ -223,7 +256,6 @@ export async function runCheckFeedLoop(serial: string, params: {
       // matcher also performs the strict sponsored-card check.
       const visualIcons = await android.findFeedActionIcons(serial, onLog, {
         strictViewFeed: true,
-        allowUnconfirmedLikeAnchor: true,
         // Reuse this scan's complete XML. findFeedActionIcons still captures
         // a fresh screenshot for the visual Like reference, but must not pay
         // for a second UIAutomator dump of the same post.
@@ -422,7 +454,6 @@ export async function runCheckFeedLoop(serial: string, params: {
         saveLabel: saveNode?.desc || saveNode?.text || "",
         author: authorNode ? { ...pos(authorNode), name: authorNode.desc || authorNode.text || "unknown" } : null,
         audio: audioNode ? pos(audioNode) : null,
-        mediaBounds: media ? { x1: media.x1, y1: media.y1, x2: media.x2, y2: media.y2 } : undefined,
         isVideoPost: /SurfaceView|TextureView|VideoView|video_player|row_feed_video/.test(xml),
         xml,
       };
@@ -545,96 +576,25 @@ export async function runCheckFeedLoop(serial: string, params: {
             onLog?.(`View Feed ${i + 1}/${count}: action bar found — ${iconSummary}`);
 
             if (wantLike) {
-              // `icons` was just obtained from the live tree and its Like node
-              // is already structurally validated. Reusing it avoids a second
-              // full UIAutomator dump for the most common Feed action.
-              const likeScan = icons;
-              if (!likeScan) {
-                likeFailures++;
-                onLog?.(`View Feed ${i + 1}/${count}: like skipped — current Like node was not confirmed`);
-              } else if (!likeScan.likeConfirmed) {
-                likeFailures++;
-                onLog?.(`View Feed ${i + 1}/${count}: like skipped — visual Like target was not confirmed (share/save row may still be usable)`);
-              } else if (likeScan.alreadyLiked) {
+              if (icons.alreadyLiked) {
                 onLog?.(`View Feed ${i + 1}/${count}: already liked — skipping like`);
               } else {
-                // ~93 % of likes use a double-tap on the post image — the
-                // natural human gesture.  The remaining ~7 % tap the heart
-                // icon so the mix of input methods looks organic to
-                // Instagram's telemetry.  Stories are excluded from this
-                // path (they use their own accessibility-tree like button).
-                // A double-tap is allowed only for a normal photo post whose
-                // media rectangle was confirmed by the live node tree. Video
-                // posts must use the Like node because a media double-tap
-                // opens the full-screen player.
-                  const useDoubleTap = Math.random() < 0.93 &&
-                   !likeScan.isVideoPost &&
-                    !(likeScan as any).hasInteractiveMediaOverlay &&
-                   !!likeScan.mediaBounds;
-                  if ((likeScan as any).hasInteractiveMediaOverlay) {
-                    onLog?.(`View Feed ${i + 1}/${count}: interactive media overlay detected — using Like node instead of double-tap`);
-                  }
-                 let _likeActionSucceeded = false;
-                 try {
-                  if (useDoubleTap) {
-                    // Place the double-tap in the upper quarter of the post
-                    // image to stay clear of sponsored-post CTA banners
-                    // (e.g. "Shop Now", "Install Now") that Instagram overlays
-                    // near the bottom of the media area.
-                    //
-                    // Primary path: use the media container's real bounding
-                    // box (returned by findFeedActionIcons from the same a11y
-                    // dump, so no extra dump cost) and tap at a random point
-                    // between 25 % and 45 % down from the top of the media.
-                    //
-                    // No proportional screen-coordinate fallback is allowed in
-                    // View Feed. When bounds are unavailable, the branch below
-                    // uses the confirmed Like node instead.
-                     const mb = likeScan.mediaBounds!;
-                     const mediaW = mb.x2 - mb.x1;
-                     // Use only the currently visible portion of the
-                     // node-confirmed media, ending just above the live Like
-                     // row. A recycled container may extend outside the
-                     // viewport even though its node bounds look valid.
-                     const visibleY1 = Math.max(mb.y1, 0);
-                     const visibleY2 = Math.min(mb.y2, likeScan.like.y - 24);
-                     const mediaH = visibleY2 - visibleY1;
-                    // Keep the gesture inside the node-confirmed media
-                    // rectangle. A small central band avoids captions/CTA
-                    // overlays while retaining natural variation.
-                     const xFraction = 0.45 + Math.random() * 0.10;
-                     const yFraction = 0.35 + Math.random() * 0.10;
-                    const dtX = Math.round(mb.x1 + mediaW * xFraction);
-                    let dtY: number;
-                     dtY = Math.round(visibleY1 + mediaH * yFraction);
-                    onLog?.(`View Feed ${i + 1}/${count}: double-tap using media bounds (${Math.round(xFraction * 100)}% across, ${Math.round(yFraction * 100)}% down)`);
-                     logger.info({ serial, target: "image-double-tap", x: dtX, y: dtY, mediaBoundsUsed: !!likeScan.mediaBounds }, "[check-feed] double-tap like");
-                    onLog?.(`View Feed ${i + 1}/${count}: double-tapping image at (${dtX},${dtY})…`);
-                     await android.doubleTap(serial, dtX, dtY, (msg: string) => onLog?.(`  ${msg}`));
-                  } else {
-                    // Safe node-targeted fallback when this is a video post,
-                    // the random double-tap roll misses, or the media border
-                    // is not exposed by this Instagram build.
-                     if (!likeScan.mediaBounds && !likeScan.isVideoPost) {
-                      onLog?.(`View Feed ${i + 1}/${count}: media border not confirmed — using Like node instead of guessing a double-tap`);
-                    }
-                     const jx = likeScan.like.x;
-                     const jy = likeScan.like.y;
-                    logger.info({ serial, target: "like-button", x: jx, y: jy }, "[check-feed] heart-icon like");
-                    onLog?.(`View Feed ${i + 1}/${count}: tapping heart icon at (${jx},${jy})…`);
-                    await android.tap(serial, jx, jy);
-                   }
-                   _likeActionSucceeded = true;
+                let likeActionSucceeded = false;
+                try {
+                  logger.info({ serial, target: "like-button", x: icons.like.x, y: icons.like.y }, "[check-feed] live Like node");
+                  onLog?.(`View Feed ${i + 1}/${count}: tapping live Like node at (${icons.like.x},${icons.like.y})…`);
+                  await android.tap(serial, icons.like.x, icons.like.y);
+                  likeActionSucceeded = true;
                 } catch {
                   likeFailures++;
                   onLog?.(`View Feed ${i + 1}/${count}: ✗ like threw an error`);
                 }
-           await sleepOrAbort(serial, 300 + Math.floor(Math.random() * 4701));
-                const _likeStayedInInstagram = await verifyStillInInstagram();
-                 if (_likeActionSucceeded && _likeStayedInInstagram) {
+                await sleepOrAbort(serial, 300 + Math.floor(Math.random() * 4701));
+                const likeStayedInInstagram = await verifyStillInInstagram();
+                if (likeActionSucceeded && likeStayedInInstagram) {
                   likes++;
                   onLog?.(`View Feed ${i + 1}/${count}: ✓ liked`);
-                 } else if (_likeActionSucceeded) {
+                } else if (likeActionSucceeded) {
                   likeFailures++;
                   onLog?.(`View Feed ${i + 1}/${count}: like not counted — action left Instagram and was recovered`);
                 }
