@@ -162,6 +162,7 @@ export async function runViewExplorePage(serial: string, params: {
         const wantClickAuthor = clickAuthorChance > 0 && Math.random() < clickAuthorChance;
 
         if (wantLike || wantShareFeed || wantShareDm || wantSave) {
+          await android.withInputTransaction(serial, async () => {
           await sleepOrAbort(serial, 600); // settle before scanning action bar
 
           onLog?.(`View Explore ${i + 1}/${scrollCount}: scanning action bar…`);
@@ -362,6 +363,7 @@ export async function runViewExplorePage(serial: string, params: {
               }
             }
           }
+          });
         }
 
         // ── Click Author (visit post author's profile) ─────────────────
@@ -373,6 +375,7 @@ export async function runViewExplorePage(serial: string, params: {
         // the existing Back press below then returns to Explore.
         // This block is intentionally isolated to runViewExplorePage.
         if (wantClickAuthor) {
+          await android.withInputTransaction(serial, async () => {
           try {
             if (isCycleAborted(serial)) throw new Error("cycle-aborted");
             await sleepOrAbort(serial, 300);
@@ -470,6 +473,7 @@ export async function runViewExplorePage(serial: string, params: {
             if (e?.message === "cycle-aborted") throw e;
             onLog?.(`View Explore ${i + 1}/${scrollCount}: click-author error — ${e?.message}`);
           }
+          });
         }
 
         // Always leave clicked media through Android BACK. Do not search for

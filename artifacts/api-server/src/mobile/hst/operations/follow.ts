@@ -486,6 +486,7 @@ async function runProfileBrowsingSequence(
   // failed to detect it by position).
   onLog?.(`Inject Browsing: icons — Like:${icons.alreadyLiked ? '(already liked)' : '✓'} Comment:${icons.comment?'✓':'✗'}`);
 
+  return await android.withInputTransaction(serial, async () => {
   const likeChance = rollRange(browsing.likePctMin, browsing.likePctMax) / 100;
   logger.info({ serial, likeChance: Math.round(likeChance * 100), alreadyLiked: !!icons.alreadyLiked }, "[inject-browsing] like chance rolled");
   if (likeChance > 0 && Math.random() < likeChance) {
@@ -682,6 +683,7 @@ async function runProfileBrowsingSequence(
   await sleepOrAbort(serial, 500);
 
   return rows;
+  });
 }
 
 export async function runFollowUsersStep(

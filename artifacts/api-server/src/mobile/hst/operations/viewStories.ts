@@ -446,6 +446,9 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
       }
       storyTimingAfterWatch = Date.now();
 
+      let storyActionShouldContinue = false;
+      if (willLike || willShare || willComment || willClickAuthor) {
+        storyActionShouldContinue = await android.withInputTransaction(serial, async () => {
       if (willLike) {
         // Tap the story Like button via the accessibility tree.
         //
@@ -710,7 +713,7 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
                 `live-node, calibrated-tap, or visual fallback`,
               );
               await android.pressBack(serial).catch(() => {});
-              continue;
+              return true;
             }
 
             await sleepOrAbort(serial, 350);
@@ -721,13 +724,13 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
               );
               if (!_emojiSelected) {
                 await android.pressBack(serial).catch(() => {});
-                continue;
+                return true;
               }
             } catch (e: any) {
               onLog?.(`View Stories ${s + 1}: live Emoji picker node lookup failed — ${e?.message}`);
               logger.warn({ serial, story: s + 1, err: e?.message }, "[view-stories] live emoji node lookup failed");
               await android.pressBack(serial).catch(() => {});
-              continue;
+              return true;
             }
             await sleepOrAbort(serial, 400); // selected emoji settles; send button appears
 
@@ -821,6 +824,12 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
         }
       }
       storyTimingAfterActions = Date.now();
+          return false;
+        });
+        if (storyActionShouldContinue) continue;
+      } else {
+        storyTimingAfterActions = Date.now();
+      }
 
       // Don't tap "advance to next slide" if we've already left the story
       // viewer — that tap would land on the feed and register as a like/

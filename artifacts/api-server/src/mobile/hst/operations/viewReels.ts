@@ -142,6 +142,7 @@ export async function runViewReelsLoop(serial: string, params: {
     let lastPollXml = "";
 
     if (wantLike || wantShareFeed || wantSave || wantShareDm) {
+      const skipReelAfterAction = await android.withInputTransaction(serial, async () => {
       // ── View Reels: wait for reel player nodes to appear ────────────────
       // Problem: the reel viewer sometimes opens in a separate accessibility
       // window layer (observed on Xiaomi MIUI). UIAutomator's dump captures
@@ -288,7 +289,7 @@ export async function runViewReelsLoop(serial: string, params: {
         } else {
           if (!icons.like) {
             onLog?.(`Reel ${i + 1}/${totalReels}: Like node not found — skipping like safely`);
-            continue;
+            return true;
           }
           onLog?.(`Reel ${i + 1}/${totalReels}: tapping validated Like node at (${icons.like.x},${icons.like.y})…`);
           await android.tap(serial, icons.like.x, icons.like.y);
@@ -472,12 +473,16 @@ export async function runViewReelsLoop(serial: string, params: {
         }
       }
       } // end !isReelAd
+        return false;
+      });
+      if (skipReelAfterAction) continue;
     }
 
     // ── Click Author — navigate to creator profile, scroll, then Back ──────
     // Independent of the icon scan: uses the XML dump to locate
     // clips_author_username (bottom-left of the Reels viewer) directly.
     if (wantClickAuthor) {
+      await android.withInputTransaction(serial, async () => {
       const _vrCaPfx = `View Reels ${i + 1}/${totalReels}`;
       try {
         if (isCycleAborted(serial)) throw new Error("cycle-aborted");
@@ -541,6 +546,7 @@ export async function runViewReelsLoop(serial: string, params: {
         if (e?.message === "cycle-aborted") throw e;
         onLog?.(`Reel ${i + 1}/${totalReels}: click-author error — ${e?.message}`);
       }
+      });
     }
     reelTimingAfterActions = Date.now();
 
