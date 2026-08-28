@@ -137,3 +137,4 @@
 - [ADB device-loss race handling](adb-device-loss-race.md) — reuse successful screen dimensions and classify mid-cycle ADB disappearance explicitly, never fall back to guessed gesture coordinates
 - [Mobile metric write parity](mobile-metric-write-parity.md) — every new HST counter must cover normal, pre-switch, and aborted writes, with legacy read aliases when history used another key
 - [Feed action detector independence](feed-action-detector-independence.md) — Like visual failure must not suppress independently validated Share/DM/Save; bundle references in both dev and packaged roots
+- [Feed action input transactions](feed-action-input-transaction.md) — serialize final live-node scan, action, recovery, and verification per device to prevent interleaved ADB input

@@ -6,11 +6,53 @@ import os from "os";
 import zlib from "zlib";
 import sharp from "sharp";
 import { randomBytes } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { logger } from "../lib/logger";
 import * as recorder from "./sessionRecorder";
 import { getDebugScreenshotFolderName } from "./debugScreenshotPaths";
 
 const execFileP = promisify(execFile);
+
+const inputTransactionContext = new AsyncLocalStorage<string>();
+const inputGateTails = new Map<string, Promise<void>>();
+
+async function runWithDeviceInputGate<T>(serial: string, operation: () => Promise<T>): Promise<T> {
+  if (inputTransactionContext.getStore() === serial) {
+    return operation();
+  }
+
+  const previous = inputGateTails.get(serial) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  inputGateTails.set(serial, current);
+
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (inputGateTails.get(serial) === current) {
+      inputGateTails.delete(serial);
+    }
+  }
+}
+
+/**
+ * Hold a device's input gate across a complete scan/action/verification
+ * sequence. Individual input helpers inherit the transaction context, while
+ * unrelated callers queue behind it instead of injecting a gesture between a
+ * live node scan and its tap.
+ */
+export async function withInputTransaction<T>(
+  serial: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return runWithDeviceInputGate(serial, () =>
+    inputTransactionContext.run(serial, operation),
+  );
+}
 
 /**
  * A device can disappear between the initial cycle readiness check and any
@@ -2770,28 +2812,30 @@ function escapeForAdbInput(s: string): string {
 // which is exactly the "clicks do nothing, no error anywhere" symptom this
 // is fixing.
 async function runInputShell(serial: string, args: string[], label: string): Promise<void> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  try {
-    const { stdout, stderr } = await execFileP(
-      adb,
-      ["-s", serial, "shell", "input", ...args],
-      { encoding: "utf8", timeout: 5000 } as any,
-    );
-    const out = `${stdout ?? ""}${stderr ?? ""}`.trim();
-    if (/error|exception|permission denied/i.test(out)) {
-      throw new Error(out);
+  return runWithDeviceInputGate(serial, async () => {
+    const tools = detectToolset();
+    const adb = requireTool(tools.adb, "adb");
+    try {
+      const { stdout, stderr } = await execFileP(
+        adb,
+        ["-s", serial, "shell", "input", ...args],
+        { encoding: "utf8", timeout: 5000 } as any,
+      );
+      const out = `${stdout ?? ""}${stderr ?? ""}`.trim();
+      if (/error|exception|permission denied/i.test(out)) {
+        throw new Error(out);
+      }
+    } catch (e: any) {
+      const out = `${e.stderr ?? ""}${e.stdout ?? ""}`.trim();
+      if (isAndroidDeviceUnavailableError(e)) {
+        throw new AndroidDeviceUnavailableError(serial, `input ${label}`);
+      }
+      const detail = out || (e.killed || e.signal ? "adb timed out" : e.message) || "unknown error";
+      throw new Error(
+        `adb shell input ${label} failed${detail ? `: ${detail}` : ""}`,
+      );
     }
-  } catch (e: any) {
-    const out = `${e.stderr ?? ""}${e.stdout ?? ""}`.trim();
-    if (isAndroidDeviceUnavailableError(e)) {
-      throw new AndroidDeviceUnavailableError(serial, `input ${label}`);
-    }
-    const detail = out || (e.killed || e.signal ? "adb timed out" : e.message) || "unknown error";
-    throw new Error(
-      `adb shell input ${label} failed${detail ? `: ${detail}` : ""}`,
-    );
-  }
+  });
 }
 
 export async function inputText(serial: string, text: string): Promise<void> {
@@ -2940,6 +2984,7 @@ export async function doubleTap(
   onLog?: (msg: string) => void,
   targetBounds?: { x1: number; y1: number; x2: number; y2: number },
 ): Promise<void> {
+  await runWithDeviceInputGate(serial, async () => {
   const tools = await detectToolsetAsync();
   const adb = requireTool(tools.adb, "adb");
   // Choose one offset for the whole gesture, not a separate offset per tap.
@@ -2992,6 +3037,7 @@ export async function doubleTap(
   } catch (error: any) {
     throw new Error(`adb shell double-tap failed: ${error?.message ?? "adb failed"}`);
   }
+  });
 }
 
 export async function swipe(
@@ -3570,9 +3616,11 @@ export function stopScrcpy(serial: string): void {
 /** Presses the hardware/virtual BACK key — used to recover when a scripted
  * tap accidentally navigated out of the app it was supposed to stay in. */
 export async function pressBack(serial: string): Promise<void> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], { encoding: "utf8", timeout: 3000 });
+  await runWithDeviceInputGate(serial, async () => {
+    const tools = detectToolset();
+    const adb = requireTool(tools.adb, "adb");
+    spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], { encoding: "utf8", timeout: 3000 });
+  });
 }
 
 /**

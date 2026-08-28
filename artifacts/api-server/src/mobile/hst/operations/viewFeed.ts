@@ -223,240 +223,104 @@ export async function runCheckFeedLoop(serial: string, params: {
         onLog?.("View Feed action scan: no usable live action row — skipping actions");
         return null;
       }
-      const strictSaveNode = nodes.find(n => n.rid.endsWith("row_feed_button_save")) ?? null;
+      const screen = getScreenSize(serial);
+      const liveLikeNode = nodes.find(n =>
+        (n.rid.endsWith("row_feed_button_like") || /^(?:like|unlike)$/i.test(n.desc)) &&
+        n.x === actionIcons.like.x &&
+        n.y === actionIcons.like.y,
+      ) ?? null;
+      if (!liveLikeNode) {
+        onLog?.(
+          `View Feed a11y scan: Like coordinate did not map back to its live node ` +
+          `(x=${actionIcons.like.x}, y=${actionIcons.like.y}) — skipping`,
+        );
+        return null;
+      }
+      if (
+        liveLikeNode.x1 < 0 || liveLikeNode.y1 < 0 ||
+        liveLikeNode.x2 > screen.w || liveLikeNode.y2 > screen.h ||
+        liveLikeNode.x2 <= liveLikeNode.x1 || liveLikeNode.y2 <= liveLikeNode.y1 ||
+        liveLikeNode.x2 - liveLikeNode.x1 > Math.max(180, screen.w * 0.25) ||
+        liveLikeNode.y2 - liveLikeNode.y1 > Math.max(180, screen.h * 0.12)
+      ) {
+        onLog?.(
+          `View Feed a11y scan: Like node bounds are not a compact visible control ` +
+          `(bounds=[${liveLikeNode.x1},${liveLikeNode.y1}][${liveLikeNode.x2},${liveLikeNode.y2}]) — skipping`,
+        );
+        return null;
+      }
+
+      const currentSameRow = (a: ViewFeedA11yNode, b: ViewFeedA11yNode, tolerance = 36) =>
+        Math.abs(a.y - b.y) <= tolerance;
+      const media = nodes
+        .filter(n =>
+          /(?:carousel_)?media_group/.test(n.rid) &&
+          n.y1 < liveLikeNode.y &&
+          n.y2 <= screen.h &&
+          n.x2 > n.x1 &&
+          n.y2 > n.y1 &&
+          n.x2 > liveLikeNode.x1 &&
+          n.x1 < liveLikeNode.x2,
+        )
+        .sort((a, b) => Math.abs(liveLikeNode.y - a.y2) - Math.abs(liveLikeNode.y - b.y2))[0] ?? null;
+      const mediaToActionGap = media ? liveLikeNode.y - media.y2 : Number.POSITIVE_INFINITY;
+      if (!media || mediaToActionGap > screen.h * 0.12) {
+        onLog?.(
+          `View Feed a11y scan: Like node has no adjacent visible media ` +
+          `(likeY=${liveLikeNode.y}, mediaBottom=${media?.y2 ?? "none"}, ` +
+          `gap=${Number.isFinite(mediaToActionGap) ? mediaToActionGap : "n/a"}) — skipping`,
+        );
+        return null;
+      }
+
+      const row = nodes.filter(n => currentSameRow(n, liveLikeNode));
+      const nodeAt = (position: { x: number; y: number } | null) =>
+        position ? row.find(n => n.x === position.x && n.y === position.y) ?? null : null;
+      const commentNode = row.find(n =>
+        n.rid.endsWith("row_feed_button_comment") ||
+        /^comment$/i.test(n.desc),
+      ) ?? null;
+      const shareFeedNode = nodeAt(actionIcons.shareFeed);
+      const shareDmNode = nodeAt(actionIcons.shareDm);
+      const saveNode = row.find(n =>
+        (n.rid.endsWith("row_feed_button_save") || /^(?:add to saved|remove from saved)$/i.test(n.desc)) &&
+        n.clickable &&
+        n.x1 >= screen.w * 0.78 &&
+        n.x2 - n.x1 <= 180 &&
+        n.y2 - n.y1 <= 180,
+      ) ?? null;
       const strictAuthorNode = nodes
-        .filter(n => n.clickable && n.rid.includes("row_feed_photo_profile_name") && n.y < actionIcons.like.y)
-        .sort((a, b) => b.y - a.y)[0] ?? null;
+        .filter(n =>
+          n.clickable &&
+          n.rid.includes("row_feed_photo_profile_name") &&
+          n.y < media.y1 &&
+          n.x2 > media.x1 &&
+          n.x1 < media.x2,
+        )
+        .sort((a, b) => Math.abs(media.y1 - a.y) - Math.abs(media.y1 - b.y))[0] ?? null;
       const strictAudioNode = nodes
         .filter(n =>
-          n.y < actionIcons.like.y - 20 &&
+          n.y < liveLikeNode.y - 20 &&
           !/action_bar|like_button|comment_|share_|send_|save_/i.test(n.rid) &&
           (/audio|music|sound|song/i.test(n.rid) ||
             /\b(?:audio|music|song|original)\b/i.test(`${n.desc} ${n.text}`)),
         )
         .sort((a, b) => b.y - a.y)[0] ?? null;
       return {
-        like: actionIcons.like,
+        like: { x: liveLikeNode.x, y: liveLikeNode.y },
         likeConfirmed: true,
         alreadyLiked: actionIcons.alreadyLiked ?? false,
-        comment: actionIcons.comment,
-        shareFeed: actionIcons.shareFeed,
-        shareDm: actionIcons.shareDm,
-        save: actionIcons.save,
-        saveLabel: strictSaveNode?.desc || strictSaveNode?.text || "",
+        comment: commentNode ? { x: commentNode.x, y: commentNode.y } : null,
+        shareFeed: shareFeedNode ? { x: shareFeedNode.x, y: shareFeedNode.y } : null,
+        shareDm: shareDmNode ? { x: shareDmNode.x, y: shareDmNode.y } : null,
+        save: saveNode ? { x: saveNode.x, y: saveNode.y } : null,
+        saveLabel: saveNode?.desc || saveNode?.text || "",
         author: strictAuthorNode ? { x: strictAuthorNode.x, y: strictAuthorNode.y, name: strictAuthorNode.desc || strictAuthorNode.text || "unknown" } : null,
         audio: strictAudioNode ? { x: strictAudioNode.x, y: strictAudioNode.y } : null,
-        xml,
-      };
-
-      // View Feed's Like anchor must come from the packaged visual heart
-      // reference. Accessibility Like nodes and media bounds are not safe
-      // anchors on every Instagram build: ads can expose Learn More buttons,
-      // and recycled rows can expose a Like from a different post. The visual
-      // matcher also performs the strict sponsored-card check.
-      const visualIcons = await android.findFeedActionIcons(serial, onLog, {
-        strictViewFeed: true,
-        // Reuse this scan's complete XML. findFeedActionIcons still captures
-        // a fresh screenshot for the visual Like reference, but must not pay
-        // for a second UIAutomator dump of the same post.
-        uiXml: xml,
-      }).catch(() => null);
-      if (!visualIcons) {
-        onLog?.("View Feed action scan: no usable live action row — skipping actions");
-        // View Feed diagnostic only: preserve the raw node attributes that
-        // explain a failed action-bar match. This is especially important for
-        // carousels, whose media hierarchy differs from single-photo posts.
-        // Do not dump the entire XML into the UI log; retain every node in the
-        // action-bar band plus media-group nodes so the next exported log is
-        // self-contained without changing automation behavior.
-        const diagnosticNodes = nodes.filter(n =>
-          (n.y1 >= 0.40 * getScreenSize(serial).h && n.y1 <= 0.82 * getScreenSize(serial).h) ||
-          /(?:carousel_)?media_group/i.test(n.rid),
-        );
-        onLog?.(
-          `View Feed a11y diagnostic: ${diagnosticNodes.length} raw node(s) in ` +
-          `action/media region`,
-        );
-        for (const n of diagnosticNodes) {
-          onLog?.(
-            `[feed-raw-node] ${n.clickable ? "CLICKABLE" : "view"} ` +
-            `rid="${n.rid}" desc="${n.desc}" text="${n.text}" ` +
-            `class="${n.cls}" bounds="[${n.x1},${n.y1}][${n.x2},${n.y2}"]"`,
-          );
-        }
-        return null;
-      }
-      const visualLike = {
-        x: visualIcons.like.x,
-        y: visualIcons.like.y,
-        x1: visualIcons.like.x - 16,
-        y1: visualIcons.like.y - 16,
-        x2: visualIcons.like.x + 16,
-        y2: visualIcons.like.y + 16,
-        rid: visualIcons.likeConfirmed ? "visual-like-reference" : "a11y-like-row-anchor",
-        desc: "",
-        text: "",
-        cls: "android.widget.ImageView",
-        clickable: true,
-      } satisfies ViewFeedA11yNode;
-      // Deliberately use only the visual anchor. The a11y tree remains useful
-      // for finding the optional comment/share/save controls on this same row,
-      // but it can never replace the verified Like coordinate.
-      const likes = [visualLike];
-
-      const sameRow = (a: ViewFeedA11yNode, b: ViewFeedA11yNode, tolerance = 36) =>
-        Math.abs(a.y - b.y) <= tolerance;
-      const isSave = (n: ViewFeedA11yNode) =>
-        n.rid.includes("row_feed_button_save") ||
-        /^(?:add to saved|remove from saved)$/i.test(n.desc);
-      const isComment = (n: ViewFeedA11yNode) =>
-        /^comment$/i.test(n.desc) && !/commentary|comments/i.test(n.text);
-      const isRepost = (n: ViewFeedA11yNode) =>
-        /^(?:repost|repost to your story|share to feed)$/i.test(n.desc);
-      const isDm = (n: ViewFeedA11yNode) =>
-        /^(?:send|direct|message|share via dm)$/i.test(n.desc);
-      const isFeedSaveRibbon = (n: ViewFeedA11yNode) =>
-        n.clickable &&
-        isSave(n) &&
-        n.x1 >= getScreenSize(serial).w * 0.78 &&
-        n.x2 > n.x1 &&
-        n.y2 > n.y1 &&
-        n.x2 - n.x1 <= 180 &&
-        n.y2 - n.y1 <= 180;
-
-      // Pick the row with the strongest complete identity.  A recycled
-      // off-screen post may expose another Like node, but it will not have the
-      // same row's save/role controls.  Ties are ambiguous and fail closed.
-      const rowChoices = likes.map(like => {
-        const row = nodes.filter(n => sameRow(n, like));
-        const controls = row.filter(n => n.clickable);
-        const mediaAbove = nodes
-          .filter(n => /(?:carousel_)?media_group/.test(n.rid) && n.y2 < like.y)
-          .sort((a, b) => (like.y - a.y2) - (like.y - b.y2))[0];
-        const mediaGap = mediaAbove ? like.y - mediaAbove.y2 : Number.POSITIVE_INFINITY;
-        const score =
-          100 +
-          (row.some(isSave) ? 40 : 0) +
-          (row.some(isComment) ? 20 : 0) +
-          (row.some(isRepost) ? 20 : 0) +
-          (row.some(isDm) ? 20 : 0) +
-          Math.min(controls.length, 8) +
-          (mediaAbove ? 60 : 0);
-        return { like, row, score, mediaGap };
-      });
-      rowChoices.sort((a, b) => b.score - a.score || a.mediaGap - b.mediaGap);
-      if (
-        rowChoices.length > 1 &&
-        rowChoices[0].score === rowChoices[1].score &&
-        rowChoices[0].mediaGap === rowChoices[1].mediaGap
-      ) {
-        onLog?.("View Feed a11y scan: multiple equally-identified action rows — skipping");
-        return null;
-      }
-      const chosen = rowChoices[0];
-      const row = chosen.row;
-      const like = chosen.like;
-      const pos = (n: ViewFeedA11yNode) => ({ x: n.x, y: n.y });
-      const clickableRow = row.filter(n => n.clickable);
-      // A save resource-id can also appear on a large wrapper around an
-      // embedded Reel/media surface. Only accept a compact, right-edge live
-      // node as the feed ribbon; never tap a large wrapper's centre.
-      const saveNode = clickableRow.find(isFeedSaveRibbon) ?? null;
-      const commentNode = clickableRow.find(isComment) ?? null;
-      const repostNode = clickableRow.find(isRepost) ?? null;
-      const dmNode = clickableRow.find(isDm) ?? null;
-
-      let comment = commentNode ? pos(commentNode) : null;
-      let shareFeed = repostNode ? pos(repostNode) : null;
-      let shareDm = dmNode ? pos(dmNode) : null;
-
-      // Do not infer unlabeled action identity from horizontal position.
-      // Instagram can expose the comment bubble (or a wrapper/count node)
-      // without exposing the paper-plane node. In that case Share via DM
-      // must remain null and be skipped rather than guessed.
-
-      const mediaCandidates = nodes.filter(n =>
-        /(?:carousel_)?media_group/.test(n.rid) &&
-        n.y2 < like.y &&
-        n.y2 > 0 &&
-        n.x2 > n.x1 && n.y2 > n.y1,
-      );
-      mediaCandidates.sort((a, b) =>
-        (b.x2 - b.x1) * (b.y2 - b.y1) - (a.x2 - a.x1) * (a.y2 - a.y1),
-      );
-      const media = mediaCandidates[0];
-      const { h: actionScreenH } = getScreenSize(serial);
-      const mediaToActionGap = media ? like.y - media.y2 : Number.POSITIVE_INFINITY;
-      // The action row must belong to a currently visible post. A recycled
-      // Like node from the previous post can remain at the top of the dump
-      // while the current post's media/action row is below the viewport. If
-      // there is no media immediately above this Like node, or the gap is
-      // implausibly large, fail closed instead of tapping stale coordinates.
-      if (!media || mediaToActionGap > actionScreenH * 0.12) {
-        onLog?.(
-          `View Feed a11y scan: Like node has no adjacent visible media ` +
-          `(likeY=${like.y}, mediaBottom=${media?.y2 ?? "none"}, gap=${Number.isFinite(mediaToActionGap) ? mediaToActionGap : "n/a"}) — skipping`,
-        );
-        return null;
-      }
-
-      // The author must belong to the current post, not merely be any
-      // clickable row_feed_photo_profile_name node above the action row.
-      // Recycled feed/profile nodes can otherwise win this scan (including
-      // the account profile control in the lower-right navigation area).
-      const { w: authorScreenW } = getScreenSize(serial);
-      const authorCandidates = nodes.filter(n => {
-        if (!n.clickable || !n.rid.includes("row_feed_photo_profile_name") || n.y >= like.y) {
-          return false;
-        }
-        if (media) {
-          // A feed post's author header is immediately above its media and
-          // occupies the same horizontal post bounds. Both values come from
-          // the current accessibility dump.
-          return n.y < media.y1 && n.x2 > media.x1 && n.x1 < media.x2;
-        }
-        // If this build omits media_group, retain only author candidates in
-        // the dynamically derived central region of the device display.
-        return n.x > authorScreenW * 0.15 && n.x < authorScreenW * 0.85;
-      });
-      // The current post's header is the author node immediately before the
-      // current post media. If media is unavailable, the central-region
-      // filter above prevents navigation/profile controls from being chosen.
-      authorCandidates.sort((a, b) => {
-        if (media) {
-          const aGap = media.y1 - a.y;
-          const bGap = media.y1 - b.y;
-          return Math.abs(aGap) - Math.abs(bGap);
-        }
-        return b.y - a.y;
-      });
-      const authorNode = authorCandidates[0] ?? null;
-
-      const audioCandidates = nodes.filter(n => {
-        if (n.y >= like.y - 20) return false;
-        if (/action_bar|like_button|comment_|share_|send_|save_/i.test(n.rid)) return false;
-        return /audio|music|sound|song/i.test(n.rid) ||
-          /\b(?:audio|music|song|original)\b/i.test(`${n.desc} ${n.text}`);
-      });
-      audioCandidates.sort((a, b) => {
-        const aStrong = /audio|music|sound|song/i.test(a.rid) ? 1 : 0;
-        const bStrong = /audio|music|sound|song/i.test(b.rid) ? 1 : 0;
-        return bStrong - aStrong || b.y - a.y;
-      });
-      const audioNode = audioCandidates[0] ?? null;
-
-      return {
-        like: pos(like),
-        likeConfirmed: visualIcons.likeConfirmed ?? false,
-        alreadyLiked: /^unlike$/i.test(like.desc),
-        comment, shareFeed, shareDm,
-        save: saveNode ? pos(saveNode) : null,
-        saveLabel: saveNode?.desc || saveNode?.text || "",
-        author: authorNode ? { ...pos(authorNode), name: authorNode.desc || authorNode.text || "unknown" } : null,
-        audio: audioNode ? pos(audioNode) : null,
         isVideoPost: /SurfaceView|TextureView|VideoView|video_player|row_feed_video/.test(xml),
         xml,
       };
+
     };
     // Roll session scroll personality once — each run of the feed tool gets
     // its own mix so the distribution never converges to a fixed signature
@@ -496,11 +360,13 @@ export async function runCheckFeedLoop(serial: string, params: {
       const wantClickHashtag = clickHashtagChance > 0 && Math.random() < clickHashtagChance;
       const wantClickAuthor = clickAuthorChance > 0 && Math.random() < clickAuthorChance;
 
-      // Single UI dump used for all mid-scroll sheet checks — avoids two
-      // sequential dumps (comments check + interstitial scan) that together
-      // could eat 5-9 s and leave an unexpected sheet open long enough to
-      // auto-dismiss before we react.
-      if (wantLike || wantShareFeed || wantShareDm || wantSave || wantExpandCaption) {
+      const hasActionRoll = wantLike || wantShareFeed || wantShareDm || wantSave || wantExpandCaption;
+      if (hasActionRoll) {
+        await android.withInputTransaction(serial, async () => {
+        // Single UI dump used for all mid-scroll sheet checks — avoids two
+        // sequential dumps (comments check + interstitial scan) that together
+        // could eat 5-9 s and leave an unexpected sheet open long enough to
+        // auto-dismiss before we react.
         const xml = await android.dumpUi(serial).catch(() => "");
         if (/Add a comment|add a comment|Comments/i.test(xml) && /EditText|class="android\.widget\.EditText"/.test(xml)) {
           // Comments sheet accidentally opened by the swipe — press Back.
@@ -527,10 +393,11 @@ export async function runCheckFeedLoop(serial: string, params: {
             await sleepOrAbort(serial, 400);
           }
         }
-      }
+        });
       feedTimingAfterScroll = Date.now();
 
       if (wantLike || wantShareFeed || wantShareDm || wantSave || wantExpandCaption) {
+        await android.withInputTransaction(serial, async () => {
         // This can invoke a 5-second adb dumpsys timeout on a busy device.
         // No action can have navigated away during a scroll-only iteration,
         // so defer the safety check until an action is actually going to be
@@ -922,6 +789,9 @@ export async function runCheckFeedLoop(serial: string, params: {
               }
             }
           }
+          }
+        }
+        );
         }
       } else {
         onLog?.(`View Feed ${i + 1}/${count}: no actions rolled this scroll`);
