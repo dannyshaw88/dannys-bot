@@ -7,6 +7,12 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 **Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
 
+### 2026-08-29 — Do not open Instagram picker before MediaStore indexing
+- A real-device report showed Make a Post pushed/prepared an assigned image, but the image was not preloaded in Instagram's gallery and an existing personal photo was used instead.
+- **Root cause:** the pre-picker audit verified filesystem bytes by pulling the pushed file, but did not verify that Android MediaStore had indexed the exact device path. The existing 1.2-second scanner settle was therefore not a sufficient gate.
+- **Fix:** the audit now polls MediaStore for the exact pushed path before the picker opens and aborts safely if indexing is not observed. The flow cannot continue to a stale gallery selection when the assigned image is unavailable.
+- Status: API build passed and workflow restarted; physical-device confirmation is still required.
+
 ### 2026-08-26 — Home lookup is shared, but the recovery pass is Make a Post-only
 - Investigation of the real-device failure screenshot and git history showed that Make a Post calls the same shared visual `findHomeTab` detector used by Feed, Stories, Explore, Notifications, and Random Actions. The Reels matcher work did not change it.
 - The shared detector had previously been tightened globally to the first navigation slot and the lower navigation band. A single pass can still capture the account-switch settling frame before that row is visually ready.
