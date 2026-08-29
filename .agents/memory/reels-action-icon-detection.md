@@ -26,3 +26,12 @@ matching the moving interior.
 matched, inspect the saved screenshot-matcher log and verify the search region
 before changing the target strategy. Do not restore accessibility or fixed-
 coordinate fallbacks.
+
+Reels Save must use the live screenshot bookmark detector even when an
+accessibility `save_button` node exists.
+
+**Why:** Reels may omit the ribbon or expose a node that does not correspond to
+the visible action; tapping that node can activate a different control.
+
+**How to apply:** Keep Save independent from Like, Comment, Repost, and DM
+resolution. A missing visual ribbon returns null and must be skipped.

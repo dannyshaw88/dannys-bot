@@ -4025,7 +4025,11 @@ export async function findReelActionIcons(
   }
   const liveShareFeed = _findUniqueLiveActionNode(xml, [], ["Repost"], onLog);
   const liveShareDm = _findUniqueLiveActionNode(xml, [":id/direct_share_button"], ["Share", "Send", "Direct", "Message"], onLog);
-  const liveSave = _findUniqueLiveActionNode(xml, [":id/save_button"], ["Save", "Saved"], onLog);
+  // Save is optional on Reels and its accessibility node is not reliable
+  // across surfaces. A save_button node can be absent, renamed, or reused by
+  // another control, so never use it as permission to tap. Require the live
+  // bookmark/ribbon visual match instead; no match means Save is unavailable.
+  const liveSave = await findSaveIconByPixels(serial, liveLike.y, "reel", onLog);
   const liveAlreadyLiked = _liveActionNodes(xml).some(node =>
     node.resourceId.endsWith(":id/like_button") &&
     node.contentDesc.trim().toLowerCase() === "unlike",
