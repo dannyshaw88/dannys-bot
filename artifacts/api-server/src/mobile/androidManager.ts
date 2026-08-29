@@ -4145,58 +4145,6 @@ export async function findReelActionIcons(
   const save = await findSaveIconByPixels(serial, like.y, "reel", onLog);
   const alreadySaved = false;
 
-  // Keep the existing structural fallback for Comment/Repost/Send only.
-  // Save is never inferred from this block; it is always screenshot-matched.
-  if (!shareFeed || !shareDm) {
-    // ── Structural fallback A: ViewGroup icon pattern ──
-    const vgCandidates = colNodes.filter(n => n.cls === "android.view.ViewGroup" && !n.cd && !n.txt);
-    if (!comment && !shareFeed && !shareDm && !save && vgCandidates.length === 4) {
-      onLog?.(`[reel-icons] structural ViewGroup fallback: 4 unlabelled column nodes — assigning Comment/shareFeed/shareDm by Y order; Save remains visual-only`);
-      comment   = pos(vgCandidates[0]);
-      shareFeed = pos(vgCandidates[1]);
-      shareDm   = pos(vgCandidates[2]);
-    } else if (!comment && !shareFeed && !shareDm && vgCandidates.length === 3) {
-      onLog?.(`[reel-icons] structural ViewGroup fallback: 3 unlabelled column nodes — assigning Comment/shareFeed/shareDm by Y order`);
-      comment   = pos(vgCandidates[0]);
-      shareFeed = pos(vgCandidates[1]);
-      shareDm   = pos(vgCandidates[2]);
-    } else if (comment && !shareFeed && !shareDm && vgCandidates.length === 2) {
-      onLog?.(`[reel-icons] structural ViewGroup fallback: 2 unlabelled column nodes (Comment already found) — assigning shareFeed/shareDm by Y order`);
-      shareFeed = pos(vgCandidates[0]);
-      shareDm   = pos(vgCandidates[1]);
-    } else if (!comment && !shareFeed && !shareDm && vgCandidates.length === 2) {
-      // Comment absent or labelled differently — treat remaining 2 as shareFeed + shareDm
-      onLog?.(`[reel-icons] structural ViewGroup fallback: 2 unlabelled column nodes (no Comment) — assigning shareFeed/shareDm by Y order`);
-      shareFeed = pos(vgCandidates[0]);
-      shareDm   = pos(vgCandidates[1]);
-    } else if (vgCandidates.length > 0) {
-      onLog?.(`[reel-icons] structural ViewGroup fallback: ${vgCandidates.length} candidate(s) — ambiguous count, leaving null`);
-    }
-
-    // ── Structural fallback B: Button icon pattern ──
-    // Only runs if fallback A also produced nothing.
-    if (!shareFeed && !shareDm) {
-      const btnCandidates = colNodes.filter(n => n.cls === "android.widget.Button" && !n.cd && !n.txt);
-      if (!comment && btnCandidates.length === 4) {
-        onLog?.(`[reel-icons] structural Button fallback: 4 unlabelled Buttons — assigning Comment/shareFeed/shareDm by Y order; Save remains visual-only`);
-        comment   = pos(btnCandidates[0]);
-        shareFeed = pos(btnCandidates[1]);
-        shareDm   = pos(btnCandidates[2]);
-      } else if (!comment && btnCandidates.length === 3) {
-        onLog?.(`[reel-icons] structural Button fallback: 3 unlabelled Buttons — assigning Comment/shareFeed/shareDm by Y order`);
-        comment   = pos(btnCandidates[0]);
-        shareFeed = pos(btnCandidates[1]);
-        shareDm   = pos(btnCandidates[2]);
-      } else if (btnCandidates.length === 2) {
-        onLog?.(`[reel-icons] structural Button fallback: 2 unlabelled Buttons — assigning shareFeed/shareDm by Y order`);
-        shareFeed = pos(btnCandidates[0]);
-        shareDm   = pos(btnCandidates[1]);
-      } else if (btnCandidates.length > 0) {
-        onLog?.(`[reel-icons] structural Button fallback: ${btnCandidates.length} candidate(s) — ambiguous count, leaving null`);
-      }
-    }
-  }
-
   // Never infer the paper-plane/DM action from vertical position. A visually
   // identical unlabeled node can be Comment or Repost on another Instagram
   // build, and tapping that inferred coordinate opens the wrong surface.
