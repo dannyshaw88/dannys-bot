@@ -2761,6 +2761,7 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
     } catch {}
   }, [storageKey]);
 
+
   const rememberLoaded = (nextDevicePath: string, fileName: string) => {
     setLoadedMedia(current => {
       const next = [...current, { devicePath: nextDevicePath, fileName }];
@@ -2908,8 +2909,8 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
           </span>
         )}
       </div>
-      <p className="mt-1 text-[9px] text-white/35">
-        Select and load as many images as needed. They remain in Instagram’s gallery until you delete them individually.
+       <p className="mt-1 text-[9px] text-white/35">
+         Select and load as many images as needed. They remain in Instagram’s gallery until you delete them individually.
       </p>
       {loadedMedia.length > 0 && (
         <div className="mt-1.5 space-y-1 border-t border-white/10 pt-1.5">
