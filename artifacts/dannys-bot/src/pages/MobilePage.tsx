@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
-  ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
+  ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2, Crop, ArrowRight, Share2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw, NotebookPen,
   Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles, Shuffle,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2,
@@ -2958,12 +2958,27 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const [showNavigationCalibration, setShowNavigationCalibration] = useState(false);
   const [calibrationPosition, setCalibrationPosition] = useState<CalibrationPosition>(null);
   const [showManualMedia, setShowManualMedia] = useState(false);
+  const [showMakePostControls, setShowMakePostControls] = useState(false);
+  const [makePostControlBusy, setMakePostControlBusy] = useState<string | null>(null);
   const toggleManualPower = useCallback(() => {
     if (!phone) return;
     liveCanvasRef.current?.clearToBlack();
     onPower();
     sendKey(phone.serial, manualLive ? 223 : 224, manualLive ? "Sleep" : "Wake", onLog);
   }, [manualLive, onLog, onPower, phone]);
+  const runMakePostControl = useCallback(async (action: "crop" | "next" | "share", label: string) => {
+    if (!phone || makePostControlBusy) return;
+    setMakePostControlBusy(action);
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/make-post-control`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
+      });
+      const body = await response.json().catch(() => null);
+      onLog?.(response.ok ? `Make a Post: ${label} pressed ✓` : `Make a Post: ${label} not pressed — ${body?.error ?? "control unavailable"}`);
+    } catch (e: any) {
+      onLog?.(`Make a Post: ${label} not pressed — ${e?.message ?? "network error"}`);
+    } finally { setMakePostControlBusy(null); }
+  }, [makePostControlBusy, onLog, phone]);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
@@ -3606,7 +3621,35 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
            <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={toggleManualPower} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
-           <NavBtn icon={<Settings2   className="w-3 h-3" />}     label="Controls" onClick={() => setShowNavigationCalibration(true)} />
+            <NavBtn icon={<Settings2   className="w-3 h-3" />}     label="Controls" onClick={() => setShowMakePostControls(v => !v)} />
+        </div>
+      )}
+
+      {isReady && phone && showMakePostControls && (
+        <div className="shrink-0 border-t border-cyan-400/20 bg-zinc-950 px-2 py-2">
+          <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300/70">Make a Post controls</div>
+          <div className="flex items-center justify-center gap-2">
+            {([
+              ["crop", "Crop to fit", Crop],
+              ["next", "Next", ArrowRight],
+              ["share", "Share", Share2],
+            ] as const).map(([action, label, Icon]) => (
+              <button
+                key={action}
+                type="button"
+                disabled={!!makePostControlBusy}
+                onClick={() => runMakePostControl(action, label)}
+                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] text-white/70 hover:border-cyan-400/50 hover:text-cyan-200 disabled:opacity-40"
+              >
+                {makePostControlBusy === action ? <Loader2 className="h-3 w-3 animate-spin" /> : <Icon className="h-3 w-3" />}
+                {label}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => setShowNavigationCalibration(true)}
+            className="mt-2 mx-auto block text-[8px] text-white/40 hover:text-cyan-200">
+            Open Fixed Navigation Calibration
+          </button>
         </div>
       )}
 

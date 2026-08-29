@@ -8204,6 +8204,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  // Make-a-Post operator controls. Each action resolves a fresh live
+  // accessibility node immediately before tapping; never use a remembered
+  // coordinate, which can land on the gallery grid after a transition.
+  app.post("/api/mobile/devices/:serial/input/make-post-control", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const action = z.enum(["crop", "next", "share"]).parse(req.body?.action);
+      const node = action === "crop"
+        ? await android.findExpandPhotoButton(serial)
+        : action === "next"
+          ? await android.findPostNextButton(serial)
+          : await android.findShareFooterButton(serial);
+      if (!node) {
+        res.status(409).json({ ok: false, error: `${action} control was not found on the current live screen` });
+        return;
+      }
+      await android.tap(serial, node.x, node.y, "manual");
+      res.json({ ok: true, action, x: node.x, y: node.y });
+    } catch (e: any) {
+      res.status(400).json({ ok: false, error: e?.message ?? "Make-a-Post control failed" });
+    }
+  });
+
   // Manual long-press from the operator holding on the mirrored screen.
   // The standard ADB idiom for a long-press is a zero-distance swipe with a
   // long duration — same as the automation uses in switchToInstagramAccount
