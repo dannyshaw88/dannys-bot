@@ -200,12 +200,9 @@ for (let expandScan = 0; expandScan < 4 && !expandToggle; expandScan++) {
   if (!expandToggle && expandScan < 3) await sleepOrAbort(serial, 400);
 }
 
-// Confirm the picker is actually open before tapping Next. Check for any
-// recognizable picker signal: the expand toggle (only visible when a photo
-// is selected in the preview), or a labelled Next button.
-// Tap the expand/fit toggle (two-arrow icon, bottom-left of preview) to
-// switch from IG's default centre-crop to the full original photo before
-// advancing to the filter/edit screen.
+// The picker is confirmed by the calibrated Crop to Fit control. Do not use
+// the generic "Next"/"POST" detector here: Instagram's bottom POST tab can
+// match that broad detector and is not part of this flow.
 if (!expandToggle) {
   onLog?.("Make a Post: accessibility resize control not found after retries — aborting safely");
   await android.pressBack(serial);
@@ -216,14 +213,8 @@ if (!expandToggle) {
 await android.tap(serial, expandToggle.x, expandToggle.y);
 await sleepOrAbort(serial, 500);
 
-// The expand/fit tap can animate the preview and temporarily place the
-// gallery grid over the image. Never reuse a Next coordinate found before
-// that transition: on affected Instagram builds it lands back on the
-// image/grid instead of the top-bar button. Re-dump and locate the live
-// control only after the picker has settled.
 await sleepOrAbort(serial, 700);
-onLog?.("Make a Post: re-scanning settled picker for live \"Next\" button…");
-let nextBtn1: { x: number; y: number } | null = await android.findPostNextButton(serial).catch(() => null);
+let nextBtn1: { x: number; y: number } | null = null;
 for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
   nextBtn1 = await android.getCalibratedNavigationControl(serial, "makePostFirstNext").catch(() => null);
   if (!nextBtn1 && nextScan < 3) await sleepOrAbort(serial, 500);
@@ -247,39 +238,21 @@ await android.tap(serial, nextBtn1.x, nextBtn1.y);
 // fail after a bounded settle window in which the picker signal remains and
 // no editor Next appears. All candidates still come from fresh UI dumps.
 let editorNext: { x: number; y: number } | null = null;
-let stillOnPicker: { x: number; y: number } | null = null;
 for (let advanceScan = 0; advanceScan < 10; advanceScan++) {
   await sleepOrAbort(serial, advanceScan === 0 ? 700 : 500);
-    editorNext = await android.getCalibratedNavigationControl(serial, "makePostSecondNext").catch(() => null);
+  editorNext = await android.getCalibratedNavigationControl(serial, "makePostSecondNext").catch(() => null);
   if (editorNext) break;
-  stillOnPicker = await android.findExpandPhotoButton(serial).catch(() => null);
-  if (!stillOnPicker) break;
 }
-if (!editorNext && stillOnPicker) {
-  onLog?.("Make a Post: tapped \"Next\" but the picker screen did not advance after waiting for the editor — aborting this attempt");
+if (!editorNext) {
+  onLog?.("Make a Post: calibrated second Next is unavailable — aborting this attempt");
   await android.pressBack(serial);
   await android.removeDeviceFile(serial, devicePath).catch(() => {});
   return { posted: false };
 }
 
-// Filter/edit screen → Next. Instagram's image editor (audio overlay,
-// filter strip, ratio controls) shows a labelled "Next" in the app bar —
-// give it extra time to settle before looking, since the audio-suggestion
-// overlay animation can delay accessibility-tree population.
-  const nextBtn2 = editorNext ?? await android.getCalibratedNavigationControl(serial, "makePostSecondNext").catch(() => null);
-if (nextBtn2) {
-  onLog?.(`Make a Post: tapping filter/edit "Next" at (${nextBtn2.x}, ${nextBtn2.y})…`);
-  await android.tap(serial, nextBtn2.x, nextBtn2.y);
-  await sleepOrAbort(serial, 2000);
-}
-
-// Edit/adjustments screen → Next (only present on some builds).
-const nextBtn3 = await android.findPostNextButton(serial).catch(() => null);
-if (nextBtn3) {
-  onLog?.(`Make a Post: tapping edit "Next" at (${nextBtn3.x}, ${nextBtn3.y})…`);
-  await android.tap(serial, nextBtn3.x, nextBtn3.y);
-  await sleepOrAbort(serial, 2000);
-}
+onLog?.(`Make a Post: tapping calibrated second Next at (${editorNext.x}, ${editorNext.y})…`);
+await android.tap(serial, editorNext.x, editorNext.y);
+await sleepOrAbort(serial, 2000);
 
 // Caption screen — verify we're actually there before typing/sharing.
 const shareBtn = await android.findShareFooterButton(serial).catch(() => null);
