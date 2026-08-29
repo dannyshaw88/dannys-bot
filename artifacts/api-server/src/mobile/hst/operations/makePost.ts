@@ -225,7 +225,7 @@ await sleepOrAbort(serial, 700);
 onLog?.("Make a Post: re-scanning settled picker for live \"Next\" button…");
 let nextBtn1: { x: number; y: number } | null = await android.findPostNextButton(serial).catch(() => null);
 for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
-  nextBtn1 = await android.findPostNextButton(serial).catch(() => null);
+  nextBtn1 = await android.getCalibratedNavigationControl(serial, "makePostNext").catch(() => null);
   if (!nextBtn1 && nextScan < 3) await sleepOrAbort(serial, 500);
 }
 if (!nextBtn1) {
@@ -250,7 +250,7 @@ let editorNext: { x: number; y: number } | null = null;
 let stillOnPicker: { x: number; y: number } | null = null;
 for (let advanceScan = 0; advanceScan < 10; advanceScan++) {
   await sleepOrAbort(serial, advanceScan === 0 ? 700 : 500);
-  editorNext = await android.findPostNextButton(serial).catch(() => null);
+    editorNext = await android.getCalibratedNavigationControl(serial, "makePostNext").catch(() => null);
   if (editorNext) break;
   stillOnPicker = await android.findExpandPhotoButton(serial).catch(() => null);
   if (!stillOnPicker) break;
@@ -266,7 +266,7 @@ if (!editorNext && stillOnPicker) {
 // filter strip, ratio controls) shows a labelled "Next" in the app bar —
 // give it extra time to settle before looking, since the audio-suggestion
 // overlay animation can delay accessibility-tree population.
-const nextBtn2 = editorNext ?? await android.findPostNextButton(serial).catch(() => null);
+  const nextBtn2 = editorNext ?? await android.getCalibratedNavigationControl(serial, "makePostNext").catch(() => null);
 if (nextBtn2) {
   onLog?.(`Make a Post: tapping filter/edit "Next" at (${nextBtn2.x}, ${nextBtn2.y})…`);
   await android.tap(serial, nextBtn2.x, nextBtn2.y);
@@ -318,7 +318,7 @@ if (preTapPopup) {
 // earlier Share lookup may be stale after caption entry or an editor
 // transition, so require a fresh live Share node immediately before
 // opening the location picker. Never fall back to the older coordinate.
-let finalShareBtn = await android.findShareFooterButton(serial).catch(() => null);
+  let finalShareBtn = await android.getCalibratedNavigationControl(serial, "makePostShare").catch(() => null);
 if (!finalShareBtn) {
   onLog?.("Make a Post: final caption/share page not confirmed immediately before location — aborting safely");
   await android.removeDeviceFile(serial, devicePath).catch(() => {});
@@ -397,7 +397,7 @@ if (addLocation) {
 }
 
 // Re-find Share (screen may have re-rendered after the caption/advanced steps).
-finalShareBtn = await android.findShareFooterButton(serial).catch(() => null);
+    finalShareBtn = await android.getCalibratedNavigationControl(serial, "makePostShare").catch(() => null);
 if (!finalShareBtn) {
   onLog?.("Make a Post: Share control not found after returning from location — aborting safely");
   await android.removeDeviceFile(serial, devicePath).catch(() => {});

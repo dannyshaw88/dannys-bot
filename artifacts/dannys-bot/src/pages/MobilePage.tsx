@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   Smartphone, RefreshCw, CheckCircle2, AlertTriangle,
   WifiOff, Loader2, Terminal, ExternalLink, Usb,
-  ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2, Crop, ArrowRight, Share2,
+  ChevronLeft, ChevronRight, ChevronDown, Home, Power, Trash2,
   FolderOpen, Upload, Download, Fingerprint, ArrowLeft, Copy, CardSim, RotateCcw, NotebookPen,
   Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles, Shuffle,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2,
@@ -2414,7 +2414,7 @@ function CalibrationDialog({
 
 type NavigationControlId =
   | "home" | "reels" | "directMessages" | "search" | "profile"
-  | "createPost" | "makePostCropToFit" | "userSearch" | "notifications" | "settingsBack";
+  | "createPost" | "makePostCropToFit" | "makePostNext" | "makePostShare" | "userSearch" | "notifications" | "settingsBack";
 type NavigationPoint = { x: number; y: number };
 type NavigationMap = {
   version: 1;
@@ -2435,6 +2435,8 @@ const NAVIGATION_CONTROLS: Array<{
   { id: "profile", label: "Profile", instruction: "Show Instagram's bottom navigation, then tap the Profile tab on the physical phone." },
   { id: "createPost", label: "Plus / create post", instruction: "Show the Instagram surface where the post + button is visible, then tap that + on the physical phone." },
   { id: "makePostCropToFit", label: "Make-a-Post Crop to Fit", instruction: "Open Instagram's Make-a-Post image picker with an image selected, then tap the two-arrow Crop to Fit control on the physical phone." },
+  { id: "makePostNext", label: "Make-a-Post Next", instruction: "Open the Make-a-Post picker or editor where Next is visible, then tap the Next button on the physical phone." },
+  { id: "makePostShare", label: "Make-a-Post Share", instruction: "Open the Make-a-Post caption screen where Share is visible, then tap the Share button on the physical phone." },
   { id: "userSearch", label: "Central user-search field", instruction: "Open Instagram Search/Explore and tap the central user-search field on the physical phone." },
   { id: "notifications", label: "Notifications", instruction: "Show the Instagram home header, then tap the Notifications icon on the physical phone." },
   { id: "settingsBack", label: "Instagram Settings Back", instruction: "Open an Instagram Settings detail page, then tap its upper-left Instagram Back arrow (not Android system Back)." },
@@ -2959,27 +2961,12 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const [showNavigationCalibration, setShowNavigationCalibration] = useState(false);
   const [calibrationPosition, setCalibrationPosition] = useState<CalibrationPosition>(null);
   const [showManualMedia, setShowManualMedia] = useState(false);
-  const [showMakePostControls, setShowMakePostControls] = useState(false);
-  const [makePostControlBusy, setMakePostControlBusy] = useState<string | null>(null);
   const toggleManualPower = useCallback(() => {
     if (!phone) return;
     liveCanvasRef.current?.clearToBlack();
     onPower();
     sendKey(phone.serial, manualLive ? 223 : 224, manualLive ? "Sleep" : "Wake", onLog);
   }, [manualLive, onLog, onPower, phone]);
-  const runMakePostControl = useCallback(async (action: "crop" | "next" | "share", label: string) => {
-    if (!phone || makePostControlBusy) return;
-    setMakePostControlBusy(action);
-    try {
-      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/input/make-post-control`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
-      });
-      const body = await response.json().catch(() => null);
-      onLog?.(response.ok ? `Make a Post: ${label} pressed ✓` : `Make a Post: ${label} not pressed — ${body?.error ?? "control unavailable"}`);
-    } catch (e: any) {
-      onLog?.(`Make a Post: ${label} not pressed — ${e?.message ?? "network error"}`);
-    } finally { setMakePostControlBusy(null); }
-  }, [makePostControlBusy, onLog, phone]);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
@@ -3622,35 +3609,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
            <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={toggleManualPower} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
-            <NavBtn icon={<Settings2   className="w-3 h-3" />}     label="Controls" onClick={() => setShowMakePostControls(v => !v)} />
-        </div>
-      )}
-
-      {isReady && phone && showMakePostControls && (
-        <div className="shrink-0 border-t border-cyan-400/20 bg-zinc-950 px-2 py-2">
-          <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-300/70">Make a Post controls</div>
-          <div className="flex items-center justify-center gap-2">
-            {([
-              ["crop", "Crop to fit", Crop],
-              ["next", "Next", ArrowRight],
-              ["share", "Share", Share2],
-            ] as const).map(([action, label, Icon]) => (
-              <button
-                key={action}
-                type="button"
-                disabled={!!makePostControlBusy}
-                onClick={() => runMakePostControl(action, label)}
-                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] text-white/70 hover:border-cyan-400/50 hover:text-cyan-200 disabled:opacity-40"
-              >
-                {makePostControlBusy === action ? <Loader2 className="h-3 w-3 animate-spin" /> : <Icon className="h-3 w-3" />}
-                {label}
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={() => setShowNavigationCalibration(true)}
-            className="mt-2 mx-auto block text-[8px] text-white/40 hover:text-cyan-200">
-            Open Fixed Navigation Calibration
-          </button>
+            <NavBtn icon={<Settings2   className="w-3 h-3" />}     label="Controls" onClick={() => setShowNavigationCalibration(true)} />
         </div>
       )}
 

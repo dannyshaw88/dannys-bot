@@ -8214,8 +8214,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const node = action === "crop"
         ? await android.getCalibratedNavigationControl(serial, "makePostCropToFit")
         : action === "next"
-          ? await android.findPostNextButton(serial)
-          : await android.findShareFooterButton(serial);
+          ? await android.getCalibratedNavigationControl(serial, "makePostNext")
+          : await android.getCalibratedNavigationControl(serial, "makePostShare");
       if (!node) {
         res.status(409).json({ ok: false, error: `${action} control was not found on the current live screen` });
         return;
