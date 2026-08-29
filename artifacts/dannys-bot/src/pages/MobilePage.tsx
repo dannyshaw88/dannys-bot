@@ -10825,7 +10825,7 @@ function ActionLogPanel({ lines, onClear }: { lines: string[]; onClear: () => vo
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `equinox-action-log-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
+    a.download = `aura-farming-action-log-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -11115,7 +11115,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a");
       a.href     = url;
-      a.download = `equinox-log-record-${serial ?? "unknown"}-${Date.now()}.json`;
+      a.download = `aura-farming-log-record-${serial ?? "unknown"}-${Date.now()}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -11138,7 +11138,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `equinox-log-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
+    a.download = `aura-farming-log-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -11849,9 +11849,10 @@ export function MobilePage() {
       .catch(() => setFarmSlotIndex(null));
   }, [targetSerial]);
 
-  // Forget "live" state for any serial that's no longer plugged in, so a
-  // phone unplugged then reconnected (or a different phone reusing a slot)
-  // always starts idle again instead of resuming a stream on its own.
+  // Keep an intentional manual mirror session alive through transient USB
+  // polling gaps. A phone card can briefly disappear while ADB refreshes;
+  // clearing liveOn here made Power On wake the phone and then tear down the
+  // mirror a few seconds later. Deliberate Power Off still clears it.
   useEffect(() => {
     const connected = new Set(phones.map(p => p.serial));
     if (targetSerial && connected.has(targetSerial) && restartRequested) {
@@ -11860,14 +11861,6 @@ export function MobilePage() {
         sessionStorage.removeItem("mobile-device-restart-requested");
       }
     }
-    setLiveOn(prev => {
-      const next: Record<string, boolean> = {};
-      let changed = false;
-      for (const [serial, on] of Object.entries(prev)) {
-        if (connected.has(serial)) next[serial] = on; else changed = true;
-      }
-      return changed ? next : prev;
-    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phones.map(p => p.serial).join(","), targetSerial, restartRequested]);
 
