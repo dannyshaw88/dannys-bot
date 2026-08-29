@@ -196,7 +196,7 @@ if (onStoryScreen) {
 onLog?.("Make a Post: IG auto-selects newest photo — checking for expand/fit toggle…");
 let expandToggle: { x: number; y: number } | null = null;
 for (let expandScan = 0; expandScan < 4 && !expandToggle; expandScan++) {
-  expandToggle = await android.findExpandPhotoButton(serial).catch(() => null);
+  expandToggle = await android.getCalibratedNavigationControl(serial, "makePostCropToFit").catch(() => null);
   if (!expandToggle && expandScan < 3) await sleepOrAbort(serial, 400);
 }
 
@@ -212,7 +212,7 @@ if (!expandToggle) {
   await android.removeDeviceFile(serial, devicePath).catch(() => {});
   return { posted: false };
 }
-onLog?.(`Make a Post: tapping accessibility expand/fit toggle at (${expandToggle.x}, ${expandToggle.y})…`);
+  onLog?.(`Make a Post: tapping calibrated Crop to Fit control at (${expandToggle.x}, ${expandToggle.y})…`);
 await android.tap(serial, expandToggle.x, expandToggle.y);
 await sleepOrAbort(serial, 500);
 

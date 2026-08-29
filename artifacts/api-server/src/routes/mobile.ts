@@ -8212,7 +8212,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const action = z.enum(["crop", "next", "share"]).parse(req.body?.action);
       const node = action === "crop"
-        ? await android.findExpandPhotoButton(serial)
+        ? await android.getCalibratedNavigationControl(serial, "makePostCropToFit")
         : action === "next"
           ? await android.findPostNextButton(serial)
           : await android.findShareFooterButton(serial);

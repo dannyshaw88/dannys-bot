@@ -11069,6 +11069,7 @@ export const NAVIGATION_CONTROL_IDS = [
   "search",
   "profile",
   "createPost",
+  "makePostCropToFit",
   "userSearch",
   "notifications",
   "settingsBack",

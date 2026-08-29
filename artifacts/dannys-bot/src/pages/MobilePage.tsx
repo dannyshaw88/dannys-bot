@@ -2414,7 +2414,7 @@ function CalibrationDialog({
 
 type NavigationControlId =
   | "home" | "reels" | "directMessages" | "search" | "profile"
-  | "createPost" | "userSearch" | "notifications" | "settingsBack";
+  | "createPost" | "makePostCropToFit" | "userSearch" | "notifications" | "settingsBack";
 type NavigationPoint = { x: number; y: number };
 type NavigationMap = {
   version: 1;
@@ -2434,6 +2434,7 @@ const NAVIGATION_CONTROLS: Array<{
   { id: "search", label: "Search", instruction: "Show Instagram's bottom navigation, then tap the Search tab on the physical phone." },
   { id: "profile", label: "Profile", instruction: "Show Instagram's bottom navigation, then tap the Profile tab on the physical phone." },
   { id: "createPost", label: "Plus / create post", instruction: "Show the Instagram surface where the post + button is visible, then tap that + on the physical phone." },
+  { id: "makePostCropToFit", label: "Make-a-Post Crop to Fit", instruction: "Open Instagram's Make-a-Post image picker with an image selected, then tap the two-arrow Crop to Fit control on the physical phone." },
   { id: "userSearch", label: "Central user-search field", instruction: "Open Instagram Search/Explore and tap the central user-search field on the physical phone." },
   { id: "notifications", label: "Notifications", instruction: "Show the Instagram home header, then tap the Notifications icon on the physical phone." },
   { id: "settingsBack", label: "Instagram Settings Back", instruction: "Open an Instagram Settings detail page, then tap its upper-left Instagram Back arrow (not Android system Back)." },
