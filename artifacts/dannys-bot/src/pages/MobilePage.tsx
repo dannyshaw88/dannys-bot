@@ -2414,7 +2414,7 @@ function CalibrationDialog({
 
 type NavigationControlId =
   | "home" | "reels" | "directMessages" | "search" | "profile"
-  | "createPost" | "makePostCropToFit" | "makePostNext" | "makePostShare" | "userSearch" | "notifications" | "settingsBack";
+  | "createPost" | "makePostCropToFit" | "makePostFirstNext" | "makePostSecondNext" | "makePostShare" | "userSearch" | "notifications" | "settingsBack";
 type NavigationPoint = { x: number; y: number };
 type NavigationMap = {
   version: 1;
@@ -2435,7 +2435,8 @@ const NAVIGATION_CONTROLS: Array<{
   { id: "profile", label: "Profile", instruction: "Show Instagram's bottom navigation, then tap the Profile tab on the physical phone." },
   { id: "createPost", label: "Plus / create post", instruction: "Show the Instagram surface where the post + button is visible, then tap that + on the physical phone." },
   { id: "makePostCropToFit", label: "Make-a-Post Crop to Fit", instruction: "Open Instagram's Make-a-Post image picker with an image selected, then tap the two-arrow Crop to Fit control on the physical phone." },
-  { id: "makePostNext", label: "Make-a-Post Next", instruction: "Open the Make-a-Post picker or editor where Next is visible, then tap the Next button on the physical phone." },
+  { id: "makePostFirstNext", label: "Make-a-Post First Next (top)", instruction: "Open the Make-a-Post image picker with an image selected, then tap the first Next button at the top of the physical phone." },
+  { id: "makePostSecondNext", label: "Make-a-Post Second Next (bottom)", instruction: "Open the Make-a-Post editor screen, then tap the second Next button at the bottom of the physical phone." },
   { id: "makePostShare", label: "Make-a-Post Share", instruction: "Open the Make-a-Post caption screen where Share is visible, then tap the Share button on the physical phone." },
   { id: "userSearch", label: "Central user-search field", instruction: "Open Instagram Search/Explore and tap the central user-search field on the physical phone." },
   { id: "notifications", label: "Notifications", instruction: "Show the Instagram home header, then tap the Notifications icon on the physical phone." },
