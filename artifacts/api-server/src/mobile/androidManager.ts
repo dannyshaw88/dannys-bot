@@ -3834,6 +3834,9 @@ type LiveActionNode = {
   resourceId: string;
   contentDesc: string;
   text: string;
+  width: number;
+  height: number;
+  clickable: boolean;
 };
 
 function _liveActionNodes(xml: string): LiveActionNode[] {
@@ -3855,6 +3858,9 @@ function _liveActionNodes(xml: string): LiveActionNode[] {
       resourceId: attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "",
       contentDesc: attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "",
       text: attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+      width: x2 - x1,
+      height: y2 - y1,
+      clickable: /\bclickable="true"/i.test(attrs),
     });
   }
   return nodes;
@@ -3867,7 +3873,15 @@ function _findUniqueLiveActionNode(
   onLog?: (message: string) => void,
 ): { x: number; y: number } | null {
   const nodes = _liveActionNodes(xml);
-  const byResource = nodes.filter(node =>
+  // A label/resource match is not enough: Instagram also exposes count
+  // nodes and row-sized containers near the action icons. Only a live,
+  // clickable, icon-sized node is safe to tap.
+  const actionable = nodes.filter(node =>
+    node.clickable && node.width > 0 && node.height > 0 &&
+    node.width <= 180 && node.height <= 180 &&
+    !/^\s*[\d,.]+[KMB]?\s*$/i.test(node.text),
+  );
+  const byResource = actionable.filter(node =>
     resourceIdSuffixes.some(suffix => node.resourceId === suffix || node.resourceId.endsWith(suffix)),
   );
   if (byResource.length > 1) {
@@ -3876,7 +3890,7 @@ function _findUniqueLiveActionNode(
   }
   if (byResource.length === 1) return { x: byResource[0].x, y: byResource[0].y };
 
-  const byDescription = nodes.filter(node =>
+  const byDescription = actionable.filter(node =>
     contentDescriptions.some(description => node.contentDesc.trim().toLowerCase() === description.toLowerCase()),
   );
   if (byDescription.length > 1) {

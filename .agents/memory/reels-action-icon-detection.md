@@ -35,3 +35,12 @@ the visible action; tapping that node can activate a different control.
 
 **How to apply:** Keep Save independent from Like, Comment, Repost, and DM
 resolution. A missing visual ribbon returns null and must be skipped.
+
+Accessibility action matches must also be validated as clickable, icon-sized
+nodes; count labels and row-sized containers are not safe tap targets.
+
+**Why:** Reels can expose action labels on parent/container nodes while the
+visible control is elsewhere, causing a share tap to open the likes/count sheet.
+
+**How to apply:** Reject numeric count text, non-clickable nodes, and oversized
+bounds before resolving any action coordinate. Missing validation means skip.
