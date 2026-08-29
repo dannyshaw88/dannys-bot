@@ -279,6 +279,9 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // (= CSS-pixel) coords. Set by drawFrame() on every frame so mapToPhone()
   // reads from the exact same numbers used to paint — no CSS inference at all.
   const drawRectRef  = useRef<{ dx: number; dy: number; dw: number; dh: number } | null>(null);
+  // Re-render coordinate overlays when a new frame establishes or changes the
+  // phone-to-canvas geometry. Refs alone do not trigger React rendering.
+  const [, setGeometryRevision] = useState(0);
   // Tap indicator: shows where the mouse clicked (red) vs where the system
   // sent the tap (blue). In Click Test mode a second click adds a yellow dot
   // (user marking where the tap *should* have landed). All in canvas-CSS-pixel space.
@@ -506,6 +509,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           dw = cw; dh = Math.round(dw / phoneRatio); dx = 0; dy = Math.round((ch - dh) / 2);
         }
         drawRectRef.current = { dx, dy, dw, dh };
+        setGeometryRevision(value => value + 1);
         const ctx = getCtx();
         if (ctx) {
           ctx.fillStyle = "#000";
