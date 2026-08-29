@@ -238,7 +238,7 @@ type LogMarker = {
   /** Short label drawn next to the dot (e.g. the trimmed log line for bot taps). */
   label?: string;
 };
-type CalibrationPosition = { x: number; y: number; label: string } | null;
+type CalibrationPosition = { x: number; y: number; label: string; screen?: { w: number; h: number } } | null;
 
 type InspectNode = {
   index?: number;
@@ -1389,7 +1389,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       })()}
       {calibrationPosition && (() => {
         const canvas = canvasRef.current;
-        const ps = phoneSizeRef.current ?? phoneDims;
+        // Use the display size recorded with the calibration map. A stale
+        // phoneDims value (or a stream with a different encoded height) can
+        // otherwise move a correctly captured point toward the bottom.
+        const ps = calibrationPosition.screen ?? phoneSizeRef.current ?? phoneDims;
         const dr = drawRectRef.current ?? (canvas ? { dx: 0, dy: 0, dw: canvas.clientWidth, dh: canvas.clientHeight } : null);
         if (!ps || !dr || !canvas || !canvas.clientWidth || !canvas.clientHeight) return null;
         const cssX = dr.dx + (calibrationPosition.x / ps.w) * dr.dw;
@@ -2716,7 +2719,7 @@ function NavigationCalibrationDialog({
                       {isCapturing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Re-tap"}
                     </Button>
                     {point && (
-                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-cyan-300 hover:bg-cyan-950/50" onClick={() => onCalibrationPosition?.({ ...point, label: control.label })} disabled={!!capturing || !!testing}>
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-cyan-300 hover:bg-cyan-950/50" onClick={() => onCalibrationPosition?.({ ...point, label: control.label, screen: map?.screen })} disabled={!!capturing || !!testing}>
                         Position
                       </Button>
                     )}
