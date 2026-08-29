@@ -11194,7 +11194,10 @@ export async function tapCalibratedNavigationControl(
   const y = Math.round(point.y);
   const { w, h } = getScreenSize(serial);
   onLog?.(`[cal-navigation] tapping ${control} at (${x},${y}) on ${w}x${h}`);
-  await tap(serial, x, y, "bot");
+  // Calibration tests must exercise the saved point exactly. The bot tap
+  // path adds humanisation jitter, which makes a correct calibration appear
+  // wrong (especially on small controls) and makes diagnosis impossible.
+  await tap(serial, x, y, "manual");
   return { x, y };
 }
 
