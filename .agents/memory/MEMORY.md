@@ -108,6 +108,7 @@
 - [Follow search template scan](follow-search-template-scan.md) — large multi-template search must be single-flight and yield during scans to protect native screenshot work
 - [Follow one-back navigation](follow-one-back-navigation.md) — after profile follow, one Back returns to search results; a second Back exits Explore to Home
 - [Per-device mother-code personality](per-device-mother-code-personality.md) — derive stable timing and gesture accents from serial while preserving per-action randomness and saved profile bounds
+- [Zero-weight swipe modes](zero-weight-swipe-modes.md) — an explicit 0–0 weight range disables a gesture; never treat zero as “not configured”
 - [Diagnostic API liveness](diagnostic-api-liveness.md) — child object presence and ChildProcess.killed do not prove the API is alive; track exit state and read the configured log
 - [Sharp Windows access violations](sharp-windows-access-violation.md) — serialize native Sharp screenshot decoding and keep libvips concurrency/cache conservative under multi-device polling
 - [Debug screenshot timestamp dedupe](debug-screenshot-timestamp-dedupe.md) — capture one composite per elapsed log timestamp; same-timestamp detail lines stay log-only

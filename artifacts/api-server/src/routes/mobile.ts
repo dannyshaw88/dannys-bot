@@ -4691,7 +4691,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     for (const mode of Object.keys(effective) as Array<keyof typeof effective>) {
       const configured = overrides?.[mode];
-      if (configured && (configured.weightMin > 0 || configured.weightMax > 0)) {
+      // An explicitly configured 0–0 range means this mode is disabled.
+      // Do not fall back to the Mother Code weight just because both values
+      // are zero; zero-weight modes must never be selected.
+      if (configured) {
         const min = Math.min(configured.weightMin, configured.weightMax);
         const max = Math.max(configured.weightMin, configured.weightMax);
         effective[mode] = min + Math.random() * (max - min);
