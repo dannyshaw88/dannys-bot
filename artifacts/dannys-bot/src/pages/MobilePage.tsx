@@ -269,7 +269,7 @@ type PendingPin = {
   parentNode: InspectNode | null;
 };
 
-const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; calibrationPosition?: CalibrationPosition; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: "connecting" | "waiting" | "live" | "asleep" | "error") => void }>(function LiveCanvas({ serial, live, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, calibrationPosition, onExpectedTap, onStatusChange }, ref) {
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; phoneDims?: { w: number; h: number } | null; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; calibrationPosition?: CalibrationPosition; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: "connecting" | "waiting" | "live" | "asleep" | "error") => void }>(function LiveCanvas({ serial, live, phoneDims, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, calibrationPosition, onExpectedTap, onStatusChange }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -1388,9 +1388,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         );
       })()}
       {calibrationPosition && (() => {
-        const ps = phoneSizeRef.current;
-        const dr = drawRectRef.current;
-        if (!ps || !dr) return null;
+        const canvas = canvasRef.current;
+        const ps = phoneSizeRef.current ?? phoneDims;
+        const dr = drawRectRef.current ?? (canvas ? { dx: 0, dy: 0, dw: canvas.clientWidth, dh: canvas.clientHeight } : null);
+        if (!ps || !dr || !canvas || !canvas.clientWidth || !canvas.clientHeight) return null;
         const cssX = dr.dx + (calibrationPosition.x / ps.w) * dr.dw;
         const cssY = dr.dy + (calibrationPosition.y / ps.h) * dr.dh;
         return (
@@ -3300,6 +3301,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
             ref={liveCanvasRef}
             serial={phone.serial}
             live={live}
+            phoneDims={phoneDims}
             onLog={onLog}
             onDimensions={onDimensions}
             inspectMode={inspectMode}
