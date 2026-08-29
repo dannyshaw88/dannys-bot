@@ -4789,7 +4789,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const maxDuration = Math.max(minDuration, Math.max(configured.durationMinMs, configured.durationMaxMs));
     const bands: Record<NonNullable<typeof personality>, [number, number]> = {
       superSkim: [0, .20], skim: [.20, .45], fast: [.45, .70], quick: [.70, .90],
-      normal: [.90, 1], slow: [.90, 1], focused: [.90, 1], tapDragRelease: [.05, .10], back: [.05, .10],
+      normal: [.90, 1], slow: [.90, 1], focused: [.90, 1], tapDragRelease: [.05, .10],
+      // Story exit reverses the configured swipe direction, but must not use
+      // the tap-drag speed band. A 5–10% duration often becomes too short for
+      // Instagram to recognize the downward viewer-dismiss gesture.
+      back: [.90, 1],
     };
     const [bandStart, bandEnd] = personality ? bands[personality] : [0, 1];
     const slot = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
