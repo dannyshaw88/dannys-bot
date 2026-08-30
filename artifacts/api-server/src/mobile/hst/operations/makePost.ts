@@ -92,10 +92,7 @@ try {
 onLog?.(`Make a Post: adb push complete — devicePath=${devicePath}`);
 await prepared.cleanup();
 onLog?.("Make a Post: local prepared image cleaned up after push");
-onLog?.("Make a Post: auditing device media copy before opening Instagram picker…");
-await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);
-onLog?.("Make a Post: device media audit complete");
-onLog?.(`Make a Post: ✓ pushed to ${devicePath}, media-scanner notified — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
+  onLog?.(`Make a Post: ✓ pushed to ${devicePath} — waiting for Instagram to index the image`);
 await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
 onLog?.("Make a Post: media-scan settle complete; looking for compose icon");
 
