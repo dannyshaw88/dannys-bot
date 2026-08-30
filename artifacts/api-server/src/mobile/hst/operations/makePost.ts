@@ -141,27 +141,6 @@ if (await android.isOnNotificationsOrDirectScreenLive(serial).catch(() => false)
 // would dismiss the compose/picker screen itself back to the home feed.
 await android.dismissInstagramInterstitials(serial).catch(() => null);
 
-// The "+" compose icon opens a sheet with multiple post-type tabs
-// (POST / REEL / STORY). Tap the POST tab to switch into the feed-post
-// gallery/picker. When the sheet already opened on POST mode this tab
-// isn't present, so this is a no-op in that case.
-onLog?.("Make a Post: checking for POST mode tab…");
-const postTab = await android.findButtonByLabel(serial, "POST").catch(() => null)
-  ?? await android.findButtonByLabel(serial, "Post").catch(() => null);
-if (postTab) {
-  onLog?.("Make a Post: tapping POST tab…");
-  await android.tap(serial, postTab.x, postTab.y);
-  onLog?.("Make a Post: POST tab tapped — waiting 2 s for grid to load…");
-  await sleepOrAbort(serial, 2000);
-  onLog?.("Make a Post: 2 s wait done");
-} else {
-  // POST tab not found — already on the photo picker, but give the grid
-  // a moment to finish loading before we scan for thumbnails.
-  onLog?.("Make a Post: no POST tab found — waiting 800 ms…");
-  await sleepOrAbort(serial, 800);
-  onLog?.("Make a Post: 800 ms wait done");
-}
-
 // ── Story-picker guard ────────────────────────────────────────────────────
 // The story "+" button in the stories tray carries content-desc="Add" and
 // appears before the compose "+" in the accessibility tree, so
