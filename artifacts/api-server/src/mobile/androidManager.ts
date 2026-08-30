@@ -4037,7 +4037,17 @@ export async function findReelActionIcons(
     onLog?.("[reel-icons] live like_button node not found or ambiguous — skipping reel actions");
     return null;
   }
-  const liveShareFeed = _findUniqueLiveActionNode(xml, [], ["Repost"], onLog);
+  // Reels can expose "Repost" as a label on non-action containers/statistics
+  // nodes. Label-only matching is therefore unsafe here: it can produce a
+  // coordinate that is not the double-arrow repost control. Require a
+  // resource-id belonging to the repost action and fail closed when the
+  // current Instagram build does not expose one.
+  const liveShareFeed = _findUniqueLiveActionNode(
+    xml,
+    [":id/repost_button", ":id/reposts_ufi_icon", ":id/repost_icon"],
+    [],
+    onLog,
+  );
   const liveShareDm = _findUniqueLiveActionNode(xml, [":id/direct_share_button"], ["Share", "Send", "Direct", "Message"], onLog);
   // Save is optional on Reels and its accessibility node is not reliable
   // across surfaces. A save_button node can be absent, renamed, or reused by
