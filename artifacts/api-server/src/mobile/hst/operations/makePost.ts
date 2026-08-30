@@ -138,6 +138,17 @@ if (await android.isOnNotificationsOrDirectScreenLive(serial).catch(() => false)
 // would dismiss the compose/picker screen itself back to the home feed.
 await android.dismissInstagramInterstitials(serial).catch(() => null);
 
+  // getCalibratedNavigationControl is intentionally synchronous: it resolves
+  // a saved point and throws when the map/control is unavailable. Keep retry
+  // handling local without treating its returned point as a Promise.
+  const resolveCalibratedControl = (control: string): { x: number; y: number } | null => {
+    try {
+      return android.getCalibratedNavigationControl(serial, control);
+    } catch {
+      return null;
+    }
+  };
+
 // ── Story-picker guard ────────────────────────────────────────────────────
 // The story "+" button in the stories tray carries content-desc="Add" and
 // appears before the compose "+" in the accessibility tree, so
@@ -172,7 +183,7 @@ if (onStoryScreen) {
 onLog?.("Make a Post: IG auto-selects newest photo — checking for expand/fit toggle…");
 let expandToggle: { x: number; y: number } | null = null;
 for (let expandScan = 0; expandScan < 4 && !expandToggle; expandScan++) {
-  expandToggle = await android.getCalibratedNavigationControl(serial, "makePostCropToFit").catch(() => null);
+  expandToggle = resolveCalibratedControl("makePostCropToFit");
   if (!expandToggle && expandScan < 3) await sleepOrAbort(serial, 400);
 }
 
@@ -192,7 +203,7 @@ await sleepOrAbort(serial, 500);
 await sleepOrAbort(serial, 700);
 let nextBtn1: { x: number; y: number } | null = null;
 for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
-  nextBtn1 = await android.getCalibratedNavigationControl(serial, "makePostFirstNext").catch(() => null);
+  nextBtn1 = resolveCalibratedControl("makePostFirstNext");
   if (!nextBtn1 && nextScan < 3) await sleepOrAbort(serial, 500);
 }
 if (!nextBtn1) {
@@ -216,7 +227,7 @@ await android.tap(serial, nextBtn1.x, nextBtn1.y);
 let editorNext: { x: number; y: number } | null = null;
 for (let advanceScan = 0; advanceScan < 10; advanceScan++) {
   await sleepOrAbort(serial, advanceScan === 0 ? 700 : 500);
-  editorNext = await android.getCalibratedNavigationControl(serial, "makePostSecondNext").catch(() => null);
+  editorNext = resolveCalibratedControl("makePostSecondNext");
   if (editorNext) break;
 }
 if (!editorNext) {
@@ -267,7 +278,7 @@ if (preTapPopup) {
 // earlier Share lookup may be stale after caption entry or an editor
 // transition, so require a fresh live Share node immediately before
 // opening the location picker. Never fall back to the older coordinate.
-  let finalShareBtn = await android.getCalibratedNavigationControl(serial, "makePostShare").catch(() => null);
+  let finalShareBtn = resolveCalibratedControl("makePostShare");
 if (!finalShareBtn) {
   onLog?.("Make a Post: final caption/share page not confirmed immediately before location — aborting safely");
   await android.removeDeviceFile(serial, devicePath).catch(() => {});
@@ -346,7 +357,7 @@ if (addLocation) {
 }
 
 // Re-find Share (screen may have re-rendered after the caption/advanced steps).
-    finalShareBtn = await android.getCalibratedNavigationControl(serial, "makePostShare").catch(() => null);
+    finalShareBtn = resolveCalibratedControl("makePostShare");
 if (!finalShareBtn) {
   onLog?.("Make a Post: Share control not found after returning from location — aborting safely");
   await android.removeDeviceFile(serial, devicePath).catch(() => {});
