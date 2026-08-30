@@ -108,23 +108,33 @@ export async function runUpdateBio(
     //    typing must never begin in a field containing stale Bio text.
     {
       try {
-        onLog?.("Update Bio: clearing focused field — select-all then delete");
-        await android.clearFocusedTextField(
-          serial,
-          (message: string) => onLog?.(`Update Bio: ${message}`),
-        );
-        const clearedXml = await android.dumpUi(serial);
-        const focusedField = [...clearedXml.matchAll(/<node\b[^>]*class="android\.widget\.EditText"[^>]*>/gi)]
+        const beforeClearXml = await android.dumpUi(serial);
+        const focusedField = [...beforeClearXml.matchAll(/<node\b[^>]*class="android\.widget\.EditText"[^>]*>/gi)]
           .map(match => match[0])
           .find(node => /focused="true"/i.test(node));
-        const remaining = focusedField?.match(/\btext="([^"]*)"/i)?.[1] ?? "";
-        onLog?.(`Update Bio: clear verification — focusedEditTextFound=${Boolean(focusedField)}, remainingLength=${remaining.length}, remainingValue=${JSON.stringify(remaining)}`);
-        if (remaining.length > 0) {
-          onLog?.(`Update Bio: ✗ clear verification found ${remaining.length} remaining characters — aborting`);
-          await android.pressBack(serial);
-          return;
+        const existingBio = focusedField?.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+        onLog?.(`Update Bio: focused field detected=${Boolean(focusedField)}, existingLength=${existingBio.length}`);
+        if (existingBio.length > 0) {
+          onLog?.("Update Bio: clearing existing Bio — select-all then delete");
+          await android.clearFocusedTextField(
+            serial,
+            (message: string) => onLog?.(`Update Bio: ${message}`),
+          );
+          const clearedXml = await android.dumpUi(serial);
+          const clearedField = [...clearedXml.matchAll(/<node\b[^>]*class="android\.widget\.EditText"[^>]*>/gi)]
+            .map(match => match[0])
+            .find(node => /focused="true"/i.test(node));
+          const remaining = clearedField?.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+          onLog?.(`Update Bio: clear verification — focusedEditTextFound=${Boolean(clearedField)}, remainingLength=${remaining.length}, remainingValue=${JSON.stringify(remaining)}`);
+          if (remaining.length > 0) {
+            onLog?.(`Update Bio: ✗ clear verification found ${remaining.length} remaining characters — aborting`);
+            await android.pressBack(serial);
+            return;
+          }
+          onLog?.("Update Bio: ✓ existing Bio text cleared and verified");
+        } else {
+          onLog?.("Update Bio: field is already empty — skipping select-all/delete");
         }
-        onLog?.("Update Bio: ✓ existing Bio text cleared and verified");
       } catch (e: any) {
         onLog?.(`Update Bio: ✗ could not select/clear existing Bio text — ${e?.message ?? String(e)}`);
         await android.pressBack(serial);
