@@ -3443,7 +3443,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         throw new Error("Swipe Gesture Profile duration is invalid");
       }
       const durationMinMs = Math.min(gesture.durationMinMs, gesture.durationMaxMs);
-      const durationMaxMs = Math.min(150, Math.max(gesture.durationMinMs, gesture.durationMaxMs));
+      // The settings are milliseconds for the complete swipe. Do not cap the
+      // test path at 150ms: that made ranges such as 250–275ms invert
+      // (min=250, max=150), so the preview/test no longer represented the
+      // configured gesture and could appear as a tap.
+      const durationMaxMs = Math.max(gesture.durationMinMs, gesture.durationMaxMs);
       const durationMs = durationMinMs + Math.round(Math.random() * (durationMaxMs - durationMinMs));
       // The UI supplies this exact randomized path. Disable the legacy
       // low-level jitter so the coordinates in the response are precisely
