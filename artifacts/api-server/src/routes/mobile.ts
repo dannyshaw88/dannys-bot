@@ -6075,6 +6075,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       steps.push("power-on");
       await sleepOrAbort(serial, 1200); // let the screen finish waking
 
+       // USB/MTP consent is separate from USB debugging.  Image uploads need
+       // phone-data access, and a hub re-enumeration can make Android show the
+       // consent dialog again.  Resolve it from the live UI tree before the
+       // unlock gesture so it cannot block the cycle.
+       tLog("▶ Checking USB phone-data access…");
+       const usbDataPopup = await android.acceptUsbPhoneDataDialog(serial).catch(() => false);
+       if (usbDataPopup) {
+         steps.push("usb-phone-data-allowed");
+         tLog("  ✓ USB phone-data access allowed");
+         await sleepOrAbort(serial, 600);
+       }
+
       // 1b. Swipe up from the bottom to dismiss the lock screen.  On MIUI
       // (Xiaomi) and similar OEM skins, `am start` alone does NOT clear the
       // keyguard — the app launches behind the lock screen and all subsequent

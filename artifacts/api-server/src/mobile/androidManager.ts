@@ -2453,6 +2453,35 @@ export async function getUiDump(serial: string): Promise<string> {
   return _uiDump(adb, serial);
 }
 
+/**
+ * Accept Android's USB/MTP phone-data consent dialog when it is visible.
+ * This is deliberately separate from Instagram interstitial handling because
+ * it is a system dialog and image-upload tools genuinely need the access.
+ */
+export async function acceptUsbPhoneDataDialog(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+
+  const lowerXml = xml.toLowerCase();
+  const isUsbPhoneDataDialog =
+    lowerXml.includes("allow access to phone data") &&
+    lowerXml.includes("connected device will be able to access data on this phone");
+  if (!isUsbPhoneDataDialog) return false;
+
+  const allowPos = _findElem(xml, "Allow");
+  if (!allowPos) {
+    logger.warn({ serial }, "[android-usb] phone-data access dialog detected but live Allow button was not resolved");
+    return false;
+  }
+
+  _adbTap(adb, serial, allowPos.x, allowPos.y);
+  await _sleep(600);
+  logger.info({ serial }, "[android-usb] accepted phone-data access dialog");
+  return true;
+}
+
 export async function dismissAdsChoiceDialog(
   serial: string,
   preloadedXml?: string, // reuse a dump taken moments earlier — skips an extra 5-15 s dump
@@ -2547,6 +2576,28 @@ export async function dismissInstagramInterstitials(
   // ── Specific popup guards ────────────────────────────────────────────────
   // These check for a known popup title before tapping "OK" / generic
   // buttons, so we never accidentally dismiss a legitimate compose screen.
+
+  // Android's USB/MTP consent dialog is required for phone-side media access.
+  // Make a Post and Random Actions → Update Avatar upload images through the
+  // phone's shared storage, so this dialog must be accepted rather than
+  // treated like a dismissible permission prompt.  The dialog can reappear
+  // after a USB hub/cable re-enumeration; the title guard keeps the affirmative
+  // "Allow" tap scoped to this exact system dialog.
+  const lowerUsbXml = xml.toLowerCase();
+  const isUsbPhoneDataDialog =
+    lowerUsbXml.includes("allow access to phone data") &&
+    lowerUsbXml.includes("connected device will be able to access data on this phone");
+  if (isUsbPhoneDataDialog) {
+    const allowPos = _findElem(xml, "Allow");
+    if (allowPos) {
+      _adbTap(adb, serial, allowPos.x, allowPos.y);
+      await _sleep(600);
+      logger.info({ serial }, "[android-usb] accepted phone-data access dialog");
+      return "USB phone-data access — Allow";
+    }
+    logger.warn({ serial }, "[android-usb] phone-data access dialog detected but live Allow button was not resolved");
+    return null;
+  }
 
   // "Collect the posts you love" bottom sheet — appears after tapping the
   // save/ribbon icon on a feed post when the account has no existing
