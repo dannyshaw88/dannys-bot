@@ -5937,6 +5937,41 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         catch (error) { logger.warn({ err: error, serial, slotId }, "[mobile-cycle] notebook append failed"); }
       }
     };
+    // Screen state is independent from both ADB availability and the Node
+    // automation loop. Keep these probes correlated to the cycle so a later
+    // incident can show "HST continued" without falsely implying the panel
+    // was still awake.
+    const logScreenState = async (phase: string) => {
+      const probeStartedAt = Date.now();
+      let screenOn: boolean | null = null;
+      let foreground: string | null = null;
+      let adbState: string | null = null;
+      let probeError: string | null = null;
+      try {
+        screenOn = await android.isScreenOn(serial);
+        foreground = await android.getForegroundPackage(serial).catch(() => null);
+        const device = (await android.listDevices()).find((entry: any) => entry.serial === serial);
+        adbState = device?.state ?? null;
+      } catch (error: any) {
+        probeError = error?.message ?? String(error);
+      }
+      const details = {
+        serial,
+        slotId,
+        slotIdx: incomingSlotIdx,
+        cycleId: incomingCycleId,
+        phase,
+        screenOn,
+        foreground,
+        adbState,
+        elapsedMs: Date.now() - cycleStart,
+        probeMs: Date.now() - probeStartedAt,
+        error: probeError,
+      };
+      logger.info(details, "[mobile-screen-state] probe");
+      tLog(`[SCREEN] ${phase} screen=${screenOn === null ? "unknown" : screenOn ? "ON" : "OFF"} adb=${adbState ?? "unknown"} foreground=${foreground ?? "unknown"} probe=${details.probeMs}ms`);
+      return screenOn;
+    };
     let notebookStarted = false;
     try {
       const parsedCycle = automationCycleSchema.parse(req.body);
@@ -6120,9 +6155,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // 1. Power on the phone.
       tLog("▶ Waking screen…");
+      await logScreenState("before-wake-command");
+      logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_WAKEUP(224)" }, "[mobile-screen-state] intentional command");
       await android.wakeScreen(serial);
+      await logScreenState("immediately-after-wake-command");
       steps.push("power-on");
       await sleepOrAbort(serial, 1200); // let the screen finish waking
+      await logScreenState("1200ms-after-wake");
+      // A short startup watch catches the reported failure mode: the HST
+      // process remains active while the physical display turns off again.
+      void (async () => {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        if (automationCycleCurrentId.get(serial) !== incomingCycleId || isCycleAborted(serial)) return;
+        await logScreenState("2000ms-after-wake");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (automationCycleCurrentId.get(serial) !== incomingCycleId || isCycleAborted(serial)) return;
+        await logScreenState("3000ms-after-wake");
+      })().catch(error => logger.warn({ err: error, serial, slotId, cycleId: incomingCycleId }, "[mobile-screen-state] startup watch failed"));
 
        // USB/MTP consent is separate from USB debugging.  Image uploads need
        // phone-data access, and a hub re-enumeration can make Android show the
@@ -7548,7 +7597,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           exploreScrolled > 0;
         tLog(`Cycle complete ✓${summary}`);
       }
-      await android.sleepScreen(serial);
+       logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_SLEEP(223)" }, "[mobile-screen-state] intentional command");
+       await android.sleepScreen(serial);
+       await logScreenState("after-intentional-sleep");
       steps.push("power-off");
 
       // Persist cycle stats to DB so the Metrics tab survives software restarts.
