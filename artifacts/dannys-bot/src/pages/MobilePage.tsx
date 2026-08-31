@@ -4053,6 +4053,15 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     if (event.enabled) {
       manualToggleOnRef.current = true;
       forceImmediateToggleRef.current = true;
+      // Statistics toggles arrive after the API persistence round-trip.
+      // Trigger the already-mounted runtime directly instead of waiting for
+      // the settings/hydration effect to run again. The normal effect remains
+      // the fallback for runtimes that are still mounting.
+      if (rescheduleFnRef.current !== null) {
+        rescheduleFnRef.current(0);
+        manualToggleOnRef.current = false;
+        forceImmediateToggleRef.current = false;
+      }
     }
     setSettings(nextSettings);
     toggleSignalRef.current += 1;
