@@ -26,6 +26,7 @@ import {
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
+import { persistHstToggle } from "@/lib/hstToggleCoordinator";
 
 type StatKey = "follow" | "unfollow" | "dm" | "like" | "comment" | "story" | "repost" | "human_session";
 type ColKey = StatKey | "trustscore";
@@ -222,17 +223,6 @@ type MetricAccount = {
   slotIndex?: number;
 };
 
-// Stats can briefly receive two opposite Radix Switch events when the farm
-// table is reconciled at the same time as the extracted HST owner/listener is
-// mounting.  Do not let those transient events become two DB writes and two
-// loop starts.  Keep this coordinator outside React so duplicate component
-// instances share the same gate.
-type PendingMobileSlotToggle = {
-  value: boolean;
-  timer: ReturnType<typeof setTimeout>;
-};
-const pendingMobileSlotToggles = new Map<string, PendingMobileSlotToggle>();
-
 function MobileSlotSessionToggle({ serial, slotIdx, slotId, slotUsername }: { serial: string; slotIdx: number; slotId?: string; slotUsername: string }) {
   const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-state${slotId ? `?slotId=${encodeURIComponent(slotId)}` : ""}`;
   const qKey = [stateUrl];
@@ -247,53 +237,26 @@ function MobileSlotSessionToggle({ serial, slotIdx, slotId, slotUsername }: { se
   const checked = optimistic ?? state.enabled;
 
   const commitToggle = async (val: boolean) => {
-    const toggleKey = `${serial}:${slotIdx}`;
-    const pending = pendingMobileSlotToggles.get(toggleKey);
-    if (pending?.value === val) pendingMobileSlotToggles.delete(toggleKey);
-
     setOptimistic(val);
     try {
-      // 1. Persist the new enabled state.
-       await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotId ? `?slotId=${encodeURIComponent(slotId)}` : ""}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({ enabled: val }),
+      // Persist and broadcast as one transaction. The shared coordinator
+      // broadcasts only after the dedicated toggle endpoint succeeds.
+      await persistHstToggle({
+        serial,
+        slotIdx,
+        slotId,
+        enabled: val,
+        source: "statistics",
       });
       queryClient.invalidateQueries({ queryKey: qKey });
-
-      // 2. Signal MobilePage's run-loop if it is currently mounted (same-origin
-      //    BroadcastChannel).  When MobilePage IS mounted this is sufficient —
-      //    its run-loop sets manualToggleOnRef and fires the next cycle with no
-      //    extra delay, exactly like pressing the toggle on that page.
-      try {
-        const bc = new BroadcastChannel("aura-slot-toggle");
-         bc.postMessage({ serial, slotIdx, slotId, enabled: val });
-        bc.close();
-      } catch { /* BroadcastChannel unavailable in very old environments */ }
-
-      // The always-mounted HstToggleListener receives the broadcast and starts
-      // the shared HST loop, even when MobilePage itself is not mounted. Do not
-      // post a second automation cycle here: doing both caused every Stats-page
-      // toggle to race the loop and produce a device-busy 409.
     } catch {
       setOptimistic(null);
     }
   };
 
   const toggle = (val: boolean) => {
-    const toggleKey = `${serial}:${slotIdx}`;
-    const previous = pendingMobileSlotToggles.get(toggleKey);
-    if (previous) clearTimeout(previous.timer);
-
-    // Let a same-tick off→on reconciliation settle before touching the API.
-    // The final requested value is the only value that is meaningful to the
-    // user and the only one that may start/stop the shared HST loop.
-    const timer = setTimeout(() => {
-      pendingMobileSlotToggles.delete(toggleKey);
-      void commitToggle(val);
-    }, 150);
-    pendingMobileSlotToggles.set(toggleKey, { value: val, timer });
     setOptimistic(val);
+    void commitToggle(val);
   };
 
   return (

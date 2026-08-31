@@ -2842,6 +2842,54 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       res.status(400).json({ error: e?.message ?? "Failed to load slot state" });
     }
   });
+  const hstToggleSchema = z.object({
+    enabled: z.boolean(),
+    slotId: z.string().max(100).optional(),
+    revision: z.number().int().positive().optional(),
+    requestId: z.string().max(100).optional(),
+    source: z.enum(["statistics", "phone-farm"]).optional(),
+  });
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/automation-toggle", (req: Request, res: Response) => {
+    try {
+      const slotIdx = parseMobileSlotIndex(req.params.slotIdx);
+      if (slotIdx === null) {
+        res.status(400).json({ error: "Invalid slot index" });
+        return;
+      }
+      const input = hstToggleSchema.parse(req.body);
+      const serial = p(req, "serial");
+      const requestedSlotId = input.slotId
+        ?? (typeof req.query.slotId === "string" ? req.query.slotId : undefined);
+      const cfg = loadInstanceConfigs();
+      const stableKey = slotAutomationKey(serial, slotIdx, requestedSlotId);
+      const existing = cfg[serial]?.slotAutomation?.[stableKey]
+        ?? cfg[serial]?.slotAutomation?.[String(slotIdx)]
+        ?? {};
+      const updated = { ...existing, enabled: input.enabled };
+      cfg[serial] = {
+        ...cfg[serial],
+        slotAutomation: { ...cfg[serial]?.slotAutomation, [stableKey]: updated },
+      };
+      saveInstanceConfigs(cfg);
+      const resolvedSlotId = cfg[serial]?.account?.slots?.[slotIdx]?.slotId ?? requestedSlotId ?? "";
+      logger.info(
+        `[HST-TOGGLE] source=${input.source ?? "unknown"} requestId=${input.requestId ?? "none"} ` +
+        `revision=${input.revision ?? "none"} serial=${serial} slotIdx=${slotIdx} ` +
+        `slotId=${resolvedSlotId || "none"} enabled=${input.enabled}`,
+      );
+      res.json({
+        ok: true,
+        serial,
+        slotIdx,
+        slotId: resolvedSlotId,
+        enabled: input.enabled,
+        revision: input.revision ?? null,
+        requestId: input.requestId ?? null,
+      });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Failed to save HST toggle" });
+    }
+  });
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", async (req: Request, res: Response) => {
     try {
       const slotIdx = parseMobileSlotIndex(req.params.slotIdx);

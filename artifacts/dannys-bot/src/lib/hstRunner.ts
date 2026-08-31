@@ -38,15 +38,27 @@ import {
 export function startHstLoop(
   serial: string,
   slotIdx: number,
-  options: { immediate?: boolean } = {},
+  options: { immediate?: boolean; force?: boolean; requestId?: string; source?: string } = {},
 ): void {
   const key = `${serial}:${slotIdx}`;
   // A mounted MobilePage runtime owns this slot's timer and should also own
   // its settings lifecycle. Recovery must not create a second timer while the
   // UI instance is present; both paths still share the collision coordinator.
   if (_hstUiMounted.has(key)) return;
-  if (_hstTimers.has(key) || _hstStarting.has(key)) return; // already owned/starting
-  console.info(`[HST-RECOVERY] starting loop ${key} immediate=${options.immediate !== false}`);
+  if (options.force) {
+    const existingTimer = _hstTimers.get(key);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+      _hstTimers.delete(key);
+    }
+    _hstStarting.delete(key);
+  } else if (_hstTimers.has(key) || _hstStarting.has(key)) {
+    return; // already owned/starting
+  }
+  console.info(
+    `[HST-RECOVERY] starting loop ${key} immediate=${options.immediate !== false} ` +
+    `force=${Boolean(options.force)} requestId=${options.requestId ?? "none"} source=${options.source ?? "unknown"}`,
+  );
   _hstStop.delete(key);
   if (options.immediate !== false) {
     scheduleNextBg(serial, slotIdx, key, 0); // manual toggle-on

@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
 import { useParams, useSearch } from "wouter";
 import { _hstTimers, _hstStop, _hstNextRunAt, _hstUiMounted } from "@/lib/hstRunner";
+import { persistHstToggle, type HstToggleEvent } from "@/lib/hstToggleCoordinator";
 import {
   requestCollisionSlot,
   releaseCollisionSlot,
@@ -3917,6 +3918,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // Run-every interval, same as every cycle after it. Set by
   // `setEnabledByUser` below, consumed once by the run-loop effect.
   const manualToggleOnRef = useRef(false);
+  // Forces an explicit ON event to replace an old recovery timer with an
+  // immediate cycle, even when the state was already true in this runtime.
+  const forceImmediateToggleRef = useRef(false);
+  const toggleSignalRef = useRef(0);
+  const [toggleSignal, setToggleSignal] = useState(0);
   // Counts explicit master-toggle edits so a settings response that was
   // already in flight cannot overwrite a newer off→on (or on→off) choice.
   const enabledEditRevisionRef = useRef(0);
@@ -3990,7 +3996,13 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   }, [deviceUnavailable, phone?.serial, phone?.state, slotIdx, slotUsername]);
 
   const setEnabledByUser = useCallback((enabled: boolean) => {
-    enabledEditRevisionRef.current += 1;
+    const editRevision = enabledEditRevisionRef.current + 1;
+    enabledEditRevisionRef.current = editRevision;
+    const nextSettings = { ...settingsRef.current, enabled };
+    // The dedicated toggle endpoint owns this field. Mark the full snapshot
+    // as saved so the generic settings autosave cannot immediately send a
+    // second, stale full-settings POST.
+    lastSavedRef.current = JSON.stringify(nextSettings);
     if (enabled) {
       // A rapid off→on toggle can run the old effect cleanup after the new
       // enabled state has already rendered. Clear the stale explicit-stop
@@ -4001,7 +4013,54 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       explicitToggleOffRef.current = true; // explicit user action — cleanup should abort
     }
     setSettings(s => ({ ...s, enabled }));
-  }, [phone?.serial, slotIdx]);
+    toggleSignalRef.current += 1;
+    setToggleSignal(toggleSignalRef.current);
+
+    const serial = phone?.serial;
+    if (!serial || slotIdx === undefined || invalidHstSlot) return;
+    void persistHstToggle({
+      serial,
+      slotIdx,
+      slotId,
+      enabled,
+      source: "phone-farm",
+    })
+      .then(event => {
+        onLog?.(`[HST-TOGGLE] source=phone-farm serial=${serial} slot=${slotIdx} ` +
+          `slotId=${slotId ?? "none"} enabled=${enabled} revision=${event.revision} ` +
+          `requestId=${event.requestId} persisted=true`);
+      })
+      .catch((error: any) => {
+        onLog?.(`[HST-TOGGLE] source=phone-farm serial=${serial} slot=${slotIdx} ` +
+          `slotId=${slotId ?? "none"} enabled=${enabled} revision=${editRevision} ` +
+          `persisted=false error=${error?.message ?? "request failed"}`);
+        if (enabledEditRevisionRef.current !== editRevision) return;
+        setSaveError(error?.message ?? "Couldn't save the Human Session Tool toggle");
+        const rollback = { ...settingsRef.current, enabled: !enabled };
+        lastSavedRef.current = JSON.stringify(rollback);
+        setSettings(rollback);
+      });
+  }, [phone?.serial, slotIdx, slotId, invalidHstSlot, onLog]);
+
+  const applyEnabledFromCoordinator = useCallback((event: HstToggleEvent) => {
+    // Coordinator revisions are scoped to the originating browser context.
+    // They are diagnostic ordering values, not a cross-tab Lamport clock, so
+    // never compare them with this component's local edit counter.
+    enabledEditRevisionRef.current += 1;
+    const nextSettings = { ...settingsRef.current, enabled: event.enabled };
+    lastSavedRef.current = JSON.stringify(nextSettings);
+    explicitToggleOffRef.current = !event.enabled;
+    if (event.enabled) {
+      manualToggleOnRef.current = true;
+      forceImmediateToggleRef.current = true;
+    }
+    setSettings(nextSettings);
+    toggleSignalRef.current += 1;
+    setToggleSignal(toggleSignalRef.current);
+    onLog?.(`[HST-TOGGLE] source=${event.source} serial=${event.serial} slot=${event.slotIdx} ` +
+      `slotId=${event.slotId ?? "none"} enabled=${event.enabled} revision=${event.revision} ` +
+      `requestId=${event.requestId} applied=mounted-runtime`);
+  }, [onLog]);
 
   // A TrustScore badge can be changed from the slot list while this HST
   // remains mounted in the background. Re-hydrate the effective settings
@@ -4030,24 +4089,23 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     let bc: BroadcastChannel | null = null;
     try {
       bc = new BroadcastChannel("aura-slot-toggle");
-      bc.onmessage = (ev: MessageEvent) => {
-         const { serial: evSerial, slotIdx: evSlot, slotId: evSlotId, enabled } = ev.data ?? {};
-         if (evSerial === serial && evSlot === (slotIdx ?? 0) && (!evSlotId || evSlotId === slotId)) {
-          // Guard: if the slot is already in the requested state, skip the
-          // call entirely.  Without this, a Stats-page broadcast of
-          // enabled:true to an already-enabled slot sets manualToggleOnRef
-          // without the run-loop effect firing (settings.enabled didn't
-          // change), leaving the flag permanently true and causing the next
-          // incidental effect re-run to call scheduleNext(0) — resetting the
-          // 25-99min timer to fire immediately.
-          if (enabled !== settingsRef.current.enabled) {
-            setEnabledByUser(enabled);
-          }
-        }
-      };
+       bc.onmessage = (ev: MessageEvent) => {
+         const event = ev.data as Partial<HstToggleEvent> ?? {};
+         if (
+           event.serial === serial &&
+           event.slotIdx === (slotIdx ?? 0) &&
+           (!event.slotId || event.slotId === slotId) &&
+           typeof event.enabled === "boolean" &&
+           typeof event.revision === "number" &&
+           typeof event.requestId === "string" &&
+           (event.source === "statistics" || event.source === "phone-farm")
+         ) {
+           applyEnabledFromCoordinator(event as HstToggleEvent);
+         }
+       };
     } catch { /* BroadcastChannel unavailable */ }
     return () => { try { bc?.close(); } catch {} };
-  }, [phone?.serial, slotIdx, setEnabledByUser]);
+  }, [phone?.serial, slotIdx, slotId, applyEnabledFromCoordinator]);
 
   useEffect(() => {
     // Re-fetch settings only when a genuinely new device connects (connectedKey
@@ -4145,7 +4203,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           // The lightweight state endpoint is authoritative for the slot
           // toggle. Paint it immediately instead of making the account list
           // wait for the larger TrustScore-resolved settings payload below.
-          setSettings(previous => ({ ...previous, enabled: d.enabled }));
+           setSettings(previous => (
+             enabledEditRevisionRef.current === hydrationEditRevision
+               ? { ...previous, enabled: d.enabled }
+               : previous
+           ));
           // Disabled slots only need the master state to keep the background
           // runtime and slot-list toggle accurate. The full TrustScore-resolved
           // settings object is large and is only needed by an enabled runtime
@@ -4292,18 +4354,25 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   useEffect(() => {
     if (!phone || !hydratedRef.current) return;
     const serial = phone.serial;
-    const toSave = settings;
-    const toSaveStr = JSON.stringify(toSave);
+     const toSave = settings;
+     const toSaveStr = JSON.stringify(toSave);
     if (toSaveStr === lastSavedRef.current) return; // nothing actually changed
     const t = setTimeout(() => {
       const slotIdentityQuery = slotId ? `?slotId=${encodeURIComponent(slotId)}` : "";
       const saveUrl = slotIdx !== undefined
         ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotIdentityQuery}`
         : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
-      fetch(saveUrl, {
+       // The master toggle has its own revisioned endpoint. Omitting it from
+       // full-settings autosave prevents a stale settings edit from restoring
+       // an older enabled value after a navigation or API restart.
+       const { enabled: _enabled, ...settingsWithoutToggle } = toSave;
+       const payload = slotIdx !== undefined && serial
+         ? JSON.stringify(settingsWithoutToggle)
+         : toSaveStr;
+       fetch(saveUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: toSaveStr,
+         body: payload,
       })
         .then(async r => {
           const body = await r.json().catch(() => null);
@@ -4340,7 +4409,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // and then the clamp effect fires seconds later when real settings arrive —
     // causing a spurious reschedule on every app launch.
     const _phone = phoneRef.current;
-    if (invalidHstSlot || deviceUnavailable || !settings.enabled || !hydrated) { setRunning(false); return; }
+    if (!_phone || invalidHstSlot || deviceUnavailable || !settings.enabled || !hydrated) { setRunning(false); return; }
     const serial = _phone.serial;
     const key = `${serial}:${slotIdx ?? 0}`;
 
@@ -4357,12 +4426,14 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // We distinguish A from B by checking whether this is a fresh mount: on a
     // fresh mount rescheduleFnRef.current is null (cleanup nulled it).
     let recoveredFireAt: number | null = null;
+    const forceImmediateToggle = forceImmediateToggleRef.current;
     if (_hstTimers.has(key)) {
-      if (rescheduleFnRef.current !== null) {
+      if (rescheduleFnRef.current !== null && !forceImmediateToggle) {
         // Case A — same instance, valid closures, leave the timer alone.
         return;
       }
-      // Case B — remount. Cancel the stale timer.
+      // Case B — remount, or an explicit ON event replacing a stale recovery
+      // timer. Cancel the old handle before installing the new closure.
       const staleHandle = _hstTimers.get(key)!;
       clearTimeout(staleHandle);
       _hstTimers.delete(key);
@@ -4771,8 +4842,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // App restart with toggle already on → spread the first run across a
     // random delay within the configured Run-every interval so all accounts
     // don't fire simultaneously the moment the software restarts.
-    const wasManualToggleOn = manualToggleOnRef.current;
+    const wasManualToggleOn = manualToggleOnRef.current || forceImmediateToggle;
     manualToggleOnRef.current = false;
+    forceImmediateToggleRef.current = false;
     const _startTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
     if (wasManualToggleOn) {
       srvLog(`${_startTag} — effect started, firing immediately (manual toggle-on)`);
@@ -4847,7 +4919,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       rescheduleFnRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.enabled, hydrated, phone?.serial, connectedKey]);
+  }, [settings.enabled, hydrated, phone?.serial, connectedKey, toggleSignal]);
 
   // Clamp: if the existing timer no longer fits within the new [min, max]
   // bounds, directly reschedule the module-level timer with a corrected delay.
