@@ -254,9 +254,19 @@ function generateFakePhone(index: number): UsbPhone {
   };
 }
 
-function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[] {
-  const out = runAdb(adbPath, ["devices", "-l"]);
-  if (diag) diag.rawOutput = out ?? "(adb devices -l produced no output or failed to run)";
+function listUsbPhones(adbPath: string, diag?: UsbPollDiagnostic): UsbPhone[] {
+  const result = runAdbDetailed(adbPath, ["devices", "-l"]);
+  const out = result.ok ? result.stdout.trim() : null;
+  if (diag) {
+    diag.commandOk = result.ok;
+    diag.exitCode = result.exitCode;
+    diag.signal = result.signal;
+    diag.timedOut = result.timedOut;
+    diag.error = result.error;
+    diag.stderr = result.stderr;
+    diag.durationMs = result.durationMs;
+    diag.rawOutput = result.stdout || result.stderr;
+  }
   if (!out) return [];
 
   const phones: UsbPhone[] = [];
@@ -311,10 +321,14 @@ function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[
       let cached = devicePropsCache.get(serial);
       if (!cached) {
         cached = {};
-        const mfr = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.manufacturer"]);
+        const mfrResult = runAdbDetailed(adbPath, ["-s", serial, "shell", "getprop", "ro.product.manufacturer"]);
+        const mfr = mfrResult.ok ? mfrResult.stdout.trim() : null;
+        if (!mfrResult.ok) diag?.probeFailures?.push({ serial, operation: "manufacturer", error: mfrResult.error ?? mfrResult.stderr ?? "ADB command failed" });
         if (mfr) cached.manufacturer = mfr;
 
-        const ver = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.build.version.release"]);
+        const verResult = runAdbDetailed(adbPath, ["-s", serial, "shell", "getprop", "ro.build.version.release"]);
+        const ver = verResult.ok ? verResult.stdout.trim() : null;
+        if (!verResult.ok) diag?.probeFailures?.push({ serial, operation: "androidVersion", error: verResult.error ?? verResult.stderr ?? "ADB command failed" });
         if (ver) cached.androidVersion = ver;
 
         // Keep the public model from `adb devices -l` in the cache too. The
@@ -325,16 +339,22 @@ function listUsbPhones(adbPath: string, diag?: { rawOutput: string }): UsbPhone[
           cached.model = phone.model;
         } else {
           // If model wasn't in the -l output, try getprop.
-          const mdl = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.model"]);
+          const mdlResult = runAdbDetailed(adbPath, ["-s", serial, "shell", "getprop", "ro.product.model"]);
+          const mdl = mdlResult.ok ? mdlResult.stdout.trim() : null;
+          if (!mdlResult.ok) diag?.probeFailures?.push({ serial, operation: "model", error: mdlResult.error ?? mdlResult.stderr ?? "ADB command failed" });
           if (mdl) cached.model = mdl;
         }
 
         // Marketing/human-readable name (e.g. "Redmi Note 12" vs raw "23076RN8DY")
-        const mkt = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.marketname"]);
+        const mktResult = runAdbDetailed(adbPath, ["-s", serial, "shell", "getprop", "ro.product.marketname"]);
+        const mkt = mktResult.ok ? mktResult.stdout.trim() : null;
+        if (!mktResult.ok) diag?.probeFailures?.push({ serial, operation: "marketName", error: mktResult.error ?? mktResult.stderr ?? "ADB command failed" });
         if (mkt && mkt.trim()) {
           cached.marketName = mkt.trim();
         } else {
-          const mkt2 = runAdb(adbPath, ["-s", serial, "shell", "getprop", "ro.product.vendor.marketname"]);
+          const mkt2Result = runAdbDetailed(adbPath, ["-s", serial, "shell", "getprop", "ro.product.vendor.marketname"]);
+          const mkt2 = mkt2Result.ok ? mkt2Result.stdout.trim() : null;
+          if (!mkt2Result.ok) diag?.probeFailures?.push({ serial, operation: "vendorMarketName", error: mkt2Result.error ?? mkt2Result.stderr ?? "ADB command failed" });
           if (mkt2 && mkt2.trim()) cached.marketName = mkt2.trim();
         }
 

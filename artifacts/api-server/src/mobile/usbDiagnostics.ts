@@ -45,6 +45,21 @@ const consecutiveFailures = new Map<string, number>();
 const knownSerials = new Set<string>();
 let pollId = 0;
 
+function loadPersistedEvents(): void {
+  try {
+    if (!fs.existsSync(filePath)) return;
+    const lines = fs.readFileSync(filePath, "utf8").split("\n").filter(Boolean);
+    for (const line of lines.slice(-MAX_EVENTS)) {
+      try {
+        const event = JSON.parse(line) as UsbDiagnosticEvent;
+        if (!event || typeof event.at !== "string" || typeof event.kind !== "string") continue;
+        events.push(event);
+        pollId = Math.max(pollId, Number(event.pollId) || 0);
+      } catch { /* ignore one damaged JSONL row */ }
+    }
+  } catch { /* persistence is best effort */ }
+}
+
 function trimText(value: unknown, max = MAX_TEXT_BYTES): string {
   return String(value ?? "")
     .replace(/\u0000/g, "")
@@ -76,6 +91,8 @@ function record(event: Omit<UsbDiagnosticEvent, "at">, important = false): void 
   // also written to the normal server log so they are visible immediately.
   if (important) console.warn(`[USB-DIAG] ${JSON.stringify(complete)}`);
 }
+
+loadPersistedEvents();
 
 export type UsbPollDiagnostic = {
   adbFound: boolean;

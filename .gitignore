@@ -66,6 +66,7 @@ server/server/db.sqlite
 
 # Debug / server logs
 *.log
+artifacts/api-server/aura-farming-usb-diagnostics.jsonl
 
 # Sensitive files that should never be committed
 attached_assets/*.txt

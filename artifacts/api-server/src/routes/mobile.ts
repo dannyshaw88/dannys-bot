@@ -15,6 +15,7 @@ import { getDebugScreenshotFolderName } from "../mobile/debugScreenshotPaths";
 import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
 import { getDeviceLabel } from "./usb-phones";
+import { getUsbDiagnostics } from "../mobile/usbDiagnostics";
 import { fixAiSlop } from "../instagram/fixAiSlop";
 import { getRuntimeSnapshot } from "../diagnostics/runtimeSnapshot";
 import {
@@ -8625,6 +8626,41 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       });
       res.end(zipBuf);
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
+  });
+
+  // ── USB/ADB disconnect diagnostics export ─────────────────────────────────
+  // The USB route keeps a bounded timeline of every poll and state transition.
+  // Include a server-log tail here so a user can reproduce a flap, export one
+  // file, and send the evidence without opening a terminal.
+  app.get("/api/mobile/usb-diagnostics", (req: Request, res: Response) => {
+    try {
+      const requestedSerial = typeof req.query.serial === "string" && req.query.serial.trim()
+        ? req.query.serial.trim()
+        : null;
+      const logPath = (global as any).__SERVER_LOG_PATH as string | undefined;
+      let serverLog = "";
+      if (logPath && fs.existsSync(logPath)) {
+        const content = fs.readFileSync(logPath, "utf8");
+        serverLog = content.slice(-512 * 1024);
+      }
+
+      const payload = {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        serial: requestedSerial,
+        usb: getUsbDiagnostics(requestedSerial),
+        serverLogTail: serverLog,
+      };
+      const filename = `aura-farming-usb-diagnostics-${requestedSerial ?? "all"}-${Date.now()}.json`;
+      res
+        .status(200)
+        .setHeader("Content-Type", "application/json; charset=utf-8")
+        .setHeader("Content-Disposition", `attachment; filename="${filename}"`)
+        .send(JSON.stringify(payload, null, 2));
+    } catch (e: any) {
+      logger.error({ err: e }, "[usb-diagnostics] export failed");
+      res.status(500).json({ ok: false, error: e?.message ?? "Could not export USB diagnostics" });
+    }
   });
 
   // ── Mirror live state ─────────────────────────────────────────────────────

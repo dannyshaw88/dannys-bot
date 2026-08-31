@@ -3979,9 +3979,15 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const wasUnavailable = wasDeviceUnavailableRef.current;
     wasDeviceUnavailableRef.current = deviceUnavailable;
     if (wasUnavailable && !deviceUnavailable) {
+      writeUiSpeedLog("usb-slot-reconnected", {
+        serial: phone?.serial ?? null,
+        state: phone?.state ?? "device",
+        slotIdx,
+        slotUsername: slotUsername || null,
+      });
       setConnectedKey(key => key + 1);
     }
-  }, [deviceUnavailable]);
+  }, [deviceUnavailable, phone?.serial, phone?.state, slotIdx, slotUsername]);
 
   const setEnabledByUser = useCallback((enabled: boolean) => {
     enabledEditRevisionRef.current += 1;
@@ -4208,6 +4214,14 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         body: JSON.stringify({ cycleId: abortingId }),
       }).catch(() => {});
     }
+    writeUiSpeedLog("usb-slot-paused", {
+      serial,
+      state: phone?.state ?? "unavailable",
+      slotIdx,
+      slotUsername: slotUsername || null,
+      hadTimer: timer !== undefined,
+      hadRunningCycle: Boolean(abortingId),
+    });
     onLog?.(`[HST] ${slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`} paused — device is ${phone?.state ?? "unavailable"}`);
   }, [phone?.serial, phone?.state, deviceUnavailable, slotIdx, slotUsername, cancelQueuedSlot, onLog]);
 
@@ -10949,6 +10963,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
+  const [exportingUsbDiagnostics, setExportingUsbDiagnostics] = React.useState(false);
   const [expandedLogGroups, setExpandedLogGroups] = React.useState<Set<string>>(() => new Set());
 
   // Only auto-scroll when the user is currently at (or near) the bottom.
@@ -11087,6 +11102,33 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
     URL.revokeObjectURL(url);
   };
 
+  const handleExportUsbDiagnostics = async () => {
+    if (!serial) return;
+    setExportingUsbDiagnostics(true);
+    try {
+      const response = await fetch(`/api/mobile/usb-diagnostics?serial=${encodeURIComponent(serial)}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        addLog?.(`USB diagnostics export failed: ${body?.error ?? response.status}`);
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aura-farming-usb-diagnostics-${serial}-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addLog?.("USB diagnostics exported — includes ADB poll history, state transitions, and server-log tail.");
+    } catch (e: any) {
+      addLog?.(`USB diagnostics export error: ${e?.message ?? "network error"}`);
+    } finally {
+      setExportingUsbDiagnostics(false);
+    }
+  };
+
   const handleCopyCapture = async () => {
     if (!lastCapture) return;
     await writeToClipboard(lastCapture.join("\n"));
@@ -11138,6 +11180,15 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
             </Button>
             <Button type="button" variant="secondary" onClick={handleExportLog} disabled={lines.length === 0} title="Save the full log as a .txt file — browser Save As dialog will appear">
               💾 Export
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void handleExportUsbDiagnostics()}
+              disabled={!serial || exportingUsbDiagnostics}
+              title="Export the ADB/USB connection timeline and server-log evidence"
+            >
+              {exportingUsbDiagnostics ? "USB Log…" : "USB Log"}
             </Button>
             <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
               Clear
