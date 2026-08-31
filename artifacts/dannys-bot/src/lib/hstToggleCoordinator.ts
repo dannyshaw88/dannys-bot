@@ -20,6 +20,7 @@ export type HstToggleEvent = {
 
 type ToggleCounter = { revision: number };
 const counters = new Map<string, ToggleCounter>();
+const requestQueues = new Map<string, Promise<unknown>>();
 let requestSequence = 0;
 
 function keyFor(serial: string, slotIdx: number, slotId?: string): string {
@@ -50,6 +51,10 @@ function nextEvent(
 }
 
 function broadcast(event: HstToggleEvent): void {
+  // This same-tab path also covers embedded runtimes without
+  // BroadcastChannel. The App listener and any mounted slot runtime dedupe
+  // only by the event's requestId at their own boundary.
+  window.dispatchEvent(new CustomEvent("aura-slot-toggle", { detail: event }));
   try {
     const channel = new BroadcastChannel("aura-slot-toggle");
     channel.postMessage(event);
@@ -74,25 +79,35 @@ export async function persistHstToggle(input: {
     input.enabled,
     input.source,
   );
-  const slotIdQuery = input.slotId ? `?slotId=${encodeURIComponent(input.slotId)}` : "";
-  const response = await fetch(
-    `/api/mobile/devices/${encodeURIComponent(input.serial)}/slots/${input.slotIdx}/automation-toggle${slotIdQuery}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        enabled: event.enabled,
-        slotId: event.slotId,
-        revision: event.revision,
-        requestId: event.requestId,
-        source: event.source,
-      }),
-    },
+  const queueKey = keyFor(input.serial, input.slotIdx, input.slotId);
+  const previous = requestQueues.get(queueKey) ?? Promise.resolve();
+  const request = previous.catch(() => undefined).then(async () => {
+    const slotIdQuery = input.slotId ? `?slotId=${encodeURIComponent(input.slotId)}` : "";
+    const response = await fetch(
+      `/api/mobile/devices/${encodeURIComponent(input.serial)}/slots/${input.slotIdx}/automation-toggle${slotIdQuery}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: event.enabled,
+          slotId: event.slotId,
+          revision: event.revision,
+          requestId: event.requestId,
+          source: event.source,
+        }),
+      },
+    );
+    const body = await response.json().catch(() => null);
+    if (!response.ok || !body?.ok) {
+      throw new Error(body?.error ?? `Toggle save failed (${response.status})`);
+    }
+    broadcast(event);
+    return event;
+  });
+  requestQueues.set(queueKey, request);
+  void request.then(
+    () => { if (requestQueues.get(queueKey) === request) requestQueues.delete(queueKey); },
+    () => { if (requestQueues.get(queueKey) === request) requestQueues.delete(queueKey); },
   );
-  const body = await response.json().catch(() => null);
-  if (!response.ok || !body?.ok) {
-    throw new Error(body?.error ?? `Toggle save failed (${response.status})`);
-  }
-  broadcast(event);
-  return event;
+  return request as Promise<HstToggleEvent>;
 }

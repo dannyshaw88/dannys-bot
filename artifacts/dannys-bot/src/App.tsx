@@ -188,33 +188,43 @@ function HstAutoRestart() {
 function HstToggleListener() {
   useEffect(() => {
     let bc: BroadcastChannel | null = null;
+    const handleToggle = (data: any) => {
+      const { serial, slotIdx, enabled, requestId, source } = data ?? {};
+      if (typeof serial !== "string" || typeof slotIdx !== "number") return;
+      if (enabled) {
+        // MobilePage's mounted runtime owns this slot when present. Starting
+        // the background runner as well races its immediate schedule and can
+        // make the first toggle appear ignored. The listener is only needed
+        // for Stats-page toggles when MobilePage is not mounted.
+        if (!_hstUiMounted.has(`${serial}:${slotIdx}`)) {
+          // A manual ON is authoritative even when startup recovery already
+          // left a long-delay timer behind. Replace that timer and wake the
+          // device now instead of silently treating the click as a no-op.
+          startHstLoop(serial, slotIdx, {
+            immediate: true,
+            force: true,
+            requestId: typeof requestId === "string" ? requestId : undefined,
+            source: typeof source === "string" ? source : "unknown",
+          });
+        }
+      } else {
+        stopHstLoop(serial, slotIdx);
+      }
+    };
+    const onWindowToggle = (event: Event) => {
+      handleToggle((event as CustomEvent).detail);
+    };
+    window.addEventListener("aura-slot-toggle", onWindowToggle);
     try {
       bc = new BroadcastChannel("aura-slot-toggle");
       bc.onmessage = (ev: MessageEvent) => {
-        const { serial, slotIdx, slotId, enabled, revision, requestId, source } = ev.data ?? {};
-        if (typeof serial !== "string" || typeof slotIdx !== "number") return;
-        if (enabled) {
-          // MobilePage's mounted runtime owns this slot when present. Starting
-          // the background runner as well races its immediate schedule and can
-          // make the first toggle appear ignored. The listener is only needed
-          // for Stats-page toggles when MobilePage is not mounted.
-          if (!_hstUiMounted.has(`${serial}:${slotIdx}`)) {
-            // A manual ON is authoritative even when startup recovery already
-            // left a long-delay timer behind. Replace that timer and wake the
-            // device now instead of silently treating the click as a no-op.
-            startHstLoop(serial, slotIdx, {
-              immediate: true,
-              force: true,
-              requestId: typeof requestId === "string" ? requestId : undefined,
-              source: typeof source === "string" ? source : "unknown",
-            });
-          }
-        } else {
-          stopHstLoop(serial, slotIdx);
-        }
+        handleToggle(ev.data);
       };
     } catch { /* BroadcastChannel unavailable (old browser / test env) */ }
-    return () => { try { bc?.close(); } catch {} };
+    return () => {
+      window.removeEventListener("aura-slot-toggle", onWindowToggle);
+      try { bc?.close(); } catch {}
+    };
   }, []);
   return null;
 }

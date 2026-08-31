@@ -4087,24 +4087,32 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const serial = phone?.serial;
     if (!serial) return;
     let bc: BroadcastChannel | null = null;
+    const handleToggle = (rawEvent: unknown) => {
+      const event = rawEvent as Partial<HstToggleEvent> ?? {};
+      if (
+        event.serial === serial &&
+        event.slotIdx === (slotIdx ?? 0) &&
+        (!event.slotId || event.slotId === slotId) &&
+        typeof event.enabled === "boolean" &&
+        typeof event.revision === "number" &&
+        typeof event.requestId === "string" &&
+        (event.source === "statistics" || event.source === "phone-farm")
+      ) {
+        applyEnabledFromCoordinator(event as HstToggleEvent);
+      }
+    };
+    const onWindowToggle = (event: Event) => handleToggle((event as CustomEvent).detail);
+    window.addEventListener("aura-slot-toggle", onWindowToggle);
     try {
       bc = new BroadcastChannel("aura-slot-toggle");
        bc.onmessage = (ev: MessageEvent) => {
-         const event = ev.data as Partial<HstToggleEvent> ?? {};
-         if (
-           event.serial === serial &&
-           event.slotIdx === (slotIdx ?? 0) &&
-           (!event.slotId || event.slotId === slotId) &&
-           typeof event.enabled === "boolean" &&
-           typeof event.revision === "number" &&
-           typeof event.requestId === "string" &&
-           (event.source === "statistics" || event.source === "phone-farm")
-         ) {
-           applyEnabledFromCoordinator(event as HstToggleEvent);
-         }
+         handleToggle(ev.data);
        };
     } catch { /* BroadcastChannel unavailable */ }
-    return () => { try { bc?.close(); } catch {} };
+    return () => {
+      window.removeEventListener("aura-slot-toggle", onWindowToggle);
+      try { bc?.close(); } catch {}
+    };
   }, [phone?.serial, slotIdx, slotId, applyEnabledFromCoordinator]);
 
   useEffect(() => {
