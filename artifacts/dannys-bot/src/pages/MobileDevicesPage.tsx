@@ -618,6 +618,17 @@ async function fetchUsbPhones(): Promise<UsbPhone[]> {
   return (d.phones ?? []) as UsbPhone[];
 }
 
+async function connectWifiAdb(address: string): Promise<string> {
+  const r = await fetch("/api/mobile/connect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address: address.trim() }),
+  });
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d?.ok) throw new Error(d?.message ?? "Could not connect to the phone");
+  return d.message ?? "Connected";
+}
+
 async function registerDevice(phone: UsbPhone): Promise<FarmDevice> {
   const displayName = [phone.manufacturer, phone.marketName || MODEL_FRIENDLY_NAME[phone.model ?? ""] || phone.model].filter(Boolean).join(" ") || phone.serial;
   const r = await fetch("/api/mobile/farm-devices", {
@@ -666,6 +677,8 @@ function AddDevicePanel({
   const [loading, setLoading] = useState(true);
   const [adding,  setAdding]  = useState<string | null>(null);
   const [error,   setError]   = useState<string | null>(null);
+  const [wifiAddress, setWifiAddress] = useState("");
+  const [connectingWifi, setConnectingWifi] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -694,6 +707,21 @@ function AddDevicePanel({
     }
   };
 
+  const handleWifiConnect = async () => {
+    if (!wifiAddress.trim()) return;
+    setConnectingWifi(true);
+    setError(null);
+    try {
+      await connectWifiAdb(wifiAddress);
+      setWifiAddress("");
+      await refresh();
+    } catch (e: any) {
+      setError(e?.message ?? "Could not connect to the phone");
+    } finally {
+      setConnectingWifi(false);
+    }
+  };
+
   const available = phones.filter(p => p.state === "device");
   const blocked   = phones.filter(p => p.state !== "device");
 
@@ -718,6 +746,30 @@ function AddDevicePanel({
           {error}
         </div>
       )}
+
+      <div className="w-full rounded-xl border border-border bg-card p-3 space-y-2">
+        <p className="text-xs font-semibold text-foreground">Connect one phone over Wi‑Fi</p>
+        <p className="text-[10px] text-muted-foreground">
+          Enter the Wireless Debugging address, for example 192.168.1.42:5555
+        </p>
+        <div className="flex gap-2">
+          <input
+            value={wifiAddress}
+            onChange={e => setWifiAddress(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") void handleWifiConnect(); }}
+            placeholder="Phone IP:port"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+            disabled={connectingWifi || adding !== null}
+          />
+          <button
+            onClick={() => void handleWifiConnect()}
+            disabled={!wifiAddress.trim() || connectingWifi || adding !== null}
+            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            {connectingWifi ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Connect"}
+          </button>
+        </div>
+      </div>
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
