@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Plane } from "lucide-react";
+import type { CollisionLease, CollisionSource } from "@/lib/collisionCoordinator";
 
 // Collision preventer slot index reserved for phone apps (outside Instagram slot range 0..N).
 const PHONE_APPS_SLOT_IDX = 99;
@@ -379,8 +380,8 @@ interface MobilePhoneAppsPanelProps {
   onNextRunAt:       (ts: number | null) => void;
   onRunning?:        (running: boolean) => void;
   onLog?:            (msg: string) => void;
-  requestSlot?:      (idx: number, readyAt: number, onQueued?: () => void) => Promise<boolean>;
-  releaseSlot?:      (idx: number, skipRest?: boolean) => void;
+  requestSlot?:      (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string) => Promise<CollisionLease>;
+  releaseSlot?:      (lease: CollisionLease, skipRest?: boolean) => void;
   cancelQueuedSlot?: (idx: number) => void;
 }
 
@@ -499,18 +500,25 @@ function MobilePhoneAppsPanel({
     runningRef.current = true;
     onRunningRef.current?.(true);
     setCompletionStatus("running");
+    // Preserve the timer's original due time before clearing the display
+    // state. The shared coordinator uses this timestamp to prioritize turns
+    // that became ready first across HST and Phone Apps owners.
+    const hstTurnAt = nextRunAtRef.current ?? Date.now();
     updateNextRunAt(null);
     onLogRef.current?.("▶ Starting Phone Apps cycle");
 
-    const hstTurnAt = nextRunAtRef.current ?? Date.now();
-    let slotAcquired = false;
+    let collisionLease: CollisionLease | null = null;
     let cycleOutcomeLogged = false;
     try {
       if (requestSlot) {
-        await requestSlot(PHONE_APPS_SLOT_IDX, hstTurnAt, () => {
+        collisionLease = await requestSlot(PHONE_APPS_SLOT_IDX, hstTurnAt, () => {
           onLogRef.current?.("Phone Apps — collision detected; device busy, waiting for rest window");
-        });
-        slotAcquired = true;
+        }, "phone-apps", "phone-apps");
+        if (!collisionLease.id) {
+          cycleOutcomeLogged = true;
+          onLogRef.current?.("Cycle aborted — Phone Apps collision request was cancelled");
+          return;
+        }
         if (stopRef.current) {
           cycleOutcomeLogged = true;
           onLogRef.current?.("Cycle aborted — Phone Apps disabled while waiting for the device");
@@ -616,7 +624,7 @@ function MobilePhoneAppsPanel({
       cycleOutcomeLogged = true;
       onLogRef.current?.(`Cycle failed — Phone Apps: ${e?.message ?? "unknown error"}`);
     } finally {
-      if (slotAcquired) releaseSlot?.(PHONE_APPS_SLOT_IDX);
+      if (collisionLease?.id) releaseSlot?.(collisionLease);
       runningRef.current = false;
       onRunningRef.current?.(false);
       if (!cycleOutcomeLogged && stopRef.current) {

@@ -5,6 +5,15 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
 import { useParams, useSearch } from "wouter";
 import { _hstTimers, _hstStop, _hstNextRunAt, _hstUiMounted } from "@/lib/hstRunner";
+import {
+  requestCollisionSlot,
+  releaseCollisionSlot,
+  cancelCollisionSlot,
+  resetCollision,
+  setCollisionConfig,
+  type CollisionLease,
+  type CollisionSource,
+} from "@/lib/collisionCoordinator";
 import { BrowserPanel } from "@/components/BrowserPanel";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
@@ -3851,7 +3860,7 @@ const MAX_HST_ACCOUNT_SLOTS = 10;
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void) => Promise<boolean>, releaseSlot?: (idx: number, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig, isActive = false, slotId?: string) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string) => Promise<CollisionLease>, releaseSlot?: (lease: CollisionLease, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig, isActive = false, slotId?: string) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -3893,6 +3902,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // pass it to the server-side abort endpoint (prevents stale abort POSTs
   // from killing the *next* cycle after a rapid toggle-off / toggle-on).
   const cycleIdRef = useRef<string | null>(null);
+  // The coordinator returns a lease token, not just a slot index. This keeps a
+  // late completion from an older cycle from releasing a newer lease for the
+  // same account slot.
+  const collisionLeaseRef = useRef<CollisionLease | null>(null);
   // Snapshot of what's actually persisted server-side — lets autosave skip
   // firing a no-op POST right after hydration (when `settings` merely
   // mirrors what was just loaded) and only save on real user edits.
@@ -4403,6 +4416,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       setNextRunAt(null);
       // Collision preventer: wait for device to be free before running.
       // Hoisted so post-cycle scheduling can use it as a CP-active fallback.
+      collisionLeaseRef.current = null;
       let collisionPrevented = false;
       if (requestSlot && slotIdx !== undefined) {
         onLog?.(`[HST-DBG] ${_dbgTag} — awaiting collision-preventer slot…`);
@@ -4419,11 +4433,15 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           }
           onLog?.(`[HST-DBG] ${_dbgTag} — collision detected; queued, waiting for rest window`);
         };
-        collisionPrevented = await requestSlot(slotIdx, hstTurnAt, onQueued);
+        const lease = await requestSlot(slotIdx, hstTurnAt, onQueued, "hst-ui", _dbgTag);
+        collisionLeaseRef.current = lease;
+        collisionPrevented = lease.collisionPrevented;
         srvLog(`${_dbgTag} — collision-preventer request resolved (collisionPrevented=${collisionPrevented})`);
         if (_hstStop.has(key)) {
           onLog?.(`[HST-DBG] ${_dbgTag} — stopped while waiting for collision-preventer; releasing slot`);
-          releaseSlot?.(slotIdx, true); return;
+          releaseSlot?.(lease, true);
+          collisionLeaseRef.current = null;
+          return;
         }
         onLog?.(`[HST-DBG] ${_dbgTag} — slot acquired (collisionPrevented=${collisionPrevented})`);
       }
@@ -4700,7 +4718,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         cycleAbortRef.current = null;
         cycleIdRef.current = null;
         // Release the collision scheduler slot regardless of outcome.
-        if (releaseSlot && slotIdx !== undefined) releaseSlot(slotIdx);
+        if (releaseSlot && collisionLeaseRef.current) {
+          releaseSlot(collisionLeaseRef.current);
+          collisionLeaseRef.current = null;
+        }
       }
 
       // Post-cycle: check stop flag, then reschedule.
@@ -4859,21 +4880,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 interface CollisionPreventerConfig { enabled: boolean; restMinMin: number; restMinMax: number; }
 
 function useCollisionPreventer(serial: string | null) {
-  // Fail closed while the device-specific setting is hydrating. Starting with
-  // enabled=false lets an immediate/manual HST run bypass the collider before
-  // the GET response arrives, allowing two slots to enter the device together.
-  // The settings panel uses the same safe defaults for a new device.
+  // Keep the visible settings state local for rendering, but keep queue/lease
+  // state in collisionCoordinator.ts so background and mounted runtimes share
+  // one device-level owner.
   const [config, setConfig] = useState<CollisionPreventerConfig>({ enabled: true, restMinMin: 5, restMinMax: 10 });
-  const configRef = useRef(config);
-  useEffect(() => { configRef.current = config; }, [config]);
-
-  // Queue entries: slotIdx, the timestamp the slot first became ready, and the
-  // resolve callback that grants permission to run. Boolean arg = collisionPrevented.
-  // readyAt is the scheduled HST turn, not the time requestSlot happened to run.
-  const queueRef = useRef<{ slotIdx: number; readyAt: number; resolve: (collisionPrevented: boolean) => void }[]>([]);
-  const busyRef  = useRef(false); // true = a slot is running or resting
-  const activeSlotRef = useRef<number | null>(null);
-  const restTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load saved config on mount / serial change, and refresh it while the
   // Account panel stays mounted behind the other device tabs. The settings
@@ -4886,7 +4896,10 @@ function useCollisionPreventer(serial: string | null) {
       fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/collision-preventer`)
         .then(r => r.json())
         .then(d => {
-          if (active && d.config) setConfig(d.config);
+          if (active && d.config) {
+            setConfig(d.config);
+            setCollisionConfig(serial, d.config);
+          }
         })
         .catch(() => {});
     };
@@ -4898,120 +4911,35 @@ function useCollisionPreventer(serial: string | null) {
     };
   }, [serial]);
 
-  const processNext = useCallback(() => {
-    restTimerRef.current = null;
-    if (queueRef.current.length === 0) {
-      busyRef.current = false;
-      activeSlotRef.current = null;
-      return;
-    }
-    queueRef.current.sort((a, b) => a.readyAt - b.readyAt || a.slotIdx - b.slotIdx);
-    const next = queueRef.current.shift()!;
-    busyRef.current = true;
-    activeSlotRef.current = next.slotIdx;
-    next.resolve(true); // true = was queued = collision was prevented
-  }, []);
-
-  // Returns true if the slot had to wait (collision was prevented), false if it ran immediately.
+  // Returns a lease whose collisionPrevented flag records whether this turn
+  // waited. The lease identity is required for every release.
   // onQueued fires immediately when the slot is pushed to the wait queue — before the rest
   // period begins — so the dashboard timestamp reflects the moment of the collision, not when
   // the slot eventually gets its turn.
-  const requestSlot = useCallback((slotIdx: number, readyAt: number, onQueued?: () => void): Promise<boolean> => {
-    if (!configRef.current.enabled) return Promise.resolve(false);
-    return new Promise<boolean>(resolve => {
-      if (!busyRef.current) {
-        busyRef.current = true;
-        activeSlotRef.current = slotIdx;
-        resolve(false);
-      } else {
-        // Preserve the original HST turn so an overdue slot keeps its place in
-        // the priority queue while it waits for the configured collision rest.
-        queueRef.current.push({ slotIdx, readyAt, resolve });
-        // Fire the callback NOW (at collision time) so the dashboard entry
-        // timestamp matches when the slot was actually blocked, not when it
-        // eventually gets its turn after the rest window.
-        onQueued?.();
-      }
-    });
-  }, []);
+  const requestSlot = useCallback((
+    slotIdx: number,
+    readyAt: number,
+    onQueued?: () => void,
+    source: CollisionSource = "hst-ui",
+    owner = `slot${slotIdx}`,
+  ): Promise<CollisionLease> => {
+    if (!serial) return Promise.resolve({ id: "", collisionPrevented: false });
+    return requestCollisionSlot(serial, slotIdx, readyAt, { source, owner, onQueued });
+  }, [serial]);
 
-  const releaseSlot = useCallback((slotIdx: number, skipRest = false) => {
-    // If this slot was still queued (for example, its Human Session toggle was
-    // turned off while it was waiting), remove only that queued turn. Do not
-    // start another rest timer or resolve it after the queue has moved on.
-    if (activeSlotRef.current !== slotIdx) {
-      queueRef.current = queueRef.current.filter(entry => entry.slotIdx !== slotIdx);
-      return;
-    }
-    // A stale completion from a previous cycle must not release the slot that
-    // has already been granted to another account.
-    activeSlotRef.current = null;
-    if (skipRest) {
-      // A queued turn was cancelled after being granted. It never ran, so
-      // cancelling it must not impose another device rest window.
-      processNext();
-      return;
-    }
-    if (!configRef.current.enabled) {
-      // Collision prevention was disabled while this cycle was running.
-      // Continue the existing ready queue immediately, without introducing a
-      // rest window that the user has just turned off.
-      processNext();
-      return;
-    }
-    // The active slot has finished. Hold the device for one configured
-    // collision-rest interval, then grant the oldest queued HST turn. The
-    // queued runCycle resumes from its existing requestSlot() promise and
-    // does not receive a new HST interval until its own cycle completes.
-    if (restTimerRef.current !== null) return;
-    const cfg = configRef.current;
-    const restMs = (cfg.restMinMin + Math.random() * Math.max(0, cfg.restMinMax - cfg.restMinMin)) * 60_000;
-    restTimerRef.current = setTimeout(processNext, Math.round(restMs));
-  }, [processNext]);
+  const releaseSlot = useCallback((lease: CollisionLease, skipRest = false) => {
+    if (serial) releaseCollisionSlot(serial, lease, skipRest);
+  }, [serial]);
 
   const cancelQueuedSlot = useCallback((slotIdx: number) => {
-    const queued = queueRef.current.filter(entry => entry.slotIdx === slotIdx);
-    queueRef.current = queueRef.current.filter(entry => entry.slotIdx !== slotIdx);
-    // Resolve cancelled requests so their runCycle callbacks can observe the
-    // stop flag and exit. The returned boolean is irrelevant on that branch.
-    for (const entry of queued) entry.resolve(false);
-  }, []);
+    if (serial) cancelCollisionSlot(serial, slotIdx);
+  }, [serial]);
 
-  const resetCollision = useCallback(() => {
-    if (restTimerRef.current !== null) {
-      clearTimeout(restTimerRef.current);
-      restTimerRef.current = null;
-    }
-    const queued = queueRef.current;
-    queueRef.current = [];
-    busyRef.current = false;
-    activeSlotRef.current = null;
-    for (const entry of queued) entry.resolve(false);
-  }, []);
+  const reset = useCallback(() => {
+    if (serial) resetCollision(serial);
+  }, [serial]);
 
-  // Turning the preventer off removes the rest window, but must never release
-  // an account while another account is still active. If the device is idle
-  // (including during a rest timer), grant the oldest queued turn immediately;
-  // otherwise releaseSlot will do the same when the active cycle completes.
-  useEffect(() => {
-    configRef.current = config;
-    if (config.enabled) return;
-    if (restTimerRef.current !== null) {
-      clearTimeout(restTimerRef.current);
-      restTimerRef.current = null;
-    }
-    if (activeSlotRef.current === null) processNext();
-  }, [config, processNext]);
-
-  useEffect(() => () => {
-    if (restTimerRef.current !== null) clearTimeout(restTimerRef.current);
-    restTimerRef.current = null;
-    queueRef.current = [];
-    busyRef.current = false;
-    activeSlotRef.current = null;
-  }, []);
-
-  return { config, setConfig, requestSlot, releaseSlot, cancelQueuedSlot, resetCollision };
+  return { config, setConfig, requestSlot, releaseSlot, cancelQueuedSlot, resetCollision: reset };
 }
 
 // ── Copy Settings dialog ──────────────────────────────────────────────────────
@@ -8656,8 +8584,8 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   onPrevSlot?: () => void;
   onNextSlot?: () => void;
   slotCount?: number;
-  requestSlot?: (idx: number, readyAt: number) => Promise<boolean>;
-  releaseSlot?: (idx: number, skipRest?: boolean) => void;
+  requestSlot?: (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string) => Promise<CollisionLease>;
+  releaseSlot?: (lease: CollisionLease, skipRest?: boolean) => void;
   cancelQueuedSlot?: (idx: number) => void;
   refreshKey?: number;
   onCopied?: (targetSlotIdxs: number[]) => void;

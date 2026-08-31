@@ -140,3 +140,4 @@
 - [Feed action detector independence](feed-action-detector-independence.md) — Like visual failure must not suppress independently validated Share/DM/Save; bundle references in both dev and packaged roots
 - [Feed action input transactions](feed-action-input-transaction.md) — serialize final live-node scan, action, recovery, and verification per device to prevent interleaved ADB input
 - [USB phone-data consent](usb-phone-data-consent.md) — image uploads require accepting Android’s live phone-data dialog; repeated prompts can indicate USB re-enumeration
+- [Mobile collision coordinator](mobile-collision-coordinator.md) — every device automation owner must acquire and release a lease token through one shared per-device coordinator
