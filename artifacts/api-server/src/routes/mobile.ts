@@ -6694,10 +6694,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             } else {
               // Build skip sets (same as normal follow dispatcher)
               const _sfSkipFollowed = await (async () => {
-                if (!globalSkipFollowed) return undefined;
                 const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
-                const globalSet = await storage.getAllFollowedUsernames();
-                for (const u of globalSet) local.add(u);
+                if (globalSkipFollowed) {
+                  const globalSet = await storage.getAllFollowedUsernames();
+                  for (const u of globalSet) local.add(u);
+                }
                 return local;
               })();
               const _sfSkipSkipped = await (async () => {
@@ -7126,10 +7127,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           try {
             // Pre-compute skip sets once; reused for all retries in this slot.
             const _ssSkipFollowed = await (async () => {
-              if (!globalSkipFollowed) return undefined;
               const local = new Set(getMobileFollowedList(serial).map(e => e.username.toLowerCase()));
-              const globalSet = await storage.getAllFollowedUsernames();
-              for (const u of globalSet) local.add(u);
+              if (globalSkipFollowed) {
+                const globalSet = await storage.getAllFollowedUsernames();
+                for (const u of globalSet) local.add(u);
+              }
               return local;
             })();
             const _ssSkipSkipped = await (async () => {
@@ -7274,7 +7276,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 recordFollow: (username, source) => recordMobileFollow(serial, slotIdx, username, source),
                 onLike: () => { injectBrowsingLikes++; },
                 skipFollowedUsernames: await (async () => {
-                  if (!globalSkipFollowed) return undefined;
                   const local = new Set(getMobileFollowedList(serial, slotIdx).map(e => e.username.toLowerCase()));
                   if (globalSkipFollowed) {
                     const globalSet = await storage.getAllFollowedUsernames();
