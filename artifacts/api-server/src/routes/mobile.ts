@@ -4295,6 +4295,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // after the next cycle has already started cannot kill the new cycle.
   const automationCycleCurrentId  = new Map<string, string>(); // serial → running cycle ID
   const automationCycleAbortedId  = new Map<string, string>(); // serial → ID that was aborted
+  type MobileFollowedUser = { username: string; source: string; followedAt: string };
+  // Session history is intentionally scoped to the physical device + stable
+  // account slot. It backs the Follow panel and the per-cycle skip set; it is
+  // not the global followed-users database.
+  const mobileFollowedBySlot = new Map<string, MobileFollowedUser[]>();
+  const mobileFollowedKey = (serial: string, slotIdx = 0) => `${serial}:${slotIdx}`;
+  const getMobileFollowedList = (serial: string, slotIdx = 0): MobileFollowedUser[] =>
+    mobileFollowedBySlot.get(mobileFollowedKey(serial, slotIdx)) ?? [];
+  const recordMobileFollow = (serial: string, slotIdx: number, username: string, source: string) => {
+    const key = mobileFollowedKey(serial, slotIdx);
+    const list = mobileFollowedBySlot.get(key) ?? [];
+    if (!list.some(entry => entry.username.toLowerCase() === username.toLowerCase())) {
+      list.push({ username, source, followedAt: new Date().toISOString() });
+      mobileFollowedBySlot.set(key, list);
+    }
+  };
   // Current tool label for each active device cycle. This is read by the
   // lightweight status endpoint and cleared with the cycle state in finally.
   // Keep it in the same route-local registry as the other cycle maps so every
