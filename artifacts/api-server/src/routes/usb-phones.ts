@@ -296,10 +296,8 @@ function listUsbPhones(adbPath: string, diag?: UsbPollDiagnostic): UsbPhone[] {
     // that look like emulators or network/TCP devices (accept everything else,
     // including a bare "usb:" token check as a bonus label, not a requirement).
     const looksLikeEmulator = serial.startsWith("emulator-");
-    // Keep network ADB devices (host:port) as well as USB devices. Wireless
-    // debugging uses the same ADB device list and must be registerable in the
-    // farm; only emulator entries are excluded here.
-    if (looksLikeEmulator) continue;
+    const looksLikeNetwork  = /^[\w.-]+:\d+$/.test(serial); // host:port pattern (adb connect over Wi-Fi/TCP)
+    if (looksLikeEmulator || looksLikeNetwork) continue;
 
     // Parse key:value pairs from -l suffix
     const kv: Record<string, string> = {};
