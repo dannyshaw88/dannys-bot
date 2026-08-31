@@ -194,7 +194,11 @@ export async function runUpdateBio(
         }
       }
     }
-    await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 300));
+    // Instagram can return to Edit Profile before the save transaction and
+    // dirty-state cleanup have finished. Waiting only ~1.5s lets the next
+    // Back land on the discard-confirmation boundary; give the save 3–5s to
+    // settle before leaving the profile editor.
+    await sleepOrAbort(serial, 3000 + Math.round(Math.random() * 2000));
 
     // 6. Leave the surrounding Edit Profile surface using the saved Mirror
     // Controls calibration. `settingsBack` is the shared calibrated point for
