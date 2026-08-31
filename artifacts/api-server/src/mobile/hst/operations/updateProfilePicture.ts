@@ -194,10 +194,16 @@ export async function runUpdateProfilePicture(
     }
     await sleepOrAbort(serial, 2500 + Math.round(Math.random() * 1000));
 
-    // 10. Press Back once to leave the edit-profile view.
-    await android.pressBack(serial);
+    // 10. Tap the calibrated Instagram Back control once to leave the
+    // edit-profile view. This is the same upper-left control captured in
+    // Mirror Controls, and fails closed when calibration is missing/stale.
+    const calibratedBack = await android.tapCalibratedNavigationControl(
+      serial,
+      "settingsBack",
+      (message: string) => onLog?.(`Update Profile Pic: ${message}`),
+    );
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 400));
-    onLog?.("Update Profile Pic: pressed Back");
+    onLog?.(`Update Profile Pic: tapped calibrated Instagram Back at (${calibratedBack.x},${calibratedBack.y})`);
 
     uploadSucceeded = true;
 

@@ -196,20 +196,16 @@ export async function runUpdateBio(
     }
     await sleepOrAbort(serial, 1500 + Math.round(Math.random() * 300));
 
-    // 6. Leave the surrounding Edit Profile surface by locating the live
-    // top-left back arrow. Do not use Android Back or a guessed coordinate:
-    // on some builds the save flow leaves this screen open and the next
-    // random action then runs against Edit Profile indefinitely.
-    const backIcon = await android.findBackHeaderIconByPixels(
+    // 6. Leave the surrounding Edit Profile surface using the saved Mirror
+    // Controls calibration. `settingsBack` is the shared calibrated point for
+    // Instagram's upper-left back arrow; this operation must fail closed if
+    // the device has no valid point for the current display.
+    const calibratedBack = await android.tapCalibratedNavigationControl(
       serial,
+      "settingsBack",
       (message: string) => onLog?.(`Update Bio: ${message}`),
     );
-    if (!backIcon) {
-      onLog?.("Update Bio: ✗ top-left back arrow was not visually confirmed — stopping without fallback");
-      return;
-    }
-    await android.tap(serial, backIcon.x, backIcon.y);
     await sleepOrAbort(serial, 800);
-    onLog?.(`Update Bio: tapped visually confirmed back arrow at (${backIcon.x},${backIcon.y})`);
+    onLog?.(`Update Bio: tapped calibrated Instagram Back at (${calibratedBack.x},${calibratedBack.y})`);
     onLog?.("Update Bio: ✓ done");
 }

@@ -7,4 +7,4 @@ Fixed Instagram controls must use a device-specific calibration map separate fro
 
 **Why:** Fixed-control detectors and guessed screen percentages vary across Instagram builds and phone resolutions, while a keyboard calibration map has different lifecycle and partial-merge semantics.
 
-**How to apply:** Add fixed controls to the navigation calibration workflow and strict named-control executor. Long-press flows should resolve a calibrated point without dispatching an initial tap.
+**How to apply:** Add fixed controls to the navigation calibration workflow and strict named-control executor. Long-press flows should resolve a calibrated point without dispatching an initial tap. The calibrated `settingsBack` point is the shared upper-left Instagram Back target for Settings and Edit Profile surfaces; callers must fail closed when it is missing or stale.
