@@ -12,6 +12,7 @@ import path from "path";
 import fs from "fs";
 import https from "https";
 import { pipeline } from "stream/promises";
+import { recordUsbPoll, type UsbPollDiagnostic } from "../mobile/usbDiagnostics";
 
 // Official Google-hosted platform-tools zip. No account/API key needed — this
 // is the same URL "Download SDK Platform-Tools" links to on Android's own
@@ -110,10 +111,50 @@ function findAdb(): string | null {
   return null;
 }
 
+type AdbRunResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  signal: string | null;
+  timedOut: boolean;
+  error: string | null;
+  durationMs: number;
+};
+
+function runAdbDetailed(adbPath: string, args: string[]): AdbRunResult {
+  const startedAt = Date.now();
+  try {
+    const r = spawnSync(adbPath, args, { timeout: 8_000, encoding: "utf8" });
+    const error = r.error as (NodeJS.ErrnoException & { code?: string }) | undefined;
+    const timedOut = error?.code === "ETIMEDOUT" || r.signal === "SIGTERM";
+    return {
+      ok: !error && r.status === 0,
+      stdout: String(r.stdout ?? ""),
+      stderr: String(r.stderr ?? ""),
+      exitCode: r.status,
+      signal: r.signal ?? null,
+      timedOut,
+      error: error?.message ?? null,
+      durationMs: Date.now() - startedAt,
+    };
+  } catch (error: any) {
+    return {
+      ok: false,
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      timedOut: false,
+      error: error?.message ?? String(error),
+      durationMs: Date.now() - startedAt,
+    };
+  }
+}
+
 function runAdb(adbPath: string, args: string[]): string | null {
-  const r = spawnSync(adbPath, args, { timeout: 8_000, encoding: "utf8" });
-  if (r.error || r.status !== 0) return null;
-  return r.stdout?.trim() ?? null;
+  const result = runAdbDetailed(adbPath, args);
+  return result.ok ? result.stdout.trim() : null;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -331,8 +372,23 @@ const router = Router();
  */
 router.get("/mobile/usb-phones", (_req, res) => {
   const adbPath = findAdb();
-  const diag = { rawOutput: "" };
+  const diag: UsbPollDiagnostic = {
+    adbFound: adbPath !== null,
+    adbPath,
+    durationMs: 0,
+    commandOk: false,
+    exitCode: null,
+    signal: null,
+    timedOut: false,
+    error: adbPath ? null : "ADB executable was not found",
+    stderr: "",
+    rawOutput: "",
+    phones: [],
+    probeFailures: [],
+  };
   const phones = adbPath ? listUsbPhones(adbPath, diag) : [];
+  diag.phones = phones.map(phone => ({ serial: phone.serial, state: phone.state }));
+  recordUsbPoll(diag);
 
   // Append count-based fake phones (legacy).
   const fakeCount = loadFakePhoneCount();
