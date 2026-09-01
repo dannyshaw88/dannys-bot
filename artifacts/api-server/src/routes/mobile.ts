@@ -6177,6 +6177,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_WAKEUP(224)" }, "[mobile-screen-state] intentional command");
       await android.wakeScreen(serial);
       await logScreenState("immediately-after-wake-command");
+      // Some devices report ON immediately after WAKEUP and then turn the
+      // panel back off within about a second. Probe that transition before
+      // the normal post-wake delay completes.
+      void (async () => {
+        for (const [delayMs, phase] of [[300, "300ms-after-wake"], [600, "600ms-after-wake"], [900, "900ms-after-wake"]] as const) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          if (automationCycleCurrentId.get(serial) !== incomingCycleId || isCycleAborted(serial)) return;
+          await logScreenState(phase);
+        }
+      })().catch(error => logger.warn({ err: error, serial, slotId, cycleId: incomingCycleId }, "[mobile-screen-state] rapid startup probe failed"));
       steps.push("power-on");
       await sleepOrAbort(serial, 1200); // let the screen finish waking
       await logScreenState("1200ms-after-wake");
