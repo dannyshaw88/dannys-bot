@@ -9454,8 +9454,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const serial = p(req, "serial");
       const all    = await storage.getGlobalSettings();
-      // Support legacy key name so existing saved configs are not lost.
-      const raw    = all[`collision_scheduler_${serial}`] ?? all[`collision_preventer_${serial}`] ?? null;
+      // Prefer the current key. The legacy key may still contain an older
+      // default config and must not mask values saved through this endpoint.
+      const raw    = all[`collision_preventer_${serial}`] ?? all[`collision_scheduler_${serial}`] ?? null;
       const config = raw ? JSON.parse(raw) : null;
       res.json({ config });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
