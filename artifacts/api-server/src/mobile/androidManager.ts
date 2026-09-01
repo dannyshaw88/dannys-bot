@@ -3634,7 +3634,28 @@ export async function swipeUpFromBottom(serial: string): Promise<void> {
   const { w, h } = getScreenSize(serial);
   const x = Math.round(w / 2);
   const durationMs = 200 + Math.round(Math.random() * 300);
-  await swipe(serial, x, Math.round(h * 0.92), x, Math.round(h * 0.35), durationMs);
+  const y1 = Math.round(h * 0.92);
+  const y2 = Math.round(h * 0.35);
+  logger.info({
+    serial,
+    requestedFrom: [x, y1],
+    requestedTo: [x, y2],
+    durationMs,
+    path: "unlock-raw",
+  }, "[mobile-input] unlock swipe dispatched");
+  await runInputShell(
+    serial,
+    ["swipe", String(x), String(y1), String(x), String(y2), String(durationMs)],
+    "unlock swipe",
+  );
+  logger.info({
+    serial,
+    executedFrom: [x, y1],
+    executedTo: [x, y2],
+    durationMs,
+    completed: true,
+    path: "unlock-raw",
+  }, "[mobile-execution] unlock swipe command completed");
 }
 
 /** Dismiss an Instagram story/highlight viewer with the inverse gesture. */
