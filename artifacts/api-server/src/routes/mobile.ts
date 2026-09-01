@@ -5989,6 +5989,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return screenOn;
     };
     let notebookStarted = false;
+    let screenMonitor: ReturnType<typeof setInterval> | null = null;
+    let lastMonitoredScreenOn: boolean | null = null;
     try {
       const parsedCycle = automationCycleSchema.parse(req.body);
       // Re-resolve the assigned TrustScore at execution time. The browser
@@ -6188,6 +6190,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         if (automationCycleCurrentId.get(serial) !== incomingCycleId || isCycleAborted(serial)) return;
         await logScreenState("3000ms-after-wake");
       })().catch(error => logger.warn({ err: error, serial, slotId, cycleId: incomingCycleId }, "[mobile-screen-state] startup watch failed"));
+      // Keep observing for the whole cycle. This is diagnostic-only: it never
+      // wakes, retries, stops, or otherwise changes the HST.
+      screenMonitor = setInterval(async () => {
+        if (automationCycleCurrentId.get(serial) !== incomingCycleId || !automationCycleInProgress.has(serial)) return;
+        const screenOn = await logScreenState("active-cycle");
+        if (lastMonitoredScreenOn !== null && screenOn !== null && screenOn !== lastMonitoredScreenOn) {
+          logger.warn({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, from: lastMonitoredScreenOn ? "ON" : "OFF", to: screenOn ? "ON" : "OFF" }, "[mobile-screen-state] unexpected transition");
+          tLog(`[SCREEN] unexpected transition ${lastMonitoredScreenOn ? "ON" : "OFF"} → ${screenOn ? "ON" : "OFF"}`);
+        }
+        if (screenOn !== null) lastMonitoredScreenOn = screenOn;
+      }, 10_000);
 
        // USB/MTP consent is separate from USB debugging.  Image uploads need
        // phone-data access, and a hub re-enumeration can make Android show the
@@ -7816,6 +7829,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
     } finally {
+      if (screenMonitor) {
+        clearInterval(screenMonitor);
+        screenMonitor = null;
+      }
       automationCycleInProgress.delete(serial);
       automationCycleActiveSlot.delete(serial);
       automationCurrentTool.delete(serial);
