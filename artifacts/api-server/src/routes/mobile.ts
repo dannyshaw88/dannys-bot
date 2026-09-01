@@ -6173,33 +6173,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // 1. Power on the phone.
       tLog("▶ Waking screen…");
-      await logScreenState("before-wake-command");
       logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_WAKEUP(224)" }, "[mobile-screen-state] intentional command");
       await android.wakeScreen(serial);
-      await logScreenState("immediately-after-wake-command");
-      // Some devices report ON immediately after WAKEUP and then turn the
-      // panel back off within about a second. Probe that transition before
-      // the normal post-wake delay completes.
-      void (async () => {
-        for (const [delayMs, phase] of [[300, "300ms-after-wake"], [600, "600ms-after-wake"], [900, "900ms-after-wake"]] as const) {
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          if (automationCycleCurrentId.get(serial) !== incomingCycleId || isCycleAborted(serial)) return;
-          await logScreenState(phase);
-        }
-      })().catch(error => logger.warn({ err: error, serial, slotId, cycleId: incomingCycleId }, "[mobile-screen-state] rapid startup probe failed"));
       steps.push("power-on");
-      await sleepOrAbort(serial, 1200); // let the screen finish waking
-      await logScreenState("1200ms-after-wake");
-      // A short startup watch catches the reported failure mode: the HST
-      // process remains active while the physical display turns off again.
+      // Do not probe power state, wait for a fixed wake delay, or handle MTP
+      // before unlocking. Those operations are slow on some Samsung devices
+      // and the panel can time out again before the swipe reaches keyguard.
+      tLog("▶ Unlocking screen immediately after wake…");
+      await android.swipeUpFromBottom(serial);
+      steps.push("unlock-swipe");
+      await sleepOrAbort(serial, 800); // let the keyguard animation complete
+
+      // Diagnostics run after the critical wake→unlock sequence so they
+      // cannot consume the short display-on window.
       void (async () => {
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 300));
         if (automationCycleCurrentId.get(serial) !== incomingCycleId || isCycleAborted(serial)) return;
-        await logScreenState("2000ms-after-wake");
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await logScreenState("post-unlock-300ms");
+        await new Promise(resolve => setTimeout(resolve, 700));
         if (automationCycleCurrentId.get(serial) !== incomingCycleId || isCycleAborted(serial)) return;
-        await logScreenState("3000ms-after-wake");
-      })().catch(error => logger.warn({ err: error, serial, slotId, cycleId: incomingCycleId }, "[mobile-screen-state] startup watch failed"));
+        await logScreenState("post-unlock-1000ms");
+      })().catch(error => logger.warn({ err: error, serial, slotId, cycleId: incomingCycleId }, "[mobile-screen-state] post-unlock probe failed"));
       // Keep observing for the whole cycle. This is diagnostic-only: it never
       // wakes, retries, stops, or otherwise changes the HST.
       screenMonitor = setInterval(async () => {
@@ -6223,28 +6217,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          tLog("  ✓ USB phone-data access allowed");
          await sleepOrAbort(serial, 600);
        }
-
-      // 1b. Swipe up from the bottom to dismiss the lock screen.  On MIUI
-      // (Xiaomi) and similar OEM skins, `am start` alone does NOT clear the
-      // keyguard — the app launches behind the lock screen and all subsequent
-      // taps land on the keyguard instead of Instagram.  A real swipe gesture
-      // also resets the screen-off timeout so the display stays on while the
-      // cycle runs (KEYCODE_WAKEUP alone does not count as touch input).
-       tLog("▶ Verifying screen is still on before unlock…");
-       const screenBeforeUnlock = await android.isScreenOn(serial);
-       if (screenBeforeUnlock !== true) {
-         logger.warn({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, screenOn: screenBeforeUnlock }, "[mobile-screen-state] screen not on before unlock; re-waking");
-         tLog(`  Screen state before unlock: ${screenBeforeUnlock === null ? "unknown" : "OFF"} — sending wake command`);
-         await android.ensureScreenOn(serial, 2500);
-         await logScreenState("before-unlock-after-ensure");
-       } else {
-         tLog("  ✓ Screen still on before unlock");
-       }
-       tLog("▶ Unlocking screen…");
-      await android.swipeUpFromBottom(serial);
-      steps.push("unlock-swipe");
-      await sleepOrAbort(serial, 800); // let the keyguard animation complete
-      tLog("  ✓ Screen unlocked");
 
       // 2. Open Instagram.
       tLog("▶ Opening Instagram…");
