@@ -1,6 +1,6 @@
 export interface CheckNotificationsOperationContext {
   android: {
-    tapCalibratedNavigationControl(serial: string, control: "home" | "notifications", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
+    tapCalibratedNavigationControl(serial: string, control: "home" | "notifications" | "settingsBack", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
     findRandomNotificationItem(serial: string): Promise<{ x: number; y: number } | null>;
     pressBack(serial: string): Promise<void>;
@@ -60,7 +60,7 @@ export async function runCheckNotifications(
       await android.tap(serial, item.x, item.y);
       onLog?.("Random Actions: ✓ tapped notification item");
       await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
-      await android.pressBack(serial);
+      await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
       await hstRandomDelay(serial, 2500, 10000);
     } else {
       onLog?.("Random Actions: no clickable notification row found — skipping click");
@@ -69,7 +69,7 @@ export async function runCheckNotifications(
     onLog?.("Random Actions: click-notification roll missed — skipping click");
   }
 
-  await android.pressBack(serial);
+  await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
   await hstRandomDelay(serial, 2500, 10000);
   onLog?.("Random Actions: ✓ notifications check done");
 }
