@@ -6230,7 +6230,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // taps land on the keyguard instead of Instagram.  A real swipe gesture
       // also resets the screen-off timeout so the display stays on while the
       // cycle runs (KEYCODE_WAKEUP alone does not count as touch input).
-      tLog("▶ Unlocking screen…");
+       tLog("▶ Verifying screen is still on before unlock…");
+       const screenBeforeUnlock = await android.isScreenOn(serial);
+       if (screenBeforeUnlock !== true) {
+         logger.warn({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, screenOn: screenBeforeUnlock }, "[mobile-screen-state] screen not on before unlock; re-waking");
+         tLog(`  Screen state before unlock: ${screenBeforeUnlock === null ? "unknown" : "OFF"} — sending wake command`);
+         await android.ensureScreenOn(serial, 2500);
+         await logScreenState("before-unlock-after-ensure");
+       } else {
+         tLog("  ✓ Screen still on before unlock");
+       }
+       tLog("▶ Unlocking screen…");
       await android.swipeUpFromBottom(serial);
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete
