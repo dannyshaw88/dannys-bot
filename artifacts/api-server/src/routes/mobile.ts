@@ -4854,8 +4854,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (!Number.isFinite(configured.durationMinMs) || !Number.isFinite(configured.durationMaxMs)) {
       throw new Error(`Swipe Gesture Profile duration is invalid for ${source}`);
     }
-    const minDuration = Math.max(1, Math.min(configured.durationMinMs, configured.durationMaxMs));
-    const maxDuration = Math.max(minDuration, Math.max(configured.durationMinMs, configured.durationMaxMs));
     const bands: Record<NonNullable<typeof personality>, [number, number]> = {
       superSkim: [0, .20], skim: [.20, .45], fast: [.45, .70], quick: [.70, .90],
       normal: [.90, 1], slow: [.90, 1], focused: [.90, 1], tapDragRelease: [.05, .10],
@@ -4864,12 +4862,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Instagram to recognize the downward viewer-dismiss gesture.
       back: [.90, 1],
     };
-    const [bandStart, bandEnd] = personality ? bands[personality] : [0, 1];
     const slot = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
     const slotScale = [1.08, 1.04, 1, .96, .92][slot.attention];
     const mother = devicePersonality(serial);
-    const durationMs = Math.max(1, Math.round((minDuration + (maxDuration - minDuration) *
-      (bandStart + Math.random() * (bandEnd - bandStart))) * mother.gestureScale * slotScale));
+    // The caller has already selected the duration for the requested
+    // personality (Focused/Slow/Normal/etc.). The device swipe override is
+    // calibration data for the gesture path and pacing adjustments, not a
+    // replacement duration range. Previously this recomputed duration from
+    // the raw calibrated range, so a Focused ~1900ms swipe could be replaced
+    // by a 68–78ms swipe and arrive as a tap-like gesture.
+    const durationMs = Math.max(1, Math.round(fallback.durationMs * mother.gestureScale * slotScale));
     const pauseMin = Math.max(0, Math.min(configured.pauseMinMs ?? 0, configured.pauseMaxMs ?? 0));
     const pauseMax = Math.max(pauseMin, configured.pauseMaxMs ?? pauseMin);
     const settleMin = Math.max(0, Math.min(configured.settleMinMs ?? 0, configured.settleMaxMs ?? 0));
