@@ -2866,6 +2866,11 @@ async function runInputShell(serial: string, args: string[], label: string): Pro
   return runWithDeviceInputGate(serial, async () => {
     const tools = detectToolset();
     const adb = requireTool(tools.adb, "adb");
+    const inputStartedAt = Date.now();
+    logger.info(
+      { serial, label, args, startedAt: inputStartedAt },
+      "[mobile-input] adb input begin",
+    );
     try {
       const { stdout, stderr } = await execFileP(
         adb,
@@ -2876,6 +2881,10 @@ async function runInputShell(serial: string, args: string[], label: string): Pro
       if (/error|exception|permission denied/i.test(out)) {
         throw new Error(out);
       }
+      logger.info(
+        { serial, label, args, elapsedMs: Date.now() - inputStartedAt },
+        "[mobile-input] adb input end",
+      );
     } catch (e: any) {
       const out = `${e.stderr ?? ""}${e.stdout ?? ""}`.trim();
       if (isAndroidDeviceUnavailableError(e)) {
@@ -3953,11 +3962,67 @@ export function stopScrcpy(serial: string): void {
 /** Presses the hardware/virtual BACK key — used to recover when a scripted
  * tap accidentally navigated out of the app it was supposed to stay in. */
 export async function pressBack(serial: string): Promise<void> {
-  await runWithDeviceInputGate(serial, async () => {
-    const tools = detectToolset();
-    const adb = requireTool(tools.adb, "adb");
-    spawnSync(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], { encoding: "utf8", timeout: 3000 });
-  });
+  await runInputShell(serial, ["keyevent", "KEYCODE_BACK"], "back");
+}
+
+/**
+ * Small, cheap foreground snapshot for correlating automation inputs with
+ * unexpected app/launcher transitions. This deliberately records only window
+ * identity and screen power state, not the full dumpsys payload.
+ */
+export async function getForegroundSnapshot(serial: string): Promise<{
+  focusedWindow: string | null;
+  focusedApp: string | null;
+  topResumedActivity: string | null;
+  screenOn: boolean | null;
+}> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  try {
+    const [windowResult, powerResult] = await Promise.all([
+      execFileP(adb, ["-s", serial, "shell", "dumpsys", "window", "windows"], {
+        encoding: "utf8",
+        timeout: 3000,
+      } as any),
+      execFileP(adb, ["-s", serial, "shell", "dumpsys", "power"], {
+        encoding: "utf8",
+        timeout: 3000,
+      } as any),
+    ]);
+    const windowText = `${windowResult.stdout ?? ""}\n${windowResult.stderr ?? ""}`;
+    const powerText = `${powerResult.stdout ?? ""}\n${powerResult.stderr ?? ""}`;
+    const firstMatch = (patterns: RegExp[]): string | null => {
+      for (const pattern of patterns) {
+        const match = windowText.match(pattern);
+        if (match?.[1]) return match[1].trim();
+      }
+      return null;
+    };
+    const snapshot = {
+      focusedWindow: firstMatch([
+        /mCurrentFocus=Window\{[^}]*\s([^}\s]+)\}/,
+        /mCurrentFocus=([^\n]+)/,
+      ]),
+      focusedApp: firstMatch([
+        /mFocusedApp=ActivityRecord\{[^}]*\s([^}\s]+)\}/,
+        /mFocusedApp=([^\n]+)/,
+      ]),
+      topResumedActivity: firstMatch([
+        /topResumedActivity=ActivityRecord\{[^}]*\s([^}\s]+)\}/,
+        /mResumedActivity: ActivityRecord\{[^}]*\s([^}\s]+)\}/,
+      ]),
+      screenOn: /Display Power: state=ON|mScreenOn=true|DisplayPowerController.*state=ON/i.test(powerText)
+        ? true
+        : /Display Power: state=OFF|mScreenOn=false|DisplayPowerController.*state=OFF/i.test(powerText)
+          ? false
+          : null,
+    };
+    logger.info({ serial, ...snapshot }, "[mobile-screen] foreground snapshot");
+    return snapshot;
+  } catch (error: any) {
+    logger.warn({ serial, error: error?.message ?? String(error) }, "[mobile-screen] foreground snapshot failed");
+    return { focusedWindow: null, focusedApp: null, topResumedActivity: null, screenOn: null };
+  }
 }
 
 /**

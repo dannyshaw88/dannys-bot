@@ -99,11 +99,13 @@ export async function runViewReelsLoop(serial: string, params: {
     reelsPersonalityHistory.lastMode = rsv.mode;
     const beforeXml = await android.dumpUi(serial).catch(() => "");
     onLog?.(`${reelLabel}: swipe screen BEFORE — ${summarizeReelsSwipeScreen(beforeXml)}`);
+    await android.getForegroundSnapshot(serial);
     const reelsModeLabel = rsv.mode === "superSkim" ? "super skim" : rsv.mode;
     onLog?.(`${reelLabel}: advance swipe [${reelsModeLabel}]`);
     logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
     const actualPath = await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as any);
     const afterXml = await android.dumpUi(serial).catch(() => "");
+    await android.getForegroundSnapshot(serial);
     onLog?.(
       `${reelLabel}: swipe screen AFTER — ${summarizeReelsSwipeScreen(afterXml)}` +
       `; completed=${actualPath.x1},${actualPath.y1}->${actualPath.x2},${actualPath.y2}`,
