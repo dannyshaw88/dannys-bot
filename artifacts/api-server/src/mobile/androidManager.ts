@@ -3335,6 +3335,64 @@ export async function wakeScreen(serial: string): Promise<void> {
   await keyevent(serial, 224); // KEYCODE_WAKEUP
 }
 
+export type ScreenTimeoutLease = {
+  previousTimeoutMs: string;
+  changed: boolean;
+};
+
+/**
+ * Keep a physical display alive while an automation cycle is starting.
+ *
+ * Some OEMs can leave a very short screen_off_timeout behind. In that case
+ * KEYCODE_WAKEUP can succeed, but the display may go dark again while the
+ * following unlock swipe is still waiting for its screen-size probe and ADB
+ * input gate. The lease is intentionally scoped to the cycle and restored by
+ * the caller.
+ */
+export async function beginScreenTimeoutLease(serial: string): Promise<ScreenTimeoutLease> {
+  const tools = await detectToolsetAsync();
+  const adb = requireTool(tools.adb, "adb");
+  let previousTimeoutMs = "30000";
+  try {
+    const result = await execFileP(
+      adb,
+      ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"],
+      { encoding: "utf8", timeout: 3000 } as any,
+    );
+    const value = String(result.stdout ?? "").trim();
+    if (/^\d+$/.test(value)) previousTimeoutMs = value;
+  } catch {
+    // Use the same conservative fallback as the mirror session.
+  }
+
+  try {
+    await execFileP(
+      adb,
+      ["-s", serial, "shell", "settings", "put", "system", "screen_off_timeout", "2147483647"],
+      { encoding: "utf8", timeout: 5000 } as any,
+    );
+    return { previousTimeoutMs, changed: true };
+  } catch {
+    // Waking and unlocking can still work on devices that reject this
+    // setting, so don't turn the lease safeguard into a cycle failure.
+    return { previousTimeoutMs, changed: false };
+  }
+}
+
+export async function restoreScreenTimeoutLease(
+  serial: string,
+  lease: ScreenTimeoutLease,
+): Promise<void> {
+  if (!lease.changed) return;
+  const tools = await detectToolsetAsync();
+  const adb = requireTool(tools.adb, "adb");
+  await execFileP(
+    adb,
+    ["-s", serial, "shell", "settings", "put", "system", "screen_off_timeout", lease.previousTimeoutMs],
+    { encoding: "utf8", timeout: 5000 } as any,
+  );
+}
+
 export async function sleepScreen(serial: string): Promise<void> {
   await keyevent(serial, 223); // KEYCODE_SLEEP
 }

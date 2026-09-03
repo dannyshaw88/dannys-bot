@@ -5993,6 +5993,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let notebookStarted = false;
     let screenMonitor: ReturnType<typeof setInterval> | null = null;
     let lastMonitoredScreenOn: boolean | null = null;
+    let screenTimeoutLease: android.ScreenTimeoutLease | null = null;
     try {
       const parsedCycle = automationCycleSchema.parse(req.body);
       // Re-resolve the assigned TrustScore at execution time. The browser
@@ -6174,6 +6175,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       debugScreenshotTimestamps.delete(serial);
 
       // 1. Power on the phone.
+      // Apply the temporary timeout hold BEFORE waking. On devices with a
+      // very short screen-off timeout, waiting until after WAKEUP lets the
+      // display go dark while swipeUpFromBottom is still preparing its ADB
+      // screen-size/input work.
+      screenTimeoutLease = await android.beginScreenTimeoutLease(serial);
+      tLog(
+        screenTimeoutLease.changed
+          ? `▶ Screen timeout held open for wake/unlock (previously ${screenTimeoutLease.previousTimeoutMs}ms)`
+          : "▶ Screen timeout hold unavailable — continuing with device setting",
+      );
       tLog("▶ Waking screen…");
       logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_WAKEUP(224)" }, "[mobile-screen-state] intentional command");
       await android.wakeScreen(serial);
@@ -7836,6 +7847,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (screenMonitor) {
         clearInterval(screenMonitor);
         screenMonitor = null;
+      }
+      if (screenTimeoutLease) {
+        await android.restoreScreenTimeoutLease(serial, screenTimeoutLease).catch((error) => {
+          logger.warn({ err: error, serial, slotId, cycleId: incomingCycleId }, "[mobile-screen-state] timeout lease restore failed");
+        });
+        screenTimeoutLease = null;
       }
       automationCycleInProgress.delete(serial);
       automationCycleActiveSlot.delete(serial);
