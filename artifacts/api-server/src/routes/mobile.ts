@@ -6182,7 +6182,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // before unlocking. Those operations are slow on some Samsung devices
       // and the panel can time out again before the swipe reaches keyguard.
       tLog("▶ Unlocking screen immediately after wake…");
-      await android.swipeUpFromBottom(serial, loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture);
+      await android.swipeUpFromBottom(serial);
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete
 
@@ -9737,7 +9737,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Without this the device stays dark and am start is a no-op because
       // the keyguard is in the way.
       await android.wakeScreen(serial);
-      await android.swipeUpFromBottom(serial, devicePrefsPA.swipeGesture);
+      await android.swipeUpFromBottom(serial);
 
       let result: { ok: boolean; steps: string[]; error?: string };
 

@@ -3630,76 +3630,33 @@ export async function setAirplaneMode(serial: string, enable: boolean): Promise<
   spawnSync(adb, ["-s", serial, "shell", "am", "broadcast", "-a", "android.intent.action.AIRPLANE_MODE", "--ez", "state", enable ? "true" : "false"], { encoding: "utf8", timeout: 5000 });
 }
 
-export interface SwipeGestureProfile {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  durationMinMs: number;
-  durationMaxMs: number;
-  jitterX: number;
-  jitterY: number;
-  startJitterMinY?: number;
-  startJitterMaxY?: number;
-}
-
-export async function swipeUpFromBottom(serial: string, profile?: SwipeGestureProfile): Promise<void> {
+export async function swipeUpFromBottom(serial: string): Promise<void> {
   const { w, h } = getScreenSize(serial);
-  const clampX = (value: number) => Math.max(0, Math.min(w - 1, Math.round(value)));
-  const clampY = (value: number) => Math.max(0, Math.min(h - 1, Math.round(value)));
-  const hasValidProfile = profile &&
-    [profile.x1, profile.y1, profile.x2, profile.y2, profile.durationMinMs, profile.durationMaxMs]
-      .every(Number.isFinite) &&
-    profile.durationMaxMs >= 1;
-  const durationMinMs = hasValidProfile
-    ? Math.max(1, Math.min(profile.durationMinMs, profile.durationMaxMs))
-    : 200;
-  const durationMaxMs = hasValidProfile
-    ? Math.max(durationMinMs, profile.durationMaxMs)
-    : 500;
-  const durationMs = durationMinMs + Math.round(Math.random() * (durationMaxMs - durationMinMs));
-  const jitterX = hasValidProfile ? Math.max(0, profile.jitterX || 0) : 0;
-  const jitterY = hasValidProfile ? Math.max(0, profile.jitterY || 0) : 0;
-  const startJitterMinY = hasValidProfile
-    ? Math.min(profile.startJitterMinY ?? 0, profile.startJitterMaxY ?? 0)
-    : 0;
-  const startJitterMaxY = hasValidProfile
-    ? Math.max(startJitterMinY, profile.startJitterMaxY ?? startJitterMinY)
-    : 0;
-  const sharedXJitter = Math.round((Math.random() * 2 - 1) * jitterX);
-  const startYJitter = Math.round(startJitterMinY + Math.random() * (startJitterMaxY - startJitterMinY));
-  const endYJitter = Math.round((Math.random() * 2 - 1) * jitterY);
-  const x1 = hasValidProfile ? profile.x1 : w / 2;
-  const y1Base = hasValidProfile ? profile.y1 : h * 0.92;
-  const x2 = hasValidProfile ? profile.x2 : w / 2;
-  const y2Base = hasValidProfile ? profile.y2 : h * 0.35;
-  const y1 = clampY(y1Base + (hasValidProfile ? startYJitter : 0));
-  const y2 = clampY(y2Base + (hasValidProfile ? endYJitter : 0));
-  const dispatchedX1 = clampX(x1 + (hasValidProfile ? sharedXJitter : 0));
-  const dispatchedX2 = clampX(x2 + (hasValidProfile ? sharedXJitter : 0));
+  const x = Math.round(w / 2);
+  const y1 = Math.round(h * 0.90);
+  const y2 = Math.round(h * 0.50);
+  const durationMs = 50 + Math.round(Math.random() * 50);
   logger.info({
     serial,
-    profileApplied: Boolean(hasValidProfile),
-    requestedFrom: [x1, y1Base],
-    requestedTo: [x2, y2Base],
-    dispatchedFrom: [dispatchedX1, y1],
-    dispatchedTo: [dispatchedX2, y2],
+    requestedFrom: [x, y1],
+    requestedTo: [x, y2],
+    dispatchedFrom: [x, y1],
+    dispatchedTo: [x, y2],
     durationMs,
-    profileDurationRangeMs: hasValidProfile ? [profile.durationMinMs, profile.durationMaxMs] : null,
-    path: hasValidProfile ? "unlock-profile" : "unlock-default",
+    path: "unlock-fast-bottom-to-middle",
   }, "[mobile-input] unlock swipe dispatched");
   await runInputShell(
     serial,
-    ["swipe", String(dispatchedX1), String(y1), String(dispatchedX2), String(y2), String(durationMs)],
+    ["swipe", String(x), String(y1), String(x), String(y2), String(durationMs)],
     "unlock swipe",
   );
   logger.info({
     serial,
-    executedFrom: [dispatchedX1, y1],
-    executedTo: [dispatchedX2, y2],
+    executedFrom: [x, y1],
+    executedTo: [x, y2],
     durationMs,
     completed: true,
-    path: hasValidProfile ? "unlock-profile" : "unlock-default",
+    path: "unlock-fast-bottom-to-middle",
   }, "[mobile-execution] unlock swipe command completed");
 }
 
