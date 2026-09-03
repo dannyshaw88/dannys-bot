@@ -3710,19 +3710,86 @@ export async function closeInstagramViaRecents(
  * Toggles airplane mode via the connectivity service directly rather than
  * tapping a quick-settings tile — tile position varies by device/OEM and
  * Android version, so a blind coordinate tap isn't reliable across the
- * range of phones this tool targets. The network effect (radios off, then
- * back on) is identical to using the tile.
+ * range of phones this tool targets.
+ *
+ * A zero exit status from `cmd connectivity` is not proof that the phone
+ * changed state: some OEM builds accept the command but leave the global
+ * setting untouched. Always verify the setting, then apply the legacy
+ * settings+broadcast fallback when necessary. The caller only gets success
+ * after the device reports the requested state.
  */
 export async function setAirplaneMode(serial: string, enable: boolean): Promise<void> {
-  const tools = detectToolset();
+  const tools = await detectToolsetAsync();
   const adb = requireTool(tools.adb, "adb");
+  const expected = enable;
   const want = enable ? "enable" : "disable";
-  const r1 = spawnSync(adb, ["-s", serial, "shell", "cmd", "connectivity", "airplane-mode", want], { encoding: "utf8", timeout: 5000 });
-  const ok1 = r1.status === 0 && !/error|exception|unknown command/i.test(`${r1.stdout ?? ""}${r1.stderr ?? ""}`);
-  if (ok1) return;
-  // Fallback for older Android builds without `cmd connectivity`.
-  spawnSync(adb, ["-s", serial, "shell", "settings", "put", "global", "airplane_mode_on", enable ? "1" : "0"], { encoding: "utf8", timeout: 5000 });
-  spawnSync(adb, ["-s", serial, "shell", "am", "broadcast", "-a", "android.intent.action.AIRPLANE_MODE", "--ez", "state", enable ? "true" : "false"], { encoding: "utf8", timeout: 5000 });
+
+  const readState = async (): Promise<boolean | null> => {
+    try {
+      const result = await execFileP(
+        adb,
+        ["-s", serial, "shell", "settings", "get", "global", "airplane_mode_on"],
+        { encoding: "utf8", timeout: 3000 } as any,
+      );
+      const value = String(result.stdout ?? "").trim().toLowerCase();
+      if (value === "1" || value === "true") return true;
+      if (value === "0" || value === "false") return false;
+    } catch {
+      // A transient ADB read failure is retried by waitForState.
+    }
+    return null;
+  };
+
+  const waitForState = async (timeoutMs = 3000): Promise<boolean> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await readState() === expected) return true;
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    return (await readState()) === expected;
+  };
+
+  const command = spawnSync(
+    adb,
+    ["-s", serial, "shell", "cmd", "connectivity", "airplane-mode", want],
+    { encoding: "utf8", timeout: 5000 },
+  );
+  const commandOutput = `${command.stdout ?? ""}${command.stderr ?? ""}`;
+  const commandAccepted =
+    command.status === 0 && !/error|exception|unknown command/i.test(commandOutput);
+  if (commandAccepted && await waitForState()) return;
+
+  // Fallback for older Android builds and OEM builds where cmd connectivity
+  // exits successfully without changing the global airplane-mode state.
+  const setting = spawnSync(
+    adb,
+    ["-s", serial, "shell", "settings", "put", "global", "airplane_mode_on", enable ? "1" : "0"],
+    { encoding: "utf8", timeout: 5000 },
+  );
+  const broadcast = spawnSync(
+    adb,
+    [
+      "-s", serial, "shell", "am", "broadcast",
+      "-a", "android.intent.action.AIRPLANE_MODE",
+      "--ez", "state", enable ? "true" : "false",
+    ],
+    { encoding: "utf8", timeout: 5000 },
+  );
+  const fallbackOutput = `${setting.stdout ?? ""}${setting.stderr ?? ""}${broadcast.stdout ?? ""}${broadcast.stderr ?? ""}`;
+  if (setting.status !== 0 || broadcast.status !== 0 || /error|exception|unknown command/i.test(fallbackOutput)) {
+    logger.warn(
+      { serial, enable, commandStatus: command.status, settingStatus: setting.status, broadcastStatus: broadcast.status, commandOutput, fallbackOutput },
+      "[android-network] airplane-mode command reported an error",
+    );
+  }
+
+  if (!(await waitForState())) {
+    const actual = await readState();
+    throw new Error(
+      `Airplane mode ${enable ? "enable" : "disable"} was not verified ` +
+      `(reported=${actual === null ? "unknown" : actual ? "on" : "off"})`,
+    );
+  }
 }
 
 export async function swipeUpFromBottom(serial: string): Promise<void> {

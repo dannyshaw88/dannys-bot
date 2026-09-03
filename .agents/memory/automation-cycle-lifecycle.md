@@ -30,6 +30,9 @@ already on screen, or force-stopping the process invisibly.
   older builds) rather than tapping a quick-settings tile — tile position
   is not consistent across devices/OEMs, so a coordinate tap is unreliable
   at scale.
+- Treat a successful airplane-mode command exit as insufficient on OEM phones:
+  read back `airplane_mode_on`, use the settings+broadcast fallback when it
+  did not change, and fail explicitly if the requested state cannot be verified.
 - Before the initial wake→unlock sequence, hold Android's screen timeout at a
   long value and restore it during cycle cleanup. Some OEMs can let a very
   short timeout expire while the unlock swipe is still waiting on ADB/display
