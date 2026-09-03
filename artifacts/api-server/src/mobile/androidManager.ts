@@ -4233,20 +4233,43 @@ function _isSponsoredViewFeedXml(xml: string): boolean {
 type LiveActionNode = {
   x: number;
   y: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
   resourceId: string;
   contentDesc: string;
   text: string;
+  className: string;
   width: number;
   height: number;
   clickable: boolean;
+  enabled: boolean;
+  /** Index into the parsed UIAutomator tree; -1 denotes the XML root. */
+  parentIndex: number;
+  /** A semantic icon can be non-clickable while this ancestor owns its action. */
+  actionOwnerIndex: number | null;
 };
 
+/**
+ * Parse one UIAutomator dump once, retaining parent relationships rather than
+ * treating every `<node>` as an unrelated regex match. Instagram commonly puts
+ * an id/label on an ImageView but exposes clickable=true only on its wrapping
+ * FrameLayout. Callers must resolve identity from the labelled child and action
+ * eligibility from that child or an ancestor; requiring both properties on the
+ * same XML element silently drops real controls on several IG builds.
+ */
 function _liveActionNodes(xml: string): LiveActionNode[] {
   const nodes: LiveActionNode[] = [];
-  const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+  const openAncestors: number[] = [];
+  const nodeRe = /<(\/?)node\b([^>]*?)(\/?)>/gi;
   let match: RegExpExecArray | null;
   while ((match = nodeRe.exec(xml)) !== null) {
-    const attrs = match[1];
+    if (match[1] === "/") {
+      openAncestors.pop();
+      continue;
+    }
+    const attrs = match[2];
     const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
     if (!bounds) continue;
     const x1 = Number(bounds[1]);
@@ -4257,13 +4280,35 @@ function _liveActionNodes(xml: string): LiveActionNode[] {
     nodes.push({
       x: Math.round((x1 + x2) / 2),
       y: Math.round((y1 + y2) / 2),
+      x1, y1, x2, y2,
       resourceId: attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "",
       contentDesc: attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "",
       text: attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "",
+      className: attrs.match(/\bclass="([^"]*)"/i)?.[1] ?? "",
       width: x2 - x1,
       height: y2 - y1,
       clickable: /\bclickable="true"/i.test(attrs),
+      enabled: !/\benabled="false"/i.test(attrs),
+      parentIndex: openAncestors.length ? openAncestors[openAncestors.length - 1] : -1,
+      actionOwnerIndex: null,
     });
+    // UIAutomator normally self-closes every node. Keep a stack nevertheless:
+    // vendor dumps with paired node tags retain exactly the same relationships.
+    if (match[3] !== "/") openAncestors.push(nodes.length - 1);
+  }
+
+  for (let index = 0; index < nodes.length; index++) {
+    let current = index;
+    while (current >= 0) {
+      const candidate = nodes[current];
+      // clickable is UIAutomator's exposed ACTION_CLICK capability. Do not
+      // infer an action from focusability, bounds, image shape, or position.
+      if (candidate.clickable && candidate.enabled) {
+        nodes[index].actionOwnerIndex = current;
+        break;
+      }
+      current = candidate.parentIndex;
+    }
   }
   return nodes;
 }
@@ -4287,23 +4332,47 @@ function _findUniqueLiveActionNode(
     node.width <= 180 && node.height <= 180 &&
     !/^\s*[\d,.]+[KMB]?\s*$/i.test(node.text),
   );
+  const resolve = (matches: LiveActionNode[], source: string): { x: number; y: number } | null => {
+    if (matches.length > 1) {
+      onLog?.(`[live-action] rejected ${source}: ambiguous identity (${matches.length} matches)`);
+      return null;
+    }
+    if (matches.length === 0) return null;
+    const match = matches[0];
+    if (!match.enabled) {
+      onLog?.(`[live-action] rejected ${source}: identified node is disabled`);
+      return null;
+    }
+    if (match.actionOwnerIndex == null) {
+      onLog?.(
+        `[live-action] rejected ${source}: identified node has no enabled clickable ancestor ` +
+        `(child-clickable=${match.clickable})`,
+      );
+      return null;
+    }
+    const owner = nodes[match.actionOwnerIndex];
+    // Keep the exact semantic child's centre as the tap point. It lies inside
+    // the owning clickable ancestor and avoids turning a confirmed icon action
+    // into a broad row/container tap; the ancestor is used only to prove the
+    // accessibility ACTION_CLICK is available.
+    onLog?.(
+      `[live-action] resolved ${source}: child=(${match.x},${match.y}) ` +
+      `owner=(${owner.x},${owner.y}) ${match.actionOwnerIndex === nodes.indexOf(match) ? "self" : "ancestor"}`,
+    );
+    return { x: match.x, y: match.y };
+  };
   const byResource = compact.filter(node =>
     resourceIdSuffixes.some(suffix => node.resourceId === suffix || node.resourceId.endsWith(suffix)),
   );
-  if (byResource.length > 1) {
-    onLog?.(`[live-action] ambiguous resource-id match (${byResource.length}) for ${resourceIdSuffixes.join(", ")}`);
-    return null;
-  }
-  if (byResource.length === 1) return { x: byResource[0].x, y: byResource[0].y };
+  const resourceResolved = resolve(byResource, `resource-id [${resourceIdSuffixes.join(", ")}]`);
+  if (byResource.length > 0) return resourceResolved;
 
   const byDescription = compact.filter(node =>
     contentDescriptions.some(description => node.contentDesc.trim().toLowerCase() === description.toLowerCase()),
   );
-  if (byDescription.length > 1) {
-    onLog?.(`[live-action] ambiguous content-desc match (${byDescription.length}) for ${contentDescriptions.join(", ")}`);
-    return null;
-  }
-  if (byDescription.length === 1) return { x: byDescription[0].x, y: byDescription[0].y };
+  const descriptionResolved = resolve(byDescription, `content-desc [${contentDescriptions.join(", ")}]`);
+  if (byDescription.length > 0) return descriptionResolved;
+  onLog?.(`[live-action] rejected: no compact identity match for resource-id [${resourceIdSuffixes.join(", ")}] or content-desc [${contentDescriptions.join(", ")}]`);
   return null;
 }
 
@@ -8454,30 +8523,70 @@ export async function findProfileGridPosts(
   const maxY = Math.round(h * 0.90);
   const RID = "com.instagram.android:id/image_button";
   const results: { x: number; y: number; cd: string }[] = [];
-  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-  let m: RegExpExecArray | null;
-  while ((m = nodeRe.exec(xml)) !== null) {
-    const a = m[1];
-    if (!a.includes("image_button")) continue;      // fast pre-filter
-    const ridM = a.match(/resource-id="([^"]*)"/);
-    if (!ridM?.[1].includes("image_button")) continue;
-    const bm = a.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-    if (!bm) continue;
-    const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
-    const cx = Math.round((x1 + x2) / 2);
-    const cy = Math.round((y1 + y2) / 2);
-    if (cy < minY || cy > maxY) continue;
+  let rejectedNoAction = 0;
+  for (const node of _liveActionNodes(xml)) {
+    if (!node.resourceId.includes("image_button")) continue;
+    if (node.y < minY || node.y > maxY) continue;
     // Require a minimum size so we don't pick header/avatar image buttons.
     // Profile grid thumbnails are roughly 1/3 screen wide and square.
-    const nodeW = x2 - x1;
-    const nodeH = y2 - y1;
-    if (nodeW < 60 || nodeH < 60) continue;
-    const cdM = a.match(/content-desc="([^"]*)"/);
-    const cd = cdM?.[1] ?? "";
-    results.push({ x: cx, y: cy, cd });
+    if (node.width < 60 || node.height < 60) continue;
+    // The thumbnail can itself be a passive ImageView. It remains a safe
+    // identity target only when an enabled clickable ancestor exposes the
+    // actual accessibility ACTION_CLICK.
+    if (!node.enabled || node.actionOwnerIndex == null) {
+      rejectedNoAction++;
+      continue;
+    }
+    results.push({ x: node.x, y: node.y, cd: node.contentDesc });
   }
-  onLog?.(`[profile-grid] found ${results.length} image_button node(s) in visible band`);
+  onLog?.(
+    `[profile-grid] found ${results.length} actionable image_button node(s) in visible band` +
+    (rejectedNoAction ? `; rejected ${rejectedNoAction} without enabled clickable ancestor` : ""),
+  );
   return results;
+}
+
+/** Resolve visible Explore grid media from the same identity/action tree used
+ * by post actions. A passive image preview is valid only when its clickable
+ * card ancestor owns ACTION_CLICK; no screen-position identity guessing. */
+export async function findExploreGridPosts(
+  serial: string,
+  onLog?: (line: string) => void,
+): Promise<Array<{ x: number; y: number; resourceId: string; clickable: boolean; enabled: boolean }>> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return [];
+  const { h } = getScreenSize(serial);
+  const results: Array<{ x: number; y: number; resourceId: string; clickable: boolean; enabled: boolean }> = [];
+  let rejected = 0;
+  for (const node of _liveActionNodes(xml)) {
+    const isGridIdentity =
+      node.resourceId.endsWith("grid_card_layout_container") ||
+      node.resourceId.endsWith("layout_container") ||
+      node.resourceId.endsWith("image_button") ||
+      node.resourceId.endsWith("image_preview");
+    if (!isGridIdentity || node.width < 150 || node.height < 150) continue;
+    if (node.y <= 155 || node.y >= h - 30) continue;
+    if (!node.enabled || node.actionOwnerIndex == null) {
+      rejected++;
+      continue;
+    }
+    results.push({
+      x: node.x, y: node.y, resourceId: node.resourceId,
+      clickable: node.clickable, enabled: node.enabled,
+    });
+  }
+  const containers = results.filter(cell =>
+    cell.resourceId.endsWith("grid_card_layout_container") ||
+    cell.resourceId.endsWith("layout_container"),
+  );
+  const resolved = containers.length ? containers : results;
+  onLog?.(
+    `[explore-grid] resolved ${resolved.length} actionable cell(s)` +
+    (rejected ? `; rejected ${rejected} identity node(s) without enabled clickable ancestor` : ""),
+  );
+  return resolved;
 }
 
 /**
@@ -12743,29 +12852,45 @@ export async function findAndTapUserInSearch(
     const exactNames = new Set([cleanLc, `@${cleanLc}`]);
     const exactUserPositions: Array<{ x: number; y: number }> = [];
     const exactUserSeen = new Set<string>();
-    for (const seg of xml.split(/(?=<node )/)) {
-      if (!seg.startsWith("<node ")) continue;
-      if (/class="android\.widget\.EditText"/i.test(seg)) continue;
-      if (seg.includes("/row_search_keyword_title\"") ||
-          seg.includes("/search_keyword_title\"") ||
-          seg.includes("/row_search_recent_chip\"") ||
-          seg.includes("/search_recent_chip\"")) continue;
-      const text = seg.match(/\btext="([^"]*)"/i)?.[1]?.trim().toLocaleLowerCase() ?? "";
-      const desc = seg.match(/\bcontent-desc="([^"]*)"/i)?.[1]?.trim().toLocaleLowerCase() ?? "";
+    let exactRejectedNoAction = 0;
+    for (const node of _liveActionNodes(xml)) {
+      if (/android\.widget\.EditText$/i.test(node.className)) continue;
+      if (node.resourceId.includes("/row_search_keyword_title") ||
+          node.resourceId.includes("/search_keyword_title") ||
+          node.resourceId.includes("/row_search_recent_chip") ||
+          node.resourceId.includes("/search_recent_chip")) continue;
+      const text = node.text.trim().toLocaleLowerCase();
+      const desc = node.contentDesc.trim().toLocaleLowerCase();
       if (!exactNames.has(text) && !exactNames.has(desc)) continue;
-      const bb = seg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!bb) continue;
-      const x = Math.round((parseInt(bb[1]) + parseInt(bb[3])) / 2);
-      const y = Math.round((parseInt(bb[2]) + parseInt(bb[4])) / 2);
-      const key = `${x},${y}`;
+      // Keep identity strict: an exact username alone is insufficient if that
+      // labelled node is not inside an enabled clickable result row.
+      if (!node.enabled || node.actionOwnerIndex == null) {
+        exactRejectedNoAction++;
+        continue;
+      }
+      const x = node.x;
+      const y = node.y;
+      // Child and wrapper can both repeat the exact username. They are one
+      // candidate only when they resolve to the same clickable row owner.
+      const key = String(node.actionOwnerIndex);
       if (!exactUserSeen.has(key)) {
         exactUserSeen.add(key);
         exactUserPositions.push({ x, y });
       }
     }
     exactUserPositions.sort((a, b) => a.y - b.y);
+    if (exactUserPositions.length > 1) {
+      onLog?.(
+        `Follow: @${clean} has ${exactUserPositions.length} distinct actionable exact-username rows — ` +
+        `identity is ambiguous, target aborted safely`,
+      );
+      return { found: false };
+    }
     if (exactUserPositions.length === 0) {
-      onLog?.(`Follow: @${clean} exact username is not listed in search results — target aborted safely`);
+      onLog?.(
+        `Follow: @${clean} exact username is not listed in an actionable search result — target aborted safely` +
+        (exactRejectedNoAction ? ` (rejected ${exactRejectedNoAction} exact label(s) without enabled clickable ancestor)` : ""),
+      );
       return { found: false };
     }
 

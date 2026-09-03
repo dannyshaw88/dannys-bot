@@ -97,50 +97,11 @@ export async function runViewExplorePage(serial: string, params: {
       // Matching the tappable image children directly (image_button +
       // image_preview) catches both types, and the ≥150px size filter
       // excludes tiny UI images (profile pics, icons, etc.).
-      const xml = await android.dumpUi(serial).catch(() => "");
-      const gridCells: Array<{ x: number; y: number; resourceId: string; clickable: boolean; enabled: boolean }> = [];
-      const nodeRe2 = /<node\s([^>]*?)\s*\/?>/g;
-      let cm: RegExpExecArray | null;
-      while ((cm = nodeRe2.exec(xml)) !== null) {
-        const attrs = cm[1];
-        const resourceMatch = attrs.match(/resource-id="([^"]*)"/);
-        const resourceId = resourceMatch?.[1] ?? "";
-        // Tap the grid's owning container, not merely an image child. The
-        // image child can have valid-looking bounds while the surrounding
-        // container owns Instagram's click handler.
-        const isGridContainer =
-          resourceId.endsWith("grid_card_layout_container") ||
-          resourceId.endsWith("layout_container");
-        const isImageChild =
-          resourceId.endsWith("image_button") ||
-          resourceId.endsWith("image_preview");
-        if (!isGridContainer && !isImageChild) continue;
-        const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-        if (!bm) continue;
-        const x1 = parseInt(bm[1]), y1 = parseInt(bm[2]);
-        const x2 = parseInt(bm[3]), y2 = parseInt(bm[4]);
-        // Must be a real grid cell — at least 150×150px.
-        if ((x2 - x1) < 150 || (y2 - y1) < 150) continue;
-        const cx = Math.round((x1 + x2) / 2);
-        const cy = Math.round((y1 + y2) / 2);
-        // Exclude cells clipped into the search/action bar (top ~155px)
-        // or the bottom nav (bottom ~30px from screen edge).
-        const clickable = /clickable="true"/.test(attrs);
-        const enabled = !/enabled="false"/.test(attrs);
-        if (cy > 155 && cy < h - 30 && enabled && (isGridContainer ? clickable : clickable)) {
-          gridCells.push({ x: cx, y: cy, resourceId, clickable, enabled });
-        }
-      }
-      // Prefer the clickable grid containers. Image children are retained
-      // only as a compatibility fallback for builds where Instagram exposes
-      // no clickable container but marks the image node itself clickable.
-      const clickableContainers = gridCells.filter((cell) =>
-        cell.resourceId.endsWith("grid_card_layout_container") ||
-        cell.resourceId.endsWith("layout_container"),
-      );
-      const clickableCells = clickableContainers.length > 0
-        ? clickableContainers
-        : gridCells.filter((cell) => cell.clickable);
+      // Shared resolver binds an image/card identity to an enabled clickable
+      // ancestor. A grid preview itself is often non-clickable, so filtering
+      // only exact clickable nodes loses valid cards; accepting a node without
+      // an action owner risks tapping inert/ambiguous UI.
+      const clickableCells = await android.findExploreGridPosts(serial, onLog).catch(() => []);
 
       if (clickableCells.length > 0) {
         const cell = clickableCells[Math.floor(Math.random() * clickableCells.length)];

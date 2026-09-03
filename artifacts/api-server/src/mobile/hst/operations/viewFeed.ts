@@ -282,13 +282,11 @@ export async function runCheckFeedLoop(serial: string, params: {
       ) ?? null;
       const shareFeedNode = nodeAt(actionIcons.shareFeed);
       const shareDmNode = nodeAt(actionIcons.shareDm);
-      const saveNode = row.find(n =>
-        (n.rid.endsWith("row_feed_button_save") || /^(?:add to saved|remove from saved)$/i.test(n.desc)) &&
-        n.clickable &&
-        n.x1 >= screen.w * 0.78 &&
-        n.x2 - n.x1 <= 180 &&
-        n.y2 - n.y1 <= 180,
-      ) ?? null;
+      // findFeedActionIcons has already resolved the labelled save child
+      // against its enabled clickable ancestor. Do not re-require
+      // clickable=true on this exact ImageView: several IG builds attach the
+      // ACTION_CLICK to the wrapping container instead.
+      const saveNode = nodeAt(actionIcons.save);
       const strictAuthorNode = nodes
         .filter(n =>
           n.clickable &&
