@@ -4065,8 +4065,17 @@ export async function getForegroundPackage(serial: string): Promise<string | nul
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const r = spawnSync(adb, ["-s", serial, "shell", "dumpsys", "activity", "activities"], { encoding: "utf8", timeout: 5000 });
-  const m = (r.stdout || "").match(/mResumedActivity:.*?\{[^}]*\s([^/]+)\/[^\s}]+/);
-  return m ? m[1] : null;
+  const output = r.stdout || "";
+  // dumpsys activity output contains several ActivityRecord lines on modern
+  // Android/MIUI builds. The old greedy expression could start matching in
+  // one record and finish in mLastPausedActivity, returning garbage such as
+  // `t103} mLastPausedActivity: ActivityRecord{... com.instagram.android`.
+  // Only accept the package token immediately after the user id in the
+  // resumed/top-resumed activity record, and validate it as a package name.
+  const packagePattern = /(?:mResumedActivity|topResumedActivity):[\s\S]*?\bu\d+\s+([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\//;
+  const m = output.match(packagePattern);
+  const pkg = m?.[1] ?? null;
+  return pkg && /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/.test(pkg) ? pkg : null;
 }
 
 /**
