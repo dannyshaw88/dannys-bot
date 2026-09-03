@@ -26,7 +26,11 @@ export async function runManualProfileTabLongPress(
 
   logger.info({ serial, profileTab }, "[manual-account-switch] calibrated profile target resolved; dispatching long-press");
   const holdDurationMs = 2000 + Math.floor(Math.random() * 3001);
-  await android.swipe(serial, profileTab.x, profileTab.y, profileTab.x, profileTab.y, holdDurationMs);
+  // Do not route this through the generic swipe helper: its Android gesture
+  // safety clamp moves bottom navigation points upward into the feed. The
+  // calibration map has already validated this fixed control, so preserve its
+  // exact coordinate for the long-press.
+  await android.longPressAtPoint(serial, profileTab.x, profileTab.y, holdDurationMs);
   logger.info({ serial, profileTab, holdDurationMs }, "[manual-account-switch] long-press dispatched");
   return { ok: true, dispatched: true, target: "profile-tab", node: profileTab };
 }

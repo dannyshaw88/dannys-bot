@@ -3167,6 +3167,44 @@ export async function swipe(
   }, "[mobile-execution] swipe command completed");
 }
 
+/**
+ * Send a stationary long-press to an already validated fixed-control point.
+ *
+ * This intentionally bypasses swipe()'s app-safe edge clamp. Generic swipes
+ * must avoid Android's system gesture areas, but calibrated Instagram controls
+ * such as the bottom Profile tab legitimately live there. Routing a Profile
+ * long-press through swipe() moved y≈1469 up to the 85% safe boundary and
+ * pressed a feed image instead.
+ */
+export async function longPressAtPoint(
+  serial: string,
+  x: number,
+  y: number,
+  durationMs: number = 2000,
+): Promise<void> {
+  const dispatchedX = Math.round(x);
+  const dispatchedY = Math.round(y);
+  const duration = Math.max(1, Math.round(durationMs));
+  logger.info({
+    serial,
+    requestedAt: [x, y],
+    dispatchedAt: [dispatchedX, dispatchedY],
+    durationMs: duration,
+  }, "[mobile-input] fixed-control long-press dispatched");
+  await runInputShell(
+    serial,
+    [
+      "swipe",
+      String(dispatchedX),
+      String(dispatchedY),
+      String(dispatchedX),
+      String(dispatchedY),
+      String(duration),
+    ],
+    "fixed-control-long-press",
+  );
+}
+
 export async function keyevent(serial: string, code: string | number): Promise<void> {
   const normalized = String(code).trim().toUpperCase();
   if (normalized === "67" || normalized === "112" ||
