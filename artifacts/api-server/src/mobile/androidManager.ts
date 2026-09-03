@@ -4276,14 +4276,18 @@ function _findUniqueLiveActionNode(
 ): { x: number; y: number } | null {
   const nodes = _liveActionNodes(xml);
   // A label/resource match is not enough: Instagram also exposes count
-  // nodes and row-sized containers near the action icons. Only a live,
-  // clickable, icon-sized node is safe to tap.
-  const actionable = nodes.filter(node =>
-    node.clickable && node.width > 0 && node.height > 0 &&
+  // nodes and row-sized containers near the action icons. Keep the compact
+  // control-size guard, but do NOT require the matched node itself to be
+  // clickable. Instagram frequently exposes the icon/ImageView as
+  // clickable="false" while its parent container owns the click action.
+  // Requiring clickable on this exact node caused visible controls to be
+  // discarded before their reliable resource-id/content-desc was examined.
+  const compact = nodes.filter(node =>
+    node.width > 0 && node.height > 0 &&
     node.width <= 180 && node.height <= 180 &&
     !/^\s*[\d,.]+[KMB]?\s*$/i.test(node.text),
   );
-  const byResource = actionable.filter(node =>
+  const byResource = compact.filter(node =>
     resourceIdSuffixes.some(suffix => node.resourceId === suffix || node.resourceId.endsWith(suffix)),
   );
   if (byResource.length > 1) {
@@ -4292,7 +4296,7 @@ function _findUniqueLiveActionNode(
   }
   if (byResource.length === 1) return { x: byResource[0].x, y: byResource[0].y };
 
-  const byDescription = actionable.filter(node =>
+  const byDescription = compact.filter(node =>
     contentDescriptions.some(description => node.contentDesc.trim().toLowerCase() === description.toLowerCase()),
   );
   if (byDescription.length > 1) {
