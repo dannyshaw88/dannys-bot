@@ -3167,6 +3167,43 @@ export async function swipe(
   }, "[mobile-execution] swipe command completed");
 }
 
+/**
+ * Dispatch a stationary hold to a validated fixed-control coordinate.
+ *
+ * This deliberately does not use swipe(). Generic swipes are clamped away
+ * from Android's edge gesture areas, but Instagram's bottom Profile control
+ * legitimately lives near the bottom edge. Reusing swipe() here changes the
+ * calibrated target before ADB receives it.
+ */
+export async function longPressAtPoint(
+  serial: string,
+  x: number,
+  y: number,
+  durationMs: number,
+): Promise<void> {
+  const dispatchedX = Math.round(x);
+  const dispatchedY = Math.round(y);
+  const duration = Math.max(1, Math.round(durationMs));
+  logger.info({
+    serial,
+    requestedAt: [x, y],
+    dispatchedAt: [dispatchedX, dispatchedY],
+    durationMs: duration,
+  }, "[mobile-input] fixed-control long-press dispatch");
+  await runInputShell(
+    serial,
+    [
+      "swipe",
+      String(dispatchedX),
+      String(dispatchedY),
+      String(dispatchedX),
+      String(dispatchedY),
+      String(duration),
+    ],
+    "fixed-control-long-press",
+  );
+}
+
 export async function keyevent(serial: string, code: string | number): Promise<void> {
   const normalized = String(code).trim().toUpperCase();
   if (normalized === "67" || normalized === "112" ||

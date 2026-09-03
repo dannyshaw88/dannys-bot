@@ -1011,12 +1011,22 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           clearTimeout(pendingSingleTapRef.current.timer);
           pendingSingleTapRef.current = null;
         }
-        addLog(`[manual] Account-switcher hold recognized [held ${durationMs}ms] — resolving Profile tab before dispatch`);
+        addLog(
+          `[manual] Account-switcher hold recognized [held ${durationMs}ms at ` +
+          `(${drag.startX}, ${drag.startY}) in video ${phoneSize.w}×${phoneSize.h}] — ` +
+          `resolving Profile tab before dispatch`,
+        );
         try {
           const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/profile-tab-longpress`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({}),
+            body: JSON.stringify({
+              mirrorX: drag.startX,
+              mirrorY: drag.startY,
+              videoW: phoneSize.w,
+              videoH: phoneSize.h,
+              heldMs: durationMs,
+            }),
           });
           if (!r.ok) {
             const body = await r.json().catch(() => null);

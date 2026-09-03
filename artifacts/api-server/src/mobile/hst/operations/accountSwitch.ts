@@ -4,6 +4,13 @@ import { logger } from "../../../lib/logger";
 export interface ManualProfileTabLongPressOperationContext {
   android: typeof androidManager;
   serial: string;
+  mirrorHold?: {
+    x: number;
+    y: number;
+    videoW?: number;
+    videoH?: number;
+    heldMs?: number;
+  };
 }
 
 export type ManualProfileTabLongPressResult =
@@ -24,9 +31,12 @@ export async function runManualProfileTabLongPress(
   logger.info({ serial }, "[manual-account-switch] resolving profile tab before long-press");
   const profileTab = android.getCalibratedNavigationControl(serial, "profile");
 
-  logger.info({ serial, profileTab }, "[manual-account-switch] calibrated profile target resolved; dispatching long-press");
+  logger.info(
+    { serial, mirrorHold: context.mirrorHold ?? null, profileTab },
+    "[manual-account-switch] calibrated profile target resolved; dispatching long-press",
+  );
   const holdDurationMs = 2000 + Math.floor(Math.random() * 3001);
-  await android.swipe(serial, profileTab.x, profileTab.y, profileTab.x, profileTab.y, holdDurationMs);
+  await android.longPressAtPoint(serial, profileTab.x, profileTab.y, holdDurationMs);
   logger.info({ serial, profileTab, holdDurationMs }, "[manual-account-switch] long-press dispatched");
   return { ok: true, dispatched: true, target: "profile-tab", node: profileTab };
 }

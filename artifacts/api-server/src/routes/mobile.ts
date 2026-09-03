@@ -8404,8 +8404,48 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // currently selected device instead of trusting a mirror-screen coordinate.
   app.post("/api/mobile/devices/:serial/input/profile-tab-longpress", async (req: Request, res: Response) => {
     try {
+      const mirrorInput = z.object({
+        mirrorX: z.number().optional(),
+        mirrorY: z.number().optional(),
+        videoW: z.number().optional(),
+        videoH: z.number().optional(),
+        heldMs: z.number().optional(),
+      }).parse(req.body ?? {});
       const serial = p(req, "serial");
-      const result = await runManualProfileTabLongPress({ android, serial });
+      const hasMirrorPoint = mirrorInput.mirrorX != null && mirrorInput.mirrorY != null;
+      const mirroredPoint = hasMirrorPoint
+        ? await rescaleForDevice(
+            serial,
+            mirrorInput.mirrorX!,
+            mirrorInput.mirrorY!,
+            mirrorInput.videoW,
+            mirrorInput.videoH,
+          )
+        : null;
+      req.log.info({
+        serial,
+        mirror: hasMirrorPoint
+          ? {
+              fromVideo: [mirrorInput.mirrorX, mirrorInput.mirrorY],
+              video: [mirrorInput.videoW ?? null, mirrorInput.videoH ?? null],
+              wouldDispatchToDevice: mirroredPoint ? [mirroredPoint.x, mirroredPoint.y] : null,
+            }
+          : null,
+        heldMs: mirrorInput.heldMs ?? null,
+      }, "[mirror-profile-hold] coordinate audit before calibrated dispatch");
+      const result = await runManualProfileTabLongPress({
+        android,
+        serial,
+        mirrorHold: hasMirrorPoint
+          ? {
+              x: mirrorInput.mirrorX!,
+              y: mirrorInput.mirrorY!,
+              videoW: mirrorInput.videoW,
+              videoH: mirrorInput.videoH,
+              heldMs: mirrorInput.heldMs,
+            }
+          : undefined,
+      });
       if (!result.ok) {
         res.status(result.status).json({ error: result.error });
         return;
