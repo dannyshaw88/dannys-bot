@@ -6399,21 +6399,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         automationPreSwitchInProgress.set(serial, true);
         try {
           tLog(`▶ Pre-switch actions on @${preSwitchLastUsername} before switching to @${resolvedSlotUsername || preSwitchLastUsername}…`);
-          const preSwitchStatsStart = {
-            likes,
-            storyLikes,
-            exploreLikes,
-            reelsLikes,
-            injectBrowsingLikes,
-            followedCount,
-            storiesWatched,
-            reelsViewed,
-            sharesDm,
-            sharesFeed,
-            saves,
-            postsUploaded,
-            feedScrolled,
-            exploreScrolled,
+          // Keep pre-switch metrics separate from the current account's
+          // counters. They belong to preSwitchLastUsername and must not be
+          // included again when the newly selected account is persisted at the
+          // end of this cycle.
+          const preSwitchMetrics = {
+            likes: 0,
+            storyLikes: 0,
+            exploreLikes: 0,
+            reelsLikes: 0,
+            injectBrowsingLikes: 0,
+            followedCount: 0,
+            storiesWatched: 0,
+            reelsViewed: 0,
+            sharesDm: 0,
+            sharesFeed: 0,
+            saves: 0,
+            postsUploaded: 0,
+            feedScrolled: 0,
+            exploreScrolled: 0,
           };
           const preSwitchToolSeq = _toolSeq.filter(tool => tool !== "follow" && !String(tool).startsWith("follow_spread:"));
           // Pre-switch percentage is a quota for the combined pre-switch
@@ -6459,7 +6463,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             tLog(`▶ Pre-switch dispatch: ${_toolOrderLabels[preTool] ?? preTool}`);
             const scaled = (n: number) => Math.max(0, Math.floor(n * preSwitchToolPercent));
             if (preTool === "feed") {
-              await runCheckFeedLoop(serial, {
+              const preSwitchFeedResult = await runCheckFeedLoop(serial, {
                 count: scaled(Math.max(feedScrollMin, 1)),
                 // Instagram was launched, popup-checked, and given its
                 // post-launch settle window immediately above. Pre-switch
@@ -6490,9 +6494,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }).catch((e: any) => {
                 if (e?.message === "cycle-aborted") throw e;
                 tLog(`  ⚠ Pre-switch View Feed skipped: ${e?.message ?? "unknown error"}`);
+                return null;
               });
+              if (preSwitchFeedResult) {
+                preSwitchMetrics.likes += preSwitchFeedResult.likes;
+                preSwitchMetrics.sharesFeed += preSwitchFeedResult.sharesFeed;
+                preSwitchMetrics.sharesDm += preSwitchFeedResult.sharesDm;
+                preSwitchMetrics.saves += preSwitchFeedResult.saves;
+                preSwitchMetrics.feedScrolled += preSwitchFeedResult.count;
+              }
             } else if (preTool === "stories") {
-              await runViewStoriesFromFeedLoop(serial, {
+              const preSwitchStoriesResult = await runViewStoriesFromFeedLoop(serial, {
                 slidesMin: scaled(viewStoriesSlidesMin),
                 slidesMax: scaled(viewStoriesSlidesMax),
                 slideWatchPctMin: viewStoriesSlideWatchPctMin,
@@ -6509,9 +6521,44 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }).catch((e: any) => {
                 if (e?.message === "cycle-aborted") throw e;
                 tLog(`  ⚠ Pre-switch Stories skipped: ${e?.message ?? "unknown error"}`);
+                return null;
               });
+              if (preSwitchStoriesResult) {
+                preSwitchMetrics.storiesWatched += preSwitchStoriesResult.storiesWatched;
+                preSwitchMetrics.storyLikes += preSwitchStoriesResult.storyLikes;
+              }
+            } else if (preTool === "explore") {
+              const preSwitchExploreResult = await runViewExplorePage(serial, {
+                scrollCount: scaled(viewExploreScrollMax ?? 0),
+                delayMinSec: viewExploreActionDelayMin ?? 3,
+                delayMaxSec: viewExploreActionDelayMax ?? 6,
+                clickPostPctMin: viewExploreClickPostPctMin ?? 0,
+                clickPostPctMax: viewExploreClickPostPctMax ?? 0,
+                likePercentMin: viewExploreLikePercentMin ?? 0,
+                likePercentMax: viewExploreLikePercentMax ?? 0,
+                shareFeedPercentMin: viewExploreShareFeedPercentMin ?? 0,
+                shareFeedPercentMax: viewExploreShareFeedPercentMax ?? 0,
+                shareDmPercentMin: viewExploreShareDmPercentMin ?? 0,
+                shareDmPercentMax: viewExploreShareDmPercentMax ?? 0,
+                savePercentMin: viewExploreSavePercentMin ?? 0,
+                savePercentMax: viewExploreSavePercentMax ?? 0,
+                clickAuthorPctMin: viewExploreClickAuthorPercentMin ?? 0,
+                clickAuthorPctMax: viewExploreClickAuthorPercentMax ?? 0,
+                onLog: (msg) => tLog(`  ${msg}`),
+              }).catch((e: any) => {
+                if (e?.message === "cycle-aborted") throw e;
+                tLog(`  ⚠ Pre-switch View Explore skipped: ${e?.message ?? "unknown error"}`);
+                return null;
+              });
+              if (preSwitchExploreResult) {
+                preSwitchMetrics.exploreLikes += preSwitchExploreResult.likes;
+                preSwitchMetrics.sharesFeed += preSwitchExploreResult.sharesFeed;
+                preSwitchMetrics.sharesDm += preSwitchExploreResult.sharesDm;
+                preSwitchMetrics.saves += preSwitchExploreResult.saves;
+                preSwitchMetrics.exploreScrolled += preSwitchExploreResult.postsScrolled;
+              }
             } else if (preTool === "reels") {
-              await runViewReelsLoop(serial, {
+              const preSwitchReelsResult = await runViewReelsLoop(serial, {
                 scrollMin: scaled(viewReelsScrollMin),
                 scrollMax: scaled(viewReelsScrollMax),
                 watchPctMin: viewReelsWatchPctMin,
@@ -6530,7 +6577,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }).catch((e: any) => {
                 if (e?.message === "cycle-aborted") throw e;
                 tLog(`  ⚠ Pre-switch View Reels skipped: ${e?.message ?? "unknown error"}`);
+                return null;
               });
+              if (preSwitchReelsResult) {
+                preSwitchMetrics.reelsViewed += preSwitchReelsResult.reelsViewed;
+                preSwitchMetrics.reelsLikes += preSwitchReelsResult.likes;
+                preSwitchMetrics.sharesFeed += preSwitchReelsResult.sharesFeed;
+                preSwitchMetrics.sharesDm += preSwitchReelsResult.sharesDm;
+                preSwitchMetrics.saves += preSwitchReelsResult.saves;
+              }
             } else if (preTool === "checkDm") {
               await runCheckDmLoopOperation(serial, {
                 scrollsMin: scaled(checkDmScrollMin),
@@ -6619,33 +6674,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }, hstOperationContext);
             }
           }
-          const preSwitchStatsDelta = {
-            likes: (likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes) - (preSwitchStatsStart.likes + preSwitchStatsStart.storyLikes + preSwitchStatsStart.exploreLikes + preSwitchStatsStart.reelsLikes + preSwitchStatsStart.injectBrowsingLikes),
-            follows: followedCount - preSwitchStatsStart.followedCount,
-            stories: storiesWatched - preSwitchStatsStart.storiesWatched,
-            reels: reelsViewed - preSwitchStatsStart.reelsViewed,
-            dms: sharesDm - preSwitchStatsStart.sharesDm,
-            feedShares: (sharesFeed + sharesDm) - (preSwitchStatsStart.sharesFeed + preSwitchStatsStart.sharesDm),
-            saves: saves - preSwitchStatsStart.saves,
-            postsUploaded: postsUploaded - preSwitchStatsStart.postsUploaded,
-            feedScrolled: feedScrolled - preSwitchStatsStart.feedScrolled,
-            exploreScrolled: exploreScrolled - preSwitchStatsStart.exploreScrolled,
-          };
           if (preSwitchLastUsername) {
             await storage.incrementMobileStats(preSwitchLastUsername, {
-              likes: Math.max(0, preSwitchStatsDelta.likes),
-              follows: Math.max(0, preSwitchStatsDelta.follows),
-              stories: Math.max(0, preSwitchStatsDelta.stories),
-              reels: Math.max(0, preSwitchStatsDelta.reels),
-              dms: Math.max(0, preSwitchStatsDelta.dms),
-              feedShares: Math.max(0, preSwitchStatsDelta.feedShares),
-              saves: Math.max(0, preSwitchStatsDelta.saves),
+              likes: preSwitchMetrics.likes + preSwitchMetrics.storyLikes + preSwitchMetrics.exploreLikes + preSwitchMetrics.reelsLikes + preSwitchMetrics.injectBrowsingLikes,
+              follows: preSwitchMetrics.followedCount,
+              stories: preSwitchMetrics.storiesWatched,
+              reels: preSwitchMetrics.reelsViewed,
+              dms: preSwitchMetrics.sharesDm,
+              feedShares: preSwitchMetrics.sharesFeed + preSwitchMetrics.sharesDm,
+              saves: preSwitchMetrics.saves,
               cycles: 0,
               // The Reels operation counts each completed reel/view as one
               // reel-scroll metric for the Phone Farm performance table.
-              reelScrolls: Math.max(0, preSwitchStatsDelta.reels),
-              feedScrolls: Math.max(0, preSwitchStatsDelta.feedScrolled),
-              exploreScrolls: Math.max(0, preSwitchStatsDelta.exploreScrolled),
+              reelScrolls: preSwitchMetrics.reelsViewed,
+              feedScrolls: preSwitchMetrics.feedScrolled,
+              exploreScrolls: preSwitchMetrics.exploreScrolled,
             }).catch(() => {});
           }
         } finally {
@@ -6970,7 +7013,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               ),
             );
             tLog(`▶ Starting feed scroll — ${feedRunCount} posts (fresh pass roll)`);
-            ({ likes, likeFailures, sharesFeed, sharesDm, saves, captionExpands, strayNavRecoveries, audioTaps, hashtagTaps, authorVisits } = await runCheckFeedLoop(serial, {
+            const feedResult = await runCheckFeedLoop(serial, {
               count: feedRunCount, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
               shareFeedPercentMin, shareFeedPercentMax,
               shareDmPercentMin, shareDmPercentMax,
@@ -6980,10 +7023,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               clickHashtagPercentMin, clickHashtagPercentMax,
               clickAuthorPercentMin, clickAuthorPercentMax,
               onLog: (msg) => tLog(`  ${msg}`),
-            }));
+            });
+            // These are cycle totals, so every tool must add its successful
+            // actions rather than replacing the previous tool's counters.
+            likes += feedResult.likes;
+            likeFailures += feedResult.likeFailures;
+            sharesFeed += feedResult.sharesFeed;
+            sharesDm += feedResult.sharesDm;
+            saves += feedResult.saves;
+            captionExpands += feedResult.captionExpands;
+            strayNavRecoveries += feedResult.strayNavRecoveries;
+            audioTaps += feedResult.audioTaps;
+            hashtagTaps += feedResult.hashtagTaps;
+            authorVisits += feedResult.authorVisits;
             feedScrolled = feedRunCount;
-            steps.push(`feed(${feedRunCount} scrolls, ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} dm-shares, ${saves} saves, ${captionExpands} caption-expands, ${audioTaps} audio-taps, ${hashtagTaps} hashtag-taps, ${authorVisits} author-visits, ${likeFailures} like-failures${strayNavRecoveries ? `, ${strayNavRecoveries} ad-nav-recoveries` : ""})`);
-            tLog(`▶ Feed done — ${likes} likes, ${sharesFeed} feed-shares, ${sharesDm} DM-shares, ${saves} saves, ${captionExpands} caption-expands`);
+            steps.push(`feed(${feedRunCount} scrolls, ${feedResult.likes} likes, ${feedResult.sharesFeed} feed-shares, ${feedResult.sharesDm} dm-shares, ${feedResult.saves} saves, ${feedResult.captionExpands} caption-expands, ${feedResult.audioTaps} audio-taps, ${feedResult.hashtagTaps} hashtag-taps, ${feedResult.authorVisits} author-visits, ${feedResult.likeFailures} like-failures${feedResult.strayNavRecoveries ? `, ${feedResult.strayNavRecoveries} ad-nav-recoveries` : ""})`);
+            tLog(`▶ Feed done — ${feedResult.likes} likes, ${feedResult.sharesFeed} feed-shares, ${feedResult.sharesDm} DM-shares, ${feedResult.saves} saves, ${feedResult.captionExpands} caption-expands`);
             _viewFeedExecuted = true;
           } else if (!feedEnabled) {
             steps.push("feed(skipped — View Feed disabled)");
@@ -7040,6 +7095,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             // optionally click posts to like/share/save.  The function
             // handles its own Home-tab exit at the end, so no nav needed here.
             tLog(`▶ Starting View Explore Page (${viewExploreScrollMax} scrolls max)`);
+            const exploreMetricStart = { sharesFeed, sharesDm, saves };
             const exploreResult = await runViewExplorePage(serial, {
               scrollCount: Math.floor(rollRange(viewExploreScrollMin ?? 0, viewExploreScrollMax ?? 0)),
               delayMinSec: viewExploreActionDelayMin ?? 3,
@@ -7060,14 +7116,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onProgress: (progress) => {
                 exploreScrolled = progress.postsScrolled;
                 exploreLikes = progress.likes;
-                sharesFeed = progress.sharesFeed;
-                sharesDm = progress.sharesDm;
-                saves = progress.saves;
+                sharesFeed = exploreMetricStart.sharesFeed + progress.sharesFeed;
+                sharesDm = exploreMetricStart.sharesDm + progress.sharesDm;
+                saves = exploreMetricStart.saves + progress.saves;
                 authorVisits = progress.authorVisits;
               },
             });
             exploreScrolled = exploreResult.postsScrolled;
             exploreLikes = exploreResult.likes;
+            sharesFeed = exploreMetricStart.sharesFeed + exploreResult.sharesFeed;
+            sharesDm = exploreMetricStart.sharesDm + exploreResult.sharesDm;
+            saves = exploreMetricStart.saves + exploreResult.saves;
             steps.push(`explore(${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes, ${exploreResult.sharesFeed} feed-shares, ${exploreResult.sharesDm} dm-shares, ${exploreResult.saves} saves, ${exploreResult.authorVisits} author-visits)`);
             tLog(`▶ View Explore Page done — ${exploreResult.postsScrolled} scrolls, ${exploreResult.postsClicked} clicked, ${exploreResult.likes} likes`);
           } else if (!viewExploreEnabled) {
@@ -7083,6 +7142,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } else if (_tool === 'reels') {
           if (_toolActivated[_tool]) { // pre-rolled above
             tLog(`▶ Starting View Reels (up to ${viewReelsScrollMax})`);
+            const reelsMetricStart = { sharesFeed, sharesDm, saves };
             const reelsResult = await runViewReelsLoop(serial, {
               scrollMin: viewReelsScrollMin, scrollMax: viewReelsScrollMax,
               watchPctMin: viewReelsWatchPctMin, watchPctMax: viewReelsWatchPctMax,
@@ -7095,13 +7155,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onProgress: (progress) => {
                 reelsViewed = progress.reelsViewed;
                 reelsLikes = progress.likes;
-                sharesFeed = progress.sharesFeed;
-                sharesDm = progress.sharesDm;
-                saves = progress.saves;
+                sharesFeed = reelsMetricStart.sharesFeed + progress.sharesFeed;
+                sharesDm = reelsMetricStart.sharesDm + progress.sharesDm;
+                saves = reelsMetricStart.saves + progress.saves;
               },
             });
             reelsViewed = reelsResult.reelsViewed;
             reelsLikes = reelsResult.likes;
+            sharesFeed = reelsMetricStart.sharesFeed + reelsResult.sharesFeed;
+            sharesDm = reelsMetricStart.sharesDm + reelsResult.sharesDm;
+            saves = reelsMetricStart.saves + reelsResult.saves;
             steps.push(`reels(${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes, ${reelsResult.sharesFeed} feed-shares, ${reelsResult.sharesDm} dm-shares, ${reelsResult.saves} saves)`);
             tLog(`▶ View Reels done — ${reelsResult.reelsViewed} viewed, ${reelsResult.likes} likes`);
              await finishViewReels(serial, {
