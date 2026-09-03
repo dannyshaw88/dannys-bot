@@ -3397,6 +3397,50 @@ export async function sleepScreen(serial: string): Promise<void> {
   await keyevent(serial, 223); // KEYCODE_SLEEP
 }
 
+export type KeyguardState = {
+  showing: boolean | null;
+  signals: string[];
+};
+
+/**
+ * Read the lockscreen state without treating an ADB command's exit code as
+ * proof that the screen was unlocked. OEM Android builds expose different
+ * names, so retain every recognized signal for the debug log.
+ */
+export async function getKeyguardState(serial: string): Promise<KeyguardState> {
+  const tools = await detectToolsetAsync();
+  const adb = requireTool(tools.adb, "adb");
+  const result = await execFileP(
+    adb,
+    ["-s", serial, "shell", "dumpsys", "window", "policy"],
+    { encoding: "utf8", timeout: 3000 } as any,
+  );
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  const signals: string[] = [];
+  const values: boolean[] = [];
+  const patterns: Array<[RegExp, string]> = [
+    [/\bisStatusBarKeyguard=(true|false)\b/i, "isStatusBarKeyguard"],
+    [/\bmShowingLockscreen=(true|false)\b/i, "mShowingLockscreen"],
+    [/\bmKeyguardShowing=(true|false)\b/i, "mKeyguardShowing"],
+    [/\bmShowingKeyguard=(true|false)\b/i, "mShowingKeyguard"],
+  ];
+
+  for (const [pattern, name] of patterns) {
+    const match = output.match(pattern);
+    if (!match) continue;
+    const value = match[1].toLowerCase() === "true";
+    signals.push(`${name}=${value}`);
+    values.push(value);
+  }
+
+  if (values.length === 0) return { showing: null, signals };
+  return {
+    // Any positive keyguard signal means the lockscreen is still showing.
+    showing: values.some(Boolean),
+    signals,
+  };
+}
+
 export function rebootDevice(serial: string): void {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -3820,6 +3864,63 @@ export async function swipeUpFromBottom(serial: string): Promise<void> {
     completed: true,
     path: "unlock-fast-bottom-to-middle",
   }, "[mobile-execution] unlock swipe command completed");
+}
+
+/**
+ * Unlock the Android keyguard after an explicit wake.
+ *
+ * This is intentionally separate from swipeUpFromBottom(). The latter is
+ * reused for Recents/app navigation, while keyguard unlock has stricter
+ * requirements: the gesture must begin inside the bottom system-gesture
+ * region and must last long enough for the keyguard to observe a real drag.
+ * A 90%-to-50% 60ms swipe can exit successfully from ADB while producing no
+ * visible movement on a physical phone.
+ */
+export async function unlockScreen(serial: string): Promise<void> {
+  const { w, h } = await getScreenSizeAsync(serial);
+  const x = Math.round(w / 2);
+  const y1 = Math.max(1, Math.round(h * 0.96));
+  const y2 = Math.round(h * 0.48);
+  const durationMs = 350;
+
+  const keyguardBefore = await getKeyguardState(serial).catch(() => null);
+  logger.info({
+    serial,
+    keyguardBefore,
+    requestedFrom: [x, y1],
+    requestedTo: [x, y2],
+    dispatchedFrom: [x, y1],
+    dispatchedTo: [x, y2],
+    durationMs,
+    source: "touchscreen",
+    path: "keyguard-bottom-edge-to-middle",
+  }, "[mobile-input] keyguard unlock swipe dispatched");
+
+  await runInputShell(
+    serial,
+    [
+      "touchscreen",
+      "swipe",
+      String(x),
+      String(y1),
+      String(x),
+      String(y2),
+      String(durationMs),
+    ],
+    "keyguard unlock swipe",
+  );
+
+  const keyguardAfter = await getKeyguardState(serial).catch(() => null);
+  logger.info({
+    serial,
+    keyguardBefore,
+    keyguardAfter,
+    executedFrom: [x, y1],
+    executedTo: [x, y2],
+    durationMs,
+    completed: true,
+    path: "keyguard-bottom-edge-to-middle",
+  }, "[mobile-execution] keyguard unlock swipe command completed");
 }
 
 /** Dismiss an Instagram story/highlight viewer with the inverse gesture. */

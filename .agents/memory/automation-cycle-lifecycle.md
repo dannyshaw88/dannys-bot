@@ -40,6 +40,11 @@ already on screen, or force-stopping the process invisibly.
 - Keep a deliberate 1.5-second panel-settle delay between `KEYCODE_WAKEUP` and
   the first unlock swipe; the keyevent can return before the physical display
   and keyguard are ready, and a sub-second gap can lose the swipe.
+- Treat `adb shell input swipe` exit-0 as host-command completion only. On the
+  affected physical phone, a 60–100ms swipe beginning at 90% height was
+  ignored by the keyguard with no visible motion. Unlock must use a dedicated
+  touchscreen gesture from the bottom-edge system-gesture region with a
+  normal drag duration, and log keyguard state before/after.
 
 - Graceful reboot must use a bounded cycle-drain period and then force the ADB
   reboot if the worker is still registered. A synchronous/in-flight device I/O

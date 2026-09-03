@@ -6196,7 +6196,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tLog("▶ Letting screen settle for 1.5 seconds before unlock…");
       await sleepOrAbort(serial, 1500, "navigation", "static");
       tLog("▶ Unlocking screen after wake settle…");
-      await android.swipeUpFromBottom(serial);
+      await android.unlockScreen(serial);
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete
 
@@ -9807,7 +9807,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Without this the device stays dark and am start is a no-op because
       // the keyguard is in the way.
       await android.wakeScreen(serial);
-      await android.swipeUpFromBottom(serial);
+      await android.unlockScreen(serial);
 
       let result: { ok: boolean; steps: string[]; error?: string };
 
