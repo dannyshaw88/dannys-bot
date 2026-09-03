@@ -404,29 +404,22 @@ export async function runCheckFeedLoop(serial: string, params: {
         // inspected/tapped. This removes the recurring post-scroll stall on
         // iterations where every action roll missed.
         await verifyStillInInstagram();
-        const feedbackCard = await android.isFeedbackOrSurveyCard(serial).catch(() => null);
-        if (feedbackCard) {
-          // This card replaced the post entirely — there is nothing safe to
-          // tap for like/share/share-DM. Skip all three and just scroll on.
-          logger.info({ serial, marker: feedbackCard }, "[check-feed] skip card detected in place of a post — skipping like/share/share-DM, scrolling past");
-          onLog?.(`View Feed ${i + 1}/${count}: skip card detected ("${feedbackCard}") — skipping like/share`);
-          if (wantLike) likeFailures++;
-        } else {
-          // Settle briefly after the scroll animation before dumping the
-          // action row. The dump itself is the authoritative readiness check;
-          // a long fixed wait here made every rolled action expensive.
-          await sleepOrAbort(serial, 350);
-          // Look up the real action-bar icons for whatever's on screen right
-          // now. The Like button's presence confirms this is a normal post
-          // with a normal action bar; each icon's actual position (or
-          // absence — a page/profile owner can disable comments and/or
-          // shares per post) is resolved fresh per post instead of assuming
-          // a fixed layout. See findFeedActionIcons()'s doc comment.
-          onLog?.(`View Feed ${i + 1}/${count}: scanning action bar…`);
-            // View Feed is intentionally strict and isolated from the other
-            // tools: sponsored cards are skipped, and a double-tap may only
-            // use a media rectangle confirmed by the live node tree.
-            const icons = await scanViewFeedA11y().catch(() => null);
+        // Settle briefly after the scroll animation before dumping the action
+        // row. The live scan below is the authoritative readiness check; a
+        // card-level label such as "Watch more reels" must not veto actions
+        // when Instagram still exposes a valid action row for the current post.
+        await sleepOrAbort(serial, 350);
+        // Look up the real action-bar icons for whatever's on screen right
+        // now. The Like button's presence confirms this is a normal post
+        // with a normal action bar; each icon's actual position (or
+        // absence — a page/profile owner can disable comments and/or
+        // shares per post) is resolved fresh per post instead of assuming
+        // a fixed layout. See findFeedActionIcons()'s doc comment.
+        onLog?.(`View Feed ${i + 1}/${count}: scanning action bar…`);
+          // View Feed is intentionally strict and isolated from the other
+          // tools: sponsored cards are skipped, and a double-tap may only
+          // use a media rectangle confirmed by the live node tree.
+          const icons = await scanViewFeedA11y().catch(() => null);
           if (!icons) {
             // No Like button found — this isn't a normal in-feed post right
             // now (Reel suggestion, ad, still animating in from the scroll,
@@ -788,7 +781,6 @@ export async function runCheckFeedLoop(serial: string, params: {
                 onLog?.(`View Feed ${i + 1}/${count}: expand caption error — ${e?.message}`);
               }
             }
-          }
           }
         }
         );

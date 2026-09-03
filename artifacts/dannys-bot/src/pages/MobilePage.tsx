@@ -11391,7 +11391,22 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               const ts  = m?.[1] ?? '';
               const dur = m?.[2] ?? '';
               const msg = m ? (m[3] ?? '') : l;
-              const accountSwitchTarget = msg.match(/^(▶ Switching to Instagram account:\s*)(@\S+)(.*)$/);
+               // Account switching emits several related diagnostics. Keep the
+               // target handle pink in all of them, not just the initial
+               // "Switching to Instagram account" header. In particular, the
+               // current profile-tab flow logs the destination in messages such
+               // as "destination @name" and "Found @name in switcher".
+               const isAccountSwitchMessage =
+                 /Switching to Instagram account|account switcher|account selector|Account-header|target=@|destination @|Found @[\w.]+ in switcher|account switch to @/i.test(msg);
+               const accountSwitchTarget = isAccountSwitchMessage
+                 ? msg.match(/(^|[\s(":=])(@[A-Za-z0-9._]{2,40})(?=$|[\s"…—,.;:)])/i)
+                 : null;
+               const accountTargetStart = accountSwitchTarget
+                 ? (accountSwitchTarget.index ?? 0) + accountSwitchTarget[1].length
+                 : -1;
+               const accountTargetEnd = accountTargetStart >= 0
+                 ? accountTargetStart + (accountSwitchTarget?.[2].length ?? 0)
+                 : -1;
 
               // Track the active tool from ▶ header lines so ALL sub-messages
               // that follow inherit the tool's colour (e.g. every explore
@@ -11475,9 +11490,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                   <span className={`flex-1 min-w-0 break-words ${msgClass}`}>
                     {accountSwitchTarget ? (
                       <>
-                        {accountSwitchTarget[1]}
-                        <span className="text-pink-400 font-semibold">{accountSwitchTarget[2]}</span>
-                        {accountSwitchTarget[3]}
+                        {msg.slice(0, accountTargetStart)}
+                        <span className="text-pink-400 font-semibold">{msg.slice(accountTargetStart, accountTargetEnd)}</span>
+                        {msg.slice(accountTargetEnd)}
                       </>
                     ) : msg}
                   </span>
