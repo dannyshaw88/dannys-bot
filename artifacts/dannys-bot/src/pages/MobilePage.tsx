@@ -11381,6 +11381,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               const ts  = m?.[1] ?? '';
               const dur = m?.[2] ?? '';
               const msg = m ? (m[3] ?? '') : l;
+              const accountSwitchTarget = msg.match(/^(▶ Switching to Instagram account:\s*)(@\S+)(.*)$/);
 
               // Track the active tool from ▶ header lines so ALL sub-messages
               // that follow inherit the tool's colour (e.g. every explore
@@ -11461,7 +11462,15 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                      {groupControl}
                    </span>
                    <span className="shrink-0 whitespace-nowrap text-white w-[5rem]">{dur ? `[${dur}]` : ''}</span>
-                  <span className={`flex-1 min-w-0 break-words ${msgClass}`}>{msg}</span>
+                  <span className={`flex-1 min-w-0 break-words ${msgClass}`}>
+                    {accountSwitchTarget ? (
+                      <>
+                        {accountSwitchTarget[1]}
+                        <span className="text-pink-400 font-semibold">{accountSwitchTarget[2]}</span>
+                        {accountSwitchTarget[3]}
+                      </>
+                    ) : msg}
+                  </span>
                 </div>
               );
              };
