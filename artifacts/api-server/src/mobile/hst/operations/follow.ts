@@ -757,6 +757,31 @@ export async function runFollowUsersStep(
   // recovery does not repeat the expensive multi-template scan immediately.
   let lastKnownSearchBar: { x: number; y: number } | null = null;
 
+  // The mirror's calibrated Back point is the same visible Instagram back
+  // arrow used by the other settings/navigation flows. Use it for leaving a
+  // profile; Android Back is reserved for dismissing a post viewer, sheet, or
+  // other transient surface opened while still inside the profile.
+  const tapCalibratedProfileBack = async (reason: string) => {
+    const point = await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
+    await sleepOrAbort(serial, 500);
+    onLog?.(`Follow: ${reason} — tapped calibrated Back at (${point.x},${point.y})`);
+  };
+
+  // A profile can be visibly open even when the helper's immediate verifier
+  // sees stale search nodes or misses the exact button label. The profile
+  // header is a stronger signal than those stale search markers, so accept a
+  // fresh dump when it contains both a profile-surface marker and a Follow
+  // control. Search rows alone do not contain the profile header marker.
+  const isConfirmedProfileSurface = (xml: string): boolean => {
+    if (!xml) return false;
+    const hasProfileHeader =
+      /action_bar_username_container|row_profile_header|profile_header|profile_grid/i.test(xml);
+    const hasFollowControl =
+      /(?:text|content-desc)="(?:Follow|Following|Requested)"/i.test(xml) ||
+      /(?:resource-id|class)="[^"]*(?:follow_button|follow_btn|inline_follow_button)[^"]*"/i.test(xml);
+    return hasProfileHeader && hasFollowControl;
+  };
+
   // Follow leaves Instagram on the search/results surface after each
   // profile.  Always restore the normal Instagram UI before another tool
   // starts: clear the current query through Instagram's live clear control,
@@ -770,9 +795,8 @@ export async function runFollowUsersStep(
       onLog?.(`Follow: cleanup clear failed — ${e?.message ?? "unknown error"}`);
     }
     try {
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 500);
-      onLog?.("Follow: cleanup — cleared search and pressed Back once to normal UI");
+      await tapCalibratedProfileBack("cleanup — cleared search");
+      onLog?.("Follow: cleanup — returned to normal UI");
     } catch (e: any) {
       if (e?.message === "cycle-aborted") throw e;
       onLog?.(`Follow: cleanup Back failed — ${e?.message ?? "unknown error"}`);
@@ -789,8 +813,7 @@ export async function runFollowUsersStep(
     // Invalidate it before touching navigation so a failed Back/search
     // recovery can never leak a stale "reuse" claim into the next user.
     searchReadyForReuse = false;
-    await android.pressBack(serial);
-    await sleepOrAbort(serial, 500);
+    await tapCalibratedProfileBack("skipped-user cleanup — returned to search results");
     // The field was just used to launch this profile, so it is still the
     // focused field after returning to results. Avoid another UIAutomator
     // dump and clear it with the fast key-event path.
@@ -1174,16 +1197,28 @@ export async function runFollowUsersStep(
       }
       // Tap the matched user in results
       onLog?.("[TRACE] follow: open-search-result");
-      const searchResult = await android.findAndTapUserInSearch(serial, username, onLog).catch(() => ({ found: false }));
+      let searchResult = await android.findAndTapUserInSearch(serial, username, onLog).catch(() => ({ found: false }));
+      if (!searchResult.found) {
+        // The helper can report a miss after tapping the correct row when its
+        // post-tap dump still contains stale search nodes or the profile
+        // button is exposed with a different label. Re-check the live screen
+        // here before treating the target as unopened.
+        const recoveryProfileXml = await android.dumpUi(serial).catch(() => "");
+        if (isConfirmedProfileSurface(recoveryProfileXml)) {
+          searchResult = { found: true, profileXml: recoveryProfileXml };
+          onLog?.(`Follow: @${username} profile is open — recovered from a stale/strict result verifier`);
+        }
+      }
       if (!searchResult.found) {
         onLog?.(`Follow: @${username} not found in results — skipping`);
-        // Stay on the Search/Explore surface for the next candidate. A failed
-        // result lookup has not opened a profile, so pressing Back here can
-        // leave Explore and return to the feed; the next loop iteration will
-        // find, focus, and clear the live search bar directly.
+        // Even on a failed result lookup, use the calibrated mirror Back
+        // control. This keeps recovery aligned with the same visible control
+        // used when a confirmed profile is opened and avoids Android Back's
+        // context-dependent navigation.
+        await tapCalibratedProfileBack("result lookup failed — leaving current search surface");
         await android.clearInstagramSearchBar(serial, (msg: string) => onLog?.(`  ${msg}`)).catch(() => {});
-        searchReadyForReuse = true;
-        onLog?.("Follow: failed result cleaned without Back — staying in Search for next candidate");
+        searchReadyForReuse = false;
+        onLog?.("Follow: failed result cleaned — next candidate will re-enter Search");
         continue;
       }
 
@@ -1464,8 +1499,7 @@ export async function runFollowUsersStep(
         const abandonChance = rollRange(browsing.abandonFollowPctMin, browsing.abandonFollowPctMax) / 100;
         if (Math.random() < abandonChance) {
           onLog?.(`Follow: ↩ abandoned follow @${username} after inject-browsing (variation — user can be re-scraped)`);
-          await android.pressBack(serial);
-          await sleepOrAbort(serial, 500);
+          await tapCalibratedProfileBack("abandoned follow — returned to search results");
           const interPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
           if (interPopup) await sleepOrAbort(serial, 400);
           continue;
@@ -1506,13 +1540,10 @@ export async function runFollowUsersStep(
         });
       }
 
-      // Return to the search/explore results after each user. The profile
-      // was opened from the search results, so exactly one Back is correct:
-      // profile → search results. Do not press Back again when Home is absent;
-      // that second press exits the search context and lands on the home feed.
-      await android.pressBack(serial);
-      await sleepOrAbort(serial, 500);
-      onLog?.("Follow: returned to search results after one Back; keeping Explore/search context");
+      // Return to the search/explore results after each user. Use exactly one
+      // calibrated mirror Back tap: profile → search results. Do not issue a
+      // second Back, which would leave the search context and land on Home.
+      await tapCalibratedProfileBack("returned to search results");
       await sleepOrAbort(serial, 800);
       // Dismiss any popup that appeared after pressing back (e.g. IG Plus
       // upsell, notification prompts) before the next operation.
