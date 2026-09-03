@@ -6228,6 +6228,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // for UI idle itself, so a long fixed sleep before it is redundant.
       // 400 ms is enough for the IG process to appear before the dump starts.
       await sleepOrAbort(serial, 400);
+      // Android can raise the USB/MTP phone-data dialog after the pre-launch
+      // check, especially after a cable or hub re-enumeration. It sits above
+      // Instagram and blocks every later action, so check once more after the
+      // app launch and dismiss the live Allow button if it appeared in that
+      // race window.
+      const usbDataPopupAfterLaunch = await android.acceptUsbPhoneDataDialog(serial).catch(() => false);
+      if (usbDataPopupAfterLaunch) {
+        steps.push("usb-phone-data-allowed-after-launch");
+        tLog("  ✓ USB phone-data access allowed after Instagram launch");
+      }
 
       // 2b–2c. SINGLE shared UIAutomator dump covers: ads-choice dialog check,
       // interstitials check, AND the account-switcher pre-check + profile-tab
