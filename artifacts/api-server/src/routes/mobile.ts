@@ -6189,10 +6189,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_WAKEUP(224)" }, "[mobile-screen-state] intentional command");
       await android.wakeScreen(serial);
       steps.push("power-on");
-      // Do not probe power state, wait for a fixed wake delay, or handle MTP
-      // before unlocking. Those operations are slow on some Samsung devices
-      // and the panel can time out again before the swipe reaches keyguard.
-      tLog("▶ Unlocking screen immediately after wake…");
+      // Give the physical panel time to finish powering on before sending the
+      // unlock gesture. On some devices the keyevent returns before the panel
+      // is ready, and a sub-second gap is too short: the swipe can be ignored
+      // or arrive while the keyguard is still transitioning.
+      tLog("▶ Letting screen settle for 1.5 seconds before unlock…");
+      await sleepOrAbort(serial, 1500, "navigation", "static");
+      tLog("▶ Unlocking screen after wake settle…");
       await android.swipeUpFromBottom(serial);
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete

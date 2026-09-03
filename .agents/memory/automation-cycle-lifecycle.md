@@ -34,6 +34,9 @@ already on screen, or force-stopping the process invisibly.
   long value and restore it during cycle cleanup. Some OEMs can let a very
   short timeout expire while the unlock swipe is still waiting on ADB/display
   setup.
+- Keep a deliberate 1.5-second panel-settle delay between `KEYCODE_WAKEUP` and
+  the first unlock swipe; the keyevent can return before the physical display
+  and keyguard are ready, and a sub-second gap can lose the swipe.
 
 - Graceful reboot must use a bounded cycle-drain period and then force the ADB
   reboot if the worker is still registered. A synchronous/in-flight device I/O
