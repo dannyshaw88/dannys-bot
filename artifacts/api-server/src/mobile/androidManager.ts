@@ -10033,6 +10033,94 @@ export async function findInstagramNotificationsIcon(
 }
 
 /**
+ * Confirm that the current Instagram surface is the notifications/activity
+ * page.  This is intentionally a separate check from finding a notification
+ * row: a feed story avatar can look like a row candidate, and an empty
+ * notifications page has no row to find.
+ */
+export async function isInstagramNotificationsScreen(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+
+  const { w, h } = _getScreenSize(xml);
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    const text = attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+    const contentDesc = attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "";
+    const resourceId = attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "";
+    const labels = [text, contentDesc].filter(Boolean);
+    if (x2 <= x1 || y2 <= y1 || x1 >= w || y1 >= h) continue;
+
+    // The title is the strongest signal. Restrict it to the header region so
+    // an unrelated notification sentence lower in a feed cannot qualify.
+    if (y1 <= h * 0.25 && labels.some((label) =>
+      /^(?:notifications?|activity|updates?)(?:\s*,.*)?$/i.test(label.trim())
+    )) {
+      return true;
+    }
+
+    // Some Instagram builds expose the title only through an obfuscated
+    // resource id. These ids are accepted only in the upper portion of the
+    // current hierarchy, never from a generic clickable node.
+    if (y1 <= h * 0.25 && /(?:activity[_-]?feed|notification[_-]?feed|notifications?)/i.test(resourceId)) {
+      return true;
+    }
+
+  }
+  return false;
+}
+
+/**
+ * Confirm that an Instagram surface currently exposes a live upper-left
+ * Back/Close control.  Callers still dispatch the calibrated settingsBack
+ * coordinate; this only prevents that coordinate from landing on Home's
+ * create (+) button when the expected detail page has already disappeared.
+ */
+export async function isInstagramBackSurfaceOpen(serial: string): Promise<boolean> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!xml) return false;
+
+  const { w, h } = _getScreenSize(xml);
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    const text = attrs.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+    const contentDesc = attrs.match(/content-desc="([^"]*)"/i)?.[1] ?? "";
+    const resourceId = attrs.match(/resource-id="([^"]*)"/i)?.[1] ?? "";
+    const labels = [text, contentDesc].filter(Boolean);
+    const isBackLabel = labels.some((label) =>
+      /^(?:back|close|navigate up)(?:\s*,.*)?$/i.test(label.trim())
+    );
+    const isBackResource = /(?:back|close|navigate[_-]?up|up_button)/i.test(resourceId);
+    const isClickable = /clickable="true"/i.test(attrs);
+    const isUpperLeft = x1 <= w * 0.20 && y1 <= h * 0.20;
+    if (isUpperLeft && (isBackLabel || (isBackResource && isClickable))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Find the Instagram Profile tab (person icon, rightmost bottom-nav item).
  * Tries resource IDs and the "Profile" content-desc label.
  */

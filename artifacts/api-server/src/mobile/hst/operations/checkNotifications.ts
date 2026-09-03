@@ -3,6 +3,8 @@ export interface CheckNotificationsOperationContext {
     tapCalibratedNavigationControl(serial: string, control: "home" | "notifications" | "settingsBack", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
     findRandomNotificationItem(serial: string): Promise<{ x: number; y: number } | null>;
+    isInstagramNotificationsScreen?(serial: string): Promise<boolean>;
+    isInstagramBackSurfaceOpen?(serial: string): Promise<boolean>;
     pressBack(serial: string): Promise<void>;
   };
   getScreenSize(serial: string): { w: number; h: number };
@@ -40,6 +42,12 @@ export async function runCheckNotifications(
 
   const icon = await android.tapCalibratedNavigationControl(serial, "notifications", onLog);
   await hstRandomDelay(serial, 1500, 10000);
+  const notificationsOpened = await android.isInstagramNotificationsScreen?.(serial).catch(() => false) ?? false;
+  if (!notificationsOpened) {
+    onLog?.("Random Actions: notifications screen was not confirmed after the Activity tap — skipping calibrated Back cleanup");
+    logger.warn({ serial }, "[check-notifications] notifications screen not confirmed");
+    return;
+  }
   onLog?.("Random Actions: ✓ opened notifications");
 
   const scrollCount = rollRange(scrollsMin, scrollsMax);
@@ -60,8 +68,17 @@ export async function runCheckNotifications(
       await android.tap(serial, item.x, item.y);
       onLog?.("Random Actions: ✓ tapped notification item");
       await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
-      await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
-      await hstRandomDelay(serial, 2500, 10000);
+      const returnedToNotifications = await android.isInstagramNotificationsScreen?.(serial).catch(() => false) ?? false;
+      if (!returnedToNotifications) {
+        const detailBackAvailable = await android.isInstagramBackSurfaceOpen?.(serial).catch(() => false) ?? false;
+        if (!detailBackAvailable) {
+          onLog?.("Random Actions: notification detail surface was not confirmed — skipping calibrated Back cleanup");
+          logger.warn({ serial }, "[check-notifications] detail surface/back control not confirmed");
+          return;
+        }
+        await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
+        await hstRandomDelay(serial, 2500, 10000);
+      }
     } else {
       onLog?.("Random Actions: no clickable notification row found — skipping click");
     }
@@ -69,6 +86,12 @@ export async function runCheckNotifications(
     onLog?.("Random Actions: click-notification roll missed — skipping click");
   }
 
+  const readyForFinalBack = await android.isInstagramNotificationsScreen?.(serial).catch(() => false) ?? false;
+  if (!readyForFinalBack) {
+    onLog?.("Random Actions: notifications surface is no longer open — skipping calibrated Back to avoid pressing Home's create button");
+    logger.warn({ serial }, "[check-notifications] final Back skipped because notifications surface disappeared");
+    return;
+  }
   await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
   await hstRandomDelay(serial, 2500, 10000);
   onLog?.("Random Actions: ✓ notifications check done");
