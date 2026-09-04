@@ -27,14 +27,15 @@ matched, inspect the saved screenshot-matcher log and verify the search region
 before changing the target strategy. Do not restore accessibility or fixed-
 coordinate fallbacks.
 
-Reels Save must use the live screenshot bookmark detector even when an
-accessibility `save_button` node exists.
+Reels Save uses the same validated live accessibility action-node matcher as
+Like, with `save_button` plus the `Add to Saved` / `Remove from Saved` labels.
 
-**Why:** Reels may omit the ribbon or expose a node that does not correspond to
-the visible action; tapping that node can activate a different control.
+**Why:** The Reels visual bookmark reference was unavailable in the runtime,
+while the live UI dump exposes the Save action node and state label directly.
 
-**How to apply:** Keep Save independent from Like, Comment, Repost, and DM
-resolution. A missing visual ribbon returns null and must be skipped.
+**How to apply:** Keep Save independent from Like, Repost, and DM resolution;
+resolve it from the current dump and fail closed when the node is absent or
+ambiguous.
 
 Accessibility action matches must also be validated as clickable, icon-sized
 nodes; count labels and row-sized containers are not safe tap targets.
