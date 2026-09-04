@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check, Users } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, UserRound, RotateCcw, Download, ChevronDown, Check } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
@@ -465,16 +465,16 @@ function SimCardSelector({
         </button>
 
         {openMenu === "provider" && (
-          <div className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-[7.5rem] w-36 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-xl">
+          <div className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-[7.5rem] w-36 overflow-y-auto rounded-md border border-border bg-white p-1 text-black shadow-xl">
             {country.providers.map(provider => (
               <button
                 key={provider}
                 type="button"
                 onClick={() => chooseProvider(provider)}
-                className="flex h-6 w-full items-center gap-2 rounded px-2 text-left text-[10px] text-popover-foreground hover:bg-accent"
+                className="relative flex h-6 w-full items-center justify-center rounded px-2 text-center text-[10px] text-black hover:bg-slate-100"
               >
-                <span className="flex-1 truncate">{provider}</span>
-                {provider === selectedProvider && <Check className="h-3 w-3 text-primary" />}
+                <span className="truncate">{provider}</span>
+                {provider === selectedProvider && <Check className="absolute right-2 h-3 w-3 text-primary" />}
               </button>
             ))}
           </div>
@@ -499,8 +499,8 @@ function AccountSlotCounter({
       className="absolute top-[calc(50%+1.15rem)] z-20 flex -translate-x-1/2 items-center gap-1 text-[11px] font-medium text-muted-foreground"
       aria-label={`${active} of ${total} account slots have Human Session Tool enabled`}
     >
-      <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span>{active}/{total}</span>
+      <UserRound className="h-3.5 w-3.5 shrink-0 text-green-500" aria-hidden="true" />
+      <span className="text-black">{active}/{total}</span>
     </div>
   );
 }
