@@ -463,23 +463,26 @@ function SimCardSelector({
           <span className="truncate">{selectedProvider ?? "SIM provider"}</span>
           <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
         </button>
-
-        {openMenu === "provider" && (
-          <div className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-[7.5rem] w-36 overflow-y-auto rounded-md border border-border bg-white p-1 text-black shadow-xl">
-            {country.providers.map(provider => (
-              <button
-                key={provider}
-                type="button"
-                onClick={() => chooseProvider(provider)}
-                className="relative flex h-6 w-full items-center justify-center rounded px-2 text-center text-[10px] text-black hover:bg-slate-100"
-              >
-                <span className="truncate">{provider}</span>
-                {provider === selectedProvider && <Check className="absolute right-2 h-3 w-3 text-primary" />}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
+
+      {openMenu === "provider" && (
+        <div
+          className="absolute left-1/2 top-[calc(100%+4px)] z-40 max-h-[7.5rem] w-36 -translate-x-1/2 overflow-y-auto rounded-md border border-border bg-white p-1 text-black opacity-100 shadow-xl"
+          style={{ backgroundColor: "#ffffff", opacity: 1 }}
+        >
+          {country.providers.map(provider => (
+            <button
+              key={provider}
+              type="button"
+              onClick={() => chooseProvider(provider)}
+              className="relative flex h-6 w-full items-center justify-center rounded px-2 text-center text-[10px] text-black hover:bg-slate-100"
+            >
+              <span className="truncate">{provider}</span>
+              {provider === selectedProvider && <Check className="absolute right-2 h-3 w-3 text-primary" />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
