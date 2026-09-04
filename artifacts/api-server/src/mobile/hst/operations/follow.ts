@@ -865,21 +865,16 @@ export async function runFollowUsersStep(
       onLog?.("Follow: skipped-user cleanup — second calibrated Back recovered clean Explore search");
       return true;
     }
-    // The field was just used to launch this profile, so it is still the
-    // focused field after returning to results. Avoid another UIAutomator
-    // dump and clear it with the fast key-event path.
-    await android.clearInstagramSearchBar(
-      serial,
-      (msg: string) => onLog?.(`Follow: skipped-user cleanup — ${msg}`),
-      { skipNodeLookup: true },
-    );
-    const recoverySearchBar = lastKnownSearchBar
-      ?? await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
+    // Do not assume the field stayed focused after Back. The attached device
+    // trace showed KEYCODE_MOVE_END starting before the saved search-bar tap,
+    // so the clear sequence could write into the profile surface. Tap the
+    // field first, confirm focus, and only then send any key events.
+    let recoverySearchBar = lastKnownSearchBar;
     if (lastKnownSearchBar) {
       onLog?.(`Follow: skipped-user cleanup — reusing calibrated user-search field at (${lastKnownSearchBar.x}, ${lastKnownSearchBar.y})`);
-    }
-    if (lastKnownSearchBar) {
       await android.tap(serial, recoverySearchBar.x, recoverySearchBar.y);
+    } else {
+      recoverySearchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
     }
     await sleepOrAbort(serial, 500);
     const focused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
@@ -887,6 +882,11 @@ export async function runFollowUsersStep(
       onLog?.("Follow: skipped-user cleanup — search bar focus not confirmed");
       return false;
     }
+    await android.clearInstagramSearchBar(
+      serial,
+      (msg: string) => onLog?.(`Follow: skipped-user cleanup — ${msg}`),
+      { skipNodeLookup: true },
+    );
     onLog?.("Follow: skipped-user cleanup — search bar cleared and focused for next user");
     searchReadyForReuse = true;
     return true;

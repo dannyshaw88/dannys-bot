@@ -5849,7 +5849,8 @@ export async function findDmSendButton(serial: string): Promise<{ x: number; y: 
  *
  * Fix strategy (node-first, belt-and-suspenders):
  *  1. Dump UI and look for Instagram's search-bar clear button by resource-id
- *     or label.  Tap it if found (best-effort — catches most builds).
+ *     or label.  Tap it if found (best-effort — catches most builds), and wait
+ *     for that tap to finish before sending any key event.
  *  2. ALWAYS follow up with KEYCODE_MOVE_END + 60 × KEYCODE_DEL regardless of
  *     whether the X button was found or tapped.  Instagram's EditText `text`
  *     attribute frequently reports "" in the UIAutomator dump even when the
@@ -5857,6 +5858,10 @@ export async function findDmSendButton(serial: string): Promise<{ x: number; y: 
  *     leaves stale text in place.  60 backspaces on an already-empty field are
  *     harmless; on a field with text they always clear it. The sweep is sent
  *     as one ADB invocation rather than 60 separate child processes.
+ *
+ * The key-event commands are awaited deliberately.  Starting them without
+ * awaiting lets the caller tap another surface while the field-clear command
+ * is still in flight; that can send a tap and key events to different screens.
  */
 export async function clearInstagramSearchBar(
   serial: string,
@@ -5884,7 +5889,11 @@ export async function clearInstagramSearchBar(
 
     if (clearBtn) {
       onLog?.(`Follow: tapping search bar clear button at (${clearBtn.x},${clearBtn.y})`);
-      _adbTap(adb, serial, clearBtn.x, clearBtn.y);
+      await runInputShell(
+        serial,
+        ["tap", String(clearBtn.x), String(clearBtn.y)],
+        "search clear button",
+      );
       await _sleep(300);
     }
   } else {
@@ -5896,9 +5905,9 @@ export async function clearInstagramSearchBar(
   // the caller has just validated and tapped the live Search node, so another
   // dump can block for the full device-specific UIAutomator timeout.
   onLog?.(`Follow: sending KEYCODE_MOVE_END + 60× KEYCODE_DEL to ensure search bar is clear`);
-  runInputShell(serial, ["keyevent", "123"], "keyevent"); // KEYCODE_MOVE_END → cursor to end
+  await runInputShell(serial, ["keyevent", "123"], "keyevent"); // KEYCODE_MOVE_END → cursor to end
   await _sleep(80);
-  runInputShell(
+  await runInputShell(
     serial,
     ["keyevent", ...Array.from({ length: 60 }, () => "67")],
     "keyevent sweep",
