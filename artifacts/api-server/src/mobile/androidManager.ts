@@ -12878,12 +12878,14 @@ export async function findAndTapUserInSearch(
     // Primary: require an exact username node. Avatar-ring nodes identify real
     // profile rows, but they do not identify WHICH profile row they belong to.
     // Tapping the first ring (or using DPAD order) can therefore follow an
-    // unrelated account when Instagram omits the requested username.
+    // unrelated account when Instagram omits the requested username. On some
+    // Instagram builds the exact username label is not itself clickable even
+    // though tapping its center opens the row, so actionOwnerIndex is not an
+    // identity gate here.
     const cleanLc = clean.toLocaleLowerCase();
     const exactNames = new Set([cleanLc, `@${cleanLc}`]);
     const exactUserPositions: Array<{ x: number; y: number }> = [];
     const exactUserSeen = new Set<string>();
-    let exactRejectedNoAction = 0;
     for (const node of _liveActionNodes(xml)) {
       if (/android\.widget\.EditText$/i.test(node.className)) continue;
       if (node.resourceId.includes("/row_search_keyword_title") ||
@@ -12893,17 +12895,15 @@ export async function findAndTapUserInSearch(
       const text = node.text.trim().toLocaleLowerCase();
       const desc = node.contentDesc.trim().toLocaleLowerCase();
       if (!exactNames.has(text) && !exactNames.has(desc)) continue;
-      // Keep identity strict: an exact username alone is insufficient if that
-      // labelled node is not inside an enabled clickable result row.
-      if (!node.enabled || node.actionOwnerIndex == null) {
-        exactRejectedNoAction++;
-        continue;
-      }
+      if (!node.enabled) continue;
       const x = node.x;
       const y = node.y;
-      // Child and wrapper can both repeat the exact username. They are one
-      // candidate only when they resolve to the same clickable row owner.
-      const key = String(node.actionOwnerIndex);
+      // Child and wrapper can both repeat the exact username. Prefer the
+      // action owner when one is exposed; otherwise deduplicate by the exact
+      // label's center and retain the older working text-node tap behavior.
+      const key = node.actionOwnerIndex == null
+        ? `point:${x},${y}`
+        : `owner:${node.actionOwnerIndex}`;
       if (!exactUserSeen.has(key)) {
         exactUserSeen.add(key);
         exactUserPositions.push({ x, y });
@@ -12919,8 +12919,7 @@ export async function findAndTapUserInSearch(
     }
     if (exactUserPositions.length === 0) {
       onLog?.(
-        `Follow: @${clean} exact username is not listed in an actionable search result — target aborted safely` +
-        (exactRejectedNoAction ? ` (rejected ${exactRejectedNoAction} exact label(s) without enabled clickable ancestor)` : ""),
+        `Follow: @${clean} exact username is not listed in a search result — target aborted safely`,
       );
       return { found: false };
     }

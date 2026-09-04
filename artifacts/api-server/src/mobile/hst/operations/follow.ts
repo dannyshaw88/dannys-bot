@@ -832,6 +832,37 @@ export async function runFollowUsersStep(
     return true;
   };
 
+  // Refocus the top Search field while staying on the current Explore/Search
+  // surface, then clear it only after focus is confirmed. This is used when a
+  // lookup fails before a profile was opened; pressing the profile Back point
+  // in that state exits Search Results and can leave the next target on a
+  // blank/transitioning screen.
+  const refocusAndClearFollowSearch = async (reason: string): Promise<boolean> => {
+    let searchBar = lastKnownSearchBar;
+    if (searchBar) {
+      onLog?.(`Follow: ${reason} — tapping saved user-search field at (${searchBar.x},${searchBar.y})`);
+      await android.tap(serial, searchBar.x, searchBar.y);
+    } else {
+      searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
+    }
+    lastKnownSearchBar = searchBar;
+    await sleepOrAbort(serial, 500);
+    const focused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+    if (!focused) {
+      onLog?.(`Follow: ${reason} — search bar focus not confirmed; refusing keyboard input`);
+      searchReadyForReuse = false;
+      return false;
+    }
+    await android.clearInstagramSearchBar(
+      serial,
+      (msg: string) => onLog?.(`Follow: ${reason} — ${msg}`),
+      { skipNodeLookup: true },
+    );
+    searchReadyForReuse = true;
+    onLog?.(`Follow: ${reason} — search field cleared and ready for next user`);
+    return true;
+  };
+
   // A rejected profile must stay inside the Explore/search flow. Returning
   // to the normal UI here makes the next candidate trigger the expensive
   // Home → Search navigation again and can cause the cleanup Back sequence
@@ -865,31 +896,7 @@ export async function runFollowUsersStep(
       onLog?.("Follow: skipped-user cleanup — second calibrated Back recovered clean Explore search");
       return true;
     }
-    // Do not assume the field stayed focused after Back. The attached device
-    // trace showed KEYCODE_MOVE_END starting before the saved search-bar tap,
-    // so the clear sequence could write into the profile surface. Tap the
-    // field first, confirm focus, and only then send any key events.
-    let recoverySearchBar = lastKnownSearchBar;
-    if (lastKnownSearchBar) {
-      onLog?.(`Follow: skipped-user cleanup — reusing calibrated user-search field at (${lastKnownSearchBar.x}, ${lastKnownSearchBar.y})`);
-      await android.tap(serial, recoverySearchBar.x, recoverySearchBar.y);
-    } else {
-      recoverySearchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
-    }
-    await sleepOrAbort(serial, 500);
-    const focused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
-    if (!focused) {
-      onLog?.("Follow: skipped-user cleanup — search bar focus not confirmed");
-      return false;
-    }
-    await android.clearInstagramSearchBar(
-      serial,
-      (msg: string) => onLog?.(`Follow: skipped-user cleanup — ${msg}`),
-      { skipNodeLookup: true },
-    );
-    onLog?.("Follow: skipped-user cleanup — search bar cleared and focused for next user");
-    searchReadyForReuse = true;
-    return true;
+    return refocusAndClearFollowSearch("skipped-user cleanup");
   };
 
   // ── Shared state — populated by either the normal fetch path or the
@@ -1264,14 +1271,15 @@ export async function runFollowUsersStep(
       }
       if (!searchResult.found) {
         onLog?.(`Follow: @${username} not found in results — skipping`);
-        // Even on a failed result lookup, use the calibrated mirror Back
-        // control. This keeps recovery aligned with the same visible control
-        // used when a confirmed profile is opened and avoids Android Back's
-        // context-dependent navigation.
-        await tapCalibratedProfileBack("result lookup failed — leaving current search surface");
-        await android.clearInstagramSearchBar(serial, (msg: string) => onLog?.(`  ${msg}`)).catch(() => {});
-        searchReadyForReuse = false;
-        onLog?.("Follow: failed result cleaned — next candidate will re-enter Search");
+        if (shouldResetToExploreForNextTarget()) {
+          await refocusAndClearFollowSearch("result lookup failed");
+        } else {
+          // No profile was opened, so the search-results Back control is the
+          // correct way to leave the single-target run. Do not clear after
+          // leaving it: keyboard events must never be sent to Explore/profile.
+          await tapCalibratedProfileBack("result lookup failed — leaving current search surface");
+        }
+        onLog?.("Follow: failed result cleaned — next candidate will reuse the current search field");
         continue;
       }
 
