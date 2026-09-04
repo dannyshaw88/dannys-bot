@@ -338,19 +338,17 @@ function SimCardSelector({
   return (
     <div
       ref={rootRef}
-      className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-md border border-white/20 bg-black/75 p-1 shadow-lg backdrop-blur-sm"
+      className="absolute left-full top-1/2 z-20 ml-0.5 flex -translate-y-1/2 items-center gap-0"
       onClick={event => event.stopPropagation()}
     >
       <button
         type="button"
-        title={`SIM country: ${country.name} (${country.dialCode})`}
-        aria-label={`Choose SIM country, currently ${country.name} ${country.dialCode}`}
+        title={`SIM country: ${country.name}`}
+        aria-label={`Choose SIM country, currently ${country.name}`}
         onClick={() => setOpenMenu(openMenu === "country" ? null : "country")}
-        className="flex h-7 shrink-0 items-center gap-1 rounded bg-white/10 px-1.5 text-[11px] text-white hover:bg-white/20"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border bg-background/90 text-foreground hover:bg-accent"
       >
         <span aria-hidden="true" className="text-base leading-none">{country.flag}</span>
-        <span className="font-medium">{country.dialCode}</span>
-        <ChevronDown className="h-3 w-3 text-white/60" />
       </button>
 
       {openMenu === "country" && (
@@ -364,7 +362,6 @@ function SimCardSelector({
             >
               <span className="text-sm leading-none" aria-hidden="true">{option.flag}</span>
               <span className="flex-1 truncate">{option.name}</span>
-              <span className="text-muted-foreground">{option.dialCode}</span>
               {option.code === country.code && <Check className="h-3 w-3 text-primary" />}
             </button>
           ))}
@@ -377,10 +374,10 @@ function SimCardSelector({
           title={selectedProvider ? `SIM provider: ${selectedProvider}` : "Choose SIM provider"}
           aria-label={selectedProvider ? `SIM provider ${selectedProvider}` : "Choose SIM provider"}
           onClick={() => setOpenMenu(openMenu === "provider" ? null : "provider")}
-          className="flex h-7 max-w-[6.5rem] items-center gap-1 rounded bg-white/10 px-2 text-[10px] font-medium text-white hover:bg-white/20"
+          className="flex h-7 max-w-[5.75rem] items-center gap-0.5 rounded border border-border bg-background/90 px-1.5 text-[10px] font-medium text-foreground hover:bg-accent"
         >
           <span className="truncate">{selectedProvider ?? "SIM provider"}</span>
-          <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
         </button>
 
         {openMenu === "provider" && (
