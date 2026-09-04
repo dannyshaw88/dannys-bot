@@ -6456,6 +6456,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             (preSwitchSelectedTools.length ? ` (${preSwitchSelectedTools.map(tool => _toolOrderLabels[tool] ?? tool).join(" → ")})` : ""),
           );
           preSwitchActionsRan = preSwitchSelectedTools.length > 0;
+          let preSwitchViewFeedExecuted = false;
           for (const preTool of preSwitchSelectedTools) {
             if (isCycleAborted(serial)) break;
             if (preTool === "follow" || String(preTool).startsWith("follow_spread:")) continue;
@@ -6513,6 +6514,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 preSwitchMetrics.saves += preSwitchFeedResult.saves;
                 preSwitchMetrics.feedScrolled += preSwitchFeedResult.count;
               }
+              preSwitchViewFeedExecuted = true;
             } else if (preTool === "stories") {
               const preSwitchStoriesResult = await runViewStoriesFromFeedLoop(serial, {
                 slidesMin: scaled(viewStoriesSlidesMin),
@@ -6658,6 +6660,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 checkNotificationsScrollsMax,
                 checkNotificationsClickPctMin,
                 checkNotificationsClickPctMax,
+                homeTapCount: preSwitchViewFeedExecuted ? 2 : 1,
                 visitProfilePctMin,
                 visitProfilePctMax,
                 visitSavedPctMin,
@@ -7548,6 +7551,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               checkNotificationsScrollsMax,
               checkNotificationsClickPctMin,
               checkNotificationsClickPctMax,
+              homeTapCount: _viewFeedExecuted ? 2 : 1,
               visitProfilePctMin,
               visitProfilePctMax,
               visitSavedPctMin,

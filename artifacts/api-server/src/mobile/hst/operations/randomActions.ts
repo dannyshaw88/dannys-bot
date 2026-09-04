@@ -28,6 +28,7 @@ export interface RandomActionsOptions {
   checkNotificationsPctMin: number; checkNotificationsPctMax: number;
   checkNotificationsScrollsMin: number; checkNotificationsScrollsMax: number;
   checkNotificationsClickPctMin: number; checkNotificationsClickPctMax: number;
+  homeTapCount?: number;
   visitProfilePctMin: number; visitProfilePctMax: number;
   visitSavedPctMin: number; visitSavedPctMax: number;
   visitSettingsPctMin: number; visitSettingsPctMax: number;
@@ -58,6 +59,7 @@ export async function runRandomActionsStep(
     await runCheckNotifications(serial, {
       scrollsMin: opts.checkNotificationsScrollsMin, scrollsMax: opts.checkNotificationsScrollsMax,
       clickPctMin: opts.checkNotificationsClickPctMin, clickPctMax: opts.checkNotificationsClickPctMax,
+      homeTapCount: opts.homeTapCount,
     }, { ...context, onLog: (message: string) => onLog(`  ${message}`) });
     fired = true;
   }

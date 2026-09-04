@@ -29,16 +29,23 @@ export async function runCheckNotifications(
     scrollsMax: number;
     clickPctMin: number;
     clickPctMax: number;
+    homeTapCount?: number;
   },
   context: CheckNotificationsOperationContext,
 ): Promise<void> {
   const { android, getScreenSize, deviceProfileSwipe, sleepOrAbort,
     hstRandomDelay, rollRange, logger, onLog } = context;
   const { scrollsMin, scrollsMax, clickPctMin, clickPctMax } = options;
+  const homeTapCount = options.homeTapCount === 2 ? 2 : 1;
 
-  const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
-  onLog?.(`Random Actions: tapping Home before notifications at (${homeTab.x},${homeTab.y})`);
-  await sleepOrAbort(serial, 1000);
+  for (let tapIndex = 0; tapIndex < homeTapCount; tapIndex++) {
+    const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
+    onLog?.(
+      `Random Actions: tapping calibrated Home ${tapIndex + 1}/${homeTapCount} ` +
+      `before notifications at (${homeTab.x},${homeTab.y})`,
+    );
+    await sleepOrAbort(serial, 1000);
+  }
 
   const icon = await android.tapCalibratedNavigationControl(serial, "notifications", onLog);
   await hstRandomDelay(serial, 1500, 10000);
