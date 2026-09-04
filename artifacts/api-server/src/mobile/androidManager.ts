@@ -4522,14 +4522,14 @@ export async function findReelActionIcons(
     return null;
   }
   // Reels can expose "Repost" as a label on non-action containers/statistics
-  // nodes. Label-only matching is therefore unsafe here: it can produce a
-  // coordinate that is not the double-arrow repost control. Require a
-  // resource-id belonging to the repost action and fail closed when the
-  // current Instagram build does not expose one.
+  // nodes, so keep the same compact-size and clickable-ancestor validation as
+  // Like. Accept the known resource IDs first, then the exact Repost label for
+  // builds that omit or rename the resource ID. Never use the generic Share
+  // label here because Share opens the DM sheet in the Reel viewer.
   const liveShareFeed = _findUniqueLiveActionNode(
     xml,
     [":id/repost_button", ":id/reposts_ufi_icon", ":id/repost_icon"],
-    [],
+    ["Repost"],
     onLog,
   );
   const liveShareDm = _findUniqueLiveActionNode(xml, [":id/direct_share_button"], ["Share", "Send", "Direct", "Message"], onLog);
