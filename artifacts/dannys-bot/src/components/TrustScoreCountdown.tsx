@@ -3,7 +3,7 @@ import { Clock3 } from "lucide-react";
 import { getTrustLevels } from "./TrustScoreBadge";
 import {
   readLocalSlotTrustScore,
-  saveSlotTrustScore,
+  publishSlotTrustScoreChanged,
 } from "./slotTrustScoreStorage";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
@@ -183,15 +183,19 @@ export function TrustScoreCountdown({
         ? await response.json() as { ok?: boolean; scoreId?: string | null }
         : null;
       if (data?.ok && data.scoreId) {
-        await saveSlotTrustScore(
+        setScoreId(data.scoreId);
+        setRemainingMs(null);
+        setExpiresAt(null);
+        // The advance endpoint already persisted both the new assignment and
+        // its next timer. Publish that committed result directly rather than
+        // issuing a second assignment write, which could fail/race and leave
+        // the account-slot badge stuck on NOOB while the timer has advanced.
+        publishSlotTrustScoreChanged(
           serial,
           slotIdx,
           data.scoreId,
           currentIndex + 2 < levels.length,
         );
-        setScoreId(data.scoreId);
-        setRemainingMs(null);
-        setExpiresAt(null);
       } else {
         await load();
       }

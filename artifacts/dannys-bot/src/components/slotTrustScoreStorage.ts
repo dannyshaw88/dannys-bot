@@ -91,6 +91,28 @@ export async function saveSlotTrustScore(
   if (!response.ok) {
     throw new Error(`Trust score save failed (${response.status})`);
   }
+  publishSlotTrustScoreChanged(serial, slotIdx, scoreId, hasNextScore);
+}
+
+/**
+ * Updates the shared client cache and notifies every mounted slot badge after
+ * a score has already been persisted by another server operation.
+ *
+ * The timer promotion endpoint writes the assignment atomically with the next
+ * timer. It must not be followed by a second assignment write just to refresh
+ * the badges, because that creates a race at the exact moment the countdown
+ * expires.
+ */
+export function publishSlotTrustScoreChanged(
+  serial: string,
+  slotIdx: number,
+  scoreId: string | null,
+  hasNextScore = scoreId === null
+    ? false
+    : getTrustLevels().findIndex(level => level.id === scoreId) < getTrustLevels().length - 1,
+): void {
+  slotScoreCache.set(slotScoreCacheKey(serial, slotIdx), { scoreId, loadedAt: Date.now() });
+  writeLocalSlotTrustScore(serial, slotIdx, scoreId);
   window.dispatchEvent(new CustomEvent("mobile_trustscore_changed", {
     detail: { serial, slotIdx, scoreId, hasNextScore },
   }));
