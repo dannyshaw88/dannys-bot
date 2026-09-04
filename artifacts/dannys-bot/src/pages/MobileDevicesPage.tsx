@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
@@ -252,8 +252,156 @@ interface TextLayer {
   x: number; y: number; bold: boolean; italic: boolean; shadow: boolean;
 }
 
-interface SlotCustomization { wallpaper: string | null; texts: TextLayer[]; }
-const DEFAULT_SLOT_CUSTOM: SlotCustomization = { wallpaper: null, texts: [] };
+interface SlotCustomization {
+  wallpaper: string | null;
+  texts: TextLayer[];
+  simCountryCode?: string;
+  simProvider?: string | null;
+}
+const DEFAULT_SLOT_CUSTOM: SlotCustomization = {
+  wallpaper: null,
+  texts: [],
+  simCountryCode: "GB",
+  simProvider: null,
+};
+
+interface SimCountry {
+  code: string;
+  flag: string;
+  dialCode: string;
+  name: string;
+  providers: string[];
+}
+
+const SIM_COUNTRIES: SimCountry[] = [
+  { code: "GB", flag: "🇬🇧", dialCode: "+44", name: "United Kingdom", providers: ["EE", "O2", "Three", "Vodafone", "giffgaff", "Tesco Mobile", "iD Mobile", "VOXI"] },
+  { code: "US", flag: "🇺🇸", dialCode: "+1", name: "United States", providers: ["AT&T", "T-Mobile", "Verizon", "UScellular", "Visible", "Mint Mobile", "Cricket"] },
+  { code: "CA", flag: "🇨🇦", dialCode: "+1", name: "Canada", providers: ["Bell", "Rogers", "TELUS", "Freedom Mobile", "Fido", "Koodo", "Virgin Plus"] },
+  { code: "AU", flag: "🇦🇺", dialCode: "+61", name: "Australia", providers: ["Telstra", "Optus", "Vodafone", "amaysim", "Boost Mobile", "Belong"] },
+  { code: "DE", flag: "🇩🇪", dialCode: "+49", name: "Germany", providers: ["Telekom", "Vodafone", "O2", "1&1", "Aldi Talk", "Congstar"] },
+  { code: "FR", flag: "🇫🇷", dialCode: "+33", name: "France", providers: ["Orange", "SFR", "Bouygues Telecom", "Free Mobile", "Lebara", "NRJ Mobile"] },
+  { code: "ES", flag: "🇪🇸", dialCode: "+34", name: "Spain", providers: ["Movistar", "Vodafone", "Orange", "Yoigo", "MásMóvil", "Digi"] },
+  { code: "IT", flag: "🇮🇹", dialCode: "+39", name: "Italy", providers: ["TIM", "Vodafone", "WindTre", "Iliad", "Fastweb", "ho. Mobile"] },
+  { code: "IN", flag: "🇮🇳", dialCode: "+91", name: "India", providers: ["Jio", "Airtel", "Vi", "BSNL", "MTNL"] },
+  { code: "NL", flag: "🇳🇱", dialCode: "+31", name: "Netherlands", providers: ["KPN", "Vodafone", "Odido", "Lebara", "Simyo", "Youfone"] },
+  { code: "IE", flag: "🇮🇪", dialCode: "+353", name: "Ireland", providers: ["Three", "Vodafone", "eir", "Tesco Mobile", "GoMo"] },
+  { code: "ZA", flag: "🇿🇦", dialCode: "+27", name: "South Africa", providers: ["Vodacom", "MTN", "Cell C", "Telkom", "Rain"] },
+];
+
+function getSimCountry(code: string | undefined): SimCountry {
+  return SIM_COUNTRIES.find(country => country.code === code) ?? SIM_COUNTRIES[0];
+}
+
+function SimCardSelector({
+  custom,
+  onChange,
+}: {
+  custom: SlotCustomization;
+  onChange: (custom: SlotCustomization) => void;
+}) {
+  const [openMenu, setOpenMenu] = useState<"country" | "provider" | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const country = getSimCountry(custom.simCountryCode);
+  const selectedProvider = country.providers.includes(custom.simProvider ?? "")
+    ? custom.simProvider
+    : null;
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, [openMenu]);
+
+  const chooseCountry = (nextCountry: SimCountry) => {
+    onChange({
+      ...custom,
+      simCountryCode: nextCountry.code,
+      simProvider: null,
+    });
+    setOpenMenu(null);
+  };
+
+  const chooseProvider = (provider: string) => {
+    onChange({
+      ...custom,
+      simCountryCode: country.code,
+      simProvider: provider,
+    });
+    setOpenMenu(null);
+  };
+
+  return (
+    <div
+      ref={rootRef}
+      className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-md border border-white/20 bg-black/75 p-1 shadow-lg backdrop-blur-sm"
+      onClick={event => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        title={`SIM country: ${country.name} (${country.dialCode})`}
+        aria-label={`Choose SIM country, currently ${country.name} ${country.dialCode}`}
+        onClick={() => setOpenMenu(openMenu === "country" ? null : "country")}
+        className="flex h-7 shrink-0 items-center gap-1 rounded bg-white/10 px-1.5 text-[11px] text-white hover:bg-white/20"
+      >
+        <span aria-hidden="true" className="text-base leading-none">{country.flag}</span>
+        <span className="font-medium">{country.dialCode}</span>
+        <ChevronDown className="h-3 w-3 text-white/60" />
+      </button>
+
+      {openMenu === "country" && (
+        <div className="absolute bottom-[calc(100%+4px)] left-0 z-30 max-h-[7.5rem] w-44 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-xl">
+          {SIM_COUNTRIES.map(option => (
+            <button
+              key={option.code}
+              type="button"
+              onClick={() => chooseCountry(option)}
+              className="flex h-6 w-full items-center gap-2 rounded px-2 text-left text-[10px] text-popover-foreground hover:bg-accent"
+            >
+              <span className="text-sm leading-none" aria-hidden="true">{option.flag}</span>
+              <span className="flex-1 truncate">{option.name}</span>
+              <span className="text-muted-foreground">{option.dialCode}</span>
+              {option.code === country.code && <Check className="h-3 w-3 text-primary" />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="relative min-w-0">
+        <button
+          type="button"
+          title={selectedProvider ? `SIM provider: ${selectedProvider}` : "Choose SIM provider"}
+          aria-label={selectedProvider ? `SIM provider ${selectedProvider}` : "Choose SIM provider"}
+          onClick={() => setOpenMenu(openMenu === "provider" ? null : "provider")}
+          className="flex h-7 max-w-[6.5rem] items-center gap-1 rounded bg-white/10 px-2 text-[10px] font-medium text-white hover:bg-white/20"
+        >
+          <span className="truncate">{selectedProvider ?? "SIM provider"}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-white/60" />
+        </button>
+
+        {openMenu === "provider" && (
+          <div className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-[7.5rem] w-36 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-xl">
+            {country.providers.map(provider => (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => chooseProvider(provider)}
+                className="flex h-6 w-full items-center gap-2 rounded px-2 text-left text-[10px] text-popover-foreground hover:bg-accent"
+              >
+                <span className="flex-1 truncate">{provider}</span>
+                {provider === selectedProvider && <Check className="h-3 w-3 text-primary" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function makeTextLayer(): TextLayer {
   return {
@@ -989,22 +1137,36 @@ function DeviceCard({
 
   return (
     <div className="group h-full relative flex flex-col">
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
+        onKeyDown={event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onClick();
+          }
+        }}
         className={`flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40${active ? ' device-card-active' : ''}`}
       >
         {/* Phone shell — wallpaper and text rendered natively inside the SVG screen */}
-        <PhoneShell
-          className="flex-1 min-h-0 w-auto max-w-[150px] group-hover:scale-[1.03] transition-transform duration-200"
-          online={online}
-          active={active}
-          wallpaperUrl={custom.wallpaper
-            ? (custom.wallpaper.startsWith('data:image/') ? custom.wallpaper : `/wallpapers/${custom.wallpaper}`)
-            : null}
-          texts={custom.texts}
-          uid={String(device.slotIndex)}
-          mirrorUrl={mirrorUrl}
-        />
+        <div className="relative flex min-h-0 w-full max-w-[150px] flex-1 items-center justify-center">
+          <PhoneShell
+            className="h-full w-auto max-w-full group-hover:scale-[1.03] transition-transform duration-200"
+            online={online}
+            active={active}
+            wallpaperUrl={custom.wallpaper
+              ? (custom.wallpaper.startsWith('data:image/') ? custom.wallpaper : `/wallpapers/${custom.wallpaper}`)
+              : null}
+            texts={custom.texts}
+            uid={String(device.slotIndex)}
+            mirrorUrl={mirrorUrl}
+          />
+          <SimCardSelector
+            custom={custom}
+            onChange={onCustomize}
+          />
+        </div>
 
         <div className="h-5 shrink-0 flex items-center justify-center">
           {currentTool && (() => {
@@ -1035,7 +1197,7 @@ function DeviceCard({
             )}
           </div>
         </div>
-      </button>
+      </div>
 
       {/* Persistent device controls — kept in the top-right so they are
           discoverable without hovering over the card. */}
