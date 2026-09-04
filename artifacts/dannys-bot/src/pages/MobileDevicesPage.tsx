@@ -267,29 +267,110 @@ const DEFAULT_SLOT_CUSTOM: SlotCustomization = {
 
 interface SimCountry {
   code: string;
-  flag: string;
   dialCode: string;
   name: string;
   providers: string[];
 }
 
 const SIM_COUNTRIES: SimCountry[] = [
-  { code: "GB", flag: "🇬🇧", dialCode: "+44", name: "United Kingdom", providers: ["EE", "O2", "Three", "Vodafone", "giffgaff", "Tesco Mobile", "iD Mobile", "VOXI"] },
-  { code: "US", flag: "🇺🇸", dialCode: "+1", name: "United States", providers: ["AT&T", "T-Mobile", "Verizon", "UScellular", "Visible", "Mint Mobile", "Cricket"] },
-  { code: "CA", flag: "🇨🇦", dialCode: "+1", name: "Canada", providers: ["Bell", "Rogers", "TELUS", "Freedom Mobile", "Fido", "Koodo", "Virgin Plus"] },
-  { code: "AU", flag: "🇦🇺", dialCode: "+61", name: "Australia", providers: ["Telstra", "Optus", "Vodafone", "amaysim", "Boost Mobile", "Belong"] },
-  { code: "DE", flag: "🇩🇪", dialCode: "+49", name: "Germany", providers: ["Telekom", "Vodafone", "O2", "1&1", "Aldi Talk", "Congstar"] },
-  { code: "FR", flag: "🇫🇷", dialCode: "+33", name: "France", providers: ["Orange", "SFR", "Bouygues Telecom", "Free Mobile", "Lebara", "NRJ Mobile"] },
-  { code: "ES", flag: "🇪🇸", dialCode: "+34", name: "Spain", providers: ["Movistar", "Vodafone", "Orange", "Yoigo", "MásMóvil", "Digi"] },
-  { code: "IT", flag: "🇮🇹", dialCode: "+39", name: "Italy", providers: ["TIM", "Vodafone", "WindTre", "Iliad", "Fastweb", "ho. Mobile"] },
-  { code: "IN", flag: "🇮🇳", dialCode: "+91", name: "India", providers: ["Jio", "Airtel", "Vi", "BSNL", "MTNL"] },
-  { code: "NL", flag: "🇳🇱", dialCode: "+31", name: "Netherlands", providers: ["KPN", "Vodafone", "Odido", "Lebara", "Simyo", "Youfone"] },
-  { code: "IE", flag: "🇮🇪", dialCode: "+353", name: "Ireland", providers: ["Three", "Vodafone", "eir", "Tesco Mobile", "GoMo"] },
-  { code: "ZA", flag: "🇿🇦", dialCode: "+27", name: "South Africa", providers: ["Vodacom", "MTN", "Cell C", "Telkom", "Rain"] },
+  { code: "GB", dialCode: "+44", name: "United Kingdom", providers: ["EE", "O2", "Three", "Vodafone", "giffgaff", "Tesco Mobile", "iD Mobile", "VOXI"] },
+  { code: "US", dialCode: "+1", name: "United States", providers: ["AT&T", "T-Mobile", "Verizon", "UScellular", "Visible", "Mint Mobile", "Cricket"] },
+  { code: "CA", dialCode: "+1", name: "Canada", providers: ["Bell", "Rogers", "TELUS", "Freedom Mobile", "Fido", "Koodo", "Virgin Plus"] },
+  { code: "AU", dialCode: "+61", name: "Australia", providers: ["Telstra", "Optus", "Vodafone", "amaysim", "Boost Mobile", "Belong"] },
+  { code: "DE", dialCode: "+49", name: "Germany", providers: ["Telekom", "Vodafone", "O2", "1&1", "Aldi Talk", "Congstar"] },
+  { code: "FR", dialCode: "+33", name: "France", providers: ["Orange", "SFR", "Bouygues Telecom", "Free Mobile", "Lebara", "NRJ Mobile"] },
+  { code: "ES", dialCode: "+34", name: "Spain", providers: ["Movistar", "Vodafone", "Orange", "Yoigo", "MásMóvil", "Digi"] },
+  { code: "IT", dialCode: "+39", name: "Italy", providers: ["TIM", "Vodafone", "WindTre", "Iliad", "Fastweb", "ho. Mobile"] },
+  { code: "IN", dialCode: "+91", name: "India", providers: ["Jio", "Airtel", "Vi", "BSNL", "MTNL"] },
+  { code: "NL", dialCode: "+31", name: "Netherlands", providers: ["KPN", "Vodafone", "Odido", "Lebara", "Simyo", "Youfone"] },
+  { code: "IE", dialCode: "+353", name: "Ireland", providers: ["Three", "Vodafone", "eir", "Tesco Mobile", "GoMo"] },
+  { code: "ZA", dialCode: "+27", name: "South Africa", providers: ["Vodacom", "MTN", "Cell C", "Telkom", "Rain"] },
 ];
 
 function getSimCountry(code: string | undefined): SimCountry {
   return SIM_COUNTRIES.find(country => country.code === code) ?? SIM_COUNTRIES[0];
+}
+
+function SimFlag({ code }: { code: string }) {
+  const svgProps = {
+    className: "h-4 w-6 shrink-0",
+    viewBox: "0 0 20 14",
+    xmlns: "http://www.w3.org/2000/svg",
+    "aria-hidden": true,
+  };
+
+  switch (code) {
+    case "GB":
+      return (
+        <svg {...svgProps}>
+          <rect width="20" height="14" fill="#1f3c88" />
+          <path d="M0 0 20 14M20 0 0 14" stroke="#fff" strokeWidth="4" />
+          <path d="M0 0 20 14M20 0 0 14" stroke="#c8102e" strokeWidth="1.6" />
+          <path d="M10 0v14M0 7h20" stroke="#fff" strokeWidth="4" />
+          <path d="M10 0v14M0 7h20" stroke="#c8102e" strokeWidth="2" />
+        </svg>
+      );
+    case "US":
+      return (
+        <svg {...svgProps}>
+          {Array.from({ length: 7 }, (_, index) => (
+            <rect key={index} y={index * 2} width="20" height="1" fill="#b22234" />
+          ))}
+          <rect width="9" height="7.5" fill="#3c3b6e" />
+          <circle cx="2" cy="2" r=".45" fill="#fff" /><circle cx="4" cy="2" r=".45" fill="#fff" />
+          <circle cx="6" cy="2" r=".45" fill="#fff" /><circle cx="3" cy="4" r=".45" fill="#fff" />
+          <circle cx="5" cy="4" r=".45" fill="#fff" /><circle cx="7" cy="4" r=".45" fill="#fff" />
+        </svg>
+      );
+    case "CA":
+      return (
+        <svg {...svgProps}>
+          <rect width="20" height="14" fill="#fff" />
+          <rect width="4.5" height="14" fill="#d52b1e" /><rect x="15.5" width="4.5" height="14" fill="#d52b1e" />
+          <path d="m10 3 .8 2.2 2-.8-.9 2 1.8 1.1-2.2.3.2 2.3-1.7-1.5-1.7 1.5.2-2.3-2.2-.3 1.8-1.1-.9-2 2 .8z" fill="#d52b1e" />
+        </svg>
+      );
+    case "AU":
+      return (
+        <svg {...svgProps}>
+          <rect width="20" height="14" fill="#012169" />
+          <path d="M0 0 10 7M10 0 0 7" stroke="#fff" strokeWidth="2" />
+          <path d="M0 0 10 7M10 0 0 7" stroke="#c8102e" strokeWidth=".8" />
+          <path d="M5 0v7M0 3.5h10" stroke="#fff" strokeWidth="2" />
+          <path d="M5 0v7M0 3.5h10" stroke="#c8102e" strokeWidth="1" />
+          <circle cx="15" cy="9" r="1.2" fill="#fff" /><circle cx="12.5" cy="11.3" r=".6" fill="#fff" />
+          <circle cx="17.5" cy="11.2" r=".6" fill="#fff" />
+        </svg>
+      );
+    case "DE":
+      return <svg {...svgProps}><rect width="20" height="14" fill="#ffce00" /><rect width="20" height="9.3" fill="#dd0000" /><rect width="20" height="4.7" fill="#000" /></svg>;
+    case "FR":
+      return <svg {...svgProps}><rect width="20" height="14" fill="#ed2939" /><rect width="13.3" height="14" fill="#fff" /><rect width="6.7" height="14" fill="#0055a4" /></svg>;
+    case "ES":
+      return <svg {...svgProps}><rect width="20" height="14" fill="#ffc400" /><rect width="20" height="3.2" fill="#c60b1e" /><rect y="10.8" width="20" height="3.2" fill="#c60b1e" /></svg>;
+    case "IT":
+      return <svg {...svgProps}><rect width="20" height="14" fill="#ce2b37" /><rect width="13.3" height="14" fill="#fff" /><rect width="6.7" height="14" fill="#009246" /></svg>;
+    case "IN":
+      return <svg {...svgProps}><rect width="20" height="14" fill="#128807" /><rect width="20" height="9.3" fill="#fff" /><rect width="20" height="4.7" fill="#ff9933" /><circle cx="10" cy="7" r="1.5" fill="none" stroke="#000080" strokeWidth=".45" /></svg>;
+    case "NL":
+      return <svg {...svgProps}><rect width="20" height="14" fill="#21468b" /><rect width="20" height="9.3" fill="#fff" /><rect width="20" height="4.7" fill="#ae1c28" /></svg>;
+    case "IE":
+      return <svg {...svgProps}><rect width="20" height="14" fill="#ff883e" /><rect width="13.3" height="14" fill="#fff" /><rect width="6.7" height="14" fill="#169b62" /></svg>;
+    case "ZA":
+      return (
+        <svg {...svgProps}>
+          <rect width="20" height="14" fill="#007a4d" />
+          <path d="M0 0v14l8-7z" fill="#ffb81c" /><path d="M0 1.7v10.6L7.5 7z" fill="#000" />
+          <path d="M0 0v2.2L7.5 7 0 11.8V14l10-7z" fill="#de3831" />
+          <path d="M0 0h20v4.2L11.8 7 20 9.8V14H0v-2.2L8.2 7 0 2.2z" fill="#fff" />
+          <path d="M0 0h20v3L10 7 20 11v3H0v-3L10 7 0 3z" fill="#002395" />
+          <path d="M0 0h20v2.2L10 7 20 11.8V14h-3.7L10 9 3.7 14H0v-2.2L8.2 7 0 2.2z" fill="#de3831" />
+          <path d="M0 0v2.2L8.2 7 0 11.8V14h3.7L10 9l6.3 5H20v-2.2L11.8 7 20 2.2V0h-3.7L10 5 3.7 0z" fill="#007a4d" />
+        </svg>
+      );
+    default:
+      return <svg {...svgProps}><rect width="20" height="14" rx="1" fill="#d1d5db" /></svg>;
+  }
 }
 
 function SimCardSelector({
@@ -338,7 +419,7 @@ function SimCardSelector({
   return (
     <div
       ref={rootRef}
-      className="absolute left-1/2 top-1/2 z-20 flex translate-x-[4.75rem] -translate-y-1/2 items-center gap-0"
+      className="absolute left-full top-1/2 z-20 ml-1 flex -translate-y-1/2 items-center gap-0"
       onClick={event => event.stopPropagation()}
     >
       <button
@@ -346,10 +427,9 @@ function SimCardSelector({
         title={`SIM country: ${country.name}`}
         aria-label={`Choose SIM country, currently ${country.name}`}
         onClick={() => setOpenMenu(openMenu === "country" ? null : "country")}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border bg-background/90 text-foreground hover:bg-accent"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-transparent text-foreground hover:bg-accent/50"
       >
-        {/* Keep the compact control flag-only; country codes belong only in storage. */}
-        <span aria-hidden="true" className="text-base leading-none">{country.flag}</span>
+        <SimFlag code={country.code} />
       </button>
 
       {openMenu === "country" && (
@@ -361,7 +441,7 @@ function SimCardSelector({
               onClick={() => chooseCountry(option)}
               className="flex h-6 w-full items-center gap-2 rounded px-2 text-left text-[10px] text-popover-foreground hover:bg-accent"
             >
-              <span className="text-sm leading-none" aria-hidden="true">{option.flag}</span>
+              <SimFlag code={option.code} />
               <span className="flex-1 truncate">{option.name}</span>
               {option.code === country.code && <Check className="h-3 w-3 text-primary" />}
             </button>
@@ -375,7 +455,7 @@ function SimCardSelector({
           title={selectedProvider ? `SIM provider: ${selectedProvider}` : "Choose SIM provider"}
           aria-label={selectedProvider ? `SIM provider ${selectedProvider}` : "Choose SIM provider"}
           onClick={() => setOpenMenu(openMenu === "provider" ? null : "provider")}
-          className="flex h-7 max-w-[5.75rem] items-center gap-0.5 rounded border border-border bg-background/90 px-1.5 text-[10px] font-medium text-foreground hover:bg-accent"
+          className="flex h-7 max-w-[5.75rem] items-center gap-0.5 rounded bg-transparent px-1 text-[10px] font-medium text-foreground hover:bg-accent/50"
         >
           <span className="truncate">{selectedProvider ?? "SIM provider"}</span>
           <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -1149,21 +1229,23 @@ function DeviceCard({
       >
         {/* Phone shell — wallpaper and text rendered natively inside the SVG screen */}
         <div className="relative flex min-h-0 w-full max-w-[150px] flex-1 items-center justify-center">
-          <PhoneShell
-            className="h-full w-auto max-w-full group-hover:scale-[1.03] transition-transform duration-200"
-            online={online}
-            active={active}
-            wallpaperUrl={custom.wallpaper
-              ? (custom.wallpaper.startsWith('data:image/') ? custom.wallpaper : `/wallpapers/${custom.wallpaper}`)
-              : null}
-            texts={custom.texts}
-            uid={String(device.slotIndex)}
-            mirrorUrl={mirrorUrl}
-          />
-          <SimCardSelector
-            custom={custom}
-            onChange={onCustomize}
-          />
+          <div className="relative h-full max-w-full shrink-0 aspect-[1/2]">
+            <PhoneShell
+              className="absolute inset-0 h-full w-full group-hover:scale-[1.03] transition-transform duration-200"
+              online={online}
+              active={active}
+              wallpaperUrl={custom.wallpaper
+                ? (custom.wallpaper.startsWith('data:image/') ? custom.wallpaper : `/wallpapers/${custom.wallpaper}`)
+                : null}
+              texts={custom.texts}
+              uid={String(device.slotIndex)}
+              mirrorUrl={mirrorUrl}
+            />
+            <SimCardSelector
+              custom={custom}
+              onChange={onCustomize}
+            />
+          </div>
         </div>
 
         <div className="h-5 shrink-0 flex items-center justify-center">
