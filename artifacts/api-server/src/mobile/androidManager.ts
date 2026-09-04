@@ -4327,6 +4327,7 @@ function _findUniqueLiveActionNode(
   resourceIdSuffixes: string[],
   contentDescriptions: string[],
   onLog?: (message: string) => void,
+  options?: { allowDescriptionFallback?: boolean },
 ): { x: number; y: number } | null {
   const nodes = _liveActionNodes(xml);
   // A label/resource match is not enough: Instagram also exposes count
@@ -4375,6 +4376,14 @@ function _findUniqueLiveActionNode(
   );
   const resourceResolved = resolve(byResource, `resource-id [${resourceIdSuffixes.join(", ")}]`);
   if (byResource.length > 0) return resourceResolved;
+
+  if (options?.allowDescriptionFallback === false) {
+    onLog?.(
+      `[live-action] rejected: no verified resource-id match for [${resourceIdSuffixes.join(", ")}] ` +
+      `(content-desc fallback disabled)`,
+    );
+    return null;
+  }
 
   const byDescription = compact.filter(node =>
     contentDescriptions.some(description => node.contentDesc.trim().toLowerCase() === description.toLowerCase()),
@@ -4531,6 +4540,7 @@ export async function findReelActionIcons(
     [":id/repost_button", ":id/reposts_ufi_icon", ":id/repost_icon"],
     ["Repost"],
     onLog,
+    { allowDescriptionFallback: false },
   );
   const liveShareDm = _findUniqueLiveActionNode(xml, [":id/direct_share_button"], ["Share", "Send", "Direct", "Message"], onLog);
   // Resolve Save from the same live accessibility action node used for Like.

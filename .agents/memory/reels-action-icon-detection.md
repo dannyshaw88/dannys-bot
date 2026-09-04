@@ -37,6 +37,18 @@ while the live UI dump exposes the Save action node and state label directly.
 resolve it from the current dump and fail closed when the node is absent or
 ambiguous.
 
+For Reels Share-to-Feed, require a verified repost-specific resource ID. Do not
+fall back to a generic `content-desc="Repost"` match: on a real device that
+fallback resolved a tap that opened the comment/reply sheet instead of the
+intended share-to-feed action.
+
+**Why:** The observed dump exposed a Repost content description without a
+verified repost resource ID, and the resulting tap produced the comment sheet.
+
+**How to apply:** If no known repost resource ID is present, leave
+`shareFeed` null and skip the action safely; never guess from vertical position
+or the label alone.
+
 Accessibility action matches must also be validated as clickable, icon-sized
 nodes; count labels and row-sized containers are not safe tap targets.
 
