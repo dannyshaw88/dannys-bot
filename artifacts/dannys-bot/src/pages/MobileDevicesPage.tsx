@@ -273,7 +273,7 @@ interface SimCountry {
 }
 
 const SIM_COUNTRIES: SimCountry[] = [
-  { code: "GB", dialCode: "+44", name: "United Kingdom", providers: ["EE", "O2", "Three", "Vodafone", "giffgaff", "Tesco Mobile", "iD Mobile", "VOXI"] },
+  { code: "GB", dialCode: "+44", name: "United Kingdom", providers: ["EE", "O2", "Three", "Vodafone", "giffgaff", "Tesco Mobile", "iD Mobile", "VOXI", "Smarty"] },
   { code: "US", dialCode: "+1", name: "United States", providers: ["AT&T", "T-Mobile", "Verizon", "UScellular", "Visible", "Mint Mobile", "Cricket"] },
   { code: "CA", dialCode: "+1", name: "Canada", providers: ["Bell", "Rogers", "TELUS", "Freedom Mobile", "Fido", "Koodo", "Virgin Plus"] },
   { code: "AU", dialCode: "+61", name: "Australia", providers: ["Telstra", "Optus", "Vodafone", "amaysim", "Boost Mobile", "Belong"] },
