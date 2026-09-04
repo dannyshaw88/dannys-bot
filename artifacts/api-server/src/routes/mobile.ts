@@ -889,28 +889,6 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
   try {
     const adb = (await android.detectToolsetAsync()).adb.path;
     if (!adb) return;
-    const dir = path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial, getDeviceLabel(serial)));
-    const legacySerialDir = path.join(
-      SCREENSHOTS_DIR,
-      serial.replace(/[^a-zA-Z0-9_\-]/g, "_"),
-    );
-    // Older builds used the serial for this folder. Merge it into the public
-    // model folder once the device metadata is available so one phone cannot
-    // leave two separate screenshot histories behind.
-    if (legacySerialDir !== dir && fs.existsSync(legacySerialDir)) {
-      await fsPromises.mkdir(dir, { recursive: true });
-      for (const file of await fsPromises.readdir(legacySerialDir)) {
-        const from = path.join(legacySerialDir, file);
-        const to = path.join(dir, file);
-        if (!fs.existsSync(to)) await fsPromises.rename(from, to).catch(() => {});
-        else await fsPromises.unlink(from).catch(() => {});
-      }
-      await fsPromises.rm(legacySerialDir, { recursive: true, force: true }).catch(() => {});
-    }
-    await fsPromises.mkdir(dir, { recursive: true });
-    const ts = Date.now();
-    const safeName = label.replace(/[^a-zA-Z0-9\s_\-]/g, "").replace(/\s+/g, "_").slice(0, 60);
-    const filename = `${ts}_${safeName}.png`;
 
     // ── 1. Capture the phone screen via ADB ──────────────────────────────────
     const phonePngRaw = await new Promise<Buffer | null>((resolve) => {
@@ -925,6 +903,38 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
     });
 
     if (!phonePngRaw) return;
+
+    // Do not create or select an evidence folder until the device has actually
+    // returned a frame. During an Android reboot, ADB can still be discoverable
+    // while screencap is unavailable; creating the folder before this check
+    // produced a transient serial-named folder during that restart window.
+    //
+    // Resolve from the stable Phone Farm registry, not the in-memory device
+    // label cache. The cache can temporarily fall back to the serial while the
+    // device is reconnecting, even though the registry still knows the
+    // device's established model/display name.
+    const dir = path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial));
+    const legacySerialDir = path.join(
+      SCREENSHOTS_DIR,
+      serial.replace(/[^a-zA-Z0-9_\-]/g, "_"),
+    );
+    // Older builds used the serial for this folder. Merge it into the public
+    // model folder once a valid frame proves the device is back online so one
+    // phone cannot leave two separate screenshot histories behind.
+    if (legacySerialDir !== dir && fs.existsSync(legacySerialDir)) {
+      await fsPromises.mkdir(dir, { recursive: true });
+      for (const file of await fsPromises.readdir(legacySerialDir)) {
+        const from = path.join(legacySerialDir, file);
+        const to = path.join(dir, file);
+        if (!fs.existsSync(to)) await fsPromises.rename(from, to).catch(() => {});
+        else await fsPromises.unlink(from).catch(() => {});
+      }
+      await fsPromises.rm(legacySerialDir, { recursive: true, force: true }).catch(() => {});
+    }
+    await fsPromises.mkdir(dir, { recursive: true });
+    const ts = Date.now();
+    const safeName = label.replace(/[^a-zA-Z0-9\s_\-]/g, "").replace(/\s+/g, "_").slice(0, 60);
+    const filename = `${ts}_${safeName}.png`;
 
     // ── 2. Resize phone screen to a fixed height ──────────────────────────────
     const TARGET_H = 760;
