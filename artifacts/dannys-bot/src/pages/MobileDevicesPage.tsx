@@ -419,7 +419,7 @@ function SimCardSelector({
   return (
     <div
       ref={rootRef}
-      className="absolute left-full top-1/2 z-20 ml-[50px] flex -translate-y-1/2 items-center gap-0"
+      className="absolute left-full top-1/2 z-20 ml-[50px] flex -translate-x-1/2 -translate-y-1/2 items-center gap-0"
       onClick={event => event.stopPropagation()}
     >
       <button
