@@ -10880,10 +10880,12 @@ export async function findDmConversationItem(serial: string): Promise<{ x: numbe
 }
 
 /**
- * Find a random tappable item from the Instagram notifications page.
- * Returns the centre of a clickable notification-row avatar View, or null if
- * none is found.  Tapping the avatar navigates to the notifying user's
- * profile — a completely passive action with no side effects.
+ * Find the text area of a random notification on Instagram's notifications
+ * page. The avatar is a separate left-column control: tapping it opens the
+ * notifying user's profile/story and can take the flow away from the
+ * notification action. The notification body text is the safe target because
+ * its parent row handles the notification navigation while avoiding the
+ * profile-picture affordance.
  */
 export async function findRandomNotificationItem(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
@@ -10893,26 +10895,20 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
   const { w, h } = getScreenSize(serial);
   const topSkip = Math.round(h * 0.10); // skip the fixed header row ("Notifications")
   const botSkip = Math.round(h * 0.92); // skip the bottom nav bar
-  // On the Instagram notifications page each row has a small circular avatar
-  // on the LEFT side of the screen — that is the tappable element.  The
-  // notification text to the right is a non-clickable TextView.  Scanning
-  // the screen layout (1080 px wide) shows the avatar Views at x≈132 px
-  // (~12 % of screen width) with bounds ≈ [55,y1][209,y2] (154 px wide).
-  //
-  // The filter: keep only clickable nodes whose centre falls within the left
-  // 25 % of the screen (the avatar column).  rightMax = 25 % is generous
-  // enough to catch the avatar regardless of screen size or OEM skin.
-  //
-  // Previous v2 "fix" mistakenly required width ≥ 50 % of screen, which
-  // rejected all 154 px avatar Views and left candidates empty — so the
-  // click-notification feature still never ran.  Reverted to cx < rightMax.
-  //
-  // The important real fix (kept from v2): use the <node …/> regex rather
-  // than a fixed-attribute-order regex.  UIAutomator does NOT guarantee
-  // attribute order, so a pattern like clickable="true"…class="…"…bounds="…"
-  // silently matched nothing on this device.
-  const rightMax = Math.round(w * 0.25);
-  const candidates: { x: number; y: number }[] = [];
+  const textMinX = Math.round(w * 0.25); // leave the avatar column alone
+  const textMaxX = Math.round(w * 0.82); // leave Follow / X controls alone
+  const rowMergeGap = Math.round(h * 0.055);
+  const excludedLabels = /^(?:follow|following|requested|remove|delete|notifications?|filter|more|close|dismiss|like|comment|share)$/i;
+  const candidates: Array<{
+    x: number;
+    y: number;
+    x1: number;
+    x2: number;
+    y1: number;
+    y2: number;
+    text: string;
+    score: number;
+  }> = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
@@ -10922,12 +10918,55 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
     const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
     const cx = Math.round((x1 + x2) / 2);
     const cy = Math.round((y1 + y2) / 2);
-    if (cx > rightMax) continue;  // only left-column avatar elements
     if (cy < topSkip || cy > botSkip) continue;
-    candidates.push({ x: cx, y: cy });
+    if (x1 < textMinX || cx > textMaxX || x2 <= x1 || y2 <= y1) continue;
+
+    const text = (
+      attrs.match(/\btext="([^"]*)"/i)?.[1] ??
+      attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ??
+      ""
+    ).trim();
+    if (!text || excludedLabels.test(text)) continue;
+    if (/^(?:@?[\w.]{2,40})$/.test(text) && !/\s/.test(text)) continue;
+    if (/profile\s*picture|avatar|story\s+of/i.test(text)) continue;
+
+    const resourceId = attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+    if (/(?:follow|remove|dismiss|close|overflow|more|like|comment|share)/i.test(resourceId)) continue;
+
+    // Prefer a notification sentence/action over a standalone username or
+    // timestamp. Longer text is normally the body node on this screen.
+    let score = Math.min(text.length, 140);
+    if (/\b(?:liked|likes|commented|mentioned|started following|requested|shared|posted|replied|tagged|your|story|reel|photo|video)\b/i.test(text)) {
+      score += 80;
+    }
+    if (/\b(?:\d+\s*(?:m|h|d|w)|just now|yesterday)\b/i.test(text)) {
+      score -= 45;
+    }
+    candidates.push({ x: cx, y: cy, x1, x2, y1, y2, text, score });
   }
   if (!candidates.length) return null;
-  return candidates[Math.floor(Math.random() * candidates.length)];
+
+  // UIAutomator often exposes the same notification as several text nodes.
+  // Collapse nearby nodes into rows, then choose the strongest body-text node
+  // in each row so a username/timestamp cannot win just because it is closer
+  // to the avatar.
+  candidates.sort((a, b) => a.y - b.y);
+  const rows: typeof candidates[] = [];
+  for (const candidate of candidates) {
+    const row = rows[rows.length - 1];
+    if (row && candidate.y - row[row.length - 1].y <= rowMergeGap) {
+      row.push(candidate);
+    } else {
+      rows.push([candidate]);
+    }
+  }
+  const rowCandidates = rows
+    .map(row => row.sort((a, b) => b.score - a.score || (b.x2 - b.x1) - (a.x2 - a.x1))[0])
+    .filter(Boolean);
+  if (!rowCandidates.length) return null;
+
+  const selected = rowCandidates[Math.floor(Math.random() * rowCandidates.length)];
+  return { x: selected.x, y: selected.y };
 }
 
 /**

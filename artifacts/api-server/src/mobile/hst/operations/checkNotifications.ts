@@ -65,6 +65,7 @@ export async function runCheckNotifications(
   if (clickChance > 0 && Math.random() < clickChance) {
     const item = await android.findRandomNotificationItem(serial).catch(() => null);
     if (item) {
+      onLog?.(`Random Actions: tapping notification text at (${item.x},${item.y})`);
       await android.tap(serial, item.x, item.y);
       onLog?.("Random Actions: ✓ tapped notification item");
       await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
