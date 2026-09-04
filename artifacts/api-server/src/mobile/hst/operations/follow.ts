@@ -782,12 +782,11 @@ export async function runFollowUsersStep(
     return hasProfileHeader && hasFollowControl;
   };
 
-  // Follow leaves Instagram on the search/results surface after each
-  // profile.  Always restore the normal Instagram UI before another tool
-  // starts: clear the current query through Instagram's live clear control,
-  // then leave the search surface with exactly one Back.  This is also
-  // required when the run stops early (including spread mode), otherwise
-  // the next tool cannot reliably find the Home tab.
+  // A multi-target run must not repeatedly submit searches from the stale
+  // results surface. After returning from a profile, two calibrated Back taps
+  // return to Explore with a clean search field; the next target then focuses
+  // that field directly. Single-target runs retain the existing one-Back
+  // cleanup behavior.
   const finishFollowNavigation = async () => {
     try {
       await android.clearInstagramSearchBar(serial, (msg: string) => onLog?.(`Follow: cleanup — ${msg}`));
@@ -803,6 +802,27 @@ export async function runFollowUsersStep(
     }
   };
 
+  const shouldResetToExploreForNextTarget = () =>
+    targetCount > 1 || Boolean(params.keepSearchOpenAfterStep);
+
+  const prepareNextTargetSearch = async (reason: string): Promise<boolean> => {
+    if (!shouldResetToExploreForNextTarget()) return false;
+    await tapCalibratedProfileBack(`${reason} — returned to search results`);
+    await tapCalibratedProfileBack(`${reason} — returned to Explore`);
+    const searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
+    lastKnownSearchBar = searchBar;
+    await sleepOrAbort(serial, 500);
+    const focused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+    if (!focused) {
+      onLog?.(`Follow: ${reason} — clean Explore search field was not confirmed focused`);
+      searchReadyForReuse = false;
+      return false;
+    }
+    searchReadyForReuse = true;
+    onLog?.(`Follow: ${reason} — two calibrated Backs complete; clean Explore search field focused`);
+    return true;
+  };
+
   // A rejected profile must stay inside the Explore/search flow. Returning
   // to the normal UI here makes the next candidate trigger the expensive
   // Home → Search navigation again and can cause the cleanup Back sequence
@@ -813,6 +833,10 @@ export async function runFollowUsersStep(
     // Invalidate it before touching navigation so a failed Back/search
     // recovery can never leak a stale "reuse" claim into the next user.
     searchReadyForReuse = false;
+    if (shouldResetToExploreForNextTarget()) {
+      await prepareNextTargetSearch("skipped-user cleanup");
+      return searchReadyForReuse;
+    }
     await tapCalibratedProfileBack("skipped-user cleanup — returned to search results");
     // The field was just used to launch this profile, so it is still the
     // focused field after returning to results. Avoid another UIAutomator
@@ -1153,10 +1177,12 @@ export async function runFollowUsersStep(
         await android.tapCalibratedNavigationControl(serial, "search", onLog);
         await sleepOrAbort(serial, 2500);
       }
-      const searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
+      const searchBar = searchReadyForReuse
+        ? (lastKnownSearchBar ?? await android.tapCalibratedNavigationControl(serial, "userSearch", onLog))
+        : await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
       lastKnownSearchBar = searchBar;
-      onLog?.("[TRACE] follow: tap-search-field");
-      await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));
+      onLog?.(searchReadyForReuse ? "[TRACE] follow: reuse-focused-search-field" : "[TRACE] follow: tap-search-field");
+      if (!searchReadyForReuse) await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));
       const searchFocused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
       if (!searchFocused) {
         onLog?.("Follow: search bar tap was not confirmed focused — stopping without pressing Back");
@@ -1540,11 +1566,15 @@ export async function runFollowUsersStep(
         });
       }
 
-      // Return to the search/explore results after each user. Use exactly one
-      // calibrated mirror Back tap: profile → search results. Do not issue a
-      // second Back, which would leave the search context and land on Home.
-      await tapCalibratedProfileBack("returned to search results");
-      await sleepOrAbort(serial, 800);
+      // For another target, leave the profile with two calibrated Back taps:
+      // profile → search results → Explore. Then focus the clean Explore search
+      // field so the next username is typed into a fresh search context.
+      if (followed < targetCount) {
+        await prepareNextTargetSearch("next target");
+      } else {
+        await tapCalibratedProfileBack("returned to search results");
+        await sleepOrAbort(serial, 800);
+      }
       // Dismiss any popup that appeared after pressing back (e.g. IG Plus
       // upsell, notification prompts) before the next operation.
       const interUserPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
