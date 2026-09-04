@@ -1037,13 +1037,14 @@ function DeviceCard({
         </div>
       </button>
 
-      {/* Power button — appears beside the wallpaper button on hover */}
+      {/* Persistent device controls — kept in the top-right so they are
+          discoverable without hovering over the card. */}
       <button
         onClick={handleRestart}
         disabled={rebooting}
         title="Restart device"
         aria-label="Restart device"
-        className="absolute top-2 right-26 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-green-500/10 hover:border-green-500 hover:text-green-500 text-muted-foreground disabled:cursor-not-allowed"
+        className="absolute top-2 right-26 z-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-green-500/10 hover:border-green-500 hover:text-green-500 text-muted-foreground disabled:cursor-not-allowed"
       >
         <RotateCcw className={`w-3 h-3 ${rebooting ? "animate-spin" : ""}`} />
       </button>
@@ -1051,25 +1052,25 @@ function DeviceCard({
         onClick={e => { e.stopPropagation(); onPower(); }}
         title={powered ? "Power off phone" : "Power on phone"}
         aria-label={powered ? "Power off phone" : "Power on phone"}
-        className={`absolute top-2 right-18 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 hover:border-primary/40 ${powered ? "text-emerald-500" : "text-muted-foreground hover:text-primary"}`}
+        className={`absolute top-2 right-18 z-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/40 ${powered ? "text-emerald-500" : "text-muted-foreground hover:text-primary"}`}
       >
         <Power className="w-3 h-3" />
       </button>
 
-      {/* Palette button — appears on hover */}
+      {/* Palette button */}
       <button
         onClick={e => { e.stopPropagation(); setPanelOpen(true); }}
         title="Customise wallpaper & text"
-        className="absolute top-2 right-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground"
+        className="absolute top-2 right-10 z-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground"
       >
         <Palette className="w-3 h-3" />
       </button>
 
-      {/* Remove button — appears on hover */}
+      {/* Remove button */}
       <button
         onClick={e => { e.stopPropagation(); onRemove(); }}
         title="Remove device from farm"
-        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive text-muted-foreground"
+        className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive text-muted-foreground"
       >
         <Trash2 className="w-3 h-3" />
       </button>
