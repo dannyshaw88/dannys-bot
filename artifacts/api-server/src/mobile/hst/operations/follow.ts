@@ -748,7 +748,7 @@ export async function runFollowUsersStep(
     getScreenSize, deviceProfileSwipe, dismissSaveCollectionPrompt,
     findButtonByLabel, findFeedActionIcons, findReelActionIcons,
     getCompiledMalesOnlyNames, findLiveMalesOnlyMatch, rollRange,
-    rollInjectBrowsingDecision } = context;
+  } = context;
   const _injectBrowsingLastDmRecipient = context._injectBrowsingLastDmRecipient as Map<string, { x: number; y: number }>;
   const { usersMin, usersMax, sources, onLog, onLike, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
   let searchReadyForReuse = !!params.searchAlreadyReady;
