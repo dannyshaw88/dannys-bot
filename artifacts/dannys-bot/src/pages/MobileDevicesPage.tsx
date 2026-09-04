@@ -12,7 +12,7 @@
  * reassigns slots because the serial travels with the hardware, not the wire.
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from "react";
 import { useLocation } from "wouter";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
@@ -376,9 +376,11 @@ function SimFlag({ code }: { code: string }) {
 function SimCardSelector({
   custom,
   onChange,
+  centerX,
 }: {
   custom: SlotCustomization;
   onChange: (custom: SlotCustomization) => void;
+  centerX: number | null;
 }) {
   const [openMenu, setOpenMenu] = useState<"country" | "provider" | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -419,7 +421,8 @@ function SimCardSelector({
   return (
     <div
       ref={rootRef}
-      className="absolute left-full top-1/2 z-20 ml-[50px] flex -translate-x-1/2 -translate-y-1/2 items-center gap-0"
+      style={{ left: centerX === null ? "82%" : `${centerX}px` }}
+      className="absolute top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-0"
       onClick={event => event.stopPropagation()}
     >
       <button
@@ -1131,6 +1134,28 @@ function DeviceCard({
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [rebooting, setRebooting] = useState(false);
+  const phoneAreaRef = useRef<HTMLDivElement>(null);
+  const phoneFrameRef = useRef<HTMLDivElement>(null);
+  const [simCenterX, setSimCenterX] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const phoneArea = phoneAreaRef.current;
+    const phoneFrame = phoneFrameRef.current;
+    if (!phoneArea || !phoneFrame) return;
+
+    const updateSimPosition = () => {
+      const areaRect = phoneArea.getBoundingClientRect();
+      const phoneRect = phoneFrame.getBoundingClientRect();
+      const rightSpaceMidpoint = (phoneRect.right + areaRect.right) / 2 - areaRect.left;
+      setSimCenterX(Math.max(0, Math.min(areaRect.width, rightSpaceMidpoint)));
+    };
+
+    updateSimPosition();
+    const observer = new ResizeObserver(updateSimPosition);
+    observer.observe(phoneArea);
+    observer.observe(phoneFrame);
+    return () => observer.disconnect();
+  }, []);
 
   const handleRestart = useCallback(async (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -1228,8 +1253,8 @@ function DeviceCard({
         className={`flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40${active ? ' device-card-active' : ''}`}
       >
         {/* Phone shell — wallpaper and text rendered natively inside the SVG screen */}
-        <div className="relative flex min-h-0 w-full max-w-[150px] flex-1 items-center justify-center">
-          <div className="relative h-full max-w-full shrink-0 aspect-[1/2]">
+        <div ref={phoneAreaRef} className="relative flex min-h-0 w-full flex-1 items-center justify-center">
+          <div ref={phoneFrameRef} className="relative h-full max-w-full shrink-0 aspect-[1/2]">
             <PhoneShell
               className="absolute inset-0 h-full w-full group-hover:scale-[1.03] transition-transform duration-200"
               online={online}
@@ -1241,11 +1266,12 @@ function DeviceCard({
               uid={String(device.slotIndex)}
               mirrorUrl={mirrorUrl}
             />
-            <SimCardSelector
-              custom={custom}
-              onChange={onCustomize}
-            />
           </div>
+          <SimCardSelector
+            custom={custom}
+            onChange={onCustomize}
+            centerX={simCenterX}
+          />
         </div>
 
         <div className="h-5 shrink-0 flex items-center justify-center">
