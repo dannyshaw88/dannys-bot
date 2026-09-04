@@ -338,7 +338,7 @@ function SimCardSelector({
   return (
     <div
       ref={rootRef}
-      className="absolute left-full top-1/2 z-20 ml-0.5 flex -translate-y-1/2 items-center gap-0"
+      className="absolute left-1/2 top-1/2 z-20 flex translate-x-[4.75rem] -translate-y-1/2 items-center gap-0"
       onClick={event => event.stopPropagation()}
     >
       <button
@@ -348,6 +348,7 @@ function SimCardSelector({
         onClick={() => setOpenMenu(openMenu === "country" ? null : "country")}
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border bg-background/90 text-foreground hover:bg-accent"
       >
+        {/* Keep the compact control flag-only; country codes belong only in storage. */}
         <span aria-hidden="true" className="text-base leading-none">{country.flag}</span>
       </button>
 
