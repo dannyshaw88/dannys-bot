@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check, Users } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
@@ -480,6 +480,27 @@ function SimCardSelector({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function AccountSlotCounter({
+  active,
+  total,
+  centerX,
+}: {
+  active: number;
+  total: number;
+  centerX: number | null;
+}) {
+  return (
+    <div
+      style={{ left: centerX === null ? "82%" : `${centerX}px` }}
+      className="absolute top-[calc(50%+1.15rem)] z-20 flex -translate-x-1/2 items-center gap-1 text-[11px] font-medium text-muted-foreground"
+      aria-label={`${active} of ${total} account slots have Human Session Tool enabled`}
+    >
+      <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span>{active}/{total}</span>
     </div>
   );
 }
@@ -1112,6 +1133,8 @@ function DeviceCard({
   active,
   isStreaming,
   currentTool,
+  accountSlotCount,
+  activeHstSlotCount,
   onClick,
   onPower,
   powered,
@@ -1125,6 +1148,8 @@ function DeviceCard({
   active:      boolean;
   isStreaming: boolean;
   currentTool: string | null;
+  accountSlotCount: number;
+  activeHstSlotCount: number;
   onClick:     () => void;
   onPower:     () => void;
   powered:     boolean;
@@ -1272,6 +1297,11 @@ function DeviceCard({
             onChange={onCustomize}
             centerX={simCenterX}
           />
+          <AccountSlotCounter
+            active={Math.min(activeHstSlotCount, accountSlotCount)}
+            total={accountSlotCount}
+            centerX={simCenterX}
+          />
         </div>
 
         <div className="h-5 shrink-0 flex items-center justify-center">
@@ -1406,6 +1436,8 @@ export function MobileDevicesPage() {
   const [streamingSerials, setStreamingSerials] = useState<Set<string>>(new Set());
   const [manualPowerSerials, setManualPowerSerials] = useState<Set<string>>(new Set());
   const [currentTools, setCurrentTools] = useState<Map<string, string>>(new Map());
+  const [accountSlotCounts, setAccountSlotCounts] = useState<Record<string, number>>({});
+  const [activeHstSlotCounts, setActiveHstSlotCounts] = useState<Record<string, number>>({});
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -1425,6 +1457,47 @@ export function MobileDevicesPage() {
     }
     finally { setLoadingDb(false); }
   }, []);
+
+  const refreshSlotCounts = useCallback(async () => {
+    const accountResults = await Promise.all(devices.map(async device => {
+      try {
+        const response = await fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/account`);
+        if (!response.ok) return null;
+        const data = await response.json();
+        return [device.serial, Array.isArray(data?.slots) ? data.slots.length : 0] as const;
+      } catch {
+        return null;
+      }
+    }));
+
+    setAccountSlotCounts(previous => {
+      const next = { ...previous };
+      for (const result of accountResults) {
+        if (result) next[result[0]] = result[1];
+      }
+      return next;
+    });
+
+    try {
+      const response = await fetch("/api/mobile/enabled-hst-slots");
+      if (!response.ok) return;
+      const data = await response.json();
+      const next: Record<string, number> = {};
+      for (const slot of Array.isArray(data?.slots) ? data.slots : []) {
+        if (typeof slot?.serial !== "string") continue;
+        next[slot.serial] = (next[slot.serial] ?? 0) + 1;
+      }
+      setActiveHstSlotCounts(next);
+    } catch {
+      // Keep the last known active counts while the API is temporarily unavailable.
+    }
+  }, [devices]);
+
+  useEffect(() => {
+    void refreshSlotCounts();
+    const id = setInterval(() => void refreshSlotCounts(), 3_000);
+    return () => clearInterval(id);
+  }, [refreshSlotCounts]);
 
   const refreshUsb = useCallback(async () => {
     try {
@@ -1611,6 +1684,8 @@ export function MobileDevicesPage() {
                       active={activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial)}
                       isStreaming={streamingSerials.has(device.serial) || (activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial))}
                       currentTool={currentTools.get(device.serial) ?? null}
+                      accountSlotCount={accountSlotCounts[device.serial] ?? 0}
+                      activeHstSlotCount={activeHstSlotCounts[device.serial] ?? 0}
                        onClick={() => void openDeviceMirror(device)}
                        powered={manualPowerSerials.has(device.serial) || streamingSerials.has(device.serial)}
                        onPower={() => void toggleDevicePower(device.serial)}
