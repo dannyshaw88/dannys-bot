@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
- import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
@@ -611,11 +611,23 @@ async function fetchFarmDevices(): Promise<FarmDevice[]> {
   return d.devices as FarmDevice[];
 }
 
-async function fetchUsbPhones(): Promise<UsbPhone[]> {
+interface UsbDiscoveryResponse {
+  adbFound: boolean;
+  adbPath?: string | null;
+  phones: UsbPhone[];
+  rawOutput?: string | null;
+}
+
+async function fetchUsbPhones(): Promise<UsbDiscoveryResponse> {
   const r = await fetch("/api/mobile/usb-phones");
-  if (!r.ok) return [];
+  if (!r.ok) throw new Error(`USB discovery failed (${r.status})`);
   const d = await r.json();
-  return (d.phones ?? []) as UsbPhone[];
+  return {
+    adbFound: d.adbFound === true,
+    adbPath: typeof d.adbPath === "string" ? d.adbPath : null,
+    phones: (d.phones ?? []) as UsbPhone[],
+    rawOutput: typeof d.rawOutput === "string" ? d.rawOutput : null,
+  };
 }
 
 async function registerDevice(phone: UsbPhone): Promise<FarmDevice> {
@@ -663,15 +675,22 @@ function AddDevicePanel({
   onCancel: () => void;
 }) {
   const [phones,  setPhones]  = useState<UsbPhone[]>([]);
+  const [detectedCount, setDetectedCount] = useState(0);
+  const [adbFound, setAdbFound] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding,  setAdding]  = useState<string | null>(null);
+  const [installingAdb, setInstallingAdb] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const all = await fetchUsbPhones();
-      setPhones(all.filter(p => !registeredSerials.has(p.serial)));
-    } catch { /* ignore */ }
+      const discovery = await fetchUsbPhones();
+      setAdbFound(discovery.adbFound);
+      setDetectedCount(discovery.phones.length);
+      setPhones(discovery.phones.filter(p => !registeredSerials.has(p.serial)));
+    } catch (e: any) {
+      setError(e?.message ?? "USB discovery failed");
+    }
     finally { setLoading(false); }
   }, [registeredSerials]);
 
@@ -691,6 +710,23 @@ function AddDevicePanel({
       setError(e?.message ?? "Registration failed");
     } finally {
       setAdding(null);
+    }
+  };
+
+  const installAdb = async () => {
+    setInstallingAdb(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/mobile/adb-auto-install", { method: "POST" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.ok) {
+        throw new Error(body?.error ?? "ADB setup failed");
+      }
+      await refresh();
+    } catch (e: any) {
+      setError(e?.message ?? "ADB setup failed");
+    } finally {
+      setInstallingAdb(false);
     }
   };
 
@@ -726,16 +762,45 @@ function AddDevicePanel({
       ) : phones.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
           <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
-            <Usb className="w-7 h-7 text-muted-foreground" />
+            {adbFound === false
+              ? <Download className="w-7 h-7 text-orange-400" />
+              : <Usb className="w-7 h-7 text-muted-foreground" />}
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground">No phones detected</p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">
-              Plug in an Android phone with USB Debugging enabled
-            </p>
+            {adbFound === false ? (
+              <>
+                <p className="text-sm font-semibold text-foreground">ADB is not installed</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
+                  Aura Farming cannot see USB phones until Windows ADB is set up.
+                </p>
+                <button
+                  onClick={installAdb}
+                  disabled={installingAdb}
+                  className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+                >
+                  {installingAdb ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  {installingAdb ? "Downloading ADB…" : "Set up ADB automatically"}
+                </button>
+              </>
+            ) : detectedCount > 0 ? (
+              <>
+                <p className="text-sm font-semibold text-foreground">All detected phones are already added</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">
+                  Disconnect an existing device or use the next available slot when another phone appears.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-foreground">No phones detected</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-[220px]">
+                  Unlock the phone, choose File transfer over USB, and accept the USB debugging prompt.
+                </p>
+              </>
+            )}
           </div>
           <button
             onClick={refresh}
+            disabled={installingAdb}
             className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
