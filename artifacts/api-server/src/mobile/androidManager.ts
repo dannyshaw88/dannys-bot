@@ -9257,8 +9257,6 @@ export async function switchToInstagramAccount(
   //    contains the username — zero extra wait in the normal (warm) case.
   let xml = postHeaderTapXml;
   let coords: { x: number; y: number } | null = null;
-  const escapedUsername = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const usernameRowPattern = new RegExp(`(?:^|,\\s*)@?${escapedUsername}(?:,|$)`, "i");
   const switcherScreenHeight = getScreenSize(serial).h;
   const SWITCHER_POLL_MIN_MS = 1500;
   const SWITCHER_POLL_MAX_MS = 5000;
@@ -9269,7 +9267,7 @@ export async function switchToInstagramAccount(
     if (!(p === 0 && xml)) {
       xml = await _uiDump(adbPath, serial).catch(() => "");
     }
-    coords = _findVisibleAccountRow(xml, switcherScreenHeight, clean, `@${clean}`);
+    coords = _findVisibleAccountText(xml, switcherScreenHeight, clean, `@${clean}`);
     if (coords) break; // found — proceed to tap
     if (p < SWITCHER_MAX_POLL - 1) {
       const pollWaitMs = SWITCHER_POLL_MIN_MS + Math.floor(Math.random() * (SWITCHER_POLL_MAX_MS - SWITCHER_POLL_MIN_MS + 1));
@@ -9279,19 +9277,6 @@ export async function switchToInstagramAccount(
   }
 
   if (!coords) {
-    // Primary exact search found nothing. Instagram's switcher often puts
-    // relationship metadata after the username in the tappable row's
-    // content-desc (for example: "user, 5 follows and 2 more"). Match the
-    // username as the first bounded token of a live row instead of requiring
-    // the whole description to equal the username.
-    if (!coords) {
-      coords = _findVisibleAccountRow(
-        xml,
-        switcherScreenHeight,
-        usernameRowPattern,
-      );
-    }
-
     // The switcher is populated, but the requested account may be below the
     // current viewport. Expand the account sheet by at most two forward swipes,
     // searching after each one. Never guess a row coordinate if the username
@@ -9350,11 +9335,7 @@ export async function switchToInstagramAccount(
         ], 4000).catch(() => {});
          await _sleep(400 + Math.floor(Math.random() * 4601));
         xml = await _uiDump(adbPath, serial).catch(() => "");
-        coords = _findVisibleAccountRow(
-          xml,
-          switcherScreenHeight,
-          usernameRowPattern,
-        );
+        coords = _findVisibleAccountText(xml, switcherScreenHeight, clean, `@${clean}`);
       }
     }
 
@@ -9368,8 +9349,8 @@ export async function switchToInstagramAccount(
   }
 
   // 5. Tap the username row to switch accounts.
-  onLog?.(`  ✓ Found @${clean} in switcher — switching…`);
-  _adbTap(adbPath, serial, coords.x, coords.y);
+  onLog?.(`  ✓ Found exact text @${clean} in switcher — tapping text at (${coords.x},${coords.y})…`);
+  await _adbTapAsync(adbPath, serial, coords.x, coords.y);
 
   // 6. Verify the resulting surface. A different account closes the sheet and
   // logs in naturally, so no Back is needed. When the tapped row is the
@@ -9614,6 +9595,38 @@ function _findVisibleAccountRow(
         return { x: Math.floor((x1 + x2) / 2), y: Math.floor((y1 + y2) / 2) };
       }
     }
+  }
+  return null;
+}
+
+/**
+ * Find an account by its exact visible text and return the centre of the
+ * TextView itself. Account switching must not fall back to a row-level
+ * content-desc or a broad relationship label: those bounds can cover the
+ * whole sheet and make a miss-tap look like a valid account selection.
+ */
+function _findVisibleAccountText(
+  xml: string,
+  screenHeight: number,
+  ...candidates: string[]
+): { x: number; y: number } | null {
+  const rootBounds = xml.match(/<hierarchy[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+  const accessibilityBottom = rootBounds ? Number(rootBounds[4]) : screenHeight;
+  const wanted = new Set(candidates.map(value => value.replace(/^@/, "").trim().toLowerCase()));
+  const nodeRe = /<node\b([^>]*)>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const text = attrs.match(/\btext="([^"]*)"/i)?.[1]?.trim() ?? "";
+    if (!text || !wanted.has(text.replace(/^@/, "").toLowerCase())) continue;
+    const bounds = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    if (x2 <= x1 || y2 <= y1 || y2 > accessibilityBottom - 19) continue;
+    return { x: Math.floor((x1 + x2) / 2), y: Math.floor((y1 + y2) / 2) };
   }
   return null;
 }
