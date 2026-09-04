@@ -148,6 +148,21 @@ await android.dismissInstagramInterstitials(serial).catch(() => null);
       return null;
     }
   };
+  const tapMakePostControl = async (
+    label: string,
+    point: { x: number; y: number },
+    source: "calibration",
+  ): Promise<void> => {
+    onLog?.(
+      `Make a Post: dispatching ${label} at requested=(${point.x},${point.y}) ` +
+      `source=${source} tap-mode=manual-exact`,
+    );
+    // Calibration coordinates are already device-space coordinates. Use the
+    // exact/manual tap path so the bot's humanisation jitter cannot move a
+    // small Next button outside its hit target.
+    await android.tap(serial, point.x, point.y, "manual");
+    onLog?.(`Make a Post: ${label} tap dispatched at exact=(${point.x},${point.y})`);
+  };
 
 // ── Story-picker guard ────────────────────────────────────────────────────
 // The story "+" button in the stories tray carries content-desc="Add" and
@@ -197,7 +212,7 @@ if (!expandToggle) {
   return { posted: false };
 }
   onLog?.(`Make a Post: tapping calibrated Crop to Fit control at (${expandToggle.x}, ${expandToggle.y})…`);
-await android.tap(serial, expandToggle.x, expandToggle.y);
+await tapMakePostControl("calibrated Crop to Fit", expandToggle, "calibration");
 await sleepOrAbort(serial, 500);
 
 await sleepOrAbort(serial, 700);
@@ -213,38 +228,46 @@ if (!nextBtn1) {
   return { posted: false };
 }
 
-onLog?.(`Make a Post: found "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
-await android.tap(serial, nextBtn1.x, nextBtn1.y);
+onLog?.(`Make a Post: found calibrated first "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
+await tapMakePostControl("calibrated first Next", nextBtn1, "calibration");
 
 // Instagram keeps the picker tree alive while the image-editor transition
 // runs. A single 1.5 s expand-toggle check races that transition: it can
 // report the old picker even though the tap succeeded, causing us to abort
 // before ever looking for the editor's second Next button.
 //
-// Prefer the editor's live labelled Next node as the success signal. Only
-// fail after a bounded settle window in which the picker signal remains and
-// no editor Next appears. All candidates still come from fresh UI dumps.
+// Resolve the editor's second Next from its own device-specific mirror
+// calibration. It is deliberately separate from the picker header Next above:
+// both controls are calibrated independently because they occupy different
+// positions on the phone.
 let editorNext: { x: number; y: number } | null = null;
-for (let advanceScan = 0; advanceScan < 10; advanceScan++) {
+for (let advanceScan = 0; advanceScan < 10 && !editorNext; advanceScan++) {
   await sleepOrAbort(serial, advanceScan === 0 ? 700 : 500);
   editorNext = resolveCalibratedControl("makePostSecondNext");
   if (editorNext) break;
 }
 if (!editorNext) {
   onLog?.("Make a Post: calibrated second Next is unavailable — aborting this attempt");
+  const evidence = await android.captureDebugEvidence?.(serial, "make-post-second-next-unavailable");
+  if (evidence) onLog?.(`Make a Post: second-Next failure evidence saved at ${evidence}`);
   await android.pressBack(serial);
   await android.removeDeviceFile(serial, devicePath).catch(() => {});
   return { posted: false };
 }
 
-onLog?.(`Make a Post: tapping calibrated second Next at (${editorNext.x}, ${editorNext.y})…`);
-await android.tap(serial, editorNext.x, editorNext.y);
+onLog?.(
+  `Make a Post: tapping distinct second Next at (${editorNext.x}, ${editorNext.y}) ` +
+  `(source=calibration; control=makePostSecondNext)…`,
+);
+await tapMakePostControl("calibrated second Next", editorNext, "calibration");
 await sleepOrAbort(serial, 2000);
 
 // Caption screen — verify we're actually there before typing/sharing.
 const shareBtn = await android.findShareFooterButton(serial).catch(() => null);
 if (!shareBtn) {
   onLog?.("Make a Post: caption/share screen not confirmed (no \"Share\" control found) — aborting this attempt");
+  const evidence = await android.captureDebugEvidence?.(serial, "make-post-after-second-next");
+  if (evidence) onLog?.(`Make a Post: post-second-Next evidence saved at ${evidence}`);
   await android.removeDeviceFile(serial, devicePath).catch(() => {});
   return { posted: false };
 }
