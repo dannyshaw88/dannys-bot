@@ -7,6 +7,13 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 **Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
 
+### 2026-09-04 — Both Next buttons must use their separate device mirror calibrations
+- The supplied device screenshots confirmed that Make a Post has two different Next controls: the first is the picker/header Next and the second is the lower editor Next. They must not share a live-node lookup or coordinate.
+- **Root cause identified in the implementation:** the calibration test uses the exact/manual tap path, while the Make-a-Post operation was calling the generic bot tap path after resolving calibration. That path adds a small jitter, which is inappropriate for a small calibrated control.
+- **Fix:** both `makePostFirstNext` and `makePostSecondNext` remain separate calibrated controls, and both are dispatched with the exact/manual tap mode. Logs now include the control name, requested coordinate, source, and exact dispatched coordinate. If the second step does not reach the caption screen, automatic screenshot/XML evidence is saved for inspection.
+- A temporary live-screen replacement for the second Next was removed after clarification; the live mirror calibration is authoritative for both taps.
+- Status: API build and workflow restart passed; physical-device confirmation is still required.
+
 ### 2026-08-29 — Do not open Instagram picker before MediaStore indexing
 - A real-device report showed Make a Post pushed/prepared an assigned image, but the image was not preloaded in Instagram's gallery and an existing personal photo was used instead.
 - **Root cause:** the pre-picker audit verified filesystem bytes by pulling the pushed file, but did not verify that Android MediaStore had indexed the exact device path. The existing 1.2-second scanner settle was therefore not a sufficient gate.
