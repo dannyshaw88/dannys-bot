@@ -782,6 +782,15 @@ export async function runFollowUsersStep(
     return hasProfileHeader && hasFollowControl;
   };
 
+  // The search bar is also visible on some profile surfaces (including the
+  // account's own profile), so "EditText/search" alone cannot prove that the
+  // first Back reached Search Results.  These profile-only markers are stable
+  // across the normal and "Search with Meta AI" search layouts.
+  const isProfileLayoutSurface = (xml: string): boolean => {
+    if (!xml) return false;
+    return /row_profile_header|profile_header|profile_grid|edit_profile|share_profile/i.test(xml);
+  };
+
   // A multi-target run must not repeatedly submit searches from the stale
   // results surface. After returning from a profile, two calibrated Back taps
   // return to Explore with a clean search field; the next target then focuses
@@ -826,8 +835,10 @@ export async function runFollowUsersStep(
   // A rejected profile must stay inside the Explore/search flow. Returning
   // to the normal UI here makes the next candidate trigger the expensive
   // Home → Search navigation again and can cause the cleanup Back sequence
-  // to land on Home. Return one level to results, clear the query, and leave
-  // the live search field focused for the next candidate.
+  // to land on Home. Usually the first Back is enough for a single-target
+  // run, but some Instagram layouts leave the account profile visible with a
+  // search bar over it. Never send search key events in that state: inspect
+  // the live tree and issue the missing second calibrated Back first.
   const returnToClearedFollowSearch = async () => {
     // This state is only valid after every confirmation below succeeds.
     // Invalidate it before touching navigation so a failed Back/search
@@ -838,6 +849,22 @@ export async function runFollowUsersStep(
       return searchReadyForReuse;
     }
     await tapCalibratedProfileBack("skipped-user cleanup — returned to search results");
+    const afterBackXml = await android.dumpUi(serial).catch(() => "");
+    if (isProfileLayoutSurface(afterBackXml)) {
+      onLog?.("Follow: skipped-user cleanup — first Back left a profile layout visible; issuing the missing second calibrated Back");
+      await tapCalibratedProfileBack("skipped-user cleanup — exited unexpected profile layout to Explore");
+      const searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
+      lastKnownSearchBar = searchBar;
+      await sleepOrAbort(serial, 500);
+      const focusedAfterRecovery = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+      if (!focusedAfterRecovery) {
+        onLog?.("Follow: skipped-user cleanup — search field was not confirmed after second Back; refusing keyboard input");
+        return false;
+      }
+      searchReadyForReuse = true;
+      onLog?.("Follow: skipped-user cleanup — second calibrated Back recovered clean Explore search");
+      return true;
+    }
     // The field was just used to launch this profile, so it is still the
     // focused field after returning to results. Avoid another UIAutomator
     // dump and clear it with the fast key-event path.
