@@ -6191,10 +6191,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       steps.push("power-on");
       // Give the physical panel time to finish powering on before sending the
       // unlock gesture. On some devices the keyevent returns before the panel
-      // is ready, and a sub-second gap is too short: the swipe can be ignored
-      // or arrive while the keyguard is still transitioning.
-      tLog("▶ Letting screen settle for 1.5 seconds before unlock…");
-      await sleepOrAbort(serial, 1500, "navigation", "static");
+      // is ready, and a short gap is too brief: the swipe can be ignored or
+      // arrive while the keyguard is still transitioning.
+      tLog("▶ Letting screen settle for 2.5 seconds before unlock…");
+      await sleepOrAbort(serial, 2500, "navigation", "static");
       tLog("▶ Unlocking screen after wake settle…");
       await android.unlockScreen(serial);
       steps.push("unlock-swipe");
