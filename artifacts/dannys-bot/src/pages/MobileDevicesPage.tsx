@@ -1159,16 +1159,16 @@ export function MobileDevicesPage() {
 
   const refreshUsb = useCallback(async () => {
     try {
-      const p = await fetchUsbPhones();
+      const { phones } = await fetchUsbPhones();
       setUsbPhones(previous => {
-        if (previous.length > 0 && p.length === 0) {
+        if (previous.length > 0 && phones.length === 0) {
           console.error(
             `[device-watchdog] USB device list dropped from ${previous.length} to 0; ` +
             "preserving the last known USB list",
           );
           return previous;
         }
-        return p;
+        return phones;
       });
     } catch (error) {
       console.error("[device-watchdog] USB device refresh failed; preserving last known list", error);
