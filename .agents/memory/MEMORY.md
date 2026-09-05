@@ -39,7 +39,7 @@
 - [Reel share-sheet resource-id alias](share-sheet-resource-id-alias.md) — grid_view_pog_avatar_view is reused by WhatsApp/Share shortcuts; strict Reel scans need real ancestor Chat evidence, not XML lookback.
 - [Story icon row selection](story-icon-row-selection.md) — rank pixel-scan candidate rows by proximity to a known screen anchor (e.g. bottom edge), not by match strength; content overlays can out-match the real control on strength alone.
 - [Story Like identity guard](story-like-semantic-identity.md) — prefer live Like labels; accept toolbar_like_button only after proving it does not overlap Comment
-- [Reel fix history](reel-fix-history.md) — read the filename → tool → sub-setting ledger before attempting another Reel action fix
+- [Reel Viewer repair log](../../REELVIEWERREPAIR.md) — read the dedicated filename → tool → sub-setting ledger before another Reel action fix
 - Any per-device "slow confirm" call (e.g. findHomeTab after a tray tap) must be swapped for the fast check individually — fixing one call site in a shared helper does not fix sibling call sites that inline their own slow check.
 - [License auth is a single global session, not per-cookie](license-global-session.md) — /api/license/login writes one global "license_session" row; any curl login logs in every browser tab/window against that server.
 - [Make a Post UI: image alteration is source-agnostic](make-a-post-image-alteration-scope.md) — Alteration level + Image settings button live in the shared caption section, not inside the Instagram-account source block, so they apply to local-computer-sourced images too.

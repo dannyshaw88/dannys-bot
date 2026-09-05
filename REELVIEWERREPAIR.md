@@ -1,11 +1,13 @@
----
-name: Reel automation fix history
-description: Internal ledger of attempted Reel fixes, organized by source file, tool, and every tool sub-setting/action.
----
+# Reel Viewer Repair Log
 
-# Purpose
+This is the permanent “already tried” record for the Reel Viewer tool.
 
-Before changing Reel automation, read this file. An entry marked **rejected**, **superseded**, or **insufficient** must not be repeated without new evidence. A new attempt must record what evidence justified it and what it changed.
+Before changing Reel Viewer behavior:
+
+1. Read this file.
+2. Do not repeat an entry marked **rejected**, **superseded**, or **insufficient** unless new device evidence justifies it.
+3. Record every new attempt under the exact source filename, tool/function, and sub-setting/action.
+4. Separate build evidence from real-device evidence.
 
 ## `artifacts/api-server/src/mobile/androidManager.ts`
 
@@ -72,16 +74,14 @@ Before changing Reel automation, read this file. An entry marked **rejected**, *
 - **Status:** **Retained**.
 - **Rule:** Do not relax the Comment identity guard without a new device dump proving the node mapping.
 
-## How to add future entries
+## Required format for new entries
 
-Use this exact nesting:
-
-1. Source filename
-2. Tool/function
-3. Every sub-setting or action
-4. Attempt
-5. Status
-6. Evidence
-7. Rule for future agents
-
-Never record a fix as successful merely because it compiles. Record device evidence separately from build evidence.
+```text
+## source filename
+### tool/function
+#### sub-setting/action
+- Attempt:
+- Status:
+- Evidence:
+- Rule:
+```
