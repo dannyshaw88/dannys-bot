@@ -4594,12 +4594,8 @@ export async function findReelActionIcons(
   );
 
   const liveLike = _findUniqueLiveActionNode(xml, [":id/like_button"], ["Like", "Unlike"], onLog);
-  // Some builds expose the Reel heart only as an unlabeled ImageView. Use the
-  // validated right-column contour matcher before abandoning the whole scan.
-  const resolvedLike = liveLike ??
-    await findFeedLikeIconByPixels(serial, screenH / 2, onLog, "reel-right");
-  if (!resolvedLike) {
-    onLog?.("[reel-icons] Like action was not confirmed by accessibility or visual matching — skipping Reel actions safely");
+  if (!liveLike) {
+    onLog?.("[reel-icons] live like_button node not found or ambiguous — skipping reel actions");
     return null;
   }
   // Reels can expose "Repost" as a label on non-action containers/statistics
@@ -4624,10 +4620,10 @@ export async function findReelActionIcons(
     ["Add to Saved", "Remove from Saved"],
     onLog,
   );
-  // Save is independent from Like and both share actions. If accessibility
-  // omits the bookmark node but the icon is visibly rendered, use the strong
-  // visual reference; otherwise leave only Save null so callers skip Save.
-  const resolvedSave = liveSave ?? await findSaveIconByPixels(serial, resolvedLike.y, "reel", onLog);
+  // Save is intentionally accessibility-only on Reels. The visual bookmark
+  // matcher can correlate with the Likes/statistics area when the Save control
+  // is absent, which risks tapping the wrong action. A missing live Save node
+  // must skip Save and nothing else.
   const liveAlreadyLiked = _liveActionNodes(xml).some(node =>
     node.resourceId.endsWith(":id/like_button") &&
     node.contentDesc.trim().toLowerCase() === "unlike",
@@ -4637,20 +4633,20 @@ export async function findReelActionIcons(
     /^(?:saved|remove from saved)$/i.test(node.contentDesc.trim()),
   );
   onLog?.(
-    `[reel-icons] available actions — like:(${resolvedLike.x},${resolvedLike.y}) ` +
+    `[reel-icons] available actions — like:(${liveLike.x},${liveLike.y}) ` +
     `shareFeed:${liveShareFeed ? `(${liveShareFeed.x},${liveShareFeed.y})` : "null"} ` +
     `shareDm:${liveShareDm ? `(${liveShareDm.x},${liveShareDm.y})` : "null"} ` +
-    `save:${resolvedSave ? `(${resolvedSave.x},${resolvedSave.y})` : "null"}` +
-    `${resolvedSave ? "" : " (Save not confirmed — skip Save only; other validated actions may continue)"}` +
+    `save:${liveSave ? `(${liveSave.x},${liveSave.y})` : "null"}` +
+    `${liveSave ? "" : " (Save not exposed — skip Save only; other validated actions may continue)"}` +
     `${liveShareFeed ? "" : " (Share-to-Feed not exposed — skip that action)"}` +
     `${liveShareDm ? "" : " (Share-via-DM not exposed — skip that action)"}`,
   );
   return {
-    like: resolvedLike,
+    like: liveLike,
     comment: null,
     shareFeed: liveShareFeed,
     shareDm: liveShareDm,
-    save: resolvedSave,
+    save: liveSave,
     alreadyLiked: liveAlreadyLiked,
     alreadySaved: liveAlreadySaved,
   };
