@@ -821,7 +821,7 @@ export async function runFollowUsersStep(
     const searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
     lastKnownSearchBar = searchBar;
     await sleepOrAbort(serial, 500);
-    const focused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+    const focused = await android.isInstagramSearchBarFocused(serial, onLog).catch(() => false);
     if (!focused) {
       onLog?.(`Follow: ${reason} — clean Explore search field was not confirmed focused`);
       searchReadyForReuse = false;
@@ -847,7 +847,7 @@ export async function runFollowUsersStep(
     }
     lastKnownSearchBar = searchBar;
     await sleepOrAbort(serial, 500);
-    const focused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+    const focused = await android.isInstagramSearchBarFocused(serial, onLog).catch(() => false);
     if (!focused) {
       onLog?.(`Follow: ${reason} — search bar focus not confirmed; refusing keyboard input`);
       searchReadyForReuse = false;
@@ -887,7 +887,7 @@ export async function runFollowUsersStep(
       const searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
       lastKnownSearchBar = searchBar;
       await sleepOrAbort(serial, 500);
-      const focusedAfterRecovery = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+      const focusedAfterRecovery = await android.isInstagramSearchBarFocused(serial, onLog).catch(() => false);
       if (!focusedAfterRecovery) {
         onLog?.("Follow: skipped-user cleanup — search field was not confirmed after second Back; refusing keyboard input");
         return false;
@@ -1217,7 +1217,7 @@ export async function runFollowUsersStep(
       lastKnownSearchBar = searchBar;
       onLog?.(searchReadyForReuse ? "[TRACE] follow: reuse-focused-search-field" : "[TRACE] follow: tap-search-field");
       if (!searchReadyForReuse) await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));
-      const searchFocused = await android.isInstagramSearchBarFocused(serial).catch(() => false);
+      const searchFocused = await android.isInstagramSearchBarFocused(serial, onLog).catch(() => false);
       if (!searchFocused) {
         onLog?.("Follow: search bar tap was not confirmed focused — stopping without pressing Back");
         break;

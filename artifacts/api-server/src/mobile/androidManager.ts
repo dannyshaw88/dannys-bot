@@ -11416,13 +11416,18 @@ export async function findInstagramSearchBar(
 /** Confirm that Instagram's live search field owns focus before typing or
  * sending any navigation key. This prevents a failed search tap from making
  * Back exit Instagram entirely. */
-export async function isInstagramSearchBarFocused(serial: string): Promise<boolean> {
+export async function isInstagramSearchBarFocused(
+  serial: string,
+  onLog?: (msg: string) => void,
+): Promise<boolean> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const { h: screenH } = getScreenSize(serial);
   const topLimit = Math.round(screenH * 0.30);
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return false;
+  let hasTopFocusedEditText = false;
+  let hasTopSearchEditText = false;
   for (const match of xml.matchAll(/<node\b[^>]*>/gi)) {
     const node = match[0];
     const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
@@ -11435,8 +11440,30 @@ export async function isInstagramSearchBarFocused(serial: string): Promise<boole
       node.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
       node.match(/\bhint="([^"]*)"/i)?.[1] ?? "",
     ].join(" ");
-    if (!/focused="true"/i.test(node) || !/edittext/i.test(node) ||
-        !/search/i.test(`${resourceId} ${label}`)) continue;
+    if (!/edittext/i.test(node)) continue;
+    const focused = /focused="true"/i.test(node);
+    const searchIdentified = /search/i.test(`${resourceId} ${label}`);
+    hasTopFocusedEditText ||= focused;
+    hasTopSearchEditText ||= searchIdentified;
+    if (focused && searchIdentified) return true;
+  }
+
+  // Instagram/MIUI intermittently omits either focused=true or the Search
+  // label/resource-id from the otherwise-live EditText node. The visible IME
+  // is the authoritative focus signal in that state. Keep this fallback
+  // tightly scoped to Instagram and to a top-region EditText so a comment/DM
+  // composer or another foreground app can never be mistaken for Follow's
+  // search field.
+  if (!hasTopFocusedEditText && !hasTopSearchEditText) return false;
+  const [keyboardShown, foregroundPackage] = await Promise.all([
+    isKeyboardShown(serial).catch(() => false),
+    getForegroundPackage(serial).catch(() => null),
+  ]);
+  if (keyboardShown && foregroundPackage === "com.instagram.android") {
+    onLog?.(
+      `Follow: search focus confirmed by visible keyboard + top ` +
+      `${hasTopSearchEditText ? "Search EditText" : "focused EditText"} fallback`,
+    );
     return true;
   }
   return false;
