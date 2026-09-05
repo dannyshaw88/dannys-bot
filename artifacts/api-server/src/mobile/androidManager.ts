@@ -5527,13 +5527,14 @@ export async function findStoryLikeButtonViaA11y(
     /comment|reply/i.test(`${node.resourceId} ${node.contentDesc} ${node.text}`),
   );
   const resourceLike = resourceCandidates.length === 1 ? resourceCandidates[0] : null;
-  const sameRowComment = resourceLike
+  const overlappingComment = resourceLike
     ? commentCandidates.find(comment =>
-      Math.abs(comment.y - resourceLike.y) <= Math.max(80, Math.round(h * 0.04)),
+      Math.abs(comment.y - resourceLike.y) <= 32 &&
+      Math.abs(comment.x - resourceLike.x) <= 32,
     ) ?? null
     : null;
 
-  if (resourceLike && !sameRowComment) {
+  if (resourceLike && !overlappingComment) {
     const owner = nodes[resourceLike.actionOwnerIndex!];
     onLog?.(
       `[story-like] resource node accepted without semantic label: ` +
@@ -5547,28 +5548,35 @@ export async function findStoryLikeButtonViaA11y(
   // action immediately to its left only when the row supplies exactly one
   // plausible predecessor. This preserves a real Like tap without guessing
   // from screen percentages or blindly trusting the mislabeled ID.
-  if (resourceLike && sameRowComment && resourceLike.x >= sameRowComment.x - 24) {
-    const predecessors = lowerActions
+  if (resourceLike && overlappingComment) {
+    const predecessorPositions = lowerActions
       .filter(node =>
-        node.x < sameRowComment.x - 24 &&
-        Math.abs(node.y - sameRowComment.y) <= Math.max(80, Math.round(h * 0.04)) &&
+        node.x < overlappingComment.x - 24 &&
+        Math.abs(node.y - overlappingComment.y) <= Math.max(80, Math.round(h * 0.04)) &&
+        /(?:ImageView|Button)$/i.test(node.className) &&
         !/comment|reply|composer|message|send/i.test(
           `${node.resourceId} ${node.contentDesc} ${node.text}`,
         ),
       )
-      .sort((a, b) => b.x - a.x);
-    if (predecessors.length === 1) {
-      const like = predecessors[0];
+      .sort((a, b) => b.x - a.x)
+      .filter((node, index, all) =>
+        index === 0 ||
+        Math.abs(node.x - all[index - 1].x) > 20 ||
+        Math.abs(node.y - all[index - 1].y) > 20,
+      );
+    const like = predecessorPositions[0] ?? null;
+    const horizontalGap = like ? overlappingComment.x - like.x : Number.POSITIVE_INFINITY;
+    if (like && horizontalGap >= 40 && horizontalGap <= 220) {
       onLog?.(
         `[story-like] toolbar_like_button overlapped Comment at ` +
         `(${resourceLike.x},${resourceLike.y}); using sole left action ` +
-        `(${like.x},${like.y}) as Like`,
+        `(${like.x},${like.y}) as Like (gap=${horizontalGap})`,
       );
       return { x: like.x, y: like.y };
     }
     onLog?.(
       `[story-like] skipped: toolbar_like_button overlaps Comment and ` +
-      `left-action candidates=${predecessors.length}`,
+      `no plausible left-adjacent heart was found`,
     );
     return null;
   }
