@@ -4573,9 +4573,33 @@ export async function findReelActionIcons(
     onLog?.(`[reel-icons] sponsored Reel signal "${sponsoredSignal}" — skipping every action`);
     return null;
   }
+  const { w: screenW, h: screenH } = getScreenSize(serial);
+  const rightColumnInventory = _liveActionNodes(xml)
+    .filter(node =>
+      node.x >= screenW * 0.68 &&
+      node.y >= screenH * 0.12 &&
+      node.y < screenH * 0.86 &&
+      node.width <= 220 &&
+      node.height <= 220,
+    )
+    .sort((a, b) => a.y - b.y);
+  onLog?.(
+    `[reel-icons] right-column inventory: ${
+      rightColumnInventory.map(node =>
+        `(${node.x},${node.y}) rid="${node.resourceId || ""}" ` +
+        `desc="${node.contentDesc || ""}" text="${node.text || ""}" ` +
+        `clickable=${node.clickable} owner=${node.actionOwnerIndex != null}`,
+      ).join(" | ") || "(none)"
+    }`,
+  );
+
   const liveLike = _findUniqueLiveActionNode(xml, [":id/like_button"], ["Like", "Unlike"], onLog);
-  if (!liveLike) {
-    onLog?.("[reel-icons] live like_button node not found or ambiguous — skipping reel actions");
+  // Some builds expose the Reel heart only as an unlabeled ImageView. Use the
+  // validated right-column contour matcher before abandoning the whole scan.
+  const resolvedLike = liveLike ??
+    await findFeedLikeIconByPixels(serial, screenH / 2, onLog, "reel-right");
+  if (!resolvedLike) {
+    onLog?.("[reel-icons] Like action was not confirmed by accessibility or visual matching — skipping Reel actions safely");
     return null;
   }
   // Reels can expose "Repost" as a label on non-action containers/statistics
@@ -4600,29 +4624,33 @@ export async function findReelActionIcons(
     ["Add to Saved", "Remove from Saved"],
     onLog,
   );
+  // Save is independent from Like and both share actions. If accessibility
+  // omits the bookmark node but the icon is visibly rendered, use the strong
+  // visual reference; otherwise leave only Save null so callers skip Save.
+  const resolvedSave = liveSave ?? await findSaveIconByPixels(serial, resolvedLike.y, "reel", onLog);
   const liveAlreadyLiked = _liveActionNodes(xml).some(node =>
     node.resourceId.endsWith(":id/like_button") &&
     node.contentDesc.trim().toLowerCase() === "unlike",
   );
   const liveAlreadySaved = _liveActionNodes(xml).some(node =>
     node.resourceId.endsWith(":id/save_button") &&
-    node.contentDesc.trim().toLowerCase() === "saved",
+    /^(?:saved|remove from saved)$/i.test(node.contentDesc.trim()),
   );
   onLog?.(
-    `[reel-icons] live nodes — like:(${liveLike.x},${liveLike.y}) ` +
+    `[reel-icons] available actions — like:(${resolvedLike.x},${resolvedLike.y}) ` +
     `shareFeed:${liveShareFeed ? `(${liveShareFeed.x},${liveShareFeed.y})` : "null"} ` +
     `shareDm:${liveShareDm ? `(${liveShareDm.x},${liveShareDm.y})` : "null"} ` +
-    `save:${liveSave ? `(${liveSave.x},${liveSave.y})` : "null"}` +
-    `${liveSave ? "" : " (Save not exposed — skip Save only; other validated actions may continue)"}` +
+    `save:${resolvedSave ? `(${resolvedSave.x},${resolvedSave.y})` : "null"}` +
+    `${resolvedSave ? "" : " (Save not confirmed — skip Save only; other validated actions may continue)"}` +
     `${liveShareFeed ? "" : " (Share-to-Feed not exposed — skip that action)"}` +
     `${liveShareDm ? "" : " (Share-via-DM not exposed — skip that action)"}`,
   );
   return {
-    like: liveLike,
+    like: resolvedLike,
     comment: null,
     shareFeed: liveShareFeed,
     shareDm: liveShareDm,
-    save: liveSave,
+    save: resolvedSave,
     alreadyLiked: liveAlreadyLiked,
     alreadySaved: liveAlreadySaved,
   };
