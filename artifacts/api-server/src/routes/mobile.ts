@@ -16,6 +16,10 @@ import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
 import { getDeviceLabel } from "./usb-phones";
 import { getUsbDiagnostics } from "../mobile/usbDiagnostics";
+import {
+  mobileAutomationProcessLockOwned,
+  startMobileAutomationProcessLock,
+} from "../mobile/mobileAutomationProcessLock";
 import { fixAiSlop } from "../instagram/fixAiSlop";
 import { getRuntimeSnapshot } from "../diagnostics/runtimeSnapshot";
 import {
@@ -1124,6 +1128,10 @@ function isPng(buf: Buffer): boolean {
 }
 
 export function registerMobileRoutes(httpServer: http.Server, app: Express) {
+  // Artifact-managed workflows can start a second API process in the same
+  // workspace. Only one process may launch mobile input against real devices.
+  startMobileAutomationProcessLock();
+
   app.get("/api/diagnostics/snapshot", (_req: Request, res: Response) => {
     logger.info("[diagnostics] runtime snapshot requested");
     res.json({
@@ -5865,6 +5873,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (error) {
       logger.warn({ err: error, serial }, "Could not verify device state before automation cycle");
       res.status(503).json({ error: "Could not verify device connection before starting automation" });
+      return;
+    }
+    if (!mobileAutomationProcessLockOwned()) {
+      res.status(409).json({
+        error: "Mobile automation is owned by another API process; retrying this cycle is safe",
+      });
       return;
     }
     if (automationCycleInProgress.has(serial) || checkFeedInProgress.has(serial)) {
