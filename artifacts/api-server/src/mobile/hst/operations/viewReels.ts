@@ -261,15 +261,9 @@ export async function runViewReelsLoop(serial: string, params: {
       // "Interested") while omitting the standalone Ad label. Reuse the last
       // dump from the player-ready poll above — no extra dump cost. Quoted
       // attribute matching prevents false positives on words like "Add".
-      const isReelAd =
-        lastPollXml.includes('text="Ad"')        || lastPollXml.includes('content-desc="Ad"') ||
-        lastPollXml.includes('text="Sponsored"') || lastPollXml.includes('content-desc="Sponsored"') ||
-        lastPollXml.includes('text="Advert"')    || lastPollXml.includes('content-desc="Advert"') ||
-        lastPollXml.includes('text="Get offer"') || lastPollXml.includes('content-desc="Get offer"') ||
-        lastPollXml.includes('text="Not interested"') || lastPollXml.includes('content-desc="Not interested"') ||
-        lastPollXml.includes('text="Interested"') || lastPollXml.includes('content-desc="Interested"');
-      if (isReelAd) {
-        onLog?.(`Reel ${i + 1}/${totalReels}: ad post detected — skipping all actions`);
+      const reelAdSignal = android.getSponsoredReelSignal(lastPollXml);
+      if (reelAdSignal) {
+        onLog?.(`Reel ${i + 1}/${totalReels}: sponsored/ad post detected via "${reelAdSignal}" — skipping all actions`);
       } else {
 
       onLog?.(`Reel ${i + 1}/${totalReels}: scanning right-side action column…`);
@@ -495,15 +489,11 @@ export async function runViewReelsLoop(serial: string, params: {
           android.dumpUi(serial).catch(() => ""),
           new Promise<string>(resolve => setTimeout(() => resolve(""), 2500)),
         ]);
-        // Skip author click if Instagram labels this as a sponsored post.
-        // Quoted attribute matching prevents false positives on words like
-        // "Add", "Adidas", etc. whose text values differ from the bare "Ad".
-        const _vrCaIsAd =
-          _vrCaXml.includes('text="Ad"')         || _vrCaXml.includes('content-desc="Ad"') ||
-          _vrCaXml.includes('text="Sponsored"')  || _vrCaXml.includes('content-desc="Sponsored"') ||
-          _vrCaXml.includes('text="Advert"')     || _vrCaXml.includes('content-desc="Advert"');
-        if (_vrCaIsAd) {
-          onLog?.(`${_vrCaPfx}: ad post detected — skipping click author`);
+        // Skip author click for every sponsored surface, including CTA-only
+        // ads that expose "Learn more" without a bare Ad/Sponsored label.
+        const _vrCaAdSignal = android.getSponsoredReelSignal(_vrCaXml);
+        if (_vrCaAdSignal) {
+          onLog?.(`${_vrCaPfx}: sponsored/ad post detected via "${_vrCaAdSignal}" — skipping click author`);
         } else {
         // Try clips_author_username first, then clips_author_info_component.
         // Raw UIAutomator XML uses resource-id="com.instagram.android:id/<name>"

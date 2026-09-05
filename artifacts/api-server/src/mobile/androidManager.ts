@@ -4496,6 +4496,49 @@ export interface ReelActionIcons {
 }
 
 /**
+ * Returns the exact sponsored/ad signal exposed by the current Reel surface,
+ * or null when the surface does not identify itself as an ad.
+ *
+ * A Reel can omit Save or Share because the owner disabled that action. That
+ * is different from an ad: a non-ad with one missing action may still safely
+ * use the other independently validated controls. Sponsored CTA text such as
+ * "Learn more" is the important signal because ad Reels can omit the generic
+ * "Ad"/"Sponsored" label from the accessibility tree.
+ */
+export function getSponsoredReelSignal(xml: string): string | null {
+  const exactLabels = new Set([
+    "ad",
+    "sponsored",
+    "advert",
+    "promoted",
+    "paid partnership",
+  ]);
+  const ctaLabels = new Set([
+    "learn more",
+    "visit site",
+    "shop now",
+    "install now",
+    "sign up",
+    "get offer",
+    "apply now",
+    "book now",
+    "download",
+    "contact us",
+    "play game",
+    "not interested",
+    "interested",
+  ]);
+  const labelRe = /(?:text|content-desc)="([^"]*)"/gi;
+  let match: RegExpExecArray | null;
+  while ((match = labelRe.exec(xml)) !== null) {
+    const label = match[1].trim().toLowerCase();
+    if (exactLabels.has(label)) return match[1].trim();
+    if (ctaLabels.has(label)) return match[1].trim();
+  }
+  return null;
+}
+
+/**
  * Locates Instagram's Reels viewer action-icon COLUMN (Like, Comment,
  * Repost/Share, Send) — for Reels these render VERTICALLY down the right
  * edge of the screen, unlike a normal feed post's horizontal bottom action
@@ -4525,6 +4568,11 @@ export async function findReelActionIcons(
   // fall back to a fresh dump for external callers.
   const xml = options?.uiXml || await _uiDump(adb, serial);
   if (!xml) return null;
+  const sponsoredSignal = getSponsoredReelSignal(xml);
+  if (sponsoredSignal) {
+    onLog?.(`[reel-icons] sponsored Reel signal "${sponsoredSignal}" — skipping every action`);
+    return null;
+  }
   const liveLike = _findUniqueLiveActionNode(xml, [":id/like_button"], ["Like", "Unlike"], onLog);
   if (!liveLike) {
     onLog?.("[reel-icons] live like_button node not found or ambiguous — skipping reel actions");
@@ -4564,7 +4612,10 @@ export async function findReelActionIcons(
     `[reel-icons] live nodes — like:(${liveLike.x},${liveLike.y}) ` +
     `shareFeed:${liveShareFeed ? `(${liveShareFeed.x},${liveShareFeed.y})` : "null"} ` +
     `shareDm:${liveShareDm ? `(${liveShareDm.x},${liveShareDm.y})` : "null"} ` +
-    `save:${liveSave ? `(${liveSave.x},${liveSave.y})` : "null"}`,
+    `save:${liveSave ? `(${liveSave.x},${liveSave.y})` : "null"}` +
+    `${liveSave ? "" : " (Save not exposed — skip Save only; other validated actions may continue)"}` +
+    `${liveShareFeed ? "" : " (Share-to-Feed not exposed — skip that action)"}` +
+    `${liveShareDm ? "" : " (Share-via-DM not exposed — skip that action)"}`,
   );
   return {
     like: liveLike,
