@@ -857,6 +857,9 @@ const DEBUG_LOG_BUFFER_SIZE = 40;
 // log lines start overlapping child processes and some frames never get saved.
 const debugScreenshotQueues = new Map<string, Promise<void>>();
 const debugScreenshotTimestamps = new Map<string, Set<string>>();
+// Incremented at every HST cycle boundary. A screenshot queued by the previous
+// cycle must not repopulate the folder after it is cleared.
+const debugScreenshotGenerations = new Map<string, number>();
 
 function pushDebugLogLine(serial: string, line: string): void {
   let buf = debugLogBuffer.get(serial);
@@ -889,8 +892,9 @@ function debugLogLineColor(line: string): string {
   return "#cbd5e1";                                   // default — light grey
 }
 
-async function captureDebugScreenshot(serial: string, label: string): Promise<void> {
+async function captureDebugScreenshot(serial: string, label: string, generation: number): Promise<void> {
   try {
+    if (debugScreenshotGenerations.get(serial) !== generation) return;
     const adb = (await android.detectToolsetAsync()).adb.path;
     if (!adb) return;
 
@@ -907,6 +911,7 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
     });
 
     if (!phonePngRaw) return;
+    if (debugScreenshotGenerations.get(serial) !== generation) return;
 
     // Do not create or select an evidence folder until the device has actually
     // returned a frame. During an Android reboot, ADB can still be discoverable
@@ -1010,6 +1015,7 @@ async function captureDebugScreenshot(serial: string, label: string): Promise<vo
         .toBuffer();
     });
 
+    if (debugScreenshotGenerations.get(serial) !== generation) return;
     await fsPromises.writeFile(path.join(dir, filename), composite).catch(() => {});
   } catch {
     // Never let a screenshot failure affect the automation cycle.
@@ -1024,11 +1030,12 @@ function queueDebugScreenshot(serial: string, timestamp: string, label: string):
   }
   if (capturedTimestamps.has(timestamp)) return;
   capturedTimestamps.add(timestamp);
+  const generation = debugScreenshotGenerations.get(serial) ?? 0;
 
   const previous = debugScreenshotQueues.get(serial) ?? Promise.resolve();
   const next = previous
     .catch(() => {})
-    .then(() => captureDebugScreenshot(serial, label))
+    .then(() => captureDebugScreenshot(serial, label, generation))
     .catch(() => {})
     .finally(() => {
       if (debugScreenshotQueues.get(serial) === next) {
