@@ -5481,10 +5481,10 @@ export async function findStoryShareButtonViaA11y(
  * project rule against hardcoded coordinates and was not reliably
  * registering as a like on this farm's devices.
  *
- * The resource-id is only accepted when the same live node also carries an
- * explicit Like/Unlike Story semantic label. Some Instagram builds reuse or
- * misreport toolbar resource IDs; trusting the ID alone can resolve the
- * comment bubble and tap it instead of the heart.
+ * Prefer an explicit Like/Unlike Story semantic label, but do not require it:
+ * some builds expose only the live toolbar resource ID. Because a build can
+ * misreport that ID on the adjacent Comment control, the ID is cross-checked
+ * against the live Comment node and the left-to-right action-row geometry.
  */
 export async function findStoryLikeButtonViaA11y(
   serial: string,
@@ -5497,32 +5497,87 @@ export async function findStoryLikeButtonViaA11y(
   const nodes = _liveActionNodes(xml);
   const { h } = getScreenSize(serial);
   const semanticLabels = new Set(["like story", "unlike story", "like", "unlike"]);
-  const candidates = nodes.filter(node =>
+  const isCompactAction = (node: LiveActionNode) =>
     node.y > h * 0.50 &&
     node.width <= 180 &&
     node.height <= 180 &&
-    semanticLabels.has(node.contentDesc.trim().toLowerCase()) &&
     node.actionOwnerIndex != null &&
-    node.enabled,
+    node.enabled &&
+    !/^\s*[\d,.]+[KMB]?\s*$/i.test(node.text);
+  const lowerActions = nodes.filter(isCompactAction);
+  const semanticCandidates = lowerActions.filter(node =>
+    semanticLabels.has(node.contentDesc.trim().toLowerCase()),
   );
 
-  if (candidates.length !== 1) {
+  if (semanticCandidates.length === 1) {
+    const like = semanticCandidates[0];
+    const owner = nodes[like.actionOwnerIndex!];
     onLog?.(
-      `[story-like] skipped: expected exactly one live Like/Unlike Story node, ` +
-      `found ${candidates.length}; resource-id alone is not trusted`,
+      `[story-like] semantic node: desc="${like.contentDesc}" ` +
+      `rid="${like.resourceId || ""}" child=(${like.x},${like.y}) ` +
+      `owner=(${owner.x},${owner.y})`,
+    );
+    return { x: like.x, y: like.y };
+  }
+
+  const resourceCandidates = lowerActions.filter(node =>
+    node.resourceId.endsWith(":id/toolbar_like_button"),
+  );
+  const commentCandidates = lowerActions.filter(node =>
+    /comment|reply/i.test(`${node.resourceId} ${node.contentDesc} ${node.text}`),
+  );
+  const resourceLike = resourceCandidates.length === 1 ? resourceCandidates[0] : null;
+  const sameRowComment = resourceLike
+    ? commentCandidates.find(comment =>
+      Math.abs(comment.y - resourceLike.y) <= Math.max(80, Math.round(h * 0.04)),
+    ) ?? null
+    : null;
+
+  if (resourceLike && !sameRowComment) {
+    const owner = nodes[resourceLike.actionOwnerIndex!];
+    onLog?.(
+      `[story-like] resource node accepted without semantic label: ` +
+      `rid="${resourceLike.resourceId}" child=(${resourceLike.x},${resourceLike.y}) ` +
+      `owner=(${owner.x},${owner.y})`,
+    );
+    return { x: resourceLike.x, y: resourceLike.y };
+  }
+
+  // If the resource-id lands on the Comment control, use the nearest compact
+  // action immediately to its left only when the row supplies exactly one
+  // plausible predecessor. This preserves a real Like tap without guessing
+  // from screen percentages or blindly trusting the mislabeled ID.
+  if (resourceLike && sameRowComment && resourceLike.x >= sameRowComment.x - 24) {
+    const predecessors = lowerActions
+      .filter(node =>
+        node.x < sameRowComment.x - 24 &&
+        Math.abs(node.y - sameRowComment.y) <= Math.max(80, Math.round(h * 0.04)) &&
+        !/comment|reply|composer|message|send/i.test(
+          `${node.resourceId} ${node.contentDesc} ${node.text}`,
+        ),
+      )
+      .sort((a, b) => b.x - a.x);
+    if (predecessors.length === 1) {
+      const like = predecessors[0];
+      onLog?.(
+        `[story-like] toolbar_like_button overlapped Comment at ` +
+        `(${resourceLike.x},${resourceLike.y}); using sole left action ` +
+        `(${like.x},${like.y}) as Like`,
+      );
+      return { x: like.x, y: like.y };
+    }
+    onLog?.(
+      `[story-like] skipped: toolbar_like_button overlaps Comment and ` +
+      `left-action candidates=${predecessors.length}`,
     );
     return null;
   }
 
-  const like = candidates[0];
-  const owner = nodes[like.actionOwnerIndex!];
-  const isLikeResource = like.resourceId.endsWith(":id/toolbar_like_button");
   onLog?.(
-    `[story-like] semantic node: desc="${like.contentDesc}" ` +
-    `rid="${like.resourceId || ""}" child=(${like.x},${like.y}) ` +
-    `owner=(${owner.x},${owner.y}) resourceMatch=${isLikeResource}`,
+    `[story-like] skipped: no unique semantic Like node or safe live resource ` +
+    `candidate (semantic=${semanticCandidates.length}, resource=${resourceCandidates.length})`,
   );
-  return { x: like.x, y: like.y };
+  return null;
 }
 
 /**
