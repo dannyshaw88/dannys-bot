@@ -1197,7 +1197,11 @@ function DeviceCard({
       const result = await response?.json().catch(() => null);
       const message = result?.error ?? "Device restart failed";
       console.error("[PhoneFarm] device restart failed", message);
-      window.alert(message);
+      // A reboot briefly makes ADB unavailable by design. Do not show the raw
+      // Electron/ADB timeout in a blocking native alert; it is noisy, ugly,
+      // and prevents the device page from recovering while the phone returns.
+      // Keep the full error in the console for diagnostics and let the normal
+      // device-status polling show the phone when it reconnects.
       return;
     }
     setTimeout(() => setRebooting(false), 15000);
