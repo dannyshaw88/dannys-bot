@@ -458,17 +458,18 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
         // (confirmed from log: "liked (double-tap at (540,1082))" fired but
         // the Like Story button still showed cd="Like Story" afterwards).
         //
-        // Fix: find toolbar_like_button by resource-id via findStoryLikeButtonViaA11y
-        // and tap it once — same as every other button in this codebase.
-        // Falls back to the legacy double-tap if the a11y lookup fails.
-        const likeBtn = await android.findStoryLikeButtonViaA11y(serial).catch(() => null);
+        // Resolve the live heart by its explicit Like/Unlike semantic label.
+        // Resource IDs are only supporting evidence: on some Instagram builds
+        // the toolbar ID has resolved to the adjacent comment control.
+        const likeBtn = await android.findStoryLikeButtonViaA11y(serial, onLog).catch(() => null);
         if (likeBtn) {
           await android.tap(serial, likeBtn.x, likeBtn.y);
           storyLikes++;
           logger.info({ serial, story: s + 1, x: likeBtn.x, y: likeBtn.y }, "[view-stories] liked story via a11y toolbar_like_button");
           onLog?.(`View Stories ${s + 1}: liked via a11y at (${likeBtn.x},${likeBtn.y})`);
         } else {
-          // Like button not found in accessibility tree — skip the like entirely.
+          // Like button not found with a positive semantic identity — skip the
+          // like entirely.
           //
           // The previous fallback (double-tap at w*0.50, h*0.44) is PERMANENTLY
           // REMOVED. Tapping at the centre of the story screen is not safe:
@@ -481,7 +482,7 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
           // Skipping the like on this slide is always safer than a blind
           // centre-screen tap that can and does cause unintended navigation.
           logger.info({ serial, story: s + 1 }, "[view-stories] like button not found via a11y — skipping like (no fallback tap)");
-          onLog?.(`View Stories ${s + 1}: like skipped — toolbar_like_button not found in a11y tree (no centre-screen tap; fallback removed)`);
+          onLog?.(`View Stories ${s + 1}: like skipped — no positively identified Like node in a11y tree (no fallback tap)`);
         }
         // When a share is also scheduled on this slide, don't linger here —
         // every extra ms is runway the DM-share sequence won't have.

@@ -5481,11 +5481,10 @@ export async function findStoryShareButtonViaA11y(
  * project rule against hardcoded coordinates and was not reliably
  * registering as a like on this farm's devices.
  *
- * Strategy 1 (primary): resource-id `toolbar_like_button`.
- * Strategy 2 (fallback): content-desc "Like Story" or "Like".
- * Returns null if neither is found — callers fall back to the legacy
- * double-tap approach so no regression occurs on builds that don't expose
- * the button in the accessibility tree.
+ * The resource-id is only accepted when the same live node also carries an
+ * explicit Like/Unlike Story semantic label. Some Instagram builds reuse or
+ * misreport toolbar resource IDs; trusting the ID alone can resolve the
+ * comment bubble and tap it instead of the heart.
  */
 export async function findStoryLikeButtonViaA11y(
   serial: string,
@@ -5495,39 +5494,35 @@ export async function findStoryLikeButtonViaA11y(
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
-  const like = _findUniqueLiveActionNode(
-    xml,
-    [":id/toolbar_like_button"],
-    ["Like Story"],
-    onLog,
+  const nodes = _liveActionNodes(xml);
+  const { h } = getScreenSize(serial);
+  const semanticLabels = new Set(["like story", "unlike story", "like", "unlike"]);
+  const candidates = nodes.filter(node =>
+    node.y > h * 0.50 &&
+    node.width <= 180 &&
+    node.height <= 180 &&
+    semanticLabels.has(node.contentDesc.trim().toLowerCase()) &&
+    node.actionOwnerIndex != null &&
+    node.enabled,
   );
-  if (!like) onLog?.("[story-like] live toolbar_like_button node not found or ambiguous — skipping like");
-  return like;
 
-  // Strategy 1: resource-id lookup (primary).
-  const RID = "com.instagram.android:id/toolbar_like_button";
-  {
-    const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-    let m: RegExpExecArray | null;
-    while ((m = nodeRe.exec(xml)) !== null) {
-      const a = m[1];
-      if (!a.includes(RID)) continue;
-      const bm = a.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!bm) continue;
-      const cx = Math.round((Number(bm[1]) + Number(bm[3])) / 2);
-      const cy = Math.round((Number(bm[2]) + Number(bm[4])) / 2);
-      if (cy < h * 0.50) continue; // sanity: must be in lower half
-      return { x: cx, y: cy };
-    }
+  if (candidates.length !== 1) {
+    onLog?.(
+      `[story-like] skipped: expected exactly one live Like/Unlike Story node, ` +
+      `found ${candidates.length}; resource-id alone is not trusted`,
+    );
+    return null;
   }
 
-  // Strategy 2: content-desc label fallback.
-  for (const label of ["Like Story", "Like"]) {
-    const found = _findElem(xml, label);
-    if (found && found.y > h * 0.50) return found;
-  }
-
-  return null;
+  const like = candidates[0];
+  const owner = nodes[like.actionOwnerIndex!];
+  const isLikeResource = like.resourceId.endsWith(":id/toolbar_like_button");
+  onLog?.(
+    `[story-like] semantic node: desc="${like.contentDesc}" ` +
+    `rid="${like.resourceId || ""}" child=(${like.x},${like.y}) ` +
+    `owner=(${owner.x},${owner.y}) resourceMatch=${isLikeResource}`,
+  );
+  return { x: like.x, y: like.y };
 }
 
 /**
