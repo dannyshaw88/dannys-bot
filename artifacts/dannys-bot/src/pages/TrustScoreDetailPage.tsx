@@ -345,6 +345,7 @@ function CopyTrustScoreDialog({
 
 export function TrustScoreDetailPage() {
   const { trustScoreId } = useParams<{ trustScoreId: string }>();
+  const [, setLocation] = useLocation();
 
   const level = getTrustLevels().find(l => l.id === trustScoreId);
   if (!level) {
@@ -357,7 +358,7 @@ export function TrustScoreDetailPage() {
 
   return (
     <AppLayout>
-      <TrustScoreAutomationEditor trustScoreId={trustScoreId!} level={level} onBack={() => window.history.back()} />
+      <TrustScoreAutomationEditor trustScoreId={trustScoreId!} level={level} onBack={() => setLocation("/trust-scores")} />
     </AppLayout>
   );
 }
