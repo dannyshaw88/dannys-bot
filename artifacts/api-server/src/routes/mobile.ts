@@ -6199,11 +6199,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // Clear debug screenshots from the previous account's cycle so the new
       // account starts fresh with its own 50-frame sequence.
+      debugScreenshotGenerations.set(
+        serial,
+        (debugScreenshotGenerations.get(serial) ?? 0) + 1,
+      );
+      // Detach the previous queue instead of making the new cycle wait behind
+      // its backlog. In-flight work is generation-checked and will be dropped
+      // before it can write into the freshly cleared directory.
+      debugScreenshotQueues.delete(serial);
+      debugLogBuffer.delete(serial);
+      debugScreenshotTimestamps.delete(serial);
       await fsPromises.rm(
-        path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial, getDeviceLabel(serial))),
+        path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial)),
         { recursive: true, force: true },
       ).catch(() => {});
-      debugScreenshotTimestamps.delete(serial);
 
       // 1. Power on the phone.
       // Apply the temporary timeout hold BEFORE waking. On devices with a
