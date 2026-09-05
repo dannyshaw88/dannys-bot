@@ -10913,6 +10913,10 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
   const textMaxX = Math.round(w * 0.82); // leave Follow / X controls alone
   const rowMergeGap = Math.round(h * 0.055);
   const excludedLabels = /^(?:follow|following|requested|remove|delete|notifications?|filter|more|close|dismiss|like|comment|share)$/i;
+  const excludedInformationalRows = [
+    /you['’]re\s+all\s+caught\s+up/i,
+    /your\s+weekly\s+recap\s+is\s+ready/i,
+  ];
   const candidates: Array<{
     x: number;
     y: number;
@@ -10975,6 +10979,9 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
     }
   }
   const rowCandidates = rows
+    .filter(row => !row.some(candidate =>
+      excludedInformationalRows.some(pattern => pattern.test(candidate.text))
+    ))
     .map(row => row.sort((a, b) => b.score - a.score || (b.x2 - b.x1) - (a.x2 - a.x1))[0])
     .filter(Boolean);
   if (!rowCandidates.length) return null;
