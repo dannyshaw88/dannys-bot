@@ -4620,6 +4620,38 @@ export async function findReelActionIcons(
     ["Add to Saved", "Remove from Saved"],
     onLog,
   );
+  // Instagram can occasionally return a stale/reused resource-id whose
+  // semantic child centre is actually inside a different action's bounds.
+  // This is especially dangerous for Save: a false Save coordinate can open
+  // the DM share sheet. Treat cross-action geometry as an identity conflict
+  // and skip only the conflicting action rather than tapping it.
+  const actionNodes = _liveActionNodes(xml);
+  const pointInside = (point: { x: number; y: number }, node: LiveActionNode): boolean =>
+    point.x >= node.x1 && point.x <= node.x2 && point.y >= node.y1 && point.y <= node.y2;
+  const directShareNodes = actionNodes.filter(node =>
+    node.resourceId === ":id/direct_share_button" ||
+    node.resourceId.endsWith(":id/direct_share_button"),
+  );
+  const saveNodes = actionNodes.filter(node =>
+    node.resourceId === ":id/save_button" ||
+    node.resourceId.endsWith(":id/save_button"),
+  );
+  let safeSave = liveSave;
+  let safeShareDm = liveShareDm;
+  if (safeSave && directShareNodes.some(node => pointInside(safeSave!, node))) {
+    onLog?.(
+      `[reel-icons] rejected Save: resolved point (${safeSave.x},${safeSave.y}) ` +
+      `falls inside direct-share bounds — unsafe identity conflict; skipping Save only`,
+    );
+    safeSave = null;
+  }
+  if (safeShareDm && saveNodes.some(node => pointInside(safeShareDm!, node))) {
+    onLog?.(
+      `[reel-icons] rejected Share-via-DM: resolved point (${safeShareDm.x},${safeShareDm.y}) ` +
+      `falls inside Save bounds — unsafe identity conflict; skipping Share-via-DM only`,
+    );
+    safeShareDm = null;
+  }
   // Save is intentionally accessibility-only on Reels. The visual bookmark
   // matcher can correlate with the Likes/statistics area when the Save control
   // is absent, which risks tapping the wrong action. A missing live Save node
@@ -4635,18 +4667,18 @@ export async function findReelActionIcons(
   onLog?.(
     `[reel-icons] available actions — like:(${liveLike.x},${liveLike.y}) ` +
     `shareFeed:${liveShareFeed ? `(${liveShareFeed.x},${liveShareFeed.y})` : "null"} ` +
-    `shareDm:${liveShareDm ? `(${liveShareDm.x},${liveShareDm.y})` : "null"} ` +
-    `save:${liveSave ? `(${liveSave.x},${liveSave.y})` : "null"}` +
-    `${liveSave ? "" : " (Save not exposed — skip Save only; other validated actions may continue)"}` +
+    `shareDm:${safeShareDm ? `(${safeShareDm.x},${safeShareDm.y})` : "null"} ` +
+    `save:${safeSave ? `(${safeSave.x},${safeSave.y})` : "null"}` +
+    `${safeSave ? "" : " (Save not exposed or identity-conflicted — skip Save only; other validated actions may continue)"}` +
     `${liveShareFeed ? "" : " (Share-to-Feed not exposed — skip that action)"}` +
-    `${liveShareDm ? "" : " (Share-via-DM not exposed — skip that action)"}`,
+    `${safeShareDm ? "" : " (Share-via-DM not exposed or identity-conflicted — skip that action)"}`,
   );
   return {
     like: liveLike,
     comment: null,
     shareFeed: liveShareFeed,
-    shareDm: liveShareDm,
-    save: liveSave,
+    shareDm: safeShareDm,
+    save: safeSave,
     alreadyLiked: liveAlreadyLiked,
     alreadySaved: liveAlreadySaved,
   };
