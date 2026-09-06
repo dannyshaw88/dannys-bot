@@ -1521,10 +1521,17 @@ export async function runWhatsAppApp(
         node.x2 > node.x1 && node.y2 > node.y1,
       );
       if (!composer) {
+        whatsappDebug(`message composer not found for "${contact.text}"`, describeWhatsAppSurface(xml));
         steps.push(`WhatsApp skipped "${contact.text}" — message composer not found`);
         await pressBack();
         break;
       }
+      whatsappDebug(`message composer found for "${contact.text}"`, {
+        resourceId: composer.resourceId,
+        text: composer.text,
+        contentDesc: composer.contentDesc,
+        bounds: `[${composer.x1},${composer.y1}][${composer.x2},${composer.y2}]`,
+      });
       await _adbTapAsync(adb, serial, composer.x, composer.y);
       const resolvedMessage = resolveWhatsAppSpintax(messageTemplate);
       await setClipboard(serial, resolvedMessage);
@@ -1537,10 +1544,18 @@ export async function runWhatsAppApp(
       xml = await _uiDump(adb, serial);
       const paste = findLiveLabel(xml, ["paste"], ["paste"]);
       if (!paste) {
+        whatsappDebug(`Paste menu item not found for "${contact.text}"`, describeWhatsAppSurface(xml));
         steps.push(`WhatsApp skipped "${contact.text}" — Paste menu item not found`);
         await pressBack();
         break;
       }
+      whatsappDebug(`tapping native Paste for "${contact.text}"`, {
+        resourceId: paste.resourceId,
+        text: paste.text,
+        contentDesc: paste.contentDesc,
+        x: paste.x,
+        y: paste.y,
+      });
       await _adbTapAsync(adb, serial, paste.x, paste.y);
       await _sleep(450);
 
@@ -1548,19 +1563,33 @@ export async function runWhatsAppApp(
         xml = await _uiDump(adb, serial);
         const attach = findLiveLabel(xml, ["attach"], ["input_attach_button"]);
         if (!attach) {
+          whatsappDebug(`attachment control not found for "${contact.text}"`, describeWhatsAppSurface(xml));
           steps.push(`WhatsApp skipped "${contact.text}" — attachment control not found`);
           await pressBack();
           break;
         }
+        whatsappDebug(`tapping Attach for "${contact.text}"`, {
+          resourceId: attach.resourceId,
+          contentDesc: attach.contentDesc,
+          x: attach.x,
+          y: attach.y,
+        });
         await _adbTapAsync(adb, serial, attach.x, attach.y);
         await _sleep(600);
         xml = await _uiDump(adb, serial);
         const document = findLiveLabel(xml, ["document"], ["pickfiletype_document_holder"]);
         if (!document) {
+          whatsappDebug(`Document option not found for "${contact.text}"`, describeWhatsAppSurface(xml));
           steps.push(`WhatsApp skipped "${contact.text}" — Document attachment option not found`);
           await pressBack();
           break;
         }
+        whatsappDebug(`tapping Document for "${contact.text}"`, {
+          resourceId: document.resourceId,
+          contentDesc: document.contentDesc,
+          x: document.x,
+          y: document.y,
+        });
         await _adbTapAsync(adb, serial, document.x, document.y);
         await _sleep(1000);
         xml = await _uiDump(adb, serial);
@@ -1584,10 +1613,20 @@ export async function runWhatsAppApp(
           }
         }
         if (!fileNode) {
+          whatsappDebug(`staged attachment not visible for "${contact.text}"`, {
+            ...describeWhatsAppSurface(xml),
+            expectedFileNames: [...attachmentNames],
+          });
           steps.push(`WhatsApp skipped "${contact.text}" — staged attachment was not visible`);
           await pressBack();
           break;
         }
+        whatsappDebug(`tapping staged attachment for "${contact.text}"`, {
+          text: fileNode.text,
+          contentDesc: fileNode.contentDesc,
+          x: fileNode.x,
+          y: fileNode.y,
+        });
         await _adbTapAsync(adb, serial, fileNode.x, fileNode.y);
         await _sleep(900);
       }
@@ -1597,10 +1636,19 @@ export async function runWhatsAppApp(
         ? findLiveLabel(xml, ["send 1 media", "send media"], ["send_media_btn"])
         : findLiveLabel(xml, ["send"], ["send"]);
       if (!send) {
+        whatsappDebug(`Send control not found for "${contact.text}"`, describeWhatsAppSurface(xml));
         steps.push(`WhatsApp skipped "${contact.text}" — Send control not found`);
         await pressBack();
         break;
       }
+      whatsappDebug(`tapping final Send for "${contact.text}"`, {
+        resourceId: send.resourceId,
+        text: send.text,
+        contentDesc: send.contentDesc,
+        x: send.x,
+        y: send.y,
+        withAttachment: Boolean(remoteMediaPath),
+      });
       await _adbTapAsync(adb, serial, send.x, send.y);
       await _sleep(700);
       sent++;
