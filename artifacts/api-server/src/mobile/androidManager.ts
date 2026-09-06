@@ -5,7 +5,7 @@ import fs from "fs";
 import os from "os";
 import zlib from "zlib";
 import sharp from "sharp";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { logger } from "../lib/logger";
 import * as recorder from "./sessionRecorder";
@@ -1230,6 +1230,7 @@ type WhatsAppLiveNode = {
   resourceId: string;
   className: string;
   clickable: boolean;
+  focused: boolean;
   x1: number;
   y1: number;
   x2: number;
@@ -1254,6 +1255,7 @@ function parseWhatsAppLiveNodes(xml: string): WhatsAppLiveNode[] {
       resourceId: attr("resource-id").trim(),
       className: attr("class").trim(),
       clickable: attr("clickable").toLowerCase() === "true",
+      focused: attr("focused").toLowerCase() === "true",
       x1, y1, x2, y2,
       x: Math.round((x1 + x2) / 2),
       y: Math.round((y1 + y2) / 2),
@@ -1530,34 +1532,132 @@ export async function runWhatsAppApp(
         resourceId: composer.resourceId,
         text: composer.text,
         contentDesc: composer.contentDesc,
+        focused: composer.focused,
         bounds: `[${composer.x1},${composer.y1}][${composer.x2},${composer.y2}]`,
       });
       await _adbTapAsync(adb, serial, composer.x, composer.y);
+      await _sleep(500);
+      xml = await _uiDump(adb, serial);
+      let focusedComposer = parseWhatsAppLiveNodes(xml).find(node =>
+        node.resourceId.toLowerCase().endsWith("/entry") &&
+        node.className === "android.widget.EditText" &&
+        node.x2 > node.x1 && node.y2 > node.y1,
+      );
+      // Some WhatsApp builds need a second tap after the keyboard starts
+      // animating before the EditText becomes the active input target.
+      if (focusedComposer && !focusedComposer.focused) {
+        await _adbTapAsync(adb, serial, focusedComposer.x, focusedComposer.y);
+        await _sleep(400);
+        xml = await _uiDump(adb, serial);
+        focusedComposer = parseWhatsAppLiveNodes(xml).find(node =>
+          node.resourceId.toLowerCase().endsWith("/entry") &&
+          node.className === "android.widget.EditText" &&
+          node.x2 > node.x1 && node.y2 > node.y1,
+        ) ?? focusedComposer;
+      }
       const resolvedMessage = resolveWhatsAppSpintax(messageTemplate);
       await setClipboard(serial, resolvedMessage);
+      const messageFingerprint = createHash("sha256")
+        .update(resolvedMessage, "utf8")
+        .digest("hex")
+        .slice(0, 12);
+      const clipboardProbe = await probeClipboard(serial, resolvedMessage);
+      whatsappDebug(`clipboard prepared for "${contact.text}"`, {
+        messageLength: resolvedMessage.length,
+        messageFingerprint,
+        clipboardProbe: clipboardProbe.status,
+        clipboardObservedLength: clipboardProbe.observedLength,
+        composerFocused: Boolean(focusedComposer?.focused),
+      });
       await runAdb(adb, [
         "-s", serial, "shell", "input", "swipe",
         String(composer.x), String(composer.y),
-        String(composer.x), String(composer.y), "650",
+        String(composer.x), String(composer.y), "900",
       ], 5000);
-      await _sleep(450);
-      xml = await _uiDump(adb, serial);
-      const paste = findLiveLabel(xml, ["paste"], ["paste"]);
-      if (!paste) {
-        whatsappDebug(`Paste menu item not found for "${contact.text}"`, describeWhatsAppSurface(xml));
-        steps.push(`WhatsApp skipped "${contact.text}" — Paste menu item not found`);
-        await pressBack();
-        break;
+      let paste: WhatsAppLiveNode | null = null;
+      let editMenuXml = "";
+      let editMenuItems: string[] = [];
+      for (let menuPoll = 1; menuPoll <= 5; menuPoll++) {
+        if (menuPoll > 1) await _sleep(300);
+        editMenuXml = await _uiDump(adb, serial);
+        const editNodes = parseWhatsAppLiveNodes(editMenuXml);
+        editMenuItems = [...new Set(editNodes.flatMap(node => [node.text, node.contentDesc])
+          .map(value => value.trim())
+          .filter(value => /^(paste|autofill|cut|copy|select all|share|translate)$/i.test(value)))];
+        paste = findLiveLabel(editMenuXml, ["paste"], ["paste"]);
+        if (paste) break;
       }
-      whatsappDebug(`tapping native Paste for "${contact.text}"`, {
-        resourceId: paste.resourceId,
-        text: paste.text,
-        contentDesc: paste.contentDesc,
-        x: paste.x,
-        y: paste.y,
-      });
-      await _adbTapAsync(adb, serial, paste.x, paste.y);
-      await _sleep(450);
+      if (!paste) {
+        whatsappDebug(`Paste menu item not found for "${contact.text}"`, {
+          ...describeWhatsAppSurface(editMenuXml),
+          editMenuItems,
+          clipboardProbe: clipboardProbe.status,
+        });
+        // If the clipboard was confirmed (or the device does not expose a
+        // readable clipboard command), try Android's explicit paste key once.
+        // This is guarded by post-paste field verification, so Autofill or a
+        // stale menu can never result in a message being sent accidentally.
+        if (clipboardProbe.status !== "mismatch") {
+          await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 3000);
+          await _sleep(250);
+          await _adbTapAsync(adb, serial, composer.x, composer.y);
+          await _sleep(250);
+          await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_PASTE"], 3000);
+          await _sleep(700);
+          const fallbackXml = await _uiDump(adb, serial);
+          const fallbackComposer = parseWhatsAppLiveNodes(fallbackXml).find(node =>
+            node.resourceId.toLowerCase().endsWith("/entry") &&
+            node.className === "android.widget.EditText",
+          );
+          const fallbackText = fallbackComposer?.text ?? "";
+          const fallbackVerified = textMatchesWhatsAppComposer(fallbackText, resolvedMessage);
+          whatsappDebug(`explicit KEYCODE_PASTE fallback for "${contact.text}"`, {
+            verified: fallbackVerified,
+            composerTextLength: fallbackText.length,
+            messageLength: resolvedMessage.length,
+            messageFingerprint,
+          });
+          if (fallbackVerified) {
+            xml = fallbackXml;
+          } else {
+            steps.push(`WhatsApp skipped "${contact.text}" — Paste unavailable (${editMenuItems.join(", ") || "no edit-menu labels"})`);
+            await pressBack();
+            break;
+          }
+        } else {
+          steps.push(`WhatsApp skipped "${contact.text}" — clipboard verification mismatch`);
+          await pressBack();
+          break;
+        }
+      } else {
+        whatsappDebug(`tapping native Paste for "${contact.text}"`, {
+          resourceId: paste.resourceId,
+          text: paste.text,
+          contentDesc: paste.contentDesc,
+          x: paste.x,
+          y: paste.y,
+        });
+        await _adbTapAsync(adb, serial, paste.x, paste.y);
+        await _sleep(700);
+        xml = await _uiDump(adb, serial);
+        const pastedComposer = parseWhatsAppLiveNodes(xml).find(node =>
+          node.resourceId.toLowerCase().endsWith("/entry") &&
+          node.className === "android.widget.EditText",
+        );
+        const pastedText = pastedComposer?.text ?? "";
+        const pasteVerified = textMatchesWhatsAppComposer(pastedText, resolvedMessage);
+        whatsappDebug(`native Paste verification for "${contact.text}"`, {
+          verified: pasteVerified,
+          composerTextLength: pastedText.length,
+          messageLength: resolvedMessage.length,
+          messageFingerprint,
+        });
+        if (!pasteVerified) {
+          steps.push(`WhatsApp skipped "${contact.text}" — Paste did not populate the message field`);
+          await pressBack();
+          break;
+        }
+      }
 
       if (remoteMediaPath && opts?.media) {
         xml = await _uiDump(adb, serial);
@@ -3390,6 +3490,50 @@ export async function setClipboard(serial: string, text: string): Promise<void> 
     const detail = out || e.message || "unknown error";
     throw new Error(`adb clipboard set failed: ${detail}`);
   }
+}
+
+type ClipboardProbe = {
+  status: "confirmed" | "mismatch" | "unavailable";
+  observedLength: number | null;
+};
+
+/**
+ * Android's clipboard service is not readable on every OS/build. When it is
+ * available, use it only as a private equality check; never put clipboard
+ * contents into the action log.
+ */
+async function probeClipboard(serial: string, expected: string): Promise<ClipboardProbe> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  try {
+    const { stdout, stderr } = await execFileP(
+      adb,
+      ["-s", serial, "shell", "cmd", "clipboard", "get"],
+      { encoding: "utf8", timeout: 5000 } as any,
+    );
+    const output = `${stdout ?? ""}`.replace(/\r\n/g, "\n").trim();
+    const errorOutput = `${stderr ?? ""}`.trim();
+    if (/unknown command|not found|permission denied|error|exception/i.test(`${output}\n${errorOutput}`)) {
+      return { status: "unavailable", observedLength: null };
+    }
+    return {
+      status: output === expected || output.includes(expected) ? "confirmed" : "mismatch",
+      observedLength: output.length,
+    };
+  } catch {
+    return { status: "unavailable", observedLength: null };
+  }
+}
+
+function textMatchesWhatsAppComposer(actual: string, expected: string): boolean {
+  const normalize = (value: string) => value.replace(/\r\n/g, "\n").trim().replace(/\s+/g, " ");
+  const normalizedActual = normalize(actual);
+  const normalizedExpected = normalize(expected);
+  return Boolean(
+    normalizedActual &&
+    normalizedActual !== "message" &&
+    normalizedActual.includes(normalizedExpected),
+  );
 }
 
 /** Paste the current Android clipboard into the focused field. */

@@ -14,3 +14,9 @@ After tapping WhatsApp's Send message FAB, allow a bounded settle/poll window be
 **Why:** The contact picker can still be transitioning after the FAB tap; a single early dump falsely reports zero contacts and hides whether navigation, rendering, or row filtering failed.
 
 **How to apply:** Keep the wait finite, re-dump on each poll, and include enough live hierarchy summary to distinguish the home screen, picker shell, and populated contact list without falling back to guessed taps.
+
+The WhatsApp composer path must verify both clipboard preparation and the resulting composer text. If Android exposes Autofill instead of Paste, poll the edit menu, record the visible menu labels without recording message contents, and allow only a guarded KEYCODE_PASTE fallback when the composer text is verified afterward.
+
+**Why:** A long-press can open a valid text-editing menu while still failing to expose Paste; sending based only on the menu or clipboard command result risks sending an empty or wrong message.
+
+**How to apply:** Treat clipboard readback as best-effort because some Android builds hide it, fingerprint the expected message rather than logging its contents, and fail closed unless native Paste or the explicit fallback visibly populates the live `entry` field.
