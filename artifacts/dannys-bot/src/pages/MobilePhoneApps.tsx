@@ -307,41 +307,43 @@ function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMi
       <div className="flex items-center gap-4 flex-wrap">
         {/* Icon + label — anchors the left of the first visual row */}
         <div className="flex items-center gap-2 min-w-[13rem]">
-          {icon}
-          <span className={`text-sm font-semibold ${enabled ? "text-foreground" : "text-muted-foreground"}`}>{label}</span>
           <Checkbox
             checked={enabled}
             onCheckedChange={(checked) => onEnabled(checked === true)}
             aria-label={`Enable ${label}`}
-            className="ml-1 shrink-0"
+            className="shrink-0"
           />
+          {icon}
+          <span className={`text-sm font-semibold ${enabled ? "text-foreground" : "text-muted-foreground"}`}>{label}</span>
         </div>
 
         {enabled && (
           <>
-            {/* Activation */}
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Activation</span>
-              <div className="flex items-center gap-1">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  className={PCT_INPUT}
-                  value={min}
-                  onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
-                />
-                <span className="text-muted-foreground text-sm">to</span>
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  className={PCT_INPUT}
-                  value={max}
-                  onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
-                />
-                <span className="text-muted-foreground text-sm">%</span>
-              </div>
+            {/* Activation — keep the editable fields centered on the app title.
+                The caption floats above the same row so it does not push the
+                numeric controls below the title when the row wraps. */}
+            <div className="relative flex items-center gap-1 pt-2">
+              <span className="absolute left-1/2 bottom-full -translate-x-1/2 mb-0.5 text-xs text-muted-foreground whitespace-nowrap">
+                Activation
+              </span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                className={PCT_INPUT}
+                value={min}
+                onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                className={PCT_INPUT}
+                value={max}
+                onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
+              />
+              <span className="text-muted-foreground text-sm">%</span>
             </div>
 
             {/* Fields that belong to the first visual row. */}
