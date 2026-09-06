@@ -25,7 +25,7 @@ Image attachments must use WhatsApp's `pickfiletype_gallery_holder`, not the Doc
 
 **Why:** DocumentsUI can show the staged file in Recents without selecting it, while Gallery is the same media-import path used by Make a Post and its thumbnails do not expose source filenames. WhatsApp's displayed date follows the media taken/EXIF timestamp, not necessarily the scan time.
 
-**How to apply:** Scan the staged DCIM file, query `date_taken` before falling back to scan timestamps, allow phone/host timezone offsets while retaining minute-level matching, tap only that match, and require `send_media_counter=1` before sending. Keep non-image attachments on the Document path.
+**How to apply:** Scan the staged DCIM file, query `date_taken` before falling back to scan timestamps, treat numeric `"0"`/negative values as unavailable, allow phone/host timezone offsets while retaining minute-level matching, tap only that match, and require `send_media_counter=1` before sending. Keep non-image attachments on the Document path.
 
 WhatsApp Add Media is a raw-transfer path, not Make a Post processing: do not strip metadata, run AI-slop repair, alter pixels, or apply any other Make a Post transformation.
 

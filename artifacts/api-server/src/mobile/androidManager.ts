@@ -1456,21 +1456,24 @@ export async function runWhatsAppApp(
         // taken/EXIF timestamp when one exists. date_added/date_modified is
         // the scan time and can point at today even when the displayed photo
         // date is weeks old.
-        const rawTimestamp = Number(
-          indexed.fields.date_taken ||
-          indexed.fields.date_modified ||
+        const timestampCandidates = [
+          indexed.fields.date_taken,
+          indexed.fields.date_modified,
           indexed.fields.date_added,
-        );
-        const timestamp = rawTimestamp > 1_000_000_000_000
-          ? rawTimestamp / 1000
-          : rawTimestamp;
-        galleryMediaTimestamp = indexed.found && Number.isFinite(timestamp) && timestamp > 0
-          ? timestamp
+        ]
+          .map(value => Number(value))
+          .map(value => value > 1_000_000_000_000 ? value / 1000 : value)
+          .filter(value => Number.isFinite(value) && value > 1_000_000_000);
+        galleryMediaTimestamp = indexed.found
+          ? timestampCandidates[0] ?? null
           : null;
         whatsappDebug("image attachment staged for Gallery", {
           fileName: safeName,
           devicePath: remoteMediaPath,
           mediaStoreFound: indexed.found,
+          mediaStoreDateTaken: indexed.fields.date_taken ?? null,
+          mediaStoreDateModified: indexed.fields.date_modified ?? null,
+          mediaStoreDateAdded: indexed.fields.date_added ?? null,
           galleryMediaTimestamp,
         });
       } else {
@@ -1724,18 +1727,43 @@ export async function runWhatsAppApp(
             x: stagedItem.x,
             y: stagedItem.y,
           });
-          await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
-          await _sleep(900);
-          xml = await _uiDump(adb, serial);
-          const gallerySend = findLiveLabel(xml, ["send 1 media", "send media"], ["send_media_btn"]);
-          const galleryCounter = parseWhatsAppLiveNodes(xml).find(node =>
-            node.resourceId.toLowerCase().endsWith("/send_media_counter"),
-          );
-          if (!gallerySend || galleryCounter?.text !== "1") {
-            whatsappDebug(`Gallery image selection was not verified for "${contact.text}"`, {
-              ...describeWhatsAppSurface(xml),
+          const gallerySelectionVerified = (currentXml: string) => {
+            const currentNodes = parseWhatsAppLiveNodes(currentXml);
+            const gallerySend = findLiveLabel(currentXml, ["send 1 media", "send media"], ["send_media_btn"]);
+            const galleryCounter = currentNodes.find(node =>
+              node.resourceId.toLowerCase().endsWith("/send_media_counter"),
+            );
+            const selectedTray = currentNodes.find(node =>
+              node.resourceId.toLowerCase().endsWith("/gallery_selected_media"),
+            );
+            const selectedThumbnail = currentNodes.find(node =>
+              node.resourceId.toLowerCase().endsWith("/selected_media_item_thumbnail"),
+            );
+            return {
+              verified: Boolean(gallerySend && galleryCounter?.text === "1" && (selectedTray || selectedThumbnail)),
               sendControlFound: Boolean(gallerySend),
               selectedMediaCount: galleryCounter?.text ?? null,
+              selectedTrayFound: Boolean(selectedTray),
+              selectedThumbnailFound: Boolean(selectedThumbnail),
+            };
+          };
+          let selection = { verified: false, sendControlFound: false, selectedMediaCount: null as string | null, selectedTrayFound: false, selectedThumbnailFound: false };
+          for (let selectionAttempt = 1; selectionAttempt <= 2 && !selection.verified; selectionAttempt++) {
+            await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
+            await _sleep(selectionAttempt === 1 ? 1200 : 700);
+            xml = await _uiDump(adb, serial);
+            selection = gallerySelectionVerified(xml);
+            whatsappDebug(`Gallery selection verification attempt ${selectionAttempt}`, {
+              ...selection,
+              contentDesc: stagedItem.contentDesc,
+              x: stagedItem.x,
+              y: stagedItem.y,
+            });
+          }
+          if (!selection.verified) {
+            whatsappDebug(`Gallery image selection was not verified for "${contact.text}"`, {
+              ...describeWhatsAppSurface(xml),
+              ...selection,
             });
             steps.push(`WhatsApp skipped "${contact.text}" — Gallery image selection was not verified`);
             await pressBack();
@@ -1837,6 +1865,21 @@ export async function runWhatsAppApp(
     }
     if (tempMediaPath) {
       try { fs.unlinkSync(tempMediaPath); } catch {}
+    }
+    if (remoteMediaPath) {
+      try {
+        await removeDeviceFile(serial, remoteMediaPath);
+        steps.push(`WhatsApp staged media deleted from device: ${path.basename(remoteMediaPath)}`);
+        whatsappDebug("deleted staged media from device", {
+          devicePath: remoteMediaPath,
+        });
+      } catch (cleanupError: any) {
+        const message = cleanupError?.message ?? String(cleanupError);
+        whatsappDebug(`could not delete staged media from device: ${message}`, {
+          devicePath: remoteMediaPath,
+        });
+        steps.push(`WhatsApp media cleanup warning: ${message}`);
+      }
     }
   }
 }
