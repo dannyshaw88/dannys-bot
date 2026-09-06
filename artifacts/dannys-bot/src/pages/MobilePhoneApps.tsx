@@ -322,8 +322,8 @@ function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMi
             {/* Activation — keep the editable fields centered on the app title.
                 The caption floats above the same row so it does not push the
                 numeric controls below the title when the row wraps. */}
-            <div className="relative flex items-center gap-1 pt-2">
-              <span className="absolute left-1/2 bottom-full -translate-x-1/2 mb-0.5 text-xs text-muted-foreground whitespace-nowrap">
+            <div className="relative flex items-center gap-1 self-center">
+              <span className="absolute left-1/2 bottom-full -translate-x-1/2 mb-0 leading-none text-xs text-muted-foreground whitespace-nowrap">
                 Activation
               </span>
               <Input
@@ -781,7 +781,7 @@ function MobilePhoneAppsPanel({
               <div className="divide-y divide-border">
               <AppSlotRow
                 icon={<ChromeIcon size={22} />}
-                label="Google Chrome"
+                label="Chrome"
                  enabled={settings.chrome.enabled}
                  onEnabled={v => patchApp("chrome", { enabled: v })}
                 className="order-1"
