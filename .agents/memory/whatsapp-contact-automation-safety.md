@@ -32,3 +32,9 @@ WhatsApp Add Media is a raw-transfer path, not Make a Post processing: do not st
 **Why:** The selected attachment should be sent as the user supplied it; Make a Post's cleanup pipeline is intentionally unrelated to WhatsApp messaging.
 
 **How to apply:** Decode the selected data URL, transfer those bytes to the phone, scan/index the copy, and use only the picker/import verification needed to attach it. At the end of the run, close WhatsApp through the same configured floating-window recents gesture used by HST; do not add an airplane-mode cycle to WhatsApp.
+
+WhatsApp's Gallery sheet has two coordinate spaces: the unselected thumbnail can be near the bottom of the screen, then moves upward when the selected-media tray expands. Require the staged target's bounds/content description to remain stable across consecutive unselected dumps, tap that saved pre-selection coordinate, and poll for the selected tray, thumbnail, counter, and send control. Allow a second tap only when the first tap produced no selected-state marker at all; never tap again while the sheet is visibly transitioning.
+
+**Why:** A delayed fixed retry can land on the old or moved thumbnail after the first tap has already taken effect, toggling the image back off. The supplied before/after dumps prove that this is a layout transition, not a stable thumbnail coordinate.
+
+**How to apply:** Treat `gallery_selected_media`, `selected_media_item_thumbnail`, `send_media_counter=1`, or `send_media_btn` as evidence that selection is in progress; continue polling instead of tapping. Fail closed unless the complete selected state is confirmed.
