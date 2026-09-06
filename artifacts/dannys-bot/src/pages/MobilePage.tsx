@@ -249,6 +249,7 @@ type LogMarker = {
   label?: string;
 };
 type CalibrationPosition = { x: number; y: number; label: string; screen?: { w: number; h: number } } | null;
+type MirrorStatus = "connecting" | "waiting" | "live" | "asleep" | "error";
 
 type InspectNode = {
   index?: number;
@@ -279,7 +280,7 @@ type PendingPin = {
   parentNode: InspectNode | null;
 };
 
-const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; phoneDims?: { w: number; h: number } | null; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; calibrationPosition?: CalibrationPosition; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: "connecting" | "waiting" | "live" | "asleep" | "error") => void }>(function LiveCanvas({ serial, live, phoneDims, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, calibrationPosition, onExpectedTap, onStatusChange }, ref) {
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; phoneDims?: { w: number; h: number } | null; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; calibrationPosition?: CalibrationPosition; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: MirrorStatus) => void }>(function LiveCanvas({ serial, live, phoneDims, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, calibrationPosition, onExpectedTap, onStatusChange }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -309,6 +310,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   useEffect(() => { onExpectedTapRef.current = onExpectedTap; }, [onExpectedTap]);
   const fpsCountRef  = useRef(0);
   const frameSeenRef = useRef(false);
+  const lastDecodedAtRef = useRef(0);
   // Video mode: true H.264 stream decoded with WebCodecs (near-instant).
   // Falls back to the legacy PNG-polling endpoint if screenrecord/WebCodecs
   // isn't available on this machine/device.
@@ -349,7 +351,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // flag prevents handlePointerMove from overwriting it with the mirror-hover node.
   const forcedHighlightActiveRef = useRef(false);
 
-  const [status, setStatus] = useState<"connecting" | "waiting" | "live" | "asleep" | "error">("connecting");
+  const [status, setStatus] = useState<MirrorStatus>("connecting");
   const [fps,    setFps]    = useState(0);
 
   // Bubble stream status up to PhoneSlot so the wallpaper/text overlay can
@@ -529,6 +531,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       }
       frame.close();
       fpsCountRef.current++;
+      lastDecodedAtRef.current = Date.now();
       setStatus("live");
     };
 
@@ -546,6 +549,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     const connect = () => {
       if (!active) return;
       frameSeenRef.current = false;
+      lastDecodedAtRef.current = 0;
       phoneSizeRef.current = null;
       closeDecoder();
       attemptCount++;
@@ -711,10 +715,21 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     };
 
     connect();
+    // A WebSocket can remain open while screenrecord is only emitting codec
+    // headers or while the phone has gone dark. Once a live mirror loses
+    // decoded frames, expose the asleep state so the Power control offers
+    // WAKEUP instead of incorrectly offering Power off.
+    const streamHealthTimer = setInterval(() => {
+      if (!active || !frameSeenRef.current || !lastDecodedAtRef.current) return;
+      if (Date.now() - lastDecodedAtRef.current > 3_000) {
+        setStatus(previous => previous === "live" ? "asleep" : previous);
+      }
+    }, 1_000);
     return () => {
       active = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (noFrameTimer)   clearTimeout(noFrameTimer);
+      clearInterval(streamHealthTimer);
       wsRef.current?.close();
       closeDecoder();
     };
@@ -2977,14 +2992,21 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   // hidden by the black canvas background whenever the phone screen is off
   // (locked between automation cycles, awaiting connection, etc.).
   const [canvasStreaming, setCanvasStreaming] = useState(false);
-  const handleCanvasStatus = useCallback((status: "connecting" | "waiting" | "live" | "asleep" | "error") => {
+  const [mirrorStatus, setMirrorStatus] = useState<MirrorStatus>("waiting");
+  const handleCanvasStatus = useCallback((status: MirrorStatus) => {
+    setMirrorStatus(previous => previous === status ? previous : status);
     const streaming = status === "live";
     setCanvasStreaming(previous => previous === streaming ? previous : streaming);
   }, []);
   // Reset to false the moment we stop asking for a live mirror so the
   // wallpaper reappears immediately rather than waiting for the next status
   // transition inside LiveCanvas (which is unmounted when live turns off).
-  useEffect(() => { if (!live) setCanvasStreaming(false); }, [live]);
+  useEffect(() => {
+    if (!live) {
+      setCanvasStreaming(false);
+      setMirrorStatus("waiting");
+    }
+  }, [live]);
 
   const [clickTestMode, setClickTestMode] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
@@ -2992,12 +3014,25 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   const [showNavigationCalibration, setShowNavigationCalibration] = useState(false);
   const [calibrationPosition, setCalibrationPosition] = useState<CalibrationPosition>(null);
   const [showManualMedia, setShowManualMedia] = useState(false);
+  // manualLive is only the requested session state. A timeout, reconnect, or
+  // black stream can leave that request true while the phone is already off.
+  // Only call the next action "Power off" when a decoded frame is currently
+  // flowing for that manual session.
+  const manualPowerActuallyOn = manualLive && mirrorStatus === "live";
   const toggleManualPower = useCallback(() => {
     if (!phone) return;
     liveCanvasRef.current?.clearToBlack();
-    onPower();
-    sendKey(phone.serial, manualLive ? 223 : 224, manualLive ? "Sleep" : "Wake", onLog);
-  }, [manualLive, onLog, onPower, phone]);
+    if (manualPowerActuallyOn) {
+      onPower();
+      sendKey(phone.serial, 223, "Sleep", onLog);
+    } else {
+      // If the manual session is already requested but the mirror went black,
+      // keep it live and only wake the physical screen. This is the important
+      // distinction from the old manualLive-only toggle.
+      if (!manualLive) onPower();
+      sendKey(phone.serial, 224, "Wake", onLog);
+    }
+  }, [manualLive, manualPowerActuallyOn, onLog, onPower, phone]);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
@@ -3243,9 +3278,9 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
              <button
                type="button"
                onClick={toggleManualPower}
-               title={manualLive ? "Power off phone mirror" : "Power on phone mirror"}
-               aria-label={manualLive ? "Power off phone mirror" : "Power on phone mirror"}
-               className={`transition-colors shrink-0 ${manualLive ? "text-emerald-400 hover:text-emerald-300" : "text-white/20 hover:text-white/60"}`}
+                title={manualPowerActuallyOn ? "Power off phone mirror" : "Power on phone mirror"}
+                aria-label={manualPowerActuallyOn ? "Power off phone mirror" : "Power on phone mirror"}
+                className={`transition-colors shrink-0 ${manualPowerActuallyOn ? "text-emerald-400 hover:text-emerald-300" : "text-white/20 hover:text-white/60"}`}
              >
                <Power className="w-3 h-3" />
              </button>
@@ -3638,7 +3673,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
           <NavBtn icon={<ImagePlus className="w-3.5 h-3.5" />} label="Image" onClick={() => setShowManualMedia(v => !v)} />
           <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
           <div className="w-px h-4 bg-white/10" />
-           <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualLive ? "Power off" : "Power on"}  onClick={toggleManualPower} />
+           <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualPowerActuallyOn ? "Power off" : "Power on"}  onClick={toggleManualPower} />
           <div className="w-px h-4 bg-white/10" />
           <NavBtn icon={<Keyboard    className="w-3 h-3" />}     label="Keyboard" onClick={() => setShowCalibration(true)} />
             <NavBtn icon={<Settings2   className="w-3 h-3" />}     label="Controls" onClick={() => setShowNavigationCalibration(true)} />
