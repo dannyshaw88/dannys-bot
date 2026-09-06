@@ -1287,6 +1287,15 @@ export async function runWhatsAppApp(
     userCountMin?: number;
     userCountMax?: number;
     message: string;
+    dismissDirection?: "left" | "up";
+    swipeGesture?: {
+      x1: number; y1: number; x2: number; y2: number;
+      durationMinMs: number; durationMaxMs: number;
+      jitterX: number; jitterY: number;
+      startJitterMinY?: number; startJitterMaxY?: number;
+      pauseMinMs?: number; pauseMaxMs?: number;
+      settleMinMs?: number; settleMaxMs?: number;
+    };
     media?: {
       fileName: string;
       mimeType: string;
@@ -1402,18 +1411,21 @@ export async function runWhatsAppApp(
   const getWhatsAppGalleryDateHints = (timestamp: number): string[] => {
     const hints = new Set<string>();
     // WhatsApp exposes only a localized date/time in media_item_view's
-    // content-desc, not the MediaStore filename. Allow a small clock skew
-    // between the Windows host and the phone while still requiring the exact
-    // indexed minute rather than blindly tapping the first thumbnail.
-    for (let minuteOffset = -10; minuteOffset <= 10; minuteOffset++) {
-      const date = new Date((timestamp + minuteOffset * 60) * 1000);
-      const day = date.getDate();
-      const month = date.toLocaleString("en-GB", { month: "long" });
-      const year = date.getFullYear();
-      const hour = date.getHours();
-      const minute = String(date.getMinutes()).padStart(2, "0");
-      hints.add(`${day} ${month} ${year} ${hour}:${minute}`);
-      hints.add(`${day} ${month} ${year} ${String(hour).padStart(2, "0")}:${minute}`);
+    // content-desc, not the MediaStore filename. Generate the same instant
+    // across plausible phone timezone offsets because the API host and phone
+    // do not have to use the same locale. Keep the exact minute so this never
+    // falls back to the first visible thumbnail.
+    for (let timezoneOffsetHours = -14; timezoneOffsetHours <= 14; timezoneOffsetHours++) {
+      for (let minuteOffset = -2; minuteOffset <= 2; minuteOffset++) {
+        const date = new Date((timestamp + timezoneOffsetHours * 3600 + minuteOffset * 60) * 1000);
+        const day = date.getDate();
+        const month = date.toLocaleString("en-GB", { month: "long" });
+        const year = date.getFullYear();
+        const hour = date.getHours();
+        const minute = String(date.getMinutes()).padStart(2, "0");
+        hints.add(`${day} ${month} ${year} ${hour}:${minute}`);
+        hints.add(`${day} ${month} ${year} ${String(hour).padStart(2, "0")}:${minute}`);
+      }
     }
     return [...hints];
   };
@@ -1435,8 +1447,20 @@ export async function runWhatsAppApp(
         // Make a Post. Documents/Download is a different picker and does not
         // make the staged image the selected media item.
         remoteMediaPath = await pushFileToDevice(serial, tempMediaPath, safeName);
-        const indexed = await queryMediaStoreFile(serial, remoteMediaPath);
-        const rawTimestamp = Number(indexed.fields.date_added || indexed.fields.date_modified);
+        let indexed = await queryMediaStoreFile(serial, remoteMediaPath);
+        for (let mediaPoll = 1; mediaPoll < 6 && !indexed.found; mediaPoll++) {
+          await _sleep(450);
+          indexed = await queryMediaStoreFile(serial, remoteMediaPath);
+        }
+        // WhatsApp's Gallery accessibility date is based on the media's
+        // taken/EXIF timestamp when one exists. date_added/date_modified is
+        // the scan time and can point at today even when the displayed photo
+        // date is weeks old.
+        const rawTimestamp = Number(
+          indexed.fields.date_taken ||
+          indexed.fields.date_modified ||
+          indexed.fields.date_added,
+        );
         const timestamp = rawTimestamp > 1_000_000_000_000
           ? rawTimestamp / 1000
           : rawTimestamp;
@@ -1558,10 +1582,10 @@ export async function runWhatsAppApp(
       await _sleep(900);
 
       xml = await _uiDump(adb, serial);
-      // WhatsApp's message field is the live `entry` EditText. Paste through
-      // the native long-press menu instead of using KEYCODE_PASTE directly:
-      // this follows the real device flow and avoids silently pasting into a
-      // different field when the keyboard/layout changes.
+      // WhatsApp's message field is the live `entry` EditText. It is already
+      // focused by the normal tap above, so use direct ADB text input. Do not
+      // open the long-press edit menu: on Xiaomi this shows Autofill instead
+      // of Paste and wastes up to 20 seconds before the verified fallback.
       const composer = parseWhatsAppLiveNodes(xml).find(node =>
         node.resourceId.toLowerCase().endsWith("/entry") &&
         node.className === "android.widget.EditText" &&
@@ -1601,134 +1625,32 @@ export async function runWhatsAppApp(
         ) ?? focusedComposer;
       }
       const resolvedMessage = resolveWhatsAppSpintax(messageTemplate);
-      await setClipboard(serial, resolvedMessage);
       const messageFingerprint = createHash("sha256")
         .update(resolvedMessage, "utf8")
         .digest("hex")
         .slice(0, 12);
-      const clipboardProbe = await probeClipboard(serial, resolvedMessage);
-      whatsappDebug(`clipboard prepared for "${contact.text}"`, {
+      await inputText(serial, resolvedMessage);
+      await _sleep(350);
+      const typedXml = await _uiDump(adb, serial);
+      const typedComposer = parseWhatsAppLiveNodes(typedXml).find(node =>
+        node.resourceId.toLowerCase().endsWith("/entry") &&
+        node.className === "android.widget.EditText",
+      );
+      const typedText = typedComposer?.text ?? "";
+      const directEntryVerified = textMatchesWhatsAppComposer(typedText, resolvedMessage);
+      whatsappDebug(`direct text entry for "${contact.text}"`, {
         messageLength: resolvedMessage.length,
         messageFingerprint,
-        clipboardProbe: clipboardProbe.status,
-        clipboardObservedLength: clipboardProbe.observedLength,
-        composerFocused: Boolean(focusedComposer?.focused),
+        verified: directEntryVerified,
+        composerTextLength: typedText.length,
+        composerFocused: Boolean(typedComposer?.focused),
       });
-      await runAdb(adb, [
-        "-s", serial, "shell", "input", "swipe",
-        String(composer.x), String(composer.y),
-        String(composer.x), String(composer.y), "900",
-      ], 5000);
-      let paste: WhatsAppLiveNode | null = null;
-      let editMenuXml = "";
-      let editMenuItems: string[] = [];
-      for (let menuPoll = 1; menuPoll <= 5; menuPoll++) {
-        if (menuPoll > 1) await _sleep(300);
-        editMenuXml = await _uiDump(adb, serial);
-        const editNodes = parseWhatsAppLiveNodes(editMenuXml);
-        editMenuItems = [...new Set(editNodes.flatMap(node => [node.text, node.contentDesc])
-          .map(value => value.trim())
-          .filter(value => /^(paste|autofill|cut|copy|select all|share|translate)$/i.test(value)))];
-        paste = findLiveLabel(editMenuXml, ["paste"], ["paste"]);
-        if (paste) break;
+      if (!directEntryVerified) {
+        steps.push(`WhatsApp skipped "${contact.text}" — direct message entry could not be verified`);
+        await pressBack();
+        break;
       }
-      if (!paste) {
-        whatsappDebug(`Paste menu item not found for "${contact.text}"`, {
-          ...describeWhatsAppSurface(editMenuXml),
-          editMenuItems,
-          clipboardProbe: clipboardProbe.status,
-        });
-        let fallbackVerified = false;
-        // If the clipboard was confirmed (or the device does not expose a
-        // readable clipboard command), try Android's explicit paste key once.
-        // This is guarded by post-paste field verification, so Autofill or a
-        // stale menu can never result in a message being sent accidentally.
-        if (clipboardProbe.status !== "mismatch") {
-          await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 3000);
-          await _sleep(250);
-          await _adbTapAsync(adb, serial, composer.x, composer.y);
-          await _sleep(250);
-          await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_PASTE"], 3000);
-          await _sleep(700);
-          const fallbackXml = await _uiDump(adb, serial);
-          const fallbackComposer = parseWhatsAppLiveNodes(fallbackXml).find(node =>
-            node.resourceId.toLowerCase().endsWith("/entry") &&
-            node.className === "android.widget.EditText",
-          );
-          const fallbackText = fallbackComposer?.text ?? "";
-          fallbackVerified = textMatchesWhatsAppComposer(fallbackText, resolvedMessage);
-          whatsappDebug(`explicit KEYCODE_PASTE fallback for "${contact.text}"`, {
-            verified: fallbackVerified,
-            composerTextLength: fallbackText.length,
-            messageLength: resolvedMessage.length,
-            messageFingerprint,
-          });
-          if (fallbackVerified) xml = fallbackXml;
-        }
-        // Some Xiaomi/Android builds expose the edit menu but reject the
-        // shell clipboard service. Type through the focused EditText as a
-        // second, independently verified path instead of stopping at
-        // Autofill. This is still fail-closed: the flow cannot send unless
-        // the live entry node contains the intended message afterward.
-        if (!fallbackVerified) {
-          await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 3000);
-          await _sleep(250);
-          await _adbTapAsync(adb, serial, composer.x, composer.y);
-          await _sleep(250);
-          await inputText(serial, resolvedMessage);
-          await _sleep(700);
-          const typedXml = await _uiDump(adb, serial);
-          const typedComposer = parseWhatsAppLiveNodes(typedXml).find(node =>
-            node.resourceId.toLowerCase().endsWith("/entry") &&
-            node.className === "android.widget.EditText",
-          );
-          const typedText = typedComposer?.text ?? "";
-          fallbackVerified = textMatchesWhatsAppComposer(typedText, resolvedMessage);
-          whatsappDebug(`direct text-entry fallback for "${contact.text}"`, {
-            verified: fallbackVerified,
-            composerTextLength: typedText.length,
-            messageLength: resolvedMessage.length,
-            messageFingerprint,
-            reason: clipboardProbe.status === "mismatch"
-              ? "clipboard mismatch"
-              : "paste not verified",
-          });
-          if (fallbackVerified) xml = typedXml;
-        }
-        if (!fallbackVerified) {
-          steps.push(`WhatsApp skipped "${contact.text}" — message entry could not be verified (${editMenuItems.join(", ") || "no edit-menu labels"})`);
-          await pressBack();
-          break;
-        }
-      } else {
-        whatsappDebug(`tapping native Paste for "${contact.text}"`, {
-          resourceId: paste.resourceId,
-          text: paste.text,
-          contentDesc: paste.contentDesc,
-          x: paste.x,
-          y: paste.y,
-        });
-        await _adbTapAsync(adb, serial, paste.x, paste.y);
-        await _sleep(700);
-        xml = await _uiDump(adb, serial);
-        const pastedComposer = parseWhatsAppLiveNodes(xml).find(node =>
-          node.resourceId.toLowerCase().endsWith("/entry") &&
-          node.className === "android.widget.EditText",
-        );
-        const pastedText = pastedComposer?.text ?? "";
-        const pasteVerified = textMatchesWhatsAppComposer(pastedText, resolvedMessage);
-        whatsappDebug(`native Paste verification for "${contact.text}"`, {
-          verified: pasteVerified,
-          composerTextLength: pastedText.length,
-          messageLength: resolvedMessage.length,
-          messageFingerprint,
-        });
-        if (!pasteVerified) {
-          steps.push(`WhatsApp skipped "${contact.text}" — Paste did not populate the message field`);
-          await pressBack();
-          break;
-        }
-      }
+      xml = typedXml;
 
       if (remoteMediaPath && opts?.media) {
         xml = await _uiDump(adb, serial);
@@ -1767,12 +1689,18 @@ export async function runWhatsAppApp(
         await _adbTapAsync(adb, serial, attachmentPicker.x, attachmentPicker.y);
         await _sleep(1000);
         xml = await _uiDump(adb, serial);
+        let mediaItems: WhatsAppLiveNode[] = [];
         if (isImageMedia) {
-          const mediaItems = parseWhatsAppLiveNodes(xml).filter(node =>
-            node.resourceId.toLowerCase().endsWith("/media_item_view") &&
-            node.className === "android.widget.ImageView" &&
-            node.x2 > node.x1 && node.y2 > node.y1,
-          );
+          for (let galleryPoll = 1; galleryPoll <= 8; galleryPoll++) {
+            xml = await _uiDump(adb, serial);
+            mediaItems = parseWhatsAppLiveNodes(xml).filter(node =>
+              node.resourceId.toLowerCase().endsWith("/media_item_view") &&
+              node.className === "android.widget.ImageView" &&
+              node.x2 > node.x1 && node.y2 > node.y1,
+            );
+            if (mediaItems.length > 0) break;
+            await _sleep(350);
+          }
           const galleryDateHints = galleryMediaTimestamp
             ? getWhatsAppGalleryDateHints(galleryMediaTimestamp)
             : [];
@@ -1888,6 +1816,25 @@ export async function runWhatsAppApp(
       error: error?.message ?? "WhatsApp messaging failed",
     };
   } finally {
+    try {
+      const dismissDirection = opts?.dismissDirection
+        ?? getModelDismissDirection(getDeviceModel(serial));
+      await closeInstagramViaRecents(
+        serial,
+        dismissDirection,
+        (message) => whatsappDebug(message),
+        opts?.swipeGesture,
+        "com.whatsapp",
+        "WhatsApp",
+      );
+      await keyevent(serial, 3 /* KEYCODE_HOME */);
+      await _sleep(500);
+      steps.push("WhatsApp closed via floating-window recents gesture");
+    } catch (closeError: any) {
+      const message = closeError?.message ?? String(closeError);
+      whatsappDebug(`could not close WhatsApp via floating-window recents: ${message}`);
+      steps.push(`WhatsApp close warning: ${message}`);
+    }
     if (tempMediaPath) {
       try { fs.unlinkSync(tempMediaPath); } catch {}
     }
@@ -4304,6 +4251,8 @@ export async function closeInstagramViaRecents(
     pauseMinMs?: number; pauseMaxMs?: number;
     settleMinMs?: number; settleMaxMs?: number;
   },
+  appPackage = "com.instagram.android",
+  appLabel = "Instagram",
 ): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -4361,7 +4310,7 @@ export async function closeInstagramViaRecents(
     return { from, to, durationMs };
   };
   const pidof = () => {
-    const r = spawnSync(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], { encoding: "utf8", timeout: 3000 });
+    const r = spawnSync(adb, ["-s", serial, "shell", "pidof", appPackage], { encoding: "utf8", timeout: 3000 });
     return (r.stdout ?? "").trim().length > 0;
   };
 
@@ -4410,11 +4359,11 @@ export async function closeInstagramViaRecents(
   while (true) {
     attempt++;
     attemptsRun = attempt;
-    if (!pidof()) { method = `Instagram already gone before attempt ${attempt}`; break; }
+    if (!pidof()) { method = `${appLabel} already gone before attempt ${attempt}`; break; }
 
     const xml = await _uiDump(adb, serial);
-    const igCard = xml ? _findElem(xml, "Instagram") : null;
-    const card = (igCard && xml) ? (_findLeftmostLabelInBand(xml, igCard.y, 120) ?? igCard) : null;
+    const appCard = xml ? _findElem(xml, appLabel) : null;
+    const card = (appCard && xml) ? (_findLeftmostLabelInBand(xml, appCard.y, 120) ?? appCard) : null;
     if (card) sawAnyLabel = true;
 
     if (card) {
@@ -4440,7 +4389,7 @@ export async function closeInstagramViaRecents(
     }
 
     const closed = await waitForClosed();
-    if (closed) { method += " — Instagram closed"; break; }
+    if (closed) { method += ` — ${appLabel} closed`; break; }
 
     const capReached = sawAnyLabel ? attempt >= MAX_LABELLED_ATTEMPTS : attempt >= MAX_BLIND_ATTEMPTS;
     if (capReached) { method += ` — still running after ${attempt} attempt(s), giving up on the recents gesture`; break; }
@@ -4458,7 +4407,7 @@ export async function closeInstagramViaRecents(
 
   const runningNow = pidof();
   const capLabel = sawAnyLabel ? MAX_LABELLED_ATTEMPTS : MAX_BLIND_ATTEMPTS;
-  log(`[close-ig] attempt ${attemptsRun}/${capLabel}: ${method} — Instagram ${runningNow ? "still running" : "closed ✓"}`);
+  log(`[close-${appLabel.toLowerCase()}] attempt ${attemptsRun}/${capLabel}: ${method} — ${appLabel} ${runningNow ? "still running" : "closed ✓"}`);
 
   // Card-dismiss gestures aren't consistent across OEM launchers/Android
   // versions — a "closed completely" requirement can't rely on the gesture
@@ -4466,10 +4415,13 @@ export async function closeInstagramViaRecents(
   // process and, if every drag attempt missed, fall back to a clean
   // force-stop so the app is guaranteed closed before the cycle moves on.
   if (runningNow) {
-    log("[close-ig] still running after all recents-drag attempts — falling back to force-stop");
-    await stopInstagram(serial);
+    log(`[close-${appLabel.toLowerCase()}] still running after all recents-drag attempts — falling back to force-stop`);
+    spawnSync(adb, ["-s", serial, "shell", "am", "force-stop", appPackage], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
   } else {
-    log("[close-ig] confirmed closed");
+    log(`[close-${appLabel.toLowerCase()}] confirmed closed`);
   }
 }
 
@@ -8882,7 +8834,7 @@ export async function queryMediaStoreFile(serial: string, devicePath: string): P
 }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const projection = "_id:_data:_display_name:mime_type:size:width:height:date_added:date_modified:orientation:relative_path";
+  const projection = "_id:_data:_display_name:mime_type:size:width:height:date_taken:date_added:date_modified:orientation:relative_path";
   const where = `_data='${devicePath.replace(/'/g, "''")}'`;
   const candidates = [
     "content://media/external_primary/images/media",

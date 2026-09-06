@@ -15,26 +15,20 @@ After tapping WhatsApp's Send message FAB, allow a bounded settle/poll window be
 
 **How to apply:** Keep the wait finite, re-dump on each poll, and include enough live hierarchy summary to distinguish the home screen, picker shell, and populated contact list without falling back to guessed taps.
 
-The WhatsApp composer path must verify both clipboard preparation and the resulting composer text. If Android exposes Autofill instead of Paste, poll the edit menu, record the visible menu labels without recording message contents, and allow only a guarded KEYCODE_PASTE fallback when the composer text is verified afterward.
+The WhatsApp composer path must tap the live `entry` field and use direct ADB text input, then verify the resulting composer text. It must not open the long-press edit menu or attempt clipboard preparation first.
 
-**Why:** A long-press can open a valid text-editing menu while still failing to expose Paste; sending based only on the menu or clipboard command result risks sending an empty or wrong message.
+**Why:** On the Xiaomi Redmi A5, the long-press path opens Autofill instead of Paste and can waste roughly 20 seconds before the actual direct-entry fallback.
 
-**How to apply:** Treat clipboard readback as best-effort because some Android builds hide it, fingerprint the expected message rather than logging its contents, and fail closed unless native Paste or the explicit fallback visibly populates the live `entry` field.
-
-On the Xiaomi Redmi A5 test device, `adb shell cmd clipboard set` can return without an ADB error while the subsequent clipboard probe is empty; Autofill then appears instead of Paste.
-
-**Why:** Exit-code-only clipboard handling falsely treats the message as available and leaves the flow stuck at the edit menu.
-
-**How to apply:** When readback reports a mismatch, dismiss the edit menu, refocus `entry`, type through the existing ADB text-input path, and verify the live composer text before allowing Send.
+**How to apply:** Focus `entry`, call the bulk input path once, wait only for the keyboard/input update, and fail closed unless the live field contains the intended message. Keep clipboard helpers isolated from this flow.
 
 Image attachments must use WhatsApp's `pickfiletype_gallery_holder`, not the Document picker. Stage them in DCIM/Camera and identify the staged Gallery thumbnail from its MediaStore-indexed timestamp; never assume the first visible thumbnail is the uploaded source.
 
-**Why:** DocumentsUI can show the staged file in Recents without selecting it, while Gallery is the same media-import path used by Make a Post and its thumbnails do not expose source filenames.
+**Why:** DocumentsUI can show the staged file in Recents without selecting it, while Gallery is the same media-import path used by Make a Post and its thumbnails do not expose source filenames. WhatsApp's displayed date follows the media taken/EXIF timestamp, not necessarily the scan time.
 
-**How to apply:** Scan the staged DCIM file, match the Gallery `media_item_view` date within a small clock-skew window, tap only that match, and require `send_media_counter=1` before sending. Keep non-image attachments on the Document path.
+**How to apply:** Scan the staged DCIM file, query `date_taken` before falling back to scan timestamps, allow phone/host timezone offsets while retaining minute-level matching, tap only that match, and require `send_media_counter=1` before sending. Keep non-image attachments on the Document path.
 
 WhatsApp Add Media is a raw-transfer path, not Make a Post processing: do not strip metadata, run AI-slop repair, alter pixels, or apply any other Make a Post transformation.
 
 **Why:** The selected attachment should be sent as the user supplied it; Make a Post's cleanup pipeline is intentionally unrelated to WhatsApp messaging.
 
-**How to apply:** Decode the selected data URL, transfer those bytes to the phone, scan/index the copy, and use only the picker/import verification needed to attach it.
+**How to apply:** Decode the selected data URL, transfer those bytes to the phone, scan/index the copy, and use only the picker/import verification needed to attach it. At the end of the run, close WhatsApp through the same configured floating-window recents gesture used by HST; do not add an airplane-mode cycle to WhatsApp.

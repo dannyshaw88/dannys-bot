@@ -9987,6 +9987,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           userCountMin,
           userCountMax,
           message,
+          dismissDirection: dismissDir,
+          swipeGesture: devicePrefsPA.swipeGesture,
           media,
         });
       } else {
