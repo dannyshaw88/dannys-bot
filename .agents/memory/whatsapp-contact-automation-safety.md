@@ -26,3 +26,9 @@ On the Xiaomi Redmi A5 test device, `adb shell cmd clipboard set` can return wit
 **Why:** Exit-code-only clipboard handling falsely treats the message as available and leaves the flow stuck at the edit menu.
 
 **How to apply:** When readback reports a mismatch, dismiss the edit menu, refocus `entry`, type through the existing ADB text-input path, and verify the live composer text before allowing Send.
+
+Image attachments must use WhatsApp's `pickfiletype_gallery_holder`, not the Document picker. Stage them in DCIM/Camera and identify the staged Gallery thumbnail from its MediaStore-indexed timestamp; never assume the first visible thumbnail is the uploaded source.
+
+**Why:** DocumentsUI can show the staged file in Recents without selecting it, while Gallery is the same media-import path used by Make a Post and its thumbnails do not expose source filenames.
+
+**How to apply:** Scan the staged DCIM file, match the Gallery `media_item_view` date within a small clock-skew window, tap only that match, and require `send_media_counter=1` before sending. Keep non-image attachments on the Document path.

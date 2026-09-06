@@ -1304,6 +1304,11 @@ export async function runWhatsAppApp(
   const targetCount = min + Math.floor(Math.random() * (max - min + 1));
   let tempMediaPath: string | null = null;
   let remoteMediaPath: string | null = null;
+  let galleryMediaTimestamp: number | null = null;
+  const isImageMedia = Boolean(opts?.media && (
+    /^image\//i.test(opts.media.mimeType) ||
+    /\.(?:jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(opts.media.fileName)
+  ));
   const excludedLabels = new Set([
     "new chat", "new conversation", "new contact", "create group",
     "new group", "new community", "broadcast lists", "communities",
@@ -1394,6 +1399,25 @@ export async function runWhatsAppApp(
     return { xml: currentXml, candidates: getContactCandidates(currentXml) };
   };
 
+  const getWhatsAppGalleryDateHints = (timestamp: number): string[] => {
+    const hints = new Set<string>();
+    // WhatsApp exposes only a localized date/time in media_item_view's
+    // content-desc, not the MediaStore filename. Allow a small clock skew
+    // between the Windows host and the phone while still requiring the exact
+    // indexed minute rather than blindly tapping the first thumbnail.
+    for (let minuteOffset = -10; minuteOffset <= 10; minuteOffset++) {
+      const date = new Date((timestamp + minuteOffset * 60) * 1000);
+      const day = date.getDate();
+      const month = date.toLocaleString("en-GB", { month: "long" });
+      const year = date.getFullYear();
+      const hour = date.getHours();
+      const minute = String(date.getMinutes()).padStart(2, "0");
+      hints.add(`${day} ${month} ${year} ${hour}:${minute}`);
+      hints.add(`${day} ${month} ${year} ${String(hour).padStart(2, "0")}:${minute}`);
+    }
+    return [...hints];
+  };
+
   const pressBack = async () => {
     await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000);
     await _sleep(500);
@@ -1406,16 +1430,37 @@ export async function runWhatsAppApp(
       const safeName = path.basename(opts.media.fileName).replace(/[<>:"/\\|?*\x00-\x1F]/g, "_") || "attachment";
       tempMediaPath = path.join(os.tmpdir(), `whatsapp-${Date.now()}-${safeName}`);
       fs.writeFileSync(tempMediaPath, Buffer.from(match[1], "base64"));
-      remoteMediaPath = `/sdcard/Download/${safeName}`;
-      await runAdb(adb, ["-s", serial, "push", tempMediaPath, remoteMediaPath], 30000);
-      // Give DocumentsUI a chance to index the pushed file before WhatsApp
-      // opens its Document picker. This is harmless on devices that already
-      // expose Download immediately.
-      await runAdb(adb, [
-        "-s", serial, "shell", "am", "broadcast",
-        "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-        "-d", `file://${remoteMediaPath}`,
-      ], 8000).catch(() => {});
+      if (isImageMedia) {
+        // Image attachments must enter WhatsApp through Gallery, just like
+        // Make a Post. Documents/Download is a different picker and does not
+        // make the staged image the selected media item.
+        remoteMediaPath = await pushFileToDevice(serial, tempMediaPath, safeName);
+        const indexed = await queryMediaStoreFile(serial, remoteMediaPath);
+        const rawTimestamp = Number(indexed.fields.date_added || indexed.fields.date_modified);
+        const timestamp = rawTimestamp > 1_000_000_000_000
+          ? rawTimestamp / 1000
+          : rawTimestamp;
+        galleryMediaTimestamp = indexed.found && Number.isFinite(timestamp) && timestamp > 0
+          ? timestamp
+          : null;
+        whatsappDebug("image attachment staged for Gallery", {
+          fileName: safeName,
+          devicePath: remoteMediaPath,
+          mediaStoreFound: indexed.found,
+          galleryMediaTimestamp,
+        });
+      } else {
+        remoteMediaPath = `/sdcard/Download/${safeName}`;
+        await runAdb(adb, ["-s", serial, "push", tempMediaPath, remoteMediaPath], 30000);
+        // Give DocumentsUI a chance to index the pushed file before WhatsApp
+        // opens its Document picker. This is harmless on devices that already
+        // expose Download immediately.
+        await runAdb(adb, [
+          "-s", serial, "shell", "am", "broadcast",
+          "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+          "-d", `file://${remoteMediaPath}`,
+        ], 8000).catch(() => {});
+      }
       steps.push(`WhatsApp attachment staged: ${safeName}`);
     }
     const launch = spawnSync(adb, [
@@ -1703,58 +1748,109 @@ export async function runWhatsAppApp(
         await _adbTapAsync(adb, serial, attach.x, attach.y);
         await _sleep(600);
         xml = await _uiDump(adb, serial);
-        const document = findLiveLabel(xml, ["document"], ["pickfiletype_document_holder"]);
-        if (!document) {
-          whatsappDebug(`Document option not found for "${contact.text}"`, describeWhatsAppSurface(xml));
-          steps.push(`WhatsApp skipped "${contact.text}" — Document attachment option not found`);
+        const attachmentPicker = isImageMedia
+          ? findLiveLabel(xml, ["gallery"], ["pickfiletype_gallery_holder"])
+          : findLiveLabel(xml, ["document"], ["pickfiletype_document_holder"]);
+        const attachmentPickerName = isImageMedia ? "Gallery" : "Document";
+        if (!attachmentPicker) {
+          whatsappDebug(`${attachmentPickerName} option not found for "${contact.text}"`, describeWhatsAppSurface(xml));
+          steps.push(`WhatsApp skipped "${contact.text}" — ${attachmentPickerName} attachment option not found`);
           await pressBack();
           break;
         }
-        whatsappDebug(`tapping Document for "${contact.text}"`, {
-          resourceId: document.resourceId,
-          contentDesc: document.contentDesc,
-          x: document.x,
-          y: document.y,
+        whatsappDebug(`tapping ${attachmentPickerName} for "${contact.text}"`, {
+          resourceId: attachmentPicker.resourceId,
+          contentDesc: attachmentPicker.contentDesc,
+          x: attachmentPicker.x,
+          y: attachmentPicker.y,
         });
-        await _adbTapAsync(adb, serial, document.x, document.y);
+        await _adbTapAsync(adb, serial, attachmentPicker.x, attachmentPicker.y);
         await _sleep(1000);
         xml = await _uiDump(adb, serial);
-        const attachmentNames = new Set([opts.media.fileName, path.basename(remoteMediaPath)]);
-        let fileNode = parseWhatsAppLiveNodes(xml).find(node =>
-          attachmentNames.has(node.text) ||
-          attachmentNames.has(node.contentDesc) ||
-          [...attachmentNames].some(name => node.text.endsWith(name) || node.contentDesc.endsWith(name)),
-        );
-        if (!fileNode) {
-          const download = findLiveLabel(xml, ["download", "downloads"]);
-          if (download) {
-            await _adbTapAsync(adb, serial, download.x, download.y);
-            await _sleep(700);
-            xml = await _uiDump(adb, serial);
-            fileNode = parseWhatsAppLiveNodes(xml).find(node =>
-              attachmentNames.has(node.text) ||
-              attachmentNames.has(node.contentDesc) ||
-              [...attachmentNames].some(name => node.text.endsWith(name) || node.contentDesc.endsWith(name)),
-            );
-          }
-        }
-        if (!fileNode) {
-          whatsappDebug(`staged attachment not visible for "${contact.text}"`, {
-            ...describeWhatsAppSurface(xml),
-            expectedFileNames: [...attachmentNames],
+        if (isImageMedia) {
+          const mediaItems = parseWhatsAppLiveNodes(xml).filter(node =>
+            node.resourceId.toLowerCase().endsWith("/media_item_view") &&
+            node.className === "android.widget.ImageView" &&
+            node.x2 > node.x1 && node.y2 > node.y1,
+          );
+          const galleryDateHints = galleryMediaTimestamp
+            ? getWhatsAppGalleryDateHints(galleryMediaTimestamp)
+            : [];
+          const stagedItem = mediaItems.find(node =>
+            galleryDateHints.some(hint => node.contentDesc.toLowerCase().includes(hint.toLowerCase())),
+          );
+          whatsappDebug("Gallery media scan", {
+            galleryMediaTimestamp,
+            galleryDateHints,
+            mediaItemCount: mediaItems.length,
+            mediaItemDescriptions: mediaItems.slice(0, 12).map(node => node.contentDesc),
+            stagedItemFound: Boolean(stagedItem),
           });
-          steps.push(`WhatsApp skipped "${contact.text}" — staged attachment was not visible`);
-          await pressBack();
-          break;
+          if (!stagedItem) {
+            steps.push(`WhatsApp skipped "${contact.text}" — staged image was not uniquely identified in Gallery`);
+            await pressBack();
+            break;
+          }
+          whatsappDebug(`tapping staged Gallery image for "${contact.text}"`, {
+            contentDesc: stagedItem.contentDesc,
+            x: stagedItem.x,
+            y: stagedItem.y,
+          });
+          await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
+          await _sleep(900);
+          xml = await _uiDump(adb, serial);
+          const gallerySend = findLiveLabel(xml, ["send 1 media", "send media"], ["send_media_btn"]);
+          const galleryCounter = parseWhatsAppLiveNodes(xml).find(node =>
+            node.resourceId.toLowerCase().endsWith("/send_media_counter"),
+          );
+          if (!gallerySend || galleryCounter?.text !== "1") {
+            whatsappDebug(`Gallery image selection was not verified for "${contact.text}"`, {
+              ...describeWhatsAppSurface(xml),
+              sendControlFound: Boolean(gallerySend),
+              selectedMediaCount: galleryCounter?.text ?? null,
+            });
+            steps.push(`WhatsApp skipped "${contact.text}" — Gallery image selection was not verified`);
+            await pressBack();
+            break;
+          }
+        } else {
+          const attachmentNames = new Set([opts.media.fileName, path.basename(remoteMediaPath)]);
+          let fileNode = parseWhatsAppLiveNodes(xml).find(node =>
+            attachmentNames.has(node.text) ||
+            attachmentNames.has(node.contentDesc) ||
+            [...attachmentNames].some(name => node.text.endsWith(name) || node.contentDesc.endsWith(name)),
+          );
+          if (!fileNode) {
+            const download = findLiveLabel(xml, ["download", "downloads"]);
+            if (download) {
+              await _adbTapAsync(adb, serial, download.x, download.y);
+              await _sleep(700);
+              xml = await _uiDump(adb, serial);
+              fileNode = parseWhatsAppLiveNodes(xml).find(node =>
+                attachmentNames.has(node.text) ||
+                attachmentNames.has(node.contentDesc) ||
+                [...attachmentNames].some(name => node.text.endsWith(name) || node.contentDesc.endsWith(name)),
+              );
+            }
+          }
+          if (!fileNode) {
+            whatsappDebug(`staged attachment not visible for "${contact.text}"`, {
+              ...describeWhatsAppSurface(xml),
+              expectedFileNames: [...attachmentNames],
+            });
+            steps.push(`WhatsApp skipped "${contact.text}" — staged attachment was not visible`);
+            await pressBack();
+            break;
+          }
+          whatsappDebug(`tapping staged attachment for "${contact.text}"`, {
+            text: fileNode.text,
+            contentDesc: fileNode.contentDesc,
+            x: fileNode.x,
+            y: fileNode.y,
+          });
+          await _adbTapAsync(adb, serial, fileNode.x, fileNode.y);
+          await _sleep(900);
         }
-        whatsappDebug(`tapping staged attachment for "${contact.text}"`, {
-          text: fileNode.text,
-          contentDesc: fileNode.contentDesc,
-          x: fileNode.x,
-          y: fileNode.y,
-        });
-        await _adbTapAsync(adb, serial, fileNode.x, fileNode.y);
-        await _sleep(900);
       }
 
       xml = await _uiDump(adb, serial);
