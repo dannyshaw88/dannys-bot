@@ -1308,6 +1308,11 @@ export async function runWhatsAppApp(
     "chats", "calls", "updates", "settings", "search", "back",
     "more options", "message yourself",
   ]);
+  const whatsappDebug = (message: string, details: Record<string, unknown> = {}) => {
+    const line = `WhatsApp debug: ${message}`;
+    steps.push(line);
+    logger.info({ serial, ...details }, `[whatsapp] ${message}`);
+  };
 
   const findLiveLabel = (xml: string, labels: string[], resourceIds: string[] = []): WhatsAppLiveNode | null => {
     const wanted = new Set(labels.map(label => label.toLowerCase()));
@@ -1331,6 +1336,60 @@ export async function runWhatsAppApp(
     return nodes.find(node =>
       wanted.has(node.text.toLowerCase()) || wanted.has(node.contentDesc.toLowerCase()),
     ) ?? null;
+  };
+
+  const getContactCandidates = (xml: string): WhatsAppLiveNode[] =>
+    parseWhatsAppLiveNodes(xml)
+      // The contact picker exposes real contacts as Button nodes with this
+      // resource id. This excludes New group/contact/community and every
+      // toolbar/control row without relying on display text.
+      .filter(node => node.resourceId.toLowerCase().includes("contactpicker_row_name"))
+      .filter(node => node.className === "android.widget.Button")
+      .filter(node => node.text.length >= 1 && node.text.length <= 120)
+      .filter(node => !excludedLabels.has(node.text.toLowerCase()))
+      .filter(node => !/\(you\)$/i.test(node.text) && !/\(you\)$/i.test(node.contentDesc))
+      .filter(node => !/message yourself/i.test(node.text) && !/message yourself/i.test(node.contentDesc))
+      .sort((a, b) => a.y - b.y);
+
+  const describeWhatsAppSurface = (xml: string) => {
+    const nodes = parseWhatsAppLiveNodes(xml);
+    const candidates = getContactCandidates(xml);
+    return {
+      xmlLength: xml.length,
+      hasWhatsApp: xml.includes("com.whatsapp"),
+      hasContactPicker: /contact_picker_layout|contact_list|contactpicker_row_name/i.test(xml),
+      hasConversation: /conversation_root_layout|conversation_contact_name/i.test(xml),
+      fabTextCount: nodes.filter(node => /(?:^|\/)fabText$/i.test(node.resourceId)).length,
+      contactRowCount: nodes.filter(node => node.resourceId.toLowerCase().includes("contactpicker_row_name")).length,
+      usableContactCount: candidates.length,
+      visibleContactLabels: candidates.slice(0, 8).map(node => node.text),
+      visibleResourceIds: [...new Set(nodes.map(node => node.resourceId).filter(Boolean))].slice(0, 20),
+    };
+  };
+
+  const waitForContactList = async (initialXml: string, attempt: number): Promise<{
+    xml: string;
+    candidates: WhatsAppLiveNode[];
+  }> => {
+    let currentXml = initialXml;
+    const maxPolls = 9;
+    const pollDelayMs = 650;
+    for (let poll = 1; poll <= maxPolls; poll++) {
+      if (poll > 1) await _sleep(pollDelayMs);
+      const summary = describeWhatsAppSurface(currentXml);
+      whatsappDebug(
+        `contact-list settle poll ${poll}/${maxPolls} for attempt ${attempt}: ` +
+        `picker=${summary.hasContactPicker} rows=${summary.contactRowCount} usable=${summary.usableContactCount}`,
+        summary,
+      );
+      if (summary.usableContactCount > 0) {
+        return { xml: currentXml, candidates: getContactCandidates(currentXml) };
+      }
+      if (poll < maxPolls) {
+        currentXml = await _uiDump(adb, serial);
+      }
+    }
+    return { xml: currentXml, candidates: getContactCandidates(currentXml) };
   };
 
   const pressBack = async () => {
@@ -1373,6 +1432,7 @@ export async function runWhatsAppApp(
     if (!xml.includes("com.whatsapp")) {
       throw new Error("WhatsApp did not appear in the live UI");
     }
+    whatsappDebug("launched WhatsApp", describeWhatsAppSurface(xml));
     steps.push(`WhatsApp launched — selected ${targetCount} contact${targetCount === 1 ? "" : "s"}`);
 
     // This is deliberately an internal row identity rather than a display
@@ -1404,33 +1464,35 @@ export async function runWhatsAppApp(
         break;
       }
       await _adbTapAsync(adb, serial, newChat.x, newChat.y);
+      whatsappDebug(`tapped Send message control for attempt ${attempt + 1}`, {
+        attempt: attempt + 1,
+        x: newChat.x,
+        y: newChat.y,
+        resourceId: newChat.resourceId,
+        text: newChat.text,
+        contentDesc: newChat.contentDesc,
+      });
       await _sleep(900);
 
       xml = await _uiDump(adb, serial);
-      const candidates = parseWhatsAppLiveNodes(xml)
-        // The contact picker exposes real contacts as Button nodes with this
-        // resource id. This excludes New group/contact/community and every
-        // toolbar/control row without relying on display text.
-        .filter(node => node.resourceId.toLowerCase().includes("contactpicker_row_name"))
-        .filter(node => node.className === "android.widget.Button")
-        .filter(node => node.text.length >= 1 && node.text.length <= 120)
-        .filter(node => !excludedLabels.has(node.text.toLowerCase()))
-        .filter(node => !/\(you\)$/i.test(node.text) && !/\(you\)$/i.test(node.contentDesc))
-        .filter(node => !/message yourself/i.test(node.text) && !/message yourself/i.test(node.contentDesc))
-        .filter(node => {
-          const key = `${node.text}\u0000${node.contentDesc}\u0000${node.x1},${node.y1},${node.x2},${node.y2}`;
-          return !usedContactKeys.has(key);
-        })
-        .filter((node, index, all) =>
-          all.findIndex(other =>
-            other.text === node.text &&
-            other.contentDesc === node.contentDesc &&
-            other.x1 === node.x1 &&
-            other.y1 === node.y1,
-          ) === index,
-        )
-        .sort((a, b) => a.y - b.y);
+      const settled = await waitForContactList(xml, attempt + 1);
+      xml = settled.xml;
+      const candidates = settled.candidates.filter(node => {
+        const key = `${node.text}\u0000${node.contentDesc}\u0000${node.x1},${node.y1},${node.x2},${node.y2}`;
+        return !usedContactKeys.has(key);
+      }).filter((node, index, all) =>
+        all.findIndex(other =>
+          other.text === node.text &&
+          other.contentDesc === node.contentDesc &&
+          other.x1 === node.x1 &&
+          other.y1 === node.y1,
+        ) === index,
+      );
       if (candidates.length === 0) {
+        whatsappDebug(
+          `contact-list settled without an unselected contact after ${sent} sent`,
+          describeWhatsAppSurface(xml),
+        );
         steps.push(`WhatsApp stopped — no unselected contacts found after ${sent} message${sent === 1 ? "" : "s"}`);
         await pressBack();
         break;
@@ -1438,6 +1500,13 @@ export async function runWhatsAppApp(
       const contact = candidates[Math.floor(Math.random() * candidates.length)];
       const contactKey = `${contact.text}\u0000${contact.contentDesc}\u0000${contact.x1},${contact.y1},${contact.x2},${contact.y2}`;
       usedContactKeys.add(contactKey);
+      whatsappDebug(`selected contact row "${contact.text}"`, {
+        attempt: attempt + 1,
+        contactKey,
+        resourceId: contact.resourceId,
+        bounds: `[${contact.x1},${contact.y1}][${contact.x2},${contact.y2}]`,
+        remainingVisibleCandidates: candidates.length - 1,
+      });
       await _adbTapAsync(adb, serial, contact.x, contact.y);
       await _sleep(900);
 
