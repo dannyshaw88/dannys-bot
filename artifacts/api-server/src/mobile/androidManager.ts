@@ -1448,7 +1448,7 @@ export async function runWhatsAppApp(
         // make the staged image the selected media item.
         remoteMediaPath = await pushFileToDevice(serial, tempMediaPath, safeName);
         let indexed = await queryMediaStoreFile(serial, remoteMediaPath);
-        for (let mediaPoll = 1; mediaPoll < 6 && !indexed.found; mediaPoll++) {
+        for (let mediaPoll = 1; mediaPoll < 4 && !indexed.found; mediaPoll++) {
           await _sleep(450);
           indexed = await queryMediaStoreFile(serial, remoteMediaPath);
         }
@@ -1744,7 +1744,16 @@ export async function runWhatsAppApp(
            let lastTargetSignature = "";
            let stableTargetPolls = 0;
            let galleryReadyXml = xml;
-           for (let galleryPoll = 1; galleryPoll <= 12; galleryPoll++) {
+            // A MediaStore timestamp is the only semantic identity WhatsApp
+            // exposes for these thumbnails. If indexing failed, do not spend
+            // 30 seconds dumping the same unmatchable Gallery surface.
+            if (galleryDateHints.length === 0) {
+              whatsappDebug("Gallery scan aborted — staged image has no MediaStore date identity", {
+                galleryMediaTimestamp,
+                mediaStoreFound: false,
+              });
+            }
+            for (let galleryPoll = 1; galleryPoll <= 4 && galleryDateHints.length > 0; galleryPoll++) {
              if (galleryPoll > 1) {
                await _sleep(300);
                galleryReadyXml = await _uiDump(adb, serial);
@@ -1778,8 +1787,16 @@ export async function runWhatsAppApp(
                  node.contentDesc.toLowerCase().includes(hint.toLowerCase()),
                ),
              );
-             if (matches.length === 1) {
-               const candidate = matches[0];
+              if (matches.length >= 1) {
+                // The accessibility tree exposes only a date rounded to the
+                // minute. When another photo shares that minute, Gallery
+                // orders the newest one first; the staged copy is the newest
+                // matching item because it was pushed immediately before the
+                // picker opened. Keep this live-node choice deterministic,
+                // rather than introducing a device-specific mirror tap.
+                const candidate = [...matches].sort((a, b) =>
+                  a.y1 - b.y1 || a.x1 - b.x1,
+                )[0];
                const signature = [
                  candidate.contentDesc,
                  candidate.x1,
@@ -1791,12 +1808,14 @@ export async function runWhatsAppApp(
                  ? stableTargetPolls + 1
                  : 1;
                lastTargetSignature = signature;
-               if (stableTargetPolls >= 2) {
+                if (stableTargetPolls >= 1) {
                  stagedItem = candidate;
                  xml = galleryReadyXml;
                  whatsappDebug("Gallery pre-selection surface ready", {
                    galleryPoll,
                    stableTargetPolls,
+                    matchingTargetCount: matches.length,
+                    selectedNewestVisibleMatch: matches.length > 1,
                    contentDesc: candidate.contentDesc,
                    x: candidate.x,
                    y: candidate.y,
@@ -9008,7 +9027,19 @@ export async function queryMediaStoreFile(serial: string, devicePath: string): P
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const projection = "_id:_data:_display_name:mime_type:size:width:height:date_taken:date_added:date_modified:orientation:relative_path";
-  const where = `_data='${devicePath.replace(/'/g, "''")}'`;
+  const displayName = path.basename(devicePath);
+  const escapedPath = devicePath.replace(/'/g, "''");
+  const escapedDisplayName = displayName.replace(/'/g, "''");
+  // `/sdcard` is commonly exposed to MediaStore as
+  // `/storage/emulated/0`, and Android versions differ on whether `_data`
+  // filtering is allowed on the images provider. Query the generated
+  // filename too; it is unique for this staging operation and survives both
+  // path representations.
+  const wheres = [
+    `_data='${escapedPath}'`,
+    `_display_name='${escapedDisplayName}'`,
+    `_data LIKE '%/${escapedDisplayName}'`,
+  ];
   const candidates = [
     "content://media/external_primary/images/media",
     "content://media/external/images/media",
@@ -9016,12 +9047,32 @@ export async function queryMediaStoreFile(serial: string, devicePath: string): P
     "content://media/external/file",
   ];
   const outputs: string[] = [];
-  for (const uri of candidates) {
-    const result = await runAdb(adb, ["-s", serial, "shell", "content", "query", "--uri", uri, "--projection", projection, "--where", where], 8000).catch(() => "");
-    if (result.trim()) outputs.push(`[${uri}] ${result.trim()}`);
+  query: for (const uri of candidates) {
+    for (const where of wheres) {
+      const result = await runAdb(adb, [
+        "-s", serial, "shell", "content", "query",
+        "--uri", uri,
+        "--projection", projection,
+        "--where", where,
+      ], 8000).catch(() => "");
+      if (result.trim()) {
+        outputs.push(`[${uri}] ${result.trim()}`);
+        if (
+          result.includes(`_display_name=${displayName}`) ||
+          result.includes(`/${displayName}`) ||
+          result.includes(`_data=${devicePath}`)
+        ) {
+          break query;
+        }
+      }
+    }
   }
   const raw = outputs.join("\n");
-  const row = raw.split(/\r?\n/).find(line => line.includes("_data=")) ?? "";
+  const row = raw.split(/\r?\n/).find(line =>
+    line.includes(`_display_name=${displayName}`) ||
+    line.includes(`_data=${devicePath}`) ||
+    line.includes(`/${displayName}`),
+  ) ?? "";
   const fields: Record<string, string> = {};
   for (const match of row.matchAll(/(\w+)=([^,\s]+(?:\s[^,]*?)?)(?=,\s+\w+=|$)/g)) {
     fields[match[1]] = match[2].trim();
