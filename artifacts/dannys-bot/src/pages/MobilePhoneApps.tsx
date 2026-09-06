@@ -74,6 +74,11 @@ interface AppSlotSettings {
   enabled: boolean;
   activatePctMin: number;
   activatePctMax: number;
+  /** WhatsApp contacts to message during one activated process. */
+  userCountMin?: number;
+  userCountMax?: number;
+  /** WhatsApp message template; supports {option A|option B} spintax. */
+  message?: string;
   /** Number-of-scrolls range — used by Chrome and YouTube. */
   scrollMin?: number;
   scrollMax?: number;
@@ -143,7 +148,7 @@ const DEFAULT_SETTINGS: PhoneAppsSettings = {
   chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0, internalLinkPctMin: 0, internalLinkPctMax: 0, manualSearchPctMin: 0, manualSearchPctMax: 0, manualSearchCountMin: 1, manualSearchCountMax: 1, manualSearchScrollMin: 0, manualSearchScrollMax: 0, manualSearchLinkPctMin: 0, manualSearchLinkPctMax: 0, manualSearchDwellMin: 3, manualSearchDwellMax: 8, tapTrendingStoryMin: 0, tapTrendingStoryMax: 0 },
   snapchat:   { ...DEFAULT_APP_SLOT },
   youtube:    { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, clickPctMin: 0, clickPctMax: 0, watchTimeMin: 3, watchTimeMax: 8, clickShortsPctMin: 0, clickShortsPctMax: 0, shortsScrollMin: 0, shortsScrollMax: 0, shortsWatchTimeMin: 3, shortsWatchTimeMax: 8, shortsLikePctMin: 0, shortsLikePctMax: 0 },
-  whatsapp:   { ...DEFAULT_APP_SLOT },
+  whatsapp:   { ...DEFAULT_APP_SLOT, userCountMin: 1, userCountMax: 1, message: "" },
 };
 
 // ── Card component ─────────────────────────────────────────────────────────────
@@ -294,19 +299,20 @@ interface AppSlotRowProps {
   max:        number;
   onMin:      (v: number) => void;
   onMax:      (v: number) => void;
+  labelClassName?: string;
   rowExtras?: React.ReactNode; // optional inline fields rendered after the % label on row 1
   row2?:      React.ReactNode; // optional second row rendered below row 1, full width
   row3?:      React.ReactNode; // optional third row rendered below row 2, full width
   row4?:      React.ReactNode; // optional fourth row rendered below row 3, full width
 }
 
-function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMin, onMax, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
+function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMin, onMax, labelClassName, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
   return (
     <div className={`p-4 ${className ?? ""}`}>
       {/* First visual row: icon, activation, and the app's primary fields. */}
       <div className="flex items-center gap-4 flex-wrap">
         {/* Icon + label — anchors the left of the first visual row */}
-        <div className="flex items-center gap-2 min-w-[13rem]">
+        <div className={`flex items-center gap-2 ${labelClassName ?? "min-w-[13rem]"}`}>
           <Checkbox
             checked={enabled}
             onCheckedChange={(checked) => onEnabled(checked === true)}
@@ -447,7 +453,7 @@ function MobilePhoneAppsPanel({
           chrome:      { enabled: d.chrome?.enabled ?? false, activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8, tapTrendingStoryMin: d.chrome?.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: d.chrome?.tapTrendingStoryMax ?? 0 },
           snapchat:    { enabled: d.snapchat?.enabled ?? false, activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
           youtube:     { enabled: d.youtube?.enabled ?? false, activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8, shortsLikePctMin: d.youtube?.shortsLikePctMin ?? 0, shortsLikePctMax: d.youtube?.shortsLikePctMax ?? 0 },
-          whatsapp:    { enabled: d.whatsapp?.enabled ?? false, activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0 },
+          whatsapp:    { enabled: d.whatsapp?.enabled ?? false, activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0, userCountMin: d.whatsapp?.userCountMin ?? 1, userCountMax: d.whatsapp?.userCountMax ?? 1, message: d.whatsapp?.message ?? "" },
         };
         setSettings(merged);
         settingsRef.current = merged;
@@ -588,7 +594,13 @@ function MobilePhoneAppsPanel({
          if (s.youtube.enabled && youtubeActivated) await runApp("youtube", { scrollMin: s.youtube.scrollMin ?? 1, scrollMax: s.youtube.scrollMax ?? 5, clickPctMin: s.youtube.clickPctMin ?? 0, clickPctMax: s.youtube.clickPctMax ?? 0, watchTimeMin: s.youtube.watchTimeMin ?? 3, watchTimeMax: s.youtube.watchTimeMax ?? 8, clickShortsPctMin: s.youtube.clickShortsPctMin ?? 0, clickShortsPctMax: s.youtube.clickShortsPctMax ?? 0, shortsScrollMin: s.youtube.shortsScrollMin ?? 0, shortsScrollMax: s.youtube.shortsScrollMax ?? 0, shortsWatchTimeMin: s.youtube.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: s.youtube.shortsWatchTimeMax ?? 8, shortsLikePctMin: s.youtube.shortsLikePctMin ?? 0, shortsLikePctMax: s.youtube.shortsLikePctMax ?? 0 });
         const whatsappActivated = shouldActivate(s.whatsapp.activatePctMin, s.whatsapp.activatePctMax);
         onLogRef.current?.(`Phone Apps [whatsapp]: ${whatsappActivated ? "activation roll passed" : "activation roll skipped"}`);
-         if (s.whatsapp.enabled && whatsappActivated) await runApp("whatsapp");
+        if (s.whatsapp.enabled && whatsappActivated) {
+          await runApp("whatsapp", {
+            userCountMin: s.whatsapp.userCountMin ?? 1,
+            userCountMax: s.whatsapp.userCountMax ?? 1,
+            message: s.whatsapp.message ?? "",
+          });
+        }
 
         // This is deliberately outside the activation branches: a completed
         // cycle must lock even when every app roll misses.
@@ -1154,13 +1166,51 @@ function MobilePhoneAppsPanel({
               <AppSlotRow
                 icon={<WhatsAppIcon size={22} />}
                 label="WhatsApp"
-                 enabled={settings.whatsapp.enabled}
-                 onEnabled={v => patchApp("whatsapp", { enabled: v })}
+                enabled={settings.whatsapp.enabled}
+                onEnabled={v => patchApp("whatsapp", { enabled: v })}
                 className="order-5"
+                labelClassName="min-w-0 shrink-0"
                 min={settings.whatsapp.activatePctMin}
                 max={settings.whatsapp.activatePctMax}
                 onMin={v => patchApp("whatsapp", { activatePctMin: v })}
                 onMax={v => patchApp("whatsapp", { activatePctMax: v })}
+                rowExtras={<>
+                  <div className="relative flex items-center gap-1 self-center">
+                    <span className="absolute left-1/2 bottom-full -translate-x-1/2 mb-0 leading-none text-xs text-muted-foreground whitespace-nowrap">
+                      Users per process
+                    </span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      className={PCT_INPUT}
+                      value={settings.whatsapp.userCountMin ?? 1}
+                      onChange={e => patchApp("whatsapp", { userCountMin: Math.min(100, Math.max(1, Math.round(Number(e.target.value)))) })}
+                    />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      className={PCT_INPUT}
+                      value={settings.whatsapp.userCountMax ?? 1}
+                      onChange={e => patchApp("whatsapp", { userCountMax: Math.min(100, Math.max(1, Math.round(Number(e.target.value)))) })}
+                    />
+                  </div>
+                  <div className="relative flex min-w-[16rem] flex-1 items-center self-center">
+                    <span className="absolute left-1/2 bottom-full -translate-x-1/2 mb-0 leading-none text-xs text-muted-foreground whitespace-nowrap">
+                      Message
+                    </span>
+                    <Input
+                      type="text"
+                      value={settings.whatsapp.message ?? ""}
+                      onChange={e => patchApp("whatsapp", { message: e.target.value })}
+                      placeholder="{Hi|Hello} {there|friend}!"
+                      spellCheck={false}
+                      className="h-7 w-full text-sm"
+                    />
+                  </div>
+                </>}
               />
               </div>
             </div>

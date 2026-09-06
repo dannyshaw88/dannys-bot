@@ -148,3 +148,4 @@
 - [Mobile collision coordinator](mobile-collision-coordinator.md) — every device automation owner must acquire and release a lease token through one shared per-device coordinator
 - [Notification Back surface guard](notification-back-surface-guard.md) — calibrated upper-left Back is Home's Create button when the notification surface disappears; confirm the live surface first
 - [Debug screenshot capture timing](debug-screenshot-capture-timing.md) — filename time orders the phone frame; embedded log labels can be stale behind the per-device capture queue
+- [WhatsApp contact automation safety](whatsapp-contact-automation-safety.md) — resolve contacts and Send from the live picker/composer; fail closed when WhatsApp’s layout or labels change

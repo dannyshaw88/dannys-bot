@@ -1224,6 +1224,198 @@ function chooseChromeManualSearchQuery(usedQueries: Set<string>): {
   };
 }
 
+type WhatsAppLiveNode = {
+  text: string;
+  contentDesc: string;
+  resourceId: string;
+  className: string;
+  clickable: boolean;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  x: number;
+  y: number;
+};
+
+function parseWhatsAppLiveNodes(xml: string): WhatsAppLiveNode[] {
+  const nodes: WhatsAppLiveNode[] = [];
+  for (const raw of xml.match(/<node\b[^>]*>/gi) ?? []) {
+    const attr = (name: string) => raw.match(new RegExp(`\\b${name}="([^"]*)"`, "i"))?.[1] ?? "";
+    const bounds = attr("bounds").match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
+    if (!bounds) continue;
+    const x1 = Number(bounds[1]);
+    const y1 = Number(bounds[2]);
+    const x2 = Number(bounds[3]);
+    const y2 = Number(bounds[4]);
+    nodes.push({
+      text: attr("text").trim(),
+      contentDesc: attr("content-desc").trim(),
+      resourceId: attr("resource-id").trim(),
+      className: attr("class").trim(),
+      clickable: attr("clickable").toLowerCase() === "true",
+      x1, y1, x2, y2,
+      x: Math.round((x1 + x2) / 2),
+      y: Math.round((y1 + y2) / 2),
+    });
+  }
+  return nodes;
+}
+
+function resolveWhatsAppSpintax(template: string): string {
+  let resolved = template;
+  for (let pass = 0; pass < 10 && /\{[^{}|]+\|[^{}]+\}/.test(resolved); pass++) {
+    resolved = resolved.replace(/\{([^{}]+)\}/g, (_, group: string) => {
+      const options = group.split("|");
+      return options[Math.floor(Math.random() * options.length)];
+    });
+  }
+  return resolved;
+}
+
+/**
+ * Send a configured spintax message to a random number of distinct contacts
+ * from WhatsApp's live New Chat picker. Every target and Send control must be
+ * discovered from the current UI dump; this intentionally skips rather than
+ * guessing if WhatsApp exposes an unexpected screen or layout.
+ */
+export async function runWhatsAppApp(
+  serial: string,
+  opts?: {
+    userCountMin?: number;
+    userCountMax?: number;
+    message: string;
+  },
+): Promise<{ ok: boolean; steps: string[]; error?: string }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+  const messageTemplate = String(opts?.message ?? "").trim();
+  if (!messageTemplate) throw new Error("WhatsApp message is empty");
+  const min = Math.max(1, Math.round(opts?.userCountMin ?? 1));
+  const max = Math.max(min, Math.round(opts?.userCountMax ?? min));
+  const targetCount = min + Math.floor(Math.random() * (max - min + 1));
+  const excludedLabels = new Set([
+    "new chat", "new conversation", "new contact", "create group",
+    "broadcast lists", "communities", "chats", "calls", "updates",
+    "settings", "search", "back", "more options",
+  ]);
+
+  const findLiveLabel = (xml: string, labels: string[], resourceIds: string[] = []): WhatsAppLiveNode | null => {
+    const wanted = new Set(labels.map(label => label.toLowerCase()));
+    const idMatch = parseWhatsAppLiveNodes(xml).find(node =>
+      resourceIds.some(id => node.resourceId.toLowerCase().includes(id.toLowerCase())),
+    );
+    if (idMatch) return idMatch;
+    return parseWhatsAppLiveNodes(xml).find(node =>
+      wanted.has(node.text.toLowerCase()) || wanted.has(node.contentDesc.toLowerCase()),
+    ) ?? null;
+  };
+
+  const pressBack = async () => {
+    await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 4000);
+    await _sleep(500);
+  };
+
+  try {
+    const launch = spawnSync(adb, [
+      "-s", serial, "shell", "am", "start", "-n", "com.whatsapp/.Main",
+      "--activity-clear-top",
+    ], { encoding: "utf8", timeout: 10000 });
+    const launchOutput = `${launch.stdout ?? ""}${launch.stderr ?? ""}`;
+    if (/error|does not exist|exception/i.test(launchOutput) || launch.status !== 0) {
+      spawnSync(adb, [
+        "-s", serial, "shell", "monkey", "-p", "com.whatsapp",
+        "-c", "android.intent.category.LAUNCHER", "1",
+      ], { encoding: "utf8", timeout: 10000 });
+    }
+    await _sleep(2200);
+    let xml = await _uiDump(adb, serial);
+    if (!xml.includes("com.whatsapp")) {
+      throw new Error("WhatsApp did not appear in the live UI");
+    }
+    steps.push(`WhatsApp launched — selected ${targetCount} contact${targetCount === 1 ? "" : "s"}`);
+
+    const usedContacts = new Set<string>();
+    let sent = 0;
+    for (let attempt = 0; attempt < targetCount; attempt++) {
+      xml = await _uiDump(adb, serial);
+      let newChat = findLiveLabel(xml, ["new chat", "new conversation"], ["menuitem_new_chat", "fab"]);
+      if (!newChat) {
+        // If a contact picker or conversation is still visible, return to the
+        // WhatsApp home surface once, then require a fresh live match.
+        await pressBack();
+        xml = await _uiDump(adb, serial);
+        newChat = findLiveLabel(xml, ["new chat", "new conversation"], ["menuitem_new_chat", "fab"]);
+      }
+      if (!newChat) {
+        steps.push(`WhatsApp stopped — New Chat control not found after ${sent} message${sent === 1 ? "" : "s"}`);
+        break;
+      }
+      await _adbTapAsync(adb, serial, newChat.x, newChat.y);
+      await _sleep(900);
+
+      xml = await _uiDump(adb, serial);
+      const screen = _getScreenSize(xml);
+      const candidates = parseWhatsAppLiveNodes(xml)
+        .filter(node => node.className === "android.widget.TextView")
+        .filter(node => node.text.length >= 2 && node.text.length <= 80)
+        .filter(node => node.y > screen.h * 0.12 && node.y < screen.h * 0.88)
+        .filter(node => !excludedLabels.has(node.text.toLowerCase()))
+        .filter(node => !/^\+?[\d\s().-]+$/.test(node.text))
+        .filter(node => !usedContacts.has(node.text))
+        .filter((node, index, all) => all.findIndex(other => other.text === node.text) === index)
+        .sort((a, b) => a.y - b.y);
+      if (candidates.length === 0) {
+        steps.push(`WhatsApp stopped — no unselected contacts found after ${sent} message${sent === 1 ? "" : "s"}`);
+        await pressBack();
+        break;
+      }
+      const contact = candidates[Math.floor(Math.random() * candidates.length)];
+      usedContacts.add(contact.text);
+      await _adbTapAsync(adb, serial, contact.x, contact.y);
+      await _sleep(900);
+
+      xml = await _uiDump(adb, serial);
+      const composer = parseWhatsAppLiveNodes(xml).find(node =>
+        node.className === "android.widget.EditText" && node.x2 > node.x1 && node.y2 > node.y1,
+      );
+      if (!composer) {
+        steps.push(`WhatsApp skipped "${contact.text}" — message composer not found`);
+        await pressBack();
+        break;
+      }
+      await _adbTapAsync(adb, serial, composer.x, composer.y);
+      await setClipboard(serial, resolveWhatsAppSpintax(messageTemplate));
+      await pasteClipboard(serial);
+      await _sleep(350);
+
+      xml = await _uiDump(adb, serial);
+      const send = findLiveLabel(xml, ["send"], ["send"]);
+      if (!send) {
+        steps.push(`WhatsApp skipped "${contact.text}" — Send control not found`);
+        await pressBack();
+        break;
+      }
+      await _adbTapAsync(adb, serial, send.x, send.y);
+      await _sleep(700);
+      sent++;
+      steps.push(`WhatsApp sent a randomized message to ${contact.text} (${sent}/${targetCount})`);
+      await pressBack();
+    }
+    if (sent === 0) {
+      return { ok: false, steps, error: "WhatsApp did not send a message to any contact" };
+    }
+    return { ok: true, steps };
+  } catch (error: any) {
+    return {
+      ok: false,
+      steps,
+      error: error?.message ?? "WhatsApp messaging failed",
+    };
+  }
+}
+
 export async function runChromeApp(
   serial: string,
   opts?: {

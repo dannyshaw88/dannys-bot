@@ -9756,7 +9756,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         },
         snapchat: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
         youtube: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
-        whatsapp: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
+        whatsapp: {
+          enabled: false,
+          activatePctMin: 0,
+          activatePctMax: 0,
+          userCountMin: 1,
+          userCountMax: 1,
+          message: "",
+        },
       };
       res.json({
         ...defaults,
@@ -9823,11 +9830,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
            tapTrendingStoryMin: z.number().int().min(0).optional(),
            tapTrendingStoryMax: z.number().int().min(0).optional(),
         }).passthrough().optional(),
+        whatsapp: z.object({
+          enabled: z.boolean().optional(),
+          activatePctMin: z.number().int().min(0).max(100).optional(),
+          activatePctMax: z.number().int().min(0).max(100).optional(),
+          userCountMin: z.number().int().min(1).max(100).optional(),
+          userCountMax: z.number().int().min(1).max(100).optional(),
+          message: z.string().max(10_000).optional(),
+        }).passthrough().optional(),
       }).passthrough().parse(req.body);
       const merged = {
         ...existing,
         ...input,
         ...(input.chrome ? { chrome: { ...(existing.chrome ?? {}), ...input.chrome } } : {}),
+        ...(input.whatsapp ? { whatsapp: { ...(existing.whatsapp ?? {}), ...input.whatsapp } } : {}),
       };
       (cfg[serial] as any) = { ...cfg[serial], phoneApps: merged };
       saveInstanceConfigs(cfg);
@@ -9867,7 +9883,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               clickShortsPctMin, clickShortsPctMax,
               shortsScrollMin, shortsScrollMax,
               shortsWatchTimeMin, shortsWatchTimeMax,
-              shortsLikePctMin, shortsLikePctMax } = z.object({
+               shortsLikePctMin, shortsLikePctMax,
+               userCountMin, userCountMax, message } = z.object({
         app:                  z.enum(["chrome", "snapchat", "youtube", "whatsapp"]),
         scrollMin:            z.number().min(0).optional(),
         scrollMax:            z.number().min(0).optional(),
@@ -9902,8 +9919,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         shortsWatchTimeMin:   z.number().min(0).max(600).optional(),
         shortsWatchTimeMax:   z.number().min(0).max(600).optional(),
         shortsLikePctMin:     z.number().int().min(0).max(100).optional(),
-        shortsLikePctMax:     z.number().int().min(0).max(100).optional(),
-      }).parse(req.body);
+         shortsLikePctMax:     z.number().int().min(0).max(100).optional(),
+         userCountMin:         z.number().int().min(1).max(100).optional(),
+         userCountMax:         z.number().int().min(1).max(100).optional(),
+         message:              z.string().max(10_000).optional(),
+       }).parse(req.body);
 
       // Resolve dismiss direction (used by Chrome recents close).
       // Priority: device-prefs override → model lookup.
@@ -9951,8 +9971,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           swipeGesture: devicePrefsPA.swipeGesture,
           dismissDirection: dismissDir,
         });
+      } else if (appId === "whatsapp") {
+        if (!message?.trim()) throw new Error("WhatsApp message is empty");
+        result = await android.runWhatsAppApp(serial, {
+          userCountMin,
+          userCountMax,
+          message,
+        });
       } else {
-        // Remaining apps are placeholders — will be implemented individually.
+        // Snapchat is not implemented yet.
         result = { ok: true, steps: [`${appId}: not yet implemented`] };
       }
 
