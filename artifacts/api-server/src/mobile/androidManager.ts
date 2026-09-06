@@ -1593,6 +1593,7 @@ export async function runWhatsAppApp(
           editMenuItems,
           clipboardProbe: clipboardProbe.status,
         });
+        let fallbackVerified = false;
         // If the clipboard was confirmed (or the device does not expose a
         // readable clipboard command), try Android's explicit paste key once.
         // This is guarded by post-paste field verification, so Autofill or a
@@ -1610,22 +1611,47 @@ export async function runWhatsAppApp(
             node.className === "android.widget.EditText",
           );
           const fallbackText = fallbackComposer?.text ?? "";
-          const fallbackVerified = textMatchesWhatsAppComposer(fallbackText, resolvedMessage);
+          fallbackVerified = textMatchesWhatsAppComposer(fallbackText, resolvedMessage);
           whatsappDebug(`explicit KEYCODE_PASTE fallback for "${contact.text}"`, {
             verified: fallbackVerified,
             composerTextLength: fallbackText.length,
             messageLength: resolvedMessage.length,
             messageFingerprint,
           });
-          if (fallbackVerified) {
-            xml = fallbackXml;
-          } else {
-            steps.push(`WhatsApp skipped "${contact.text}" — Paste unavailable (${editMenuItems.join(", ") || "no edit-menu labels"})`);
-            await pressBack();
-            break;
-          }
-        } else {
-          steps.push(`WhatsApp skipped "${contact.text}" — clipboard verification mismatch`);
+          if (fallbackVerified) xml = fallbackXml;
+        }
+        // Some Xiaomi/Android builds expose the edit menu but reject the
+        // shell clipboard service. Type through the focused EditText as a
+        // second, independently verified path instead of stopping at
+        // Autofill. This is still fail-closed: the flow cannot send unless
+        // the live entry node contains the intended message afterward.
+        if (!fallbackVerified) {
+          await runAdb(adb, ["-s", serial, "shell", "input", "keyevent", "KEYCODE_BACK"], 3000);
+          await _sleep(250);
+          await _adbTapAsync(adb, serial, composer.x, composer.y);
+          await _sleep(250);
+          await inputText(serial, resolvedMessage);
+          await _sleep(700);
+          const typedXml = await _uiDump(adb, serial);
+          const typedComposer = parseWhatsAppLiveNodes(typedXml).find(node =>
+            node.resourceId.toLowerCase().endsWith("/entry") &&
+            node.className === "android.widget.EditText",
+          );
+          const typedText = typedComposer?.text ?? "";
+          fallbackVerified = textMatchesWhatsAppComposer(typedText, resolvedMessage);
+          whatsappDebug(`direct text-entry fallback for "${contact.text}"`, {
+            verified: fallbackVerified,
+            composerTextLength: typedText.length,
+            messageLength: resolvedMessage.length,
+            messageFingerprint,
+            reason: clipboardProbe.status === "mismatch"
+              ? "clipboard mismatch"
+              : "paste not verified",
+          });
+          if (fallbackVerified) xml = typedXml;
+        }
+        if (!fallbackVerified) {
+          steps.push(`WhatsApp skipped "${contact.text}" — message entry could not be verified (${editMenuItems.join(", ") || "no edit-menu labels"})`);
           await pressBack();
           break;
         }
