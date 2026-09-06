@@ -1304,17 +1304,31 @@ export async function runWhatsAppApp(
   let remoteMediaPath: string | null = null;
   const excludedLabels = new Set([
     "new chat", "new conversation", "new contact", "create group",
-    "broadcast lists", "communities", "chats", "calls", "updates",
-    "settings", "search", "back", "more options",
+    "new group", "new community", "broadcast lists", "communities",
+    "chats", "calls", "updates", "settings", "search", "back",
+    "more options", "message yourself",
   ]);
 
   const findLiveLabel = (xml: string, labels: string[], resourceIds: string[] = []): WhatsAppLiveNode | null => {
     const wanted = new Set(labels.map(label => label.toLowerCase()));
-    const idMatch = parseWhatsAppLiveNodes(xml).find(node =>
+    const nodes = parseWhatsAppLiveNodes(xml);
+    // Prefer the actual control over an ancestor such as send_container or
+    // buttons. Exact resource IDs are available in the supplied WhatsApp
+    // dumps; substring matching remains a fallback for build-specific
+    // package prefixes.
+    const exactIdMatch = nodes.find(node =>
+      resourceIds.some(id => {
+        const resourceId = node.resourceId.toLowerCase();
+        const wantedId = id.toLowerCase();
+        return resourceId === wantedId || resourceId.endsWith(`/${wantedId}`);
+      }),
+    );
+    if (exactIdMatch) return exactIdMatch;
+    const idMatch = nodes.find(node =>
       resourceIds.some(id => node.resourceId.toLowerCase().includes(id.toLowerCase())),
     );
     if (idMatch) return idMatch;
-    return parseWhatsAppLiveNodes(xml).find(node =>
+    return nodes.find(node =>
       wanted.has(node.text.toLowerCase()) || wanted.has(node.contentDesc.toLowerCase()),
     ) ?? null;
   };
@@ -1333,6 +1347,14 @@ export async function runWhatsAppApp(
       fs.writeFileSync(tempMediaPath, Buffer.from(match[1], "base64"));
       remoteMediaPath = `/sdcard/Download/${safeName}`;
       await runAdb(adb, ["-s", serial, "push", tempMediaPath, remoteMediaPath], 30000);
+      // Give DocumentsUI a chance to index the pushed file before WhatsApp
+      // opens its Document picker. This is harmless on devices that already
+      // expose Download immediately.
+      await runAdb(adb, [
+        "-s", serial, "shell", "am", "broadcast",
+        "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+        "-d", `file://${remoteMediaPath}`,
+      ], 8000).catch(() => {});
       steps.push(`WhatsApp attachment staged: ${safeName}`);
     }
     const launch = spawnSync(adb, [
@@ -1353,17 +1375,29 @@ export async function runWhatsAppApp(
     }
     steps.push(`WhatsApp launched — selected ${targetCount} contact${targetCount === 1 ? "" : "s"}`);
 
-    const usedContacts = new Set<string>();
+    // This is deliberately an internal row identity rather than a display
+    // name. Duplicate contact names are common; the live row's label plus
+    // bounds distinguish duplicate rows within this picker view and remain
+    // stable when we return to the same list.
+    const usedContactKeys = new Set<string>();
     let sent = 0;
     for (let attempt = 0; attempt < targetCount; attempt++) {
       xml = await _uiDump(adb, serial);
-      let newChat = findLiveLabel(xml, ["new chat", "new conversation"], ["menuitem_new_chat", "fab"]);
+      let newChat = findLiveLabel(
+        xml,
+        ["send message", "new chat", "new conversation"],
+        ["fabText", "menuitem_new_chat"],
+      );
       if (!newChat) {
         // If a contact picker or conversation is still visible, return to the
         // WhatsApp home surface once, then require a fresh live match.
         await pressBack();
         xml = await _uiDump(adb, serial);
-        newChat = findLiveLabel(xml, ["new chat", "new conversation"], ["menuitem_new_chat", "fab"]);
+        newChat = findLiveLabel(
+          xml,
+          ["send message", "new chat", "new conversation"],
+          ["fabText", "menuitem_new_chat"],
+        );
       }
       if (!newChat) {
         steps.push(`WhatsApp stopped — New Chat control not found after ${sent} message${sent === 1 ? "" : "s"}`);
@@ -1373,15 +1407,28 @@ export async function runWhatsAppApp(
       await _sleep(900);
 
       xml = await _uiDump(adb, serial);
-      const screen = _getScreenSize(xml);
       const candidates = parseWhatsAppLiveNodes(xml)
-        .filter(node => node.className === "android.widget.TextView")
-        .filter(node => node.text.length >= 2 && node.text.length <= 80)
-        .filter(node => node.y > screen.h * 0.12 && node.y < screen.h * 0.88)
+        // The contact picker exposes real contacts as Button nodes with this
+        // resource id. This excludes New group/contact/community and every
+        // toolbar/control row without relying on display text.
+        .filter(node => node.resourceId.toLowerCase().includes("contactpicker_row_name"))
+        .filter(node => node.className === "android.widget.Button")
+        .filter(node => node.text.length >= 1 && node.text.length <= 120)
         .filter(node => !excludedLabels.has(node.text.toLowerCase()))
-        .filter(node => !/^\+?[\d\s().-]+$/.test(node.text))
-        .filter(node => !usedContacts.has(node.text))
-        .filter((node, index, all) => all.findIndex(other => other.text === node.text) === index)
+        .filter(node => !/\(you\)$/i.test(node.text) && !/\(you\)$/i.test(node.contentDesc))
+        .filter(node => !/message yourself/i.test(node.text) && !/message yourself/i.test(node.contentDesc))
+        .filter(node => {
+          const key = `${node.text}\u0000${node.contentDesc}\u0000${node.x1},${node.y1},${node.x2},${node.y2}`;
+          return !usedContactKeys.has(key);
+        })
+        .filter((node, index, all) =>
+          all.findIndex(other =>
+            other.text === node.text &&
+            other.contentDesc === node.contentDesc &&
+            other.x1 === node.x1 &&
+            other.y1 === node.y1,
+          ) === index,
+        )
         .sort((a, b) => a.y - b.y);
       if (candidates.length === 0) {
         steps.push(`WhatsApp stopped — no unselected contacts found after ${sent} message${sent === 1 ? "" : "s"}`);
@@ -1389,13 +1436,48 @@ export async function runWhatsAppApp(
         break;
       }
       const contact = candidates[Math.floor(Math.random() * candidates.length)];
-      usedContacts.add(contact.text);
+      const contactKey = `${contact.text}\u0000${contact.contentDesc}\u0000${contact.x1},${contact.y1},${contact.x2},${contact.y2}`;
+      usedContactKeys.add(contactKey);
       await _adbTapAsync(adb, serial, contact.x, contact.y);
       await _sleep(900);
 
       xml = await _uiDump(adb, serial);
+      // WhatsApp's message field is the live `entry` EditText. Paste through
+      // the native long-press menu instead of using KEYCODE_PASTE directly:
+      // this follows the real device flow and avoids silently pasting into a
+      // different field when the keyboard/layout changes.
+      const composer = parseWhatsAppLiveNodes(xml).find(node =>
+        node.resourceId.toLowerCase().endsWith("/entry") &&
+        node.className === "android.widget.EditText" &&
+        node.x2 > node.x1 && node.y2 > node.y1,
+      );
+      if (!composer) {
+        steps.push(`WhatsApp skipped "${contact.text}" — message composer not found`);
+        await pressBack();
+        break;
+      }
+      await _adbTapAsync(adb, serial, composer.x, composer.y);
+      const resolvedMessage = resolveWhatsAppSpintax(messageTemplate);
+      await setClipboard(serial, resolvedMessage);
+      await runAdb(adb, [
+        "-s", serial, "shell", "input", "swipe",
+        String(composer.x), String(composer.y),
+        String(composer.x), String(composer.y), "650",
+      ], 5000);
+      await _sleep(450);
+      xml = await _uiDump(adb, serial);
+      const paste = findLiveLabel(xml, ["paste"], ["paste"]);
+      if (!paste) {
+        steps.push(`WhatsApp skipped "${contact.text}" — Paste menu item not found`);
+        await pressBack();
+        break;
+      }
+      await _adbTapAsync(adb, serial, paste.x, paste.y);
+      await _sleep(450);
+
       if (remoteMediaPath && opts?.media) {
-        const attach = findLiveLabel(xml, ["attach", "attachment"], ["attach", "paperclip"]);
+        xml = await _uiDump(adb, serial);
+        const attach = findLiveLabel(xml, ["attach"], ["input_attach_button"]);
         if (!attach) {
           steps.push(`WhatsApp skipped "${contact.text}" — attachment control not found`);
           await pressBack();
@@ -1404,7 +1486,7 @@ export async function runWhatsAppApp(
         await _adbTapAsync(adb, serial, attach.x, attach.y);
         await _sleep(600);
         xml = await _uiDump(adb, serial);
-        const document = findLiveLabel(xml, ["document", "documents", "file", "files"], ["document", "attach_document"]);
+        const document = findLiveLabel(xml, ["document"], ["pickfiletype_document_holder"]);
         if (!document) {
           steps.push(`WhatsApp skipped "${contact.text}" — Document attachment option not found`);
           await pressBack();
@@ -1413,10 +1495,11 @@ export async function runWhatsAppApp(
         await _adbTapAsync(adb, serial, document.x, document.y);
         await _sleep(1000);
         xml = await _uiDump(adb, serial);
+        const attachmentNames = new Set([opts.media.fileName, path.basename(remoteMediaPath)]);
         let fileNode = parseWhatsAppLiveNodes(xml).find(node =>
-          node.text === opts.media!.fileName ||
-          node.contentDesc === opts.media!.fileName ||
-          node.text.endsWith(opts.media!.fileName),
+          attachmentNames.has(node.text) ||
+          attachmentNames.has(node.contentDesc) ||
+          [...attachmentNames].some(name => node.text.endsWith(name) || node.contentDesc.endsWith(name)),
         );
         if (!fileNode) {
           const download = findLiveLabel(xml, ["download", "downloads"]);
@@ -1425,9 +1508,9 @@ export async function runWhatsAppApp(
             await _sleep(700);
             xml = await _uiDump(adb, serial);
             fileNode = parseWhatsAppLiveNodes(xml).find(node =>
-              node.text === opts.media!.fileName ||
-              node.contentDesc === opts.media!.fileName ||
-              node.text.endsWith(opts.media!.fileName),
+              attachmentNames.has(node.text) ||
+              attachmentNames.has(node.contentDesc) ||
+              [...attachmentNames].some(name => node.text.endsWith(name) || node.contentDesc.endsWith(name)),
             );
           }
         }
@@ -1441,21 +1524,9 @@ export async function runWhatsAppApp(
       }
 
       xml = await _uiDump(adb, serial);
-      const composer = parseWhatsAppLiveNodes(xml).find(node =>
-        node.className === "android.widget.EditText" && node.x2 > node.x1 && node.y2 > node.y1,
-      );
-      if (!composer) {
-        steps.push(`WhatsApp skipped "${contact.text}" — message composer not found`);
-        await pressBack();
-        break;
-      }
-      await _adbTapAsync(adb, serial, composer.x, composer.y);
-      await setClipboard(serial, resolveWhatsAppSpintax(messageTemplate));
-      await pasteClipboard(serial);
-      await _sleep(350);
-
-      xml = await _uiDump(adb, serial);
-      const send = findLiveLabel(xml, ["send"], ["send"]);
+      const send = remoteMediaPath
+        ? findLiveLabel(xml, ["send 1 media", "send media"], ["send_media_btn"])
+        : findLiveLabel(xml, ["send"], ["send"]);
       if (!send) {
         steps.push(`WhatsApp skipped "${contact.text}" — Send control not found`);
         await pressBack();
