@@ -1197,20 +1197,18 @@ function MobilePhoneAppsPanel({
                       onChange={e => patchApp("whatsapp", { userCountMax: Math.min(100, Math.max(1, Math.round(Number(e.target.value)))) })}
                     />
                   </div>
-                  <div className="relative flex min-w-[16rem] flex-1 items-center self-center">
-                    <span className="absolute left-1/2 bottom-full -translate-x-1/2 mb-0 leading-none text-xs text-muted-foreground whitespace-nowrap">
-                      Message
-                    </span>
-                    <Input
-                      type="text"
-                      value={settings.whatsapp.message ?? ""}
-                      onChange={e => patchApp("whatsapp", { message: e.target.value })}
-                      placeholder="{Hi|Hello} {there|friend}!"
-                      spellCheck={false}
-                      className="h-7 w-full text-sm"
-                    />
-                  </div>
                 </>}
+                row2={<div className="col-span-5 w-full">
+                  <label className="mb-1 block text-xs text-muted-foreground">Message</label>
+                  <textarea
+                    rows={5}
+                    value={settings.whatsapp.message ?? ""}
+                    onChange={e => patchApp("whatsapp", { message: e.target.value })}
+                    placeholder="{Hi|Hello} {there|friend}!"
+                    spellCheck={false}
+                    className="box-border min-h-[7.5rem] w-full resize-y overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </div>}
               />
               </div>
             </div>
