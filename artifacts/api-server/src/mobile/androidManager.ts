@@ -1287,6 +1287,7 @@ export async function runWhatsAppApp(
     userCountMin?: number;
     userCountMax?: number;
     message: string;
+    recentContactKeys?: string[];
     dismissDirection?: "left" | "up";
     swipeGesture?: {
       x1: number; y1: number; x2: number; y2: number;
@@ -1302,7 +1303,7 @@ export async function runWhatsAppApp(
       dataUrl: string;
     } | null;
   },
-): Promise<{ ok: boolean; steps: string[]; error?: string }> {
+): Promise<{ ok: boolean; steps: string[]; error?: string; contactKeysUsed?: string[] }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
@@ -1315,6 +1316,7 @@ export async function runWhatsAppApp(
   let tempMediaPath: string | null = null;
   let remoteMediaPath: string | null = null;
   let galleryMediaTimestamp: number | null = null;
+  const successfulContactKeys: string[] = [];
   const isImageMedia = Boolean(opts?.media && (
     /^image\//i.test(opts.media.mimeType) ||
     /\.(?:jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(opts.media.fileName)
@@ -1552,6 +1554,11 @@ export async function runWhatsAppApp(
     // bounds distinguish duplicate rows within this picker view and remain
     // stable when we return to the same list.
     const usedContactKeys = new Set<string>();
+    const recentContactKeys = new Set(
+      (opts?.recentContactKeys ?? []).filter(key => typeof key === "string" && key.length > 0),
+    );
+    const contactHistoryKey = (node: WhatsAppLiveNode) =>
+      `${node.text.trim().toLocaleLowerCase()}\u0000${node.contentDesc.trim().toLocaleLowerCase()}`;
     let sent = 0;
     for (let attempt = 0; attempt < targetCount; attempt++) {
       xml = await _uiDump(adb, serial);
@@ -1589,7 +1596,7 @@ export async function runWhatsAppApp(
       xml = await _uiDump(adb, serial);
       const settled = await waitForContactList(xml, attempt + 1);
       xml = settled.xml;
-      const candidates = settled.candidates.filter(node => {
+      const unselectedCandidates = settled.candidates.filter(node => {
         const key = `${node.text}\u0000${node.contentDesc}\u0000${node.x1},${node.y1},${node.x2},${node.y2}`;
         return !usedContactKeys.has(key);
       }).filter((node, index, all) =>
@@ -1600,6 +1607,13 @@ export async function runWhatsAppApp(
           other.y1 === node.y1,
         ) === index,
       );
+      // Prefer people not contacted by the recent completed executions. If
+      // the visible picker is smaller than the history, fall back to the
+      // oldest/available rows rather than silently sending nothing forever.
+      const freshCandidates = unselectedCandidates.filter(node =>
+        !recentContactKeys.has(contactHistoryKey(node)),
+      );
+      const candidates = freshCandidates.length > 0 ? freshCandidates : unselectedCandidates;
       if (candidates.length === 0) {
         whatsappDebug(
           `contact-list settled without an unselected contact after ${sent} sent`,
@@ -1611,10 +1625,14 @@ export async function runWhatsAppApp(
       }
       const contact = candidates[Math.floor(Math.random() * candidates.length)];
       const contactKey = `${contact.text}\u0000${contact.contentDesc}\u0000${contact.x1},${contact.y1},${contact.x2},${contact.y2}`;
+      const historyKey = contactHistoryKey(contact);
       usedContactKeys.add(contactKey);
       whatsappDebug(`selected contact row "${contact.text}"`, {
         attempt: attempt + 1,
         contactKey,
+        historyKey,
+        freshCandidateCount: freshCandidates.length,
+        historyFallback: freshCandidates.length === 0,
         resourceId: contact.resourceId,
         bounds: `[${contact.x1},${contact.y1}][${contact.x2},${contact.y2}]`,
         remainingVisibleCandidates: candidates.length - 1,
@@ -2056,18 +2074,26 @@ export async function runWhatsAppApp(
       await _adbTapAsync(adb, serial, send.x, send.y);
       await _sleep(700);
       sent++;
+      successfulContactKeys.push(historyKey);
+      recentContactKeys.add(historyKey);
       steps.push(`WhatsApp sent a randomized message${remoteMediaPath ? " with attachment" : ""} to ${contact.text} (${sent}/${targetCount})`);
       await pressBack();
     }
     if (sent === 0) {
-      return { ok: false, steps, error: "WhatsApp did not send a message to any contact" };
+      return {
+        ok: false,
+        steps,
+        error: "WhatsApp did not send a message to any contact",
+        contactKeysUsed: successfulContactKeys,
+      };
     }
-    return { ok: true, steps };
+    return { ok: true, steps, contactKeysUsed: successfulContactKeys };
   } catch (error: any) {
     return {
       ok: false,
       steps,
       error: error?.message ?? "WhatsApp messaging failed",
+      contactKeysUsed: successfulContactKeys,
     };
   } finally {
     try {

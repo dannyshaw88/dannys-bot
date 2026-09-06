@@ -516,6 +516,7 @@ function MobilePhoneAppsPanel({
     runningRef.current = true;
     onRunningRef.current?.(true);
     setCompletionStatus("running");
+    const cycleStartedAt = Date.now();
     // Preserve the timer's original due time before clearing the display
     // state. The shared coordinator uses this timestamp to prioritize turns
     // that became ready first across HST and Phone Apps owners.
@@ -654,7 +655,12 @@ function MobilePhoneAppsPanel({
 
     if (!stopRef.current && settingsRef.current.enabled) {
       const s = settingsRef.current;
-      scheduleNext(randomInterval(s.intervalMin, s.intervalMax));
+      // The interval is the time between cycle starts, not an additional wait
+      // after the app work and phone lock have completed. This keeps a fixed
+      // 5–5 minute setting close to five minutes between executions instead of
+      // five minutes plus the duration of the previous cycle.
+      const nextCycleAt = cycleStartedAt + randomInterval(s.intervalMin, s.intervalMax);
+      scheduleNext(Math.max(0, nextCycleAt - Date.now()));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestSlot, releaseSlot, scheduleNext, updateNextRunAt]);
@@ -698,6 +704,13 @@ function MobilePhoneAppsPanel({
     setSettings(next);
     settingsRef.current = next;
     saveSettings(next);
+    if (settingsRef.current.enabled &&
+        (Object.prototype.hasOwnProperty.call(partial, "intervalMin") ||
+         Object.prototype.hasOwnProperty.call(partial, "intervalMax"))) {
+      // Apply a newly edited interval immediately rather than leaving the
+      // previous timer alive with its old 25–99 minute due time.
+      scheduleNext(randomInterval(next.intervalMin, next.intervalMax));
+    }
     return next;
   };
 
