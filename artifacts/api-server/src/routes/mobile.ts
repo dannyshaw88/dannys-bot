@@ -9754,7 +9754,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
            tapTrendingStoryMin: 0,
            tapTrendingStoryMax: 0,
         },
-        googlePlay: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
         snapchat: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
         youtube: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
         whatsapp: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
@@ -9869,7 +9868,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shortsScrollMin, shortsScrollMax,
               shortsWatchTimeMin, shortsWatchTimeMax,
               shortsLikePctMin, shortsLikePctMax } = z.object({
-        app:                  z.enum(["chrome", "googlePlay", "snapchat", "youtube", "whatsapp"]),
+        app:                  z.enum(["chrome", "snapchat", "youtube", "whatsapp"]),
         scrollMin:            z.number().min(0).optional(),
         scrollMax:            z.number().min(0).optional(),
         storyTapMin:          z.number().int().min(0).optional(),

@@ -38,14 +38,6 @@ function ChromeIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-function GooglePlayIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path d="M5 3.2v17.6L19.8 12 5 3.2z" fill="#1AD2F2" stroke="#fff" strokeWidth="1.2" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
 function SnapchatIcon({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -137,7 +129,6 @@ interface PhoneAppsSettings {
   intervalMin:  number;
   intervalMax:  number;
   chrome:       AppSlotSettings;
-  googlePlay:   AppSlotSettings;
   snapchat:     AppSlotSettings;
   youtube:      AppSlotSettings;
   whatsapp:     AppSlotSettings;
@@ -150,7 +141,6 @@ const DEFAULT_APP_SLOT: AppSlotSettings = { enabled: false, activatePctMin: 0, a
 const DEFAULT_SETTINGS: PhoneAppsSettings = {
   enabled: false, intervalMin: 25, intervalMax: 99,
   chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0, internalLinkPctMin: 0, internalLinkPctMax: 0, manualSearchPctMin: 0, manualSearchPctMax: 0, manualSearchCountMin: 1, manualSearchCountMax: 1, manualSearchScrollMin: 0, manualSearchScrollMax: 0, manualSearchLinkPctMin: 0, manualSearchLinkPctMax: 0, manualSearchDwellMin: 3, manualSearchDwellMax: 8, tapTrendingStoryMin: 0, tapTrendingStoryMax: 0 },
-  googlePlay: { ...DEFAULT_APP_SLOT },
   snapchat:   { ...DEFAULT_APP_SLOT },
   youtube:    { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, clickPctMin: 0, clickPctMax: 0, watchTimeMin: 3, watchTimeMax: 8, clickShortsPctMin: 0, clickShortsPctMax: 0, shortsScrollMin: 0, shortsScrollMax: 0, shortsWatchTimeMin: 3, shortsWatchTimeMax: 8, shortsLikePctMin: 0, shortsLikePctMax: 0 },
   whatsapp:   { ...DEFAULT_APP_SLOT },
@@ -317,55 +307,64 @@ function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMi
       <div className="flex items-center gap-4 flex-wrap">
         {/* Icon + label — anchors the left of the first visual row */}
         <div className="flex items-center gap-2 min-w-[13rem]">
-          <Checkbox checked={enabled} onCheckedChange={(checked) => onEnabled(checked === true)} aria-label={`Enable ${label}`} />
           {icon}
           <span className={`text-sm font-semibold ${enabled ? "text-foreground" : "text-muted-foreground"}`}>{label}</span>
+          <Checkbox
+            checked={enabled}
+            onCheckedChange={(checked) => onEnabled(checked === true)}
+            aria-label={`Enable ${label}`}
+            className="ml-1 shrink-0"
+          />
         </div>
 
-        {/* Activation */}
-        <div className="flex flex-col items-center gap-1">
-          <span className="text-xs text-muted-foreground whitespace-nowrap">Activation</span>
-          <div className="flex items-center gap-1">
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              className={PCT_INPUT}
-              value={min}
-              onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
-            />
-            <span className="text-muted-foreground text-sm">to</span>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              className={PCT_INPUT}
-              value={max}
-              onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
-            />
-            <span className="text-muted-foreground text-sm">%</span>
-          </div>
-        </div>
+        {enabled && (
+          <>
+            {/* Activation */}
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Activation</span>
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className={PCT_INPUT}
+                  value={min}
+                  onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
+                />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className={PCT_INPUT}
+                  value={max}
+                  onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
+                />
+                <span className="text-muted-foreground text-sm">%</span>
+              </div>
+            </div>
 
-        {/* Fields that belong to the first visual row. */}
-        {rowExtras}
+            {/* Fields that belong to the first visual row. */}
+            {rowExtras}
 
-        {/* Explicit full-width rows. These must not depend on available width
-            or happenstance flex wrapping to appear as separate rows. */}
-        {row2 && (
-          <div className="basis-full w-full grid grid-cols-5 items-center gap-4 [&>*:not(:first-child)]:-translate-x-[6px]">
-            {row2}
-          </div>
-        )}
-        {row3 && (
-          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
-            {row3}
-          </div>
-        )}
-        {row4 && (
-          <div className="basis-full w-full flex items-center gap-4 flex-wrap">
-            {row4}
-          </div>
+            {/* Explicit full-width rows. These must not depend on available width
+                or happenstance flex wrapping to appear as separate rows. */}
+            {row2 && (
+              <div className="basis-full w-full grid grid-cols-5 items-center gap-4 [&>*:not(:first-child)]:-translate-x-[6px]">
+                {row2}
+              </div>
+            )}
+            {row3 && (
+              <div className="basis-full w-full flex items-center gap-4 flex-wrap">
+                {row3}
+              </div>
+            )}
+            {row4 && (
+              <div className="basis-full w-full flex items-center gap-4 flex-wrap">
+                {row4}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -444,7 +443,6 @@ function MobilePhoneAppsPanel({
           intervalMin: Number(d.intervalMin ?? 25),
           intervalMax: Number(d.intervalMax ?? 99),
           chrome:      { enabled: d.chrome?.enabled ?? false, activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8, tapTrendingStoryMin: d.chrome?.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: d.chrome?.tapTrendingStoryMax ?? 0 },
-          googlePlay:  { enabled: d.googlePlay?.enabled ?? false, activatePctMin: d.googlePlay?.activatePctMin ?? 0,  activatePctMax: d.googlePlay?.activatePctMax ?? 0 },
           snapchat:    { enabled: d.snapchat?.enabled ?? false, activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
           youtube:     { enabled: d.youtube?.enabled ?? false, activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8, shortsLikePctMin: d.youtube?.shortsLikePctMin ?? 0, shortsLikePctMax: d.youtube?.shortsLikePctMax ?? 0 },
           whatsapp:    { enabled: d.whatsapp?.enabled ?? false, activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0 },
@@ -580,9 +578,6 @@ function MobilePhoneAppsPanel({
          if (s.chrome.enabled && chromeActivated) {
            await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0, internalLinkPctMin: s.chrome.internalLinkPctMin ?? 0, internalLinkPctMax: s.chrome.internalLinkPctMax ?? 0, manualSearchPctMin: s.chrome.manualSearchPctMin ?? 0, manualSearchPctMax: s.chrome.manualSearchPctMax ?? 0, manualSearchCountMin: s.chrome.manualSearchCountMin ?? 1, manualSearchCountMax: s.chrome.manualSearchCountMax ?? 1, manualSearchScrollMin: s.chrome.manualSearchScrollMin ?? 0, manualSearchScrollMax: s.chrome.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: s.chrome.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: s.chrome.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: s.chrome.manualSearchDwellMin ?? 3, manualSearchDwellMax: s.chrome.manualSearchDwellMax ?? 8, tapTrendingStoryMin: s.chrome.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: s.chrome.tapTrendingStoryMax ?? 0 });
         }
-        const googlePlayActivated = shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax);
-        onLogRef.current?.(`Phone Apps [googlePlay]: ${googlePlayActivated ? "activation roll passed" : "activation roll skipped"}`);
-         if (s.googlePlay.enabled && googlePlayActivated) await runApp("googlePlay");
         const snapchatActivated = shouldActivate(s.snapchat.activatePctMin, s.snapchat.activatePctMax);
         onLogRef.current?.(`Phone Apps [snapchat]: ${snapchatActivated ? "activation roll passed" : "activation roll skipped"}`);
          if (s.snapchat.enabled && snapchatActivated) await runApp("snapchat");
@@ -686,7 +681,7 @@ function MobilePhoneAppsPanel({
     return next;
   };
 
-  const patchApp = (app: keyof Pick<PhoneAppsSettings, 'chrome'|'googlePlay'|'snapchat'|'youtube'|'whatsapp'>, partial: Partial<AppSlotSettings>) => {
+  const patchApp = (app: keyof Pick<PhoneAppsSettings, 'chrome'|'snapchat'|'youtube'|'whatsapp'>, partial: Partial<AppSlotSettings>) => {
     const next: PhoneAppsSettings = {
       ...settingsRef.current,
       [app]: { ...settingsRef.current[app], ...partial },
@@ -968,17 +963,6 @@ function MobilePhoneAppsPanel({
                       </div>
                    </div>
                  }
-              />
-              <AppSlotRow
-                icon={<GooglePlayIcon size={22} />}
-                label="Google Play"
-                 enabled={settings.googlePlay.enabled}
-                 onEnabled={v => patchApp("googlePlay", { enabled: v })}
-                className="order-3"
-                min={settings.googlePlay.activatePctMin}
-                max={settings.googlePlay.activatePctMax}
-                onMin={v => patchApp("googlePlay", { activatePctMin: v })}
-                onMax={v => patchApp("googlePlay", { activatePctMax: v })}
               />
               <AppSlotRow
                 icon={<SnapchatIcon size={22} />}
