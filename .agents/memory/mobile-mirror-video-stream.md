@@ -10,4 +10,5 @@ The Mobile Farm phone mirror streams via `adb exec-out screenrecord --output-for
 **How to apply:** if fixing/extending this again —
 - Annex-B access-unit boundaries must be detected via `first_mb_in_slice == 0` in the slice header (Exp-Golomb), not "next slice NAL seen" — multi-slice frames are common and the naive rule fragments a single picture into multiple decoder chunks.
 - `screenrecord` hard-caps each invocation at ~180s; the backend must auto-respawn on exit or the stream silently stops.
+- An explicitly opened mirror owns a reference-counted screen-timeout lease and a periodic `KEYCODE_WAKEUP` keepalive; reconnect cleanup must not restore the OEM timeout while another mirror WebSocket is still live.
 - Do not regress to screenshot polling as the primary path — it's now the fallback only.

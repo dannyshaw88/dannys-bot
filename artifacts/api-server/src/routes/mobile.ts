@@ -1378,6 +1378,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Used by the automation cycle to push real-time progress messages into
   // the client's Log panel without a separate channel.
   const videoSessionWS = new Map<string, import('ws').WebSocket>();
+  // Keep the temporary screen-timeout override alive across overlapping
+  // reconnects. One WebSocket closing must not restore the phone's short OEM
+  // timeout underneath another mirror connection that is still active.
+  const mirrorScreenTimeoutLeases = new Map<string, {
+    previousTimeoutMs: string;
+    refCount: number;
+    changed: boolean;
+  }>();
 
   // Maps serial → set of connected log-stream WebSocket clients.
   // Log-stream is a lightweight, always-on channel (no video frames) that
@@ -1463,25 +1471,45 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       let restartCount = 0;
       let currentChild: ReturnType<typeof spawn> | null = null;
 
-      const adbShell = (...args: string[]) =>
-        spawn(adbPath, ["-s", serial, "shell", ...args], { stdio: "ignore" });
-
       // Keep the screen awake for the duration of the mirror session — same
       // trick as the PNG endpoint, but doubly important here: if the display
       // actually powers off, screenrecord stops producing frames entirely.
-      let originalScreenTimeout = "30000";
-      try {
-        const st = await execFileP(adbPath, ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"], {
-          encoding: "utf8",
-          timeout: 3000,
-        } as any);
-        const val = String(st.stdout ?? "").trim();
-        if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
-      } catch { /* ignore */ }
-      adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
-      // WAKEUP and dismiss-keyguard intentionally removed: auto-waking on
-      // connect was the root cause of the phone constantly waking between
-      // automation cycles. Wake is now exclusively user-triggered (canvas tap).
+      let screenTimeoutLeaseHeld = false;
+      let keepAwakeTimer: ReturnType<typeof setInterval> | null = null;
+      const existingTimeoutLease = mirrorScreenTimeoutLeases.get(serial);
+      if (existingTimeoutLease) {
+        existingTimeoutLease.refCount++;
+        screenTimeoutLeaseHeld = true;
+      } else {
+        let originalScreenTimeout = "30000";
+        try {
+          const st = await execFileP(adbPath, ["-s", serial, "shell", "settings", "get", "system", "screen_off_timeout"], {
+            encoding: "utf8",
+            timeout: 3000,
+          } as any);
+          const val = String(st.stdout ?? "").trim();
+          if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
+        } catch { /* use the conservative fallback */ }
+
+        let changed = false;
+        try {
+          await execFileP(adbPath, [
+            "-s", serial, "shell", "settings", "put", "system", "screen_off_timeout", "2147483647",
+          ], { encoding: "utf8", timeout: 5000 } as any);
+          changed = true;
+        } catch (error) {
+          logger.warn({ serial, err: error }, "[mobile-video] could not extend screen timeout; using WAKEUP keepalive");
+        }
+        mirrorScreenTimeoutLeases.set(serial, {
+          previousTimeoutMs: originalScreenTimeout,
+          refCount: 1,
+          changed,
+        });
+        screenTimeoutLeaseHeld = true;
+      }
+      // Do not auto-wake a phone merely because a background mirror connects:
+      // the detail mirror is opened by an explicit user action. The keepalive
+      // below only runs for that already-user-requested mirror session.
 
       // NOTE: we intentionally do NOT force `--size` to the device's exact
       // `wm size` here. screenrecord's encoder on many devices requires
@@ -1501,8 +1529,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         videoSessionActive.delete(serial);
         videoSessionWS.delete(serial);
         if (lagWatchdog) clearInterval(lagWatchdog);
+        if (keepAwakeTimer) {
+          clearInterval(keepAwakeTimer);
+          keepAwakeTimer = null;
+        }
         try { currentChild?.kill(); } catch { /* ignore */ }
-        try { adbShell("settings", "put", "system", "screen_off_timeout", originalScreenTimeout); } catch { /* ignore */ }
+        if (screenTimeoutLeaseHeld) {
+          const timeoutLease = mirrorScreenTimeoutLeases.get(serial);
+          if (timeoutLease) {
+            timeoutLease.refCount--;
+            if (timeoutLease.refCount <= 0) {
+              mirrorScreenTimeoutLeases.delete(serial);
+              if (timeoutLease.changed) {
+                void execFileP(adbPath, [
+                  "-s", serial, "shell", "settings", "put", "system",
+                  "screen_off_timeout", timeoutLease.previousTimeoutMs,
+                ], { encoding: "utf8", timeout: 5000 } as any).catch(() => {});
+              }
+            }
+          }
+          screenTimeoutLeaseHeld = false;
+        }
         logger.info({ serial, reason }, "[mobile-video] session cleaned up");
       };
       ws.on("close", () => cleanup("close"));
@@ -1738,6 +1785,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const screenOnBefore = await android.isScreenOn(serial).catch(() => null);
       await android.ensureScreenOn(serial).catch(() => { /* best effort */ });
       logger.info({ serial, elapsedMs: elapsed(), screenWasAlreadyOn: screenOnBefore === true }, "[mobile-video] timing: ensureScreenOn done");
+
+      // Some OEMs ignore or later overwrite screen_off_timeout while the
+      // display is under load. This mirror was explicitly opened by the user,
+      // so keep that session awake without injecting taps or toggling power.
+      // WAKEUP is idempotent when the display is already on and gives the user
+      // a full window to make the first manual gesture.
+      keepAwakeTimer = setInterval(() => {
+        if (!running || ws.readyState !== 1) return;
+        void execFileP(adbPath, [
+          "-s", serial, "shell", "input", "keyevent", "224",
+        ], { encoding: "utf8", timeout: 3000 } as any).catch(() => {});
+      }, 10_000);
 
       logger.info({ serial, elapsedMs: elapsed(), adbPath }, "[mobile-video] timing: about to spawn screenrecord");
       spawnStream();
