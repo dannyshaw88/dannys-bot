@@ -1692,84 +1692,214 @@ export async function runWhatsAppApp(
         await _adbTapAsync(adb, serial, attachmentPicker.x, attachmentPicker.y);
         await _sleep(1000);
         xml = await _uiDump(adb, serial);
-        let mediaItems: WhatsAppLiveNode[] = [];
-        if (isImageMedia) {
-          for (let galleryPoll = 1; galleryPoll <= 8; galleryPoll++) {
-            xml = await _uiDump(adb, serial);
-            mediaItems = parseWhatsAppLiveNodes(xml).filter(node =>
-              node.resourceId.toLowerCase().endsWith("/media_item_view") &&
-              node.className === "android.widget.ImageView" &&
-              node.x2 > node.x1 && node.y2 > node.y1,
-            );
-            if (mediaItems.length > 0) break;
-            await _sleep(350);
-          }
-          const galleryDateHints = galleryMediaTimestamp
-            ? getWhatsAppGalleryDateHints(galleryMediaTimestamp)
-            : [];
-          const stagedItem = mediaItems.find(node =>
-            galleryDateHints.some(hint => node.contentDesc.toLowerCase().includes(hint.toLowerCase())),
-          );
-          whatsappDebug("Gallery media scan", {
-            galleryMediaTimestamp,
-            galleryDateHints,
-            mediaItemCount: mediaItems.length,
-            mediaItemDescriptions: mediaItems.slice(0, 12).map(node => node.contentDesc),
-            stagedItemFound: Boolean(stagedItem),
-          });
-          if (!stagedItem) {
-            steps.push(`WhatsApp skipped "${contact.text}" — staged image was not uniquely identified in Gallery`);
-            await pressBack();
-            break;
-          }
-          whatsappDebug(`tapping staged Gallery image for "${contact.text}"`, {
-            contentDesc: stagedItem.contentDesc,
-            x: stagedItem.x,
-            y: stagedItem.y,
-          });
-          const gallerySelectionVerified = (currentXml: string) => {
-            const currentNodes = parseWhatsAppLiveNodes(currentXml);
-            const gallerySend = findLiveLabel(currentXml, ["send 1 media", "send media"], ["send_media_btn"]);
-            const galleryCounter = currentNodes.find(node =>
-              node.resourceId.toLowerCase().endsWith("/send_media_counter"),
-            );
-            const selectedTray = currentNodes.find(node =>
-              node.resourceId.toLowerCase().endsWith("/gallery_selected_media"),
-            );
-            const selectedThumbnail = currentNodes.find(node =>
-              node.resourceId.toLowerCase().endsWith("/selected_media_item_thumbnail"),
-            );
-            return {
-              verified: Boolean(gallerySend && galleryCounter?.text === "1" && (selectedTray || selectedThumbnail)),
-              sendControlFound: Boolean(gallerySend),
-              selectedMediaCount: galleryCounter?.text ?? null,
-              selectedTrayFound: Boolean(selectedTray),
-              selectedThumbnailFound: Boolean(selectedThumbnail),
-            };
-          };
-          let selection = { verified: false, sendControlFound: false, selectedMediaCount: null as string | null, selectedTrayFound: false, selectedThumbnailFound: false };
-          for (let selectionAttempt = 1; selectionAttempt <= 2 && !selection.verified; selectionAttempt++) {
-            await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
-            await _sleep(selectionAttempt === 1 ? 1200 : 700);
-            xml = await _uiDump(adb, serial);
-            selection = gallerySelectionVerified(xml);
-            whatsappDebug(`Gallery selection verification attempt ${selectionAttempt}`, {
-              ...selection,
-              contentDesc: stagedItem.contentDesc,
-              x: stagedItem.x,
-              y: stagedItem.y,
-            });
-          }
-          if (!selection.verified) {
-            whatsappDebug(`Gallery image selection was not verified for "${contact.text}"`, {
-              ...describeWhatsAppSurface(xml),
-              ...selection,
-            });
-            steps.push(`WhatsApp skipped "${contact.text}" — Gallery image selection was not verified`);
-            await pressBack();
-            break;
-          }
-        } else {
+         let mediaItems: WhatsAppLiveNode[] = [];
+         if (isImageMedia) {
+           const galleryDateHints = galleryMediaTimestamp
+             ? getWhatsAppGalleryDateHints(galleryMediaTimestamp)
+             : [];
+           const galleryMediaSelector = (currentXml: string) =>
+             parseWhatsAppLiveNodes(currentXml).filter(node =>
+               node.resourceId.toLowerCase().endsWith("/media_item_view") &&
+               node.className === "android.widget.ImageView" &&
+               node.x2 > node.x1 && node.y2 > node.y1,
+             );
+           const gallerySelectionState = (currentXml: string) => {
+             const currentNodes = parseWhatsAppLiveNodes(currentXml);
+             const gallerySend = findLiveLabel(currentXml, ["send 1 media", "send media"], ["send_media_btn"]);
+             const galleryCounter = currentNodes.find(node =>
+               node.resourceId.toLowerCase().endsWith("/send_media_counter"),
+             );
+             const selectedTray = currentNodes.find(node =>
+               node.resourceId.toLowerCase().endsWith("/gallery_selected_media"),
+             );
+             const selectedThumbnail = currentNodes.find(node =>
+               node.resourceId.toLowerCase().endsWith("/selected_media_item_thumbnail"),
+             );
+             const selectedSendButton = currentNodes.find(node =>
+               node.resourceId.toLowerCase().endsWith("/send_media_btn"),
+             );
+             const hasAnySelectedState = Boolean(
+               galleryCounter || selectedTray || selectedThumbnail || selectedSendButton,
+             );
+             return {
+               verified: Boolean(
+                 gallerySend &&
+                 galleryCounter?.text === "1" &&
+                 (selectedTray || selectedThumbnail),
+               ),
+               hasAnySelectedState,
+               sendControlFound: Boolean(gallerySend),
+               selectedMediaCount: galleryCounter?.text ?? null,
+               selectedTrayFound: Boolean(selectedTray),
+               selectedThumbnailFound: Boolean(selectedThumbnail),
+             };
+           };
+
+           // WhatsApp expands the Gallery sheet after the first thumbnail tap.
+           // Therefore the target must be captured from a stable, explicitly
+           // unselected surface. A single media_item_view is not enough: it can
+           // appear while the picker is still animating, or after the layout has
+           // already moved to the selected-media tray.
+           let stagedItem: WhatsAppLiveNode | null = null;
+           let lastTargetSignature = "";
+           let stableTargetPolls = 0;
+           let galleryReadyXml = xml;
+           for (let galleryPoll = 1; galleryPoll <= 12; galleryPoll++) {
+             if (galleryPoll > 1) {
+               await _sleep(300);
+               galleryReadyXml = await _uiDump(adb, serial);
+             }
+             const selectionState = gallerySelectionState(galleryReadyXml);
+             const candidates = galleryMediaSelector(galleryReadyXml);
+             mediaItems = candidates;
+             if (selectionState.verified) {
+               // Do not tap again if WhatsApp already reports the complete
+               // selected state (for example after a delayed first tap).
+               stagedItem = null;
+               xml = galleryReadyXml;
+               whatsappDebug("Gallery already reports selected media before tap", {
+                 galleryPoll,
+                 ...selectionState,
+               });
+               break;
+             }
+             if (selectionState.hasAnySelectedState) {
+               // The sheet is in the middle of expanding. Keep polling; a
+               // second tap here could deselect the image.
+               whatsappDebug("Gallery selection transition still settling", {
+                 galleryPoll,
+                 mediaItemCount: candidates.length,
+                 ...selectionState,
+               });
+               continue;
+             }
+             const matches = candidates.filter(node =>
+               galleryDateHints.some(hint =>
+                 node.contentDesc.toLowerCase().includes(hint.toLowerCase()),
+               ),
+             );
+             if (matches.length === 1) {
+               const candidate = matches[0];
+               const signature = [
+                 candidate.contentDesc,
+                 candidate.x1,
+                 candidate.y1,
+                 candidate.x2,
+                 candidate.y2,
+               ].join("|");
+               stableTargetPolls = signature === lastTargetSignature
+                 ? stableTargetPolls + 1
+                 : 1;
+               lastTargetSignature = signature;
+               if (stableTargetPolls >= 2) {
+                 stagedItem = candidate;
+                 xml = galleryReadyXml;
+                 whatsappDebug("Gallery pre-selection surface ready", {
+                   galleryPoll,
+                   stableTargetPolls,
+                   contentDesc: candidate.contentDesc,
+                   x: candidate.x,
+                   y: candidate.y,
+                   bounds: `[${candidate.x1},${candidate.y1}][${candidate.x2},${candidate.y2}]`,
+                 });
+                 break;
+               }
+             } else {
+               stableTargetPolls = 0;
+               lastTargetSignature = "";
+             }
+             whatsappDebug("Gallery pre-selection poll", {
+               galleryPoll,
+               mediaItemCount: candidates.length,
+               matchingTargetCount: matches.length,
+               mediaItemDescriptions: candidates.slice(0, 12).map(node => node.contentDesc),
+             });
+           }
+           whatsappDebug("Gallery media scan", {
+             galleryMediaTimestamp,
+             galleryDateHints,
+             mediaItemCount: mediaItems.length,
+             mediaItemDescriptions: mediaItems.slice(0, 12).map(node => node.contentDesc),
+             stagedItemFound: Boolean(stagedItem),
+           });
+           if (!stagedItem) {
+             const alreadySelected = gallerySelectionState(xml).verified;
+             if (!alreadySelected) {
+               steps.push(`WhatsApp skipped "${contact.text}" — staged image was not uniquely identified in Gallery`);
+               await pressBack();
+               break;
+             }
+           } else {
+             whatsappDebug(`tapping staged Gallery image for "${contact.text}"`, {
+               contentDesc: stagedItem.contentDesc,
+               x: stagedItem.x,
+               y: stagedItem.y,
+               bounds: `[${stagedItem.x1},${stagedItem.y1}][${stagedItem.x2},${stagedItem.y2}]`,
+             });
+             await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
+
+             // Poll the live selected-state markers. Do not use a fixed sleep
+             // followed by an unconditional second tap: the sheet moves the
+             // thumbnail from (for example) y=1459 to y=879 after selection,
+             // and a late retry at the old/new coordinate can toggle it off.
+             let selection = {
+               verified: false,
+               hasAnySelectedState: false,
+               sendControlFound: false,
+               selectedMediaCount: null as string | null,
+               selectedTrayFound: false,
+               selectedThumbnailFound: false,
+             };
+             for (let selectionPoll = 1; selectionPoll <= 12 && !selection.verified; selectionPoll++) {
+               if (selectionPoll > 1) await _sleep(300);
+               xml = await _uiDump(adb, serial);
+               selection = gallerySelectionState(xml);
+               whatsappDebug(`Gallery selection poll ${selectionPoll}/12`, {
+                 ...selection,
+                 contentDesc: stagedItem.contentDesc,
+                 x: stagedItem.x,
+                 y: stagedItem.y,
+               });
+             }
+
+             // One guarded retry is allowed only when the first tap produced
+             // no selected-state marker at all. If any marker appeared, keep
+             // polling/verify rather than risking a deselecting second tap.
+             if (!selection.verified && !selection.hasAnySelectedState) {
+               await _sleep(350);
+               xml = await _uiDump(adb, serial);
+               selection = gallerySelectionState(xml);
+               if (!selection.hasAnySelectedState) {
+                 whatsappDebug("Gallery first tap produced no selected state — guarded retry", {
+                   contentDesc: stagedItem.contentDesc,
+                   x: stagedItem.x,
+                   y: stagedItem.y,
+                 });
+                 await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
+                 for (let selectionPoll = 1; selectionPoll <= 12 && !selection.verified; selectionPoll++) {
+                   if (selectionPoll > 1) await _sleep(300);
+                   xml = await _uiDump(adb, serial);
+                   selection = gallerySelectionState(xml);
+                   whatsappDebug(`Gallery retry selection poll ${selectionPoll}/12`, {
+                     ...selection,
+                     contentDesc: stagedItem.contentDesc,
+                     x: stagedItem.x,
+                     y: stagedItem.y,
+                   });
+                 }
+               }
+             }
+             if (!selection.verified) {
+               whatsappDebug(`Gallery image selection was not verified for "${contact.text}"`, {
+                 ...describeWhatsAppSurface(xml),
+                 ...selection,
+               });
+               steps.push(`WhatsApp skipped "${contact.text}" — Gallery image selection was not verified`);
+               await pressBack();
+               break;
+             }
+           }
+         } else {
           const attachmentNames = new Set([opts.media.fileName, path.basename(remoteMediaPath)]);
           let fileNode = parseWhatsAppLiveNodes(xml).find(node =>
             attachmentNames.has(node.text) ||
