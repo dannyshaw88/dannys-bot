@@ -20,3 +20,9 @@ The WhatsApp composer path must verify both clipboard preparation and the result
 **Why:** A long-press can open a valid text-editing menu while still failing to expose Paste; sending based only on the menu or clipboard command result risks sending an empty or wrong message.
 
 **How to apply:** Treat clipboard readback as best-effort because some Android builds hide it, fingerprint the expected message rather than logging its contents, and fail closed unless native Paste or the explicit fallback visibly populates the live `entry` field.
+
+On the Xiaomi Redmi A5 test device, `adb shell cmd clipboard set` can return without an ADB error while the subsequent clipboard probe is empty; Autofill then appears instead of Paste.
+
+**Why:** Exit-code-only clipboard handling falsely treats the message as available and leaves the flow stuck at the edit menu.
+
+**How to apply:** When readback reports a mismatch, dismiss the edit menu, refocus `entry`, type through the existing ADB text-input path, and verify the live composer text before allowing Send.
