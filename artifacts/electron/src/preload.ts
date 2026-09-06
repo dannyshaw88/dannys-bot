@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   settingsGetAll: () => ipcRenderer.invoke("settings-get-all"),
   openFolderDialog: (defaultPath?: string) => ipcRenderer.invoke("open-folder-dialog", defaultPath),
   openMediaFileDialog: () => ipcRenderer.invoke("open-media-file-dialog"),
+  openWhatsAppMediaFileDialog: () => ipcRenderer.invoke("open-whatsapp-media-file-dialog"),
   saveProcessedImages: (files: Array<{ filename: string; dataUrl: string }>) =>
     ipcRenderer.invoke("save-processed-images", files),
   openWallpaperFileDialog: () => ipcRenderer.invoke("open-wallpaper-file-dialog"),

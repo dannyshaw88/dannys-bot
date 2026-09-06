@@ -1285,6 +1285,11 @@ export async function runWhatsAppApp(
     userCountMin?: number;
     userCountMax?: number;
     message: string;
+    media?: {
+      fileName: string;
+      mimeType: string;
+      dataUrl: string;
+    } | null;
   },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
@@ -1295,6 +1300,8 @@ export async function runWhatsAppApp(
   const min = Math.max(1, Math.round(opts?.userCountMin ?? 1));
   const max = Math.max(min, Math.round(opts?.userCountMax ?? min));
   const targetCount = min + Math.floor(Math.random() * (max - min + 1));
+  let tempMediaPath: string | null = null;
+  let remoteMediaPath: string | null = null;
   const excludedLabels = new Set([
     "new chat", "new conversation", "new contact", "create group",
     "broadcast lists", "communities", "chats", "calls", "updates",
@@ -1318,6 +1325,16 @@ export async function runWhatsAppApp(
   };
 
   try {
+    if (opts?.media?.dataUrl) {
+      const match = opts.media.dataUrl.match(/^data:[^;]+;base64,(.*)$/s);
+      if (!match) throw new Error("WhatsApp attachment is not a valid data URL");
+      const safeName = path.basename(opts.media.fileName).replace(/[<>:"/\\|?*\x00-\x1F]/g, "_") || "attachment";
+      tempMediaPath = path.join(os.tmpdir(), `whatsapp-${Date.now()}-${safeName}`);
+      fs.writeFileSync(tempMediaPath, Buffer.from(match[1], "base64"));
+      remoteMediaPath = `/sdcard/Download/${safeName}`;
+      await runAdb(adb, ["-s", serial, "push", tempMediaPath, remoteMediaPath], 30000);
+      steps.push(`WhatsApp attachment staged: ${safeName}`);
+    }
     const launch = spawnSync(adb, [
       "-s", serial, "shell", "am", "start", "-n", "com.whatsapp/.Main",
       "--activity-clear-top",
@@ -1377,6 +1394,53 @@ export async function runWhatsAppApp(
       await _sleep(900);
 
       xml = await _uiDump(adb, serial);
+      if (remoteMediaPath && opts?.media) {
+        const attach = findLiveLabel(xml, ["attach", "attachment"], ["attach", "paperclip"]);
+        if (!attach) {
+          steps.push(`WhatsApp skipped "${contact.text}" — attachment control not found`);
+          await pressBack();
+          break;
+        }
+        await _adbTapAsync(adb, serial, attach.x, attach.y);
+        await _sleep(600);
+        xml = await _uiDump(adb, serial);
+        const document = findLiveLabel(xml, ["document", "documents", "file", "files"], ["document", "attach_document"]);
+        if (!document) {
+          steps.push(`WhatsApp skipped "${contact.text}" — Document attachment option not found`);
+          await pressBack();
+          break;
+        }
+        await _adbTapAsync(adb, serial, document.x, document.y);
+        await _sleep(1000);
+        xml = await _uiDump(adb, serial);
+        let fileNode = parseWhatsAppLiveNodes(xml).find(node =>
+          node.text === opts.media!.fileName ||
+          node.contentDesc === opts.media!.fileName ||
+          node.text.endsWith(opts.media!.fileName),
+        );
+        if (!fileNode) {
+          const download = findLiveLabel(xml, ["download", "downloads"]);
+          if (download) {
+            await _adbTapAsync(adb, serial, download.x, download.y);
+            await _sleep(700);
+            xml = await _uiDump(adb, serial);
+            fileNode = parseWhatsAppLiveNodes(xml).find(node =>
+              node.text === opts.media!.fileName ||
+              node.contentDesc === opts.media!.fileName ||
+              node.text.endsWith(opts.media!.fileName),
+            );
+          }
+        }
+        if (!fileNode) {
+          steps.push(`WhatsApp skipped "${contact.text}" — staged attachment was not visible`);
+          await pressBack();
+          break;
+        }
+        await _adbTapAsync(adb, serial, fileNode.x, fileNode.y);
+        await _sleep(900);
+      }
+
+      xml = await _uiDump(adb, serial);
       const composer = parseWhatsAppLiveNodes(xml).find(node =>
         node.className === "android.widget.EditText" && node.x2 > node.x1 && node.y2 > node.y1,
       );
@@ -1400,7 +1464,7 @@ export async function runWhatsAppApp(
       await _adbTapAsync(adb, serial, send.x, send.y);
       await _sleep(700);
       sent++;
-      steps.push(`WhatsApp sent a randomized message to ${contact.text} (${sent}/${targetCount})`);
+      steps.push(`WhatsApp sent a randomized message${remoteMediaPath ? " with attachment" : ""} to ${contact.text} (${sent}/${targetCount})`);
       await pressBack();
     }
     if (sent === 0) {
@@ -1413,6 +1477,10 @@ export async function runWhatsAppApp(
       steps,
       error: error?.message ?? "WhatsApp messaging failed",
     };
+  } finally {
+    if (tempMediaPath) {
+      try { fs.unlinkSync(tempMediaPath); } catch {}
+    }
   }
 }
 

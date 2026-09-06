@@ -1495,6 +1495,36 @@ async function createWindow() {
     };
   });
 
+  // Open a native Windows picker for a WhatsApp attachment. WhatsApp's
+  // document picker accepts arbitrary file types, so this intentionally has
+  // an All Files filter instead of restricting the selection to images.
+  ipcMain.handle("open-whatsapp-media-file-dialog", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "Choose WhatsApp attachment",
+      properties: ["openFile"],
+      filters: [{ name: "All Files", extensions: ["*"] }],
+    });
+    if (result.canceled || !result.filePaths.length) return { canceled: true };
+    const filePath = result.filePaths[0];
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeType = ({
+      ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+      ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf",
+      ".txt": "text/plain", ".csv": "text/csv", ".mp4": "video/mp4",
+      ".mp3": "audio/mpeg", ".wav": "audio/wav", ".zip": "application/zip",
+    } as Record<string, string>)[ext] ?? "application/octet-stream";
+    const data = fs.readFileSync(filePath);
+    return {
+      canceled: false,
+      files: [{
+        filePath,
+        fileName: path.basename(filePath),
+        mimeType,
+        dataUrl: `data:${mimeType};base64,${data.toString("base64")}`,
+      }],
+    };
+  });
+
   ipcMain.handle("save-processed-images", async (_e, files: Array<{ filename: string; dataUrl: string }>) => {
     const result = await dialog.showOpenDialog(win!, {
       title: "Choose a folder for processed images",
