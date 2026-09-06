@@ -38,3 +38,20 @@ WhatsApp's Gallery sheet has two coordinate spaces: the unselected thumbnail can
 **Why:** A delayed fixed retry can land on the old or moved thumbnail after the first tap has already taken effect, toggling the image back off. The supplied before/after dumps prove that this is a layout transition, not a stable thumbnail coordinate.
 
 **How to apply:** Treat `gallery_selected_media`, `selected_media_item_thumbnail`, `send_media_counter=1`, or `send_media_btn` as evidence that selection is in progress; continue polling instead of tapping. If the MediaStore identity is unavailable, abort immediately rather than repeatedly dumping an unmatchable surface. Fail closed unless the complete selected state is confirmed.
+
+The WhatsApp image flow also supports a strict per-device navigation-calibration
+point for the first Gallery thumbnail. When that point is present, tap it
+directly after Gallery opens and skip the MediaStore lookup entirely; still
+require the complete selected-state markers before sending. The saved point
+lives in the shared fixed-navigation map and is captured from the physical
+phone with the same getevent workflow as the other calibrated controls.
+
+**Why:** MediaStore probing can issue many slow ADB content queries before
+WhatsApp is even launched, while the failed device run had no usable metadata
+and no accessibility match. The calibrated point is the explicit device
+specific answer to that layout difference.
+
+**How to apply:** Calibrate with the first intended image thumbnail visible,
+use the point only for that first Gallery tap (and its guarded retry), and
+never treat the point as proof that selection succeeded; `send_media_counter=1`
+and the live selected thumbnail/tray must still be observed.

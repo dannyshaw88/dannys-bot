@@ -2442,7 +2442,7 @@ function CalibrationDialog({
 
 type NavigationControlId =
   | "home" | "reels" | "directMessages" | "search" | "profile"
-  | "createPost" | "makePostCropToFit" | "makePostFirstNext" | "makePostSecondNext" | "makePostShare" | "userSearch" | "notifications" | "settingsBack";
+  | "createPost" | "makePostCropToFit" | "makePostFirstNext" | "makePostSecondNext" | "makePostShare" | "userSearch" | "notifications" | "settingsBack" | "whatsappFirstMediaGallery";
 type NavigationPoint = { x: number; y: number };
 type NavigationMap = {
   version: 1;
@@ -2469,6 +2469,7 @@ const NAVIGATION_CONTROLS: Array<{
   { id: "userSearch", label: "Central user-search field", instruction: "Open Instagram Search/Explore and tap the central user-search field on the physical phone." },
   { id: "notifications", label: "Notifications", instruction: "Show the Instagram home header, then tap the Notifications icon on the physical phone." },
   { id: "settingsBack", label: "Instagram Settings Back", instruction: "Open an Instagram Settings detail page, then tap its upper-left Instagram Back arrow (not Android system Back)." },
+  { id: "whatsappFirstMediaGallery", label: "WhatsApp First Media Gallery Tap", instruction: "Open WhatsApp's attachment Gallery until the first image thumbnail is visible, then tap that first image thumbnail on the physical phone." },
 ];
 
 function NavigationCalibrationDialog({
@@ -2642,7 +2643,7 @@ function NavigationCalibrationDialog({
         <div className="rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 py-2.5">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-200">DEVICE-SPECIFIC CONTROLS</p>
           <p className="mt-1 text-[11px] leading-4 text-amber-100/80">
-            These nine fixed controls are tapped only from this physical device&apos;s saved map.
+            These fixed controls are tapped only from this physical device&apos;s saved map.
             Missing, stale, or invalid points stop automation; no image, accessibility, or coordinate fallback is used.
           </p>
         </div>

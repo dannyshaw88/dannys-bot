@@ -1306,6 +1306,7 @@ export async function runWhatsAppApp(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
+  const runStartedAt = Date.now();
   const messageTemplate = String(opts?.message ?? "").trim();
   if (!messageTemplate) throw new Error("WhatsApp message is empty");
   const min = Math.max(1, Math.round(opts?.userCountMin ?? 1));
@@ -1318,6 +1319,13 @@ export async function runWhatsAppApp(
     /^image\//i.test(opts.media.mimeType) ||
     /\.(?:jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(opts.media.fileName)
   ));
+  const calibratedGalleryTap = (() => {
+    try {
+      return getCalibratedNavigationControl(serial, "whatsappFirstMediaGallery");
+    } catch {
+      return null;
+    }
+  })();
   const excludedLabels = new Set([
     "new chat", "new conversation", "new contact", "create group",
     "new group", "new community", "broadcast lists", "communities",
@@ -1329,6 +1337,11 @@ export async function runWhatsAppApp(
     steps.push(line);
     logger.info({ serial, ...details }, `[whatsapp] ${message}`);
   };
+  logger.info({
+    serial,
+    isImageMedia,
+    hasCalibratedGalleryTap: Boolean(calibratedGalleryTap),
+  }, "[whatsapp] run started");
 
   const findLiveLabel = (xml: string, labels: string[], resourceIds: string[] = []): WhatsAppLiveNode | null => {
     const wanted = new Set(labels.map(label => label.toLowerCase()));
@@ -1447,10 +1460,21 @@ export async function runWhatsAppApp(
         // Make a Post. Documents/Download is a different picker and does not
         // make the staged image the selected media item.
         remoteMediaPath = await pushFileToDevice(serial, tempMediaPath, safeName);
-        let indexed = await queryMediaStoreFile(serial, remoteMediaPath);
-        for (let mediaPoll = 1; mediaPoll < 4 && !indexed.found; mediaPoll++) {
-          await _sleep(450);
+        let indexed: Awaited<ReturnType<typeof queryMediaStoreFile>> = {
+          found: false,
+          raw: "",
+          fields: {},
+        };
+        if (calibratedGalleryTap) {
+          whatsappDebug("skipping MediaStore lookup because calibrated Gallery tap is configured", {
+            devicePath: remoteMediaPath,
+          });
+        } else {
           indexed = await queryMediaStoreFile(serial, remoteMediaPath);
+          for (let mediaPoll = 1; mediaPoll < 4 && !indexed.found; mediaPoll++) {
+            await _sleep(450);
+            indexed = await queryMediaStoreFile(serial, remoteMediaPath);
+          }
         }
         // WhatsApp's Gallery accessibility date is based on the media's
         // taken/EXIF timestamp when one exists. date_added/date_modified is
@@ -1490,10 +1514,21 @@ export async function runWhatsAppApp(
       }
       steps.push(`WhatsApp attachment staged: ${safeName}`);
     }
+    const launchStartedAt = Date.now();
+    logger.info({
+      serial,
+      elapsedSinceRunStartMs: launchStartedAt - runStartedAt,
+    }, "[whatsapp] am start begin");
     const launch = spawnSync(adb, [
       "-s", serial, "shell", "am", "start", "-n", "com.whatsapp/.Main",
       "--activity-clear-top",
     ], { encoding: "utf8", timeout: 10000 });
+    logger.info({
+      serial,
+      elapsedMs: Date.now() - launchStartedAt,
+      elapsedSinceRunStartMs: Date.now() - runStartedAt,
+      status: launch.status,
+    }, "[whatsapp] am start completed");
     const launchOutput = `${launch.stdout ?? ""}${launch.stderr ?? ""}`;
     if (/error|does not exist|exception/i.test(launchOutput) || launch.status !== 0) {
       spawnSync(adb, [
@@ -1506,7 +1541,10 @@ export async function runWhatsAppApp(
     if (!xml.includes("com.whatsapp")) {
       throw new Error("WhatsApp did not appear in the live UI");
     }
-    whatsappDebug("launched WhatsApp", describeWhatsAppSurface(xml));
+    whatsappDebug("launched WhatsApp", {
+      ...describeWhatsAppSurface(xml),
+      elapsedSinceRunStartMs: Date.now() - launchStartedAt,
+    });
     steps.push(`WhatsApp launched — selected ${targetCount} contact${targetCount === 1 ? "" : "s"}`);
 
     // This is deliberately an internal row identity rather than a display
@@ -1697,6 +1735,12 @@ export async function runWhatsAppApp(
            const galleryDateHints = galleryMediaTimestamp
              ? getWhatsAppGalleryDateHints(galleryMediaTimestamp)
              : [];
+            if (calibratedGalleryTap) {
+              whatsappDebug("using calibrated WhatsApp first-media Gallery tap", {
+                x: calibratedGalleryTap.x,
+                y: calibratedGalleryTap.y,
+              });
+            }
            const galleryMediaSelector = (currentXml: string) =>
              parseWhatsAppLiveNodes(currentXml).filter(node =>
                node.resourceId.toLowerCase().endsWith("/media_item_view") &&
@@ -1735,25 +1779,41 @@ export async function runWhatsAppApp(
              };
            };
 
-           // WhatsApp expands the Gallery sheet after the first thumbnail tap.
-           // Therefore the target must be captured from a stable, explicitly
-           // unselected surface. A single media_item_view is not enough: it can
-           // appear while the picker is still animating, or after the layout has
-           // already moved to the selected-media tray.
+            // WhatsApp expands the Gallery sheet after the first thumbnail tap.
+            // When a device-specific point exists, use it directly: the point
+            // is intentionally the physical first-thumbnail tap and must not
+            // depend on Gallery exposing a filename/date/accessibility node.
            let stagedItem: WhatsAppLiveNode | null = null;
+            let calibratedTapPerformed = false;
            let lastTargetSignature = "";
            let stableTargetPolls = 0;
            let galleryReadyXml = xml;
-            // A MediaStore timestamp is the only semantic identity WhatsApp
-            // exposes for these thumbnails. If indexing failed, do not spend
-            // 30 seconds dumping the same unmatchable Gallery surface.
-            if (galleryDateHints.length === 0) {
+            if (calibratedGalleryTap) {
+              const beforeTap = gallerySelectionState(galleryReadyXml);
+              if (!beforeTap.verified) {
+                await _sleep(250);
+                await tapCalibratedNavigationControl(
+                  serial,
+                  "whatsappFirstMediaGallery",
+                  message => whatsappDebug(message),
+                );
+                calibratedTapPerformed = true;
+                whatsappDebug("tapped calibrated WhatsApp first-media Gallery point", {
+                  x: calibratedGalleryTap.x,
+                  y: calibratedGalleryTap.y,
+                  beforeTap,
+                });
+              } else {
+                calibratedTapPerformed = true;
+                whatsappDebug("Gallery already reports selected media before calibrated tap", beforeTap);
+              }
+            } else if (galleryDateHints.length === 0) {
               whatsappDebug("Gallery scan aborted — staged image has no MediaStore date identity", {
                 galleryMediaTimestamp,
                 mediaStoreFound: false,
               });
             }
-            for (let galleryPoll = 1; galleryPoll <= 4 && galleryDateHints.length > 0; galleryPoll++) {
+            for (let galleryPoll = 1; !calibratedGalleryTap && galleryPoll <= 4 && galleryDateHints.length > 0; galleryPoll++) {
              if (galleryPoll > 1) {
                await _sleep(300);
                galleryReadyXml = await _uiDump(adb, serial);
@@ -1782,11 +1842,11 @@ export async function runWhatsAppApp(
                });
                continue;
              }
-             const matches = candidates.filter(node =>
-               galleryDateHints.some(hint =>
-                 node.contentDesc.toLowerCase().includes(hint.toLowerCase()),
-               ),
-             );
+              const matches = candidates.filter(node =>
+                galleryDateHints.some(hint =>
+                  node.contentDesc.toLowerCase().includes(hint.toLowerCase()),
+                ),
+              );
               if (matches.length >= 1) {
                 // The accessibility tree exposes only a date rounded to the
                 // minute. When another photo shares that minute, Gallery
@@ -1841,7 +1901,7 @@ export async function runWhatsAppApp(
              mediaItemDescriptions: mediaItems.slice(0, 12).map(node => node.contentDesc),
              stagedItemFound: Boolean(stagedItem),
            });
-           if (!stagedItem) {
+            if (!stagedItem && !calibratedTapPerformed) {
              const alreadySelected = gallerySelectionState(xml).verified;
              if (!alreadySelected) {
                steps.push(`WhatsApp skipped "${contact.text}" — staged image was not uniquely identified in Gallery`);
@@ -1849,13 +1909,22 @@ export async function runWhatsAppApp(
                break;
              }
            } else {
-             whatsappDebug(`tapping staged Gallery image for "${contact.text}"`, {
-               contentDesc: stagedItem.contentDesc,
-               x: stagedItem.x,
-               y: stagedItem.y,
-               bounds: `[${stagedItem.x1},${stagedItem.y1}][${stagedItem.x2},${stagedItem.y2}]`,
-             });
-             await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
+              whatsappDebug(
+                calibratedTapPerformed
+                  ? `calibrated first Gallery tap already performed for "${contact.text}"`
+                  : `tapping staged Gallery image for "${contact.text}"`,
+                stagedItem
+                  ? {
+                      contentDesc: stagedItem.contentDesc,
+                      x: stagedItem.x,
+                      y: stagedItem.y,
+                      bounds: `[${stagedItem.x1},${stagedItem.y1}][${stagedItem.x2},${stagedItem.y2}]`,
+                    }
+                  : { x: calibratedGalleryTap?.x, y: calibratedGalleryTap?.y },
+              );
+              if (!calibratedTapPerformed) {
+                await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
+              }
 
              // Poll the live selected-state markers. Do not use a fixed sleep
              // followed by an unconditional second tap: the sheet moves the
@@ -1875,9 +1944,9 @@ export async function runWhatsAppApp(
                selection = gallerySelectionState(xml);
                whatsappDebug(`Gallery selection poll ${selectionPoll}/12`, {
                  ...selection,
-                 contentDesc: stagedItem.contentDesc,
-                 x: stagedItem.x,
-                 y: stagedItem.y,
+                  contentDesc: stagedItem?.contentDesc ?? "calibrated first Gallery media",
+                  x: stagedItem?.x ?? calibratedGalleryTap?.x,
+                  y: stagedItem?.y ?? calibratedGalleryTap?.y,
                });
              }
 
@@ -1890,20 +1959,28 @@ export async function runWhatsAppApp(
                selection = gallerySelectionState(xml);
                if (!selection.hasAnySelectedState) {
                  whatsappDebug("Gallery first tap produced no selected state — guarded retry", {
-                   contentDesc: stagedItem.contentDesc,
-                   x: stagedItem.x,
-                   y: stagedItem.y,
+                    contentDesc: stagedItem?.contentDesc ?? "calibrated first Gallery media",
+                    x: stagedItem?.x ?? calibratedGalleryTap?.x,
+                    y: stagedItem?.y ?? calibratedGalleryTap?.y,
                  });
-                 await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
+                  if (calibratedGalleryTap) {
+                    await tapCalibratedNavigationControl(
+                      serial,
+                      "whatsappFirstMediaGallery",
+                      message => whatsappDebug(message),
+                    );
+                  } else {
+                    await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
+                  }
                  for (let selectionPoll = 1; selectionPoll <= 12 && !selection.verified; selectionPoll++) {
                    if (selectionPoll > 1) await _sleep(300);
                    xml = await _uiDump(adb, serial);
                    selection = gallerySelectionState(xml);
                    whatsappDebug(`Gallery retry selection poll ${selectionPoll}/12`, {
                      ...selection,
-                     contentDesc: stagedItem.contentDesc,
-                     x: stagedItem.x,
-                     y: stagedItem.y,
+                     contentDesc: stagedItem?.contentDesc ?? "calibrated first Gallery media",
+                     x: stagedItem?.x ?? calibratedGalleryTap?.x,
+                     y: stagedItem?.y ?? calibratedGalleryTap?.y,
                    });
                  }
                }
@@ -12810,6 +12887,7 @@ export const NAVIGATION_CONTROL_IDS = [
   "userSearch",
   "notifications",
   "settingsBack",
+  "whatsappFirstMediaGallery",
 ] as const;
 export type NavigationControlId = typeof NAVIGATION_CONTROL_IDS[number];
 export type NavigationPoint = { x: number; y: number };
