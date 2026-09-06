@@ -9729,6 +9729,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         intervalMin: 25,
         intervalMax: 99,
         chrome: {
+          enabled: false,
           activatePctMin: 0,
           activatePctMax: 0,
           scrollMin: 1,
@@ -9753,6 +9754,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
            tapTrendingStoryMin: 0,
            tapTrendingStoryMax: 0,
         },
+        googlePlay: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
+        snapchat: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
+        youtube: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
+        whatsapp: { enabled: false, activatePctMin: 0, activatePctMax: 0 },
       };
       res.json({
         ...defaults,
@@ -9771,6 +9776,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         intervalMin: 25,
         intervalMax: 99,
         chrome: {
+          enabled: false,
           manualSearches: false,
           manualSearchPctMin: 0,
           manualSearchPctMax: 0,
@@ -9793,6 +9799,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         intervalMin: z.number().min(1).max(9999).optional(),
         intervalMax: z.number().min(1).max(9999).optional(),
         chrome: z.object({
+          enabled: z.boolean().optional(),
           activatePctMin: z.number().int().min(0).max(100).optional(),
           activatePctMax: z.number().int().min(0).max(100).optional(),
           scrollMin: z.number().min(0).optional(),

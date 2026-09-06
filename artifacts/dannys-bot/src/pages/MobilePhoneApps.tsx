@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useImperativeHandle } from "react";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ const PCT_INPUT = "w-14 text-center h-7 text-sm px-1";
 // ── App tool slot config type ─────────────────────────────────────────────────
 
 interface AppSlotSettings {
+  enabled: boolean;
   activatePctMin: number;
   activatePctMax: number;
   /** Number-of-scrolls range — used by Chrome and YouTube. */
@@ -143,7 +145,7 @@ interface PhoneAppsSettings {
 
 type PhoneAppsCompletionStatus = "idle" | "running" | "locking" | "locked" | "error";
 
-const DEFAULT_APP_SLOT: AppSlotSettings = { activatePctMin: 0, activatePctMax: 0 };
+const DEFAULT_APP_SLOT: AppSlotSettings = { enabled: false, activatePctMin: 0, activatePctMax: 0 };
 
 const DEFAULT_SETTINGS: PhoneAppsSettings = {
   enabled: false, intervalMin: 25, intervalMax: 99,
@@ -295,6 +297,8 @@ export function MobilePhoneApps({
 interface AppSlotRowProps {
   icon:       React.ReactNode;
   label:      string;
+  enabled:    boolean;
+  onEnabled:  (v: boolean) => void;
   className?: string;
   min:        number;
   max:        number;
@@ -306,15 +310,16 @@ interface AppSlotRowProps {
   row4?:      React.ReactNode; // optional fourth row rendered below row 3, full width
 }
 
-function AppSlotRow({ icon, label, className, min, max, onMin, onMax, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
+function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMin, onMax, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
   return (
     <div className={`p-4 ${className ?? ""}`}>
       {/* First visual row: icon, activation, and the app's primary fields. */}
       <div className="flex items-center gap-4 flex-wrap">
         {/* Icon + label — anchors the left of the first visual row */}
-        <div className="flex items-center gap-2 min-w-[9rem]">
+        <div className="flex items-center gap-2 min-w-[13rem]">
+          <Checkbox checked={enabled} onCheckedChange={(checked) => onEnabled(checked === true)} aria-label={`Enable ${label}`} />
           {icon}
-          <span className="text-sm font-semibold text-foreground">{label}</span>
+          <span className={`text-sm font-semibold ${enabled ? "text-foreground" : "text-muted-foreground"}`}>{label}</span>
         </div>
 
         {/* Activation */}
@@ -438,11 +443,11 @@ function MobilePhoneAppsPanel({
           enabled:     pendingEnabled ?? Boolean(d.enabled ?? false),
           intervalMin: Number(d.intervalMin ?? 25),
           intervalMax: Number(d.intervalMax ?? 99),
-           chrome:      { activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8, tapTrendingStoryMin: d.chrome?.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: d.chrome?.tapTrendingStoryMax ?? 0 },
-          googlePlay:  { activatePctMin: d.googlePlay?.activatePctMin ?? 0,  activatePctMax: d.googlePlay?.activatePctMax ?? 0 },
-          snapchat:    { activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
-          youtube:     { activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8, shortsLikePctMin: d.youtube?.shortsLikePctMin ?? 0, shortsLikePctMax: d.youtube?.shortsLikePctMax ?? 0 },
-          whatsapp:    { activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0 },
+          chrome:      { enabled: d.chrome?.enabled ?? false, activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8, tapTrendingStoryMin: d.chrome?.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: d.chrome?.tapTrendingStoryMax ?? 0 },
+          googlePlay:  { enabled: d.googlePlay?.enabled ?? false, activatePctMin: d.googlePlay?.activatePctMin ?? 0,  activatePctMax: d.googlePlay?.activatePctMax ?? 0 },
+          snapchat:    { enabled: d.snapchat?.enabled ?? false, activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
+          youtube:     { enabled: d.youtube?.enabled ?? false, activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8, shortsLikePctMin: d.youtube?.shortsLikePctMin ?? 0, shortsLikePctMax: d.youtube?.shortsLikePctMax ?? 0 },
+          whatsapp:    { enabled: d.whatsapp?.enabled ?? false, activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0 },
         };
         setSettings(merged);
         settingsRef.current = merged;
@@ -572,21 +577,21 @@ function MobilePhoneAppsPanel({
         // intentionally first so the first visible app is also the first run.
         const chromeActivated = shouldActivate(s.chrome.activatePctMin, s.chrome.activatePctMax);
         onLogRef.current?.(`Phone Apps [chrome]: ${chromeActivated ? "activation roll passed" : "activation roll skipped"}`);
-        if (chromeActivated) {
+         if (s.chrome.enabled && chromeActivated) {
            await runApp("chrome", { scrollMin: s.chrome.scrollMin ?? 1, scrollMax: s.chrome.scrollMax ?? 5, storyTapMin: s.chrome.storyTapMin ?? 0, storyTapMax: s.chrome.storyTapMax ?? 0, tappedStoryScrollMin: s.chrome.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: s.chrome.tappedStoryScrollMax ?? 0, internalLinkPctMin: s.chrome.internalLinkPctMin ?? 0, internalLinkPctMax: s.chrome.internalLinkPctMax ?? 0, manualSearchPctMin: s.chrome.manualSearchPctMin ?? 0, manualSearchPctMax: s.chrome.manualSearchPctMax ?? 0, manualSearchCountMin: s.chrome.manualSearchCountMin ?? 1, manualSearchCountMax: s.chrome.manualSearchCountMax ?? 1, manualSearchScrollMin: s.chrome.manualSearchScrollMin ?? 0, manualSearchScrollMax: s.chrome.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: s.chrome.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: s.chrome.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: s.chrome.manualSearchDwellMin ?? 3, manualSearchDwellMax: s.chrome.manualSearchDwellMax ?? 8, tapTrendingStoryMin: s.chrome.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: s.chrome.tapTrendingStoryMax ?? 0 });
         }
         const googlePlayActivated = shouldActivate(s.googlePlay.activatePctMin, s.googlePlay.activatePctMax);
         onLogRef.current?.(`Phone Apps [googlePlay]: ${googlePlayActivated ? "activation roll passed" : "activation roll skipped"}`);
-        if (googlePlayActivated) await runApp("googlePlay");
+         if (s.googlePlay.enabled && googlePlayActivated) await runApp("googlePlay");
         const snapchatActivated = shouldActivate(s.snapchat.activatePctMin, s.snapchat.activatePctMax);
         onLogRef.current?.(`Phone Apps [snapchat]: ${snapchatActivated ? "activation roll passed" : "activation roll skipped"}`);
-        if (snapchatActivated) await runApp("snapchat");
+         if (s.snapchat.enabled && snapchatActivated) await runApp("snapchat");
         const youtubeActivated = shouldActivate(s.youtube.activatePctMin, s.youtube.activatePctMax);
         onLogRef.current?.(`Phone Apps [youtube]: ${youtubeActivated ? "activation roll passed" : "activation roll skipped"}`);
-        if (youtubeActivated) await runApp("youtube", { scrollMin: s.youtube.scrollMin ?? 1, scrollMax: s.youtube.scrollMax ?? 5, clickPctMin: s.youtube.clickPctMin ?? 0, clickPctMax: s.youtube.clickPctMax ?? 0, watchTimeMin: s.youtube.watchTimeMin ?? 3, watchTimeMax: s.youtube.watchTimeMax ?? 8, clickShortsPctMin: s.youtube.clickShortsPctMin ?? 0, clickShortsPctMax: s.youtube.clickShortsPctMax ?? 0, shortsScrollMin: s.youtube.shortsScrollMin ?? 0, shortsScrollMax: s.youtube.shortsScrollMax ?? 0, shortsWatchTimeMin: s.youtube.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: s.youtube.shortsWatchTimeMax ?? 8, shortsLikePctMin: s.youtube.shortsLikePctMin ?? 0, shortsLikePctMax: s.youtube.shortsLikePctMax ?? 0 });
+         if (s.youtube.enabled && youtubeActivated) await runApp("youtube", { scrollMin: s.youtube.scrollMin ?? 1, scrollMax: s.youtube.scrollMax ?? 5, clickPctMin: s.youtube.clickPctMin ?? 0, clickPctMax: s.youtube.clickPctMax ?? 0, watchTimeMin: s.youtube.watchTimeMin ?? 3, watchTimeMax: s.youtube.watchTimeMax ?? 8, clickShortsPctMin: s.youtube.clickShortsPctMin ?? 0, clickShortsPctMax: s.youtube.clickShortsPctMax ?? 0, shortsScrollMin: s.youtube.shortsScrollMin ?? 0, shortsScrollMax: s.youtube.shortsScrollMax ?? 0, shortsWatchTimeMin: s.youtube.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: s.youtube.shortsWatchTimeMax ?? 8, shortsLikePctMin: s.youtube.shortsLikePctMin ?? 0, shortsLikePctMax: s.youtube.shortsLikePctMax ?? 0 });
         const whatsappActivated = shouldActivate(s.whatsapp.activatePctMin, s.whatsapp.activatePctMax);
         onLogRef.current?.(`Phone Apps [whatsapp]: ${whatsappActivated ? "activation roll passed" : "activation roll skipped"}`);
-        if (whatsappActivated) await runApp("whatsapp");
+         if (s.whatsapp.enabled && whatsappActivated) await runApp("whatsapp");
 
         // This is deliberately outside the activation branches: a completed
         // cycle must lock even when every app roll misses.
@@ -780,6 +785,8 @@ function MobilePhoneAppsPanel({
               <AppSlotRow
                 icon={<ChromeIcon size={22} />}
                 label="Google Chrome"
+                 enabled={settings.chrome.enabled}
+                 onEnabled={v => patchApp("chrome", { enabled: v })}
                 className="order-1"
                 min={settings.chrome.activatePctMin}
                 max={settings.chrome.activatePctMax}
@@ -965,6 +972,8 @@ function MobilePhoneAppsPanel({
               <AppSlotRow
                 icon={<GooglePlayIcon size={22} />}
                 label="Google Play"
+                 enabled={settings.googlePlay.enabled}
+                 onEnabled={v => patchApp("googlePlay", { enabled: v })}
                 className="order-3"
                 min={settings.googlePlay.activatePctMin}
                 max={settings.googlePlay.activatePctMax}
@@ -974,6 +983,8 @@ function MobilePhoneAppsPanel({
               <AppSlotRow
                 icon={<SnapchatIcon size={22} />}
                 label="Snapchat"
+                 enabled={settings.snapchat.enabled}
+                 onEnabled={v => patchApp("snapchat", { enabled: v })}
                 className="order-4"
                 min={settings.snapchat.activatePctMin}
                 max={settings.snapchat.activatePctMax}
@@ -983,6 +994,8 @@ function MobilePhoneAppsPanel({
               <AppSlotRow
                 icon={<YouTubeIcon size={22} />}
                 label="YouTube"
+                 enabled={settings.youtube.enabled}
+                 onEnabled={v => patchApp("youtube", { enabled: v })}
                 className="order-2"
                 min={settings.youtube.activatePctMin}
                 max={settings.youtube.activatePctMax}
@@ -1155,6 +1168,8 @@ function MobilePhoneAppsPanel({
               <AppSlotRow
                 icon={<WhatsAppIcon size={22} />}
                 label="WhatsApp"
+                 enabled={settings.whatsapp.enabled}
+                 onEnabled={v => patchApp("whatsapp", { enabled: v })}
                 className="order-5"
                 min={settings.whatsapp.activatePctMin}
                 max={settings.whatsapp.activatePctMax}
