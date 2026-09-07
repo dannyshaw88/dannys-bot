@@ -14,15 +14,14 @@ description: Chronological record of every attempt to get Make a Post working vi
 - Status: API and frontend builds passed; physical-device confirmation is still required.
 
 ### 2026-09-07 — Editor transition must settle before the calibrated Filters tap
-- A real-device log showed the first Next dispatch and calibrated Filters dispatch occurring about 100 ms apart. The editor had not finished rendering, so the later Finish Filter point—near the second Next point—could become an accidental second Next.
-- The flow now waits for the image editor to render before tapping Filters and waits again for the Filters panel to open before selecting a filter. The calibration wizard instruction explicitly reflects the Crop → first Next → Filters order.
-- Status: API/frontend builds and workflow restart passed; physical-device confirmation is still required.
+- A real-device log showed that a long accessibility-based render gate could block the calibrated Filters tap entirely. The phone remained on the picker until the gate timed out and the abort path pressed Back.
+- Calibrated Make a Post controls must be dispatched directly after the preceding calibrated control with only a short fixed transition pause; do not require a live label lookup before a known calibration point.
+- Status: code-level fix applied; API build/workflow restart and physical-device confirmation required.
 
-### 2026-09-07 — Calibrated coordinates are not render-readiness proof
-- A follow-up device capture showed the runtime log going from the first Next directly to Most-Right Filter, with no Filters-button dispatch line. A saved calibration point can exist even while Instagram is still rendering the previous editor surface.
-- The flow now waits for a live `Filters` accessibility marker before dispatching the calibrated Filters point, then waits for a live filter-thumbnail marker before allowing the calibrated Most-Right Filter point. If either surface never appears, it captures evidence and aborts without a blind tap.
-- **Lesson:** use calibration for the actual device-space tap, but use live UI evidence to prove the target screen is ready first; never treat a valid calibration map as proof that the screen has rendered.
-- Status: code-level fix applied; API build/workflow restart and physical-device confirmation still required.
+### 2026-09-07 — Accessibility polling blocked a calibrated filter tap
+- The real-device log showed the first Next tap completing, followed by repeated screen polling and no calibrated Filters dispatch. The timeout then pressed Back, leaving the phone visibly back on the New post picker.
+- **Lesson:** calibration is the user-confirmed source of truth for these fixed controls. A missing or slow accessibility marker must not suppress a calibrated tap; keep any transition pause bounded and deterministic.
+- Status: reverted the blocking live-label gate; physical-device confirmation still required.
 
 ### 2026-09-04 — Both Next buttons must use their separate device mirror calibrations
 - The supplied device screenshots confirmed that Make a Post has two different Next controls: the first is the picker/header Next and the second is the lower editor Next. They must not share a live-node lookup or coordinate.
