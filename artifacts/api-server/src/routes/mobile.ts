@@ -915,10 +915,10 @@ const DEBUG_SCREENSHOT_TOOL_COLORS: Record<DebugScreenshotContext, string> = {
 };
 
 const DEBUG_ACCOUNT_SWITCH_RE =
-  /\b(?:pre-switch|post-switch|switching to instagram account|account switch(?:er|ing|ed)?|account selector|account-header|long-pressing profile tab|profile tab found|account switch method|destination @|found @[\w.]+ in switcher|dismissed post-switch popup)\b/i;
+  /\b(?:post-switch|switching to instagram account|account switch(?:er|ing|ed)?|account selector|account-header|long-pressing profile tab|profile tab found|account switch method|destination @|found @[\w.]+ in switcher|dismissed post-switch popup)\b/i;
 
 function detectDebugScreenshotToolHeader(line: string): DebugScreenshotTool | null {
-  if (/▶\s*(?:View\s+)?Explore\b/i.test(line)) return "explore";
+  if (/\bView\s+Explore(?:\s+Page)?\b/i.test(line)) return "explore";
   if (/▶\s*(?:View\s+)?Feed\b/i.test(line)) return "feed";
   if (/(?:▶\s*(?:Starting\s+)?View\s+Reels\b|\bReel Viewer\b)/i.test(line)) return "reels";
   if (/▶\s*(?:Direct Messaging|Check Inbox)\b/i.test(line)) return "directMessaging";
@@ -1029,7 +1029,9 @@ async function captureDebugScreenshot(serial: string, label: string, generation:
         const headerTool = detectDebugScreenshotToolHeader(line);
         if (headerTool) currentTool = headerTool;
         const accountSwitch = DEBUG_ACCOUNT_SWITCH_RE.test(line);
-        if (accountSwitch) currentTool = "accountSwitch";
+        // Tool headers are hard context boundaries. Do not let a phrase such
+        // as "Pre-switch View Explore skipped" overwrite the Explore colour.
+        if (!headerTool && accountSwitch) currentTool = "accountSwitch";
         const cycleBoundary = /Cycle\s+(complete|failed|aborted)/i.test(line);
         const inferredTool = currentTool ?? inferDebugScreenshotTool(line);
         const color = cycleBoundary

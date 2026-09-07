@@ -96,14 +96,14 @@ const DEBUG_TOOL_COLORS: Record<DebugLogContext, string> = {
 };
 
 const ACCOUNT_SWITCH_LOG_RE =
-  /\b(?:pre-switch|post-switch|switching to instagram account|account switch(?:er|ing|ed)?|account selector|account-header|target=@|long-pressing profile tab|profile tab found|account switch method|destination @|found @[\w.]+ in switcher|dismissed post-switch popup)\b/i;
+  /\b(?:post-switch|switching to instagram account|account switch(?:er|ing|ed)?|account selector|account-header|target=@|long-pressing profile tab|profile tab found|account switch method|destination @|found @[\w.]+ in switcher|dismissed post-switch popup)\b/i;
 
 function isAccountSwitchLogMessage(message: string): boolean {
   return ACCOUNT_SWITCH_LOG_RE.test(message);
 }
 
 function detectDebugToolHeader(message: string): DebugTool | null {
-  if (/▶\s*(?:View\s+)?Explore\b/i.test(message)) return "explore";
+  if (/\bView\s+Explore(?:\s+Page)?\b/i.test(message)) return "explore";
   if (/▶\s*(?:View\s+)?Feed\b/i.test(message)) return "feed";
   if (/(?:▶\s*(?:Starting\s+)?View\s+Reels\b|\bReel Viewer\b)/i.test(message)) return "reels";
   if (/▶\s*(?:Direct Messaging|Check Inbox)\b/i.test(message)) return "directMessaging";
@@ -11553,9 +11553,12 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               // owns every following line until the next tool header or cycle
               // boundary. This is deliberately context-first: a Reel opened
               // from Explore is still an Explore log line and stays green.
-              const detectedHeader = detectDebugToolHeader(msg);
-              if (detectedHeader) currentTool = detectedHeader;
-              if (isAccountSwitchMessage) currentTool = "accountSwitch";
+               const detectedHeader = detectDebugToolHeader(msg);
+               // A real tool header is a hard context boundary. In
+               // particular, "Starting View Explore Page" must reset the
+               // previous gold account-switch block to Explore green.
+               if (detectedHeader) currentTool = detectedHeader;
+               else if (isAccountSwitchMessage) currentTool = "accountSwitch";
               const inferredTool = currentTool ?? inferDebugToolFromMessage(msg);
               const isCycleBoundary = /Cycle\s+(complete|failed|aborted)/i.test(msg);
               const messageColor = isCycleBoundary
