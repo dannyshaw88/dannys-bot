@@ -942,43 +942,120 @@ export async function runCheckFeedLoop(serial: string, params: {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
           await sleepOrAbort(serial, 300);
           const _chXml = await android.dumpUi(serial).catch(() => "");
-          // Collect hashtag button nodes from the caption area — they are
-          // android.widget.Button elements whose content-desc starts with '#'.
-          // Exclude the action bar (like/comment/share) and non-caption nodes
-          // by checking the '#' prefix on the desc attribute.
-          const _chHashtags: { x: number; y: number; tag: string }[] = [];
+          // Collect live hashtag link nodes from the caption area. Instagram
+          // has exposed these as both Button and TextView nodes across builds,
+          // and the label has appeared in either content-desc or text.
+          // `visible-to-user` matters here: the hierarchy can retain a
+          // recycled/off-screen caption node with plausible bounds. Tapping
+          // that node was the failure seen in the device log (the bot sent a
+          // tap, but Instagram never opened the hashtag page).
+          const _chHashtags: {
+            x: number; y: number; x1: number; y1: number; x2: number; y2: number;
+            tag: string; cls: string; clickable: boolean;
+          }[] = [];
           for (const _chSeg of _chXml.split("<node ")) {
             const _chDesc = (_chSeg.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
-            if (!_chDesc.startsWith("#")) continue;
+            const _chText = (_chSeg.match(/text="([^"]*)"/) ?? [])[1] ?? "";
+            const _chTag = [_chDesc, _chText].find(value => /^#[\p{L}\p{N}_][\p{L}\p{N}._-]*$/u.test(value.trim()))?.trim() ?? "";
+            if (!_chTag) continue;
             const _chClass = (_chSeg.match(/class="([^"]*)"/) ?? [])[1] ?? "";
-            // Only Button nodes — a11y assigns class Button to caption hashtag links.
-            if (!_chClass.includes("Button")) continue;
+            if (!_chClass.includes("Button") && !_chClass.includes("TextView")) continue;
             const _chBb = _chSeg.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
             if (!_chBb) continue;
-            const _chX = Math.round((parseInt(_chBb[1]) + parseInt(_chBb[3])) / 2);
-            const _chY = Math.round((parseInt(_chBb[2]) + parseInt(_chBb[4])) / 2);
-            // Only nodes in the caption area — below the action bar (> 40% height).
-            if (_chY < h * 0.40) continue;
-            _chHashtags.push({ x: _chX, y: _chY, tag: _chDesc });
+            const _chX1 = parseInt(_chBb[1]), _chY1 = parseInt(_chBb[2]);
+            const _chX2 = parseInt(_chBb[3]), _chY2 = parseInt(_chBb[4]);
+            const _chX = Math.round((_chX1 + _chX2) / 2);
+            const _chY = Math.round((_chY1 + _chY2) / 2);
+            const _chVisible = !_chSeg.includes('visible-to-user="false"');
+            const _chCompact = _chX2 > _chX1 && _chY2 > _chY1 &&
+              _chX1 >= 0 && _chY1 >= 0 && _chX2 <= w && _chY2 <= h &&
+              _chX2 - _chX1 <= w * 0.8 && _chY2 - _chY1 <= h * 0.12;
+            // Only nodes in the caption area — below the action bar and
+            // above the bottom navigation bar. Keep a little room at the
+            // bottom because Xiaomi's navigation inset differs by gesture
+            // mode, but reject nodes actually inside that inset.
+            if (!_chVisible || !_chCompact || _chY < h * 0.40 || _chY > h * 0.94) continue;
+            _chHashtags.push({
+              x: _chX, y: _chY, x1: _chX1, y1: _chY1, x2: _chX2, y2: _chY2,
+              tag: _chTag, cls: _chClass, clickable: _chSeg.includes('clickable="true"'),
+            });
           }
 
           if (_chHashtags.length === 0) {
-            onLog?.(`View Feed ${i + 1}/${count}: click-hashtag rolled but no hashtag buttons visible — skipping`);
+            onLog?.(`View Feed ${i + 1}/${count}: click-hashtag rolled but no visible caption hashtag link — skipping`);
           } else {
-            const _chPick = _chHashtags[Math.floor(Math.random() * _chHashtags.length)];
-            onLog?.(`View Feed ${i + 1}/${count}: tapping hashtag "${_chPick.tag}" at (${_chPick.x},${_chPick.y})…`);
-            await android.tap(serial, _chPick.x, _chPick.y);
-            await sleepOrAbort(serial, 1500, "accountSwitching");
-            await verifyStillInInstagram();
+            // Prefer a node with an explicit click action, but retain the
+            // Button/TextView fallback because some Instagram builds put the
+            // ACTION_CLICK on the parent link container.
+            const _chActionable = _chHashtags.filter(node => node.clickable);
+            const _chPool = _chActionable.length > 0 ? _chActionable : _chHashtags;
+            const _chPick = _chPool[Math.floor(Math.random() * _chPool.length)];
+            onLog?.(
+              `View Feed ${i + 1}/${count}: hashtag candidate "${_chPick.tag}" ` +
+              `bounds=[${_chPick.x1},${_chPick.y1}][${_chPick.x2},${_chPick.y2}] ` +
+              `class=${_chPick.cls} clickable=${_chPick.clickable}`,
+            );
 
-            // Confirm we arrived at the hashtag grid — look for the grid card layout.
-            const _chGridXml = await android.dumpUi(serial).catch(() => "");
-            const _chOnGrid = _chGridXml.includes("grid_card_layout_container") ||
-              _chGridXml.includes("tabbed_pager") ||
-              _chGridXml.includes("swipeable_tab_view_pager");
+            const _chHashtagPageState = (xml: string) => {
+              const lower = xml.toLowerCase();
+              const tagName = _chPick.tag.slice(1).toLowerCase();
+              const hasGrid = lower.includes("grid_card_layout_container") ||
+                lower.includes("tabbed_pager") ||
+                lower.includes("swipeable_tab_view_pager") ||
+                lower.includes("media_grid");
+              const hasHashtagSurface = lower.includes("row_hashtag") ||
+                lower.includes("hashtag_header") ||
+                lower.includes("hashtag_media") ||
+                lower.includes("top_posts") ||
+                lower.includes("recent_posts") ||
+                (lower.includes("hashtag") && lower.includes(tagName));
+              return hasGrid || hasHashtagSurface;
+            };
+
+            const _chTapAndConfirm = async (candidate: typeof _chPick): Promise<{ xml: string; confirmed: boolean }> => {
+              onLog?.(`View Feed ${i + 1}/${count}: tapping visible hashtag "${candidate.tag}" at (${candidate.x},${candidate.y})…`);
+              await android.tap(serial, candidate.x, candidate.y);
+              await sleepOrAbort(serial, 1200, "accountSwitching");
+              await verifyStillInInstagram();
+              let xml = await android.dumpUi(serial).catch(() => "");
+              if (_chHashtagPageState(xml)) return { xml, confirmed: true };
+              // UIAutomator can capture the transition frame while Instagram
+              // is still animating. One extra short observation avoids treating
+              // a real page as a failed tap and immediately pressing Back.
+              await sleepOrAbort(serial, 700, "accountSwitching");
+              xml = await android.dumpUi(serial).catch(() => "");
+              return { xml, confirmed: _chHashtagPageState(xml) };
+            };
+
+            let _chResult = await _chTapAndConfirm(_chPick);
+            if (!_chResult.confirmed) {
+              // Retry only if the same visible hashtag is still on the feed.
+              // If it disappeared, the first tap navigated and the page
+              // detector simply did not recognize that build.
+              const _chRetryXml = _chResult.xml;
+              const _chRetrySeg = _chRetryXml.split("<node ").find(segment => {
+                const desc = (segment.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
+                const text = (segment.match(/text="([^"]*)"/) ?? [])[1] ?? "";
+                return desc === _chPick.tag || text === _chPick.tag;
+              });
+              const _chRetryBb = _chRetrySeg?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+              const _chRetryVisible = !!_chRetrySeg && !_chRetrySeg.includes('visible-to-user="false"');
+              if (_chRetryBb && _chRetryVisible) {
+                const _chRetry = {
+                  ..._chPick,
+                  x: Math.round((parseInt(_chRetryBb[1]) + parseInt(_chRetryBb[3])) / 2),
+                  y: Math.round((parseInt(_chRetryBb[2]) + parseInt(_chRetryBb[4])) / 2),
+                };
+                onLog?.(`View Feed ${i + 1}/${count}: hashtag page not confirmed; same live link remains — retrying once`);
+                _chResult = await _chTapAndConfirm(_chRetry);
+              }
+            }
+
+            const _chGridXml = _chResult.xml;
+            const _chOnGrid = _chResult.confirmed;
 
             if (!_chOnGrid) {
-              onLog?.(`View Feed ${i + 1}/${count}: hashtag grid not confirmed — pressing Back and continuing`);
+              onLog?.(`View Feed ${i + 1}/${count}: hashtag tap not confirmed — pressing Back and continuing`);
               await android.pressBack(serial);
               await sleepOrAbort(serial, 600);
             } else {
