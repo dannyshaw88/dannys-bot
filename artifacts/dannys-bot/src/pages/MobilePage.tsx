@@ -280,7 +280,7 @@ type PendingPin = {
   parentNode: InspectNode | null;
 };
 
-const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; phoneDims?: { w: number; h: number } | null; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; calibrationPosition?: CalibrationPosition; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: MirrorStatus) => void }>(function LiveCanvas({ serial, live, phoneDims, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, calibrationPosition, onExpectedTap, onStatusChange }, ref) {
+const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; automationActive?: boolean; phoneDims?: { w: number; h: number } | null; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; calibrationPosition?: CalibrationPosition; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: MirrorStatus) => void }>(function LiveCanvas({ serial, live, automationActive = false, phoneDims, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, calibrationPosition, onExpectedTap, onStatusChange }, ref) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -353,6 +353,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
 
   const [status, setStatus] = useState<MirrorStatus>("connecting");
   const [fps,    setFps]    = useState(0);
+  const automationActiveRef = useRef(automationActive);
+  useEffect(() => { automationActiveRef.current = automationActive; }, [automationActive]);
 
   // Bubble stream status up to PhoneSlot so the wallpaper/text overlay can
   // be shown whenever frames aren't actually flowing (even if live=true).
@@ -721,7 +723,13 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     // WAKEUP instead of incorrectly offering Power off.
     const streamHealthTimer = setInterval(() => {
       if (!active || !frameSeenRef.current || !lastDecodedAtRef.current) return;
-      if (Date.now() - lastDecodedAtRef.current > 3_000) {
+    // UIAutomator dumps and chained ADB actions can legitimately pause the
+    // decoder for several seconds while the phone remains awake. The server
+    // already allows a 30-second automation gap before restarting its
+    // screenrecord child; do not show the user a false "Screen is asleep"
+    // overlay after only 3 seconds.
+    const staleFrameThresholdMs = automationActiveRef.current ? 30_000 : 10_000;
+    if (Date.now() - lastDecodedAtRef.current > staleFrameThresholdMs) {
         setStatus(previous => previous === "live" ? "asleep" : previous);
       }
     }, 1_000);
@@ -2974,7 +2982,7 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
   );
 }
 
-const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; manualLive: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; inspectMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; custom: SlotCustomization; onCustomChange: (c: SlotCustomization) => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, manualLive, onPower, phoneDims, paneSize, inspectMode = false, logRecMode, logMarkers, onExpectedTap, custom, onCustomChange }, ref) {
+const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; idx: number; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; live: boolean; manualLive: boolean; automationActive?: boolean; onPower: () => void; phoneDims: { w: number; h: number } | null; paneSize: { w: number; h: number } | null; inspectMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; custom: SlotCustomization; onCustomChange: (c: SlotCustomization) => void }>(function PhoneSlot({ phone, idx, onLog, onDimensions, live, manualLive, automationActive = false, onPower, phoneDims, paneSize, inspectMode = false, logRecMode, logMarkers, onExpectedTap, custom, onCustomChange }, ref) {
   const liveCanvasRef = useRef<LiveCanvasHandle>(null);
   // Re-exposes LiveCanvas's own handle so the page-level Log tab (rendered
   // as a sibling, not a child, of this slot) can read the mirror's live
@@ -3360,6 +3368,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
             ref={liveCanvasRef}
             serial={phone.serial}
             live={live}
+            automationActive={automationActive}
             phoneDims={phoneDims}
             onLog={onLog}
             onDimensions={onDimensions}
@@ -12115,6 +12124,7 @@ export function MobilePage() {
                   //   • a Phone Apps cycle is actively executing (phoneAppsRunning)
                   live={!!(phone && (liveOn[phone.serial] || hstEnabled || phoneAppsRunning))}
                   manualLive={!!(phone && liveOn[phone.serial])}
+                  automationActive={hstEnabled || phoneAppsRunning}
                   onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: !s[phone.serial] })); }}
                   ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
                   inspectMode={inspectMode}

@@ -1475,7 +1475,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // trick as the PNG endpoint, but doubly important here: if the display
       // actually powers off, screenrecord stops producing frames entirely.
       let screenTimeoutLeaseHeld = false;
-      let keepAwakeTimer: ReturnType<typeof setInterval> | null = null;
+      // A mirror opened from the Phone Farm page may need one delayed wake
+      // retry while the panel/compositor finishes coming on. Do not keep
+      // injecting WAKEUP forever: automation cycles intentionally lock/sleep
+      // the phone between turns, and a recurring wake was making the mirror
+      // report noisy asleep/error states in the middle of otherwise healthy
+      // automation.
+      let initialWakeRetryTimer: ReturnType<typeof setTimeout> | null = null;
       const existingTimeoutLease = mirrorScreenTimeoutLeases.get(serial);
       if (existingTimeoutLease) {
         existingTimeoutLease.refCount++;
@@ -1529,9 +1535,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         videoSessionActive.delete(serial);
         videoSessionWS.delete(serial);
         if (lagWatchdog) clearInterval(lagWatchdog);
-        if (keepAwakeTimer) {
-          clearInterval(keepAwakeTimer);
-          keepAwakeTimer = null;
+        if (initialWakeRetryTimer) {
+          clearTimeout(initialWakeRetryTimer);
+          initialWakeRetryTimer = null;
         }
         try { currentChild?.kill(); } catch { /* ignore */ }
         if (screenTimeoutLeaseHeld) {
@@ -1786,17 +1792,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.ensureScreenOn(serial).catch(() => { /* best effort */ });
       logger.info({ serial, elapsedMs: elapsed(), screenWasAlreadyOn: screenOnBefore === true }, "[mobile-video] timing: ensureScreenOn done");
 
-      // Some OEMs ignore or later overwrite screen_off_timeout while the
-      // display is under load. This mirror was explicitly opened by the user,
-      // so keep that session awake without injecting taps or toggling power.
-      // WAKEUP is idempotent when the display is already on and gives the user
-      // a full window to make the first manual gesture.
-      keepAwakeTimer = setInterval(() => {
-        if (!running || ws.readyState !== 1) return;
-        void execFileP(adbPath, [
-          "-s", serial, "shell", "input", "keyevent", "224",
-        ], { encoding: "utf8", timeout: 3000 } as any).catch(() => {});
-      }, 10_000);
+      // The explicit mirror open already called ensureScreenOn above. Keep
+      // the requested 10-second grace for a phone opened from the Farm page,
+      // but make it a single retry only when that initial screen check said
+      // the display was not already on. Never wake a running automation cycle.
+      if (screenOnBefore !== true) {
+        initialWakeRetryTimer = setTimeout(() => {
+          initialWakeRetryTimer = null;
+          if (!running || ws.readyState !== 1 || automationCycleInProgress.has(serial)) return;
+          void execFileP(adbPath, [
+            "-s", serial, "shell", "input", "keyevent", "224",
+          ], { encoding: "utf8", timeout: 3000 } as any).catch(() => {});
+          logger.info({ serial }, "[mobile-video] issued one-time initial wake retry");
+        }, 10_000);
+      }
 
       logger.info({ serial, elapsedMs: elapsed(), adbPath }, "[mobile-video] timing: about to spawn screenrecord");
       spawnStream();
