@@ -164,6 +164,37 @@ await android.dismissInstagramInterstitials(serial).catch(() => null);
     onLog?.(`Make a Post: ${label} tap dispatched at exact=(${point.x},${point.y})`);
   };
 
+  // A calibration point only proves that a saved coordinate exists. It does
+  // not prove that Instagram has finished rendering the screen underneath it.
+  // Gate each transition with a live accessibility marker so a filter
+  // coordinate can never be fired while the editor is still on the old
+  // surface.
+  const waitForLiveLabel = async (
+    labels: string[],
+    description: string,
+    attempts = 12,
+    waitMs = 500,
+  ): Promise<{ label: string; point: { x: number; y: number } } | null> => {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      for (const label of labels) {
+        const point = await android.findButtonByLabel(serial, label).catch(() => null);
+        if (point) {
+          onLog?.(
+            `Make a Post: live ${description} ready — label="${label}" ` +
+            `at (${point.x},${point.y}) after ${attempt + 1} check${attempt === 0 ? "" : "s"}`,
+          );
+          return { label, point };
+        }
+      }
+      if (attempt + 1 < attempts) await sleepOrAbort(serial, waitMs, "navigation", "computed");
+    }
+    onLog?.(
+      `Make a Post: live ${description} did not render after ` +
+      `${attempts} checks — aborting before calibrated tap`,
+    );
+    return null;
+  };
+
 // ── Story-picker guard ────────────────────────────────────────────────────
 // The story "+" button in the stories tray carries content-desc="Add" and
 // appears before the compose "+" in the accessibility tree, so
@@ -248,14 +279,18 @@ await tapMakePostControl("calibrated first Next", nextBtn1, "calibration");
 
 // The filter controls are deliberately separate calibrations. Their
 // positions are device/build-specific and must not use accessibility or
-// positional fallbacks. Instagram opens the filter controls only after the
-// picker/header Next has been tapped. The editor transition is animated and
-// the filter point is near the bottom controls, so do not fire it immediately
-// after the header tap: on a slow device the tap can land on the old editor
-// surface, and the later finish-filter point can then land on the editor's
-// second Next.
-onLog?.("Make a Post: waiting for the image editor to finish rendering before opening Filters…");
-await sleepOrAbort(serial, 1800, "navigation", "computed");
+// positional fallbacks for the actual tap. The accessibility tree is used
+// only as a render-readiness gate: Instagram must expose the live Filters
+// control before the calibrated point is dispatched.
+onLog?.("Make a Post: waiting for the live image editor Filters control before opening Filters…");
+const liveFilters = await waitForLiveLabel(["Filters"], "Filters control");
+if (!liveFilters) {
+  const evidence = await android.captureDebugEvidence?.(serial, "make-post-filters-control-unavailable");
+  if (evidence) onLog?.(`Make a Post: Filters readiness evidence saved at ${evidence}`);
+  await android.pressBack(serial);
+  await android.removeDeviceFile(serial, devicePath).catch(() => {});
+  return { posted: false };
+}
 const filtersButton = await resolveCalibratedControlWithRetries(
   "makePostFilters",
   "Filters button",
@@ -265,10 +300,27 @@ if (!filtersButton) {
   await android.removeDeviceFile(serial, devicePath).catch(() => {});
   return { posted: false };
 }
-onLog?.(`Make a Post: tapping calibrated Filters button at (${filtersButton.x}, ${filtersButton.y})…`);
+onLog?.(
+  `Make a Post: tapping calibrated Filters button at (${filtersButton.x}, ${filtersButton.y}) ` +
+  `(live label="${liveFilters.label}" at ${liveFilters.point.x},${liveFilters.point.y})…`,
+);
 await tapMakePostControl("calibrated Filters button", filtersButton, "calibration");
-onLog?.("Make a Post: waiting for the Filters panel to finish opening…");
-await sleepOrAbort(serial, 1400, "navigation", "computed");
+onLog?.("Make a Post: waiting for a live filter thumbnail before selecting Most-Right Filter…");
+const liveFilterPanel = await waitForLiveLabel(
+  ["Original", "Normal", "Clarendon"],
+  "filter panel",
+);
+if (!liveFilterPanel) {
+  const evidence = await android.captureDebugEvidence?.(serial, "make-post-filter-panel-unavailable");
+  if (evidence) onLog?.(`Make a Post: filter-panel readiness evidence saved at ${evidence}`);
+  await android.pressBack(serial);
+  await android.removeDeviceFile(serial, devicePath).catch(() => {});
+  return { posted: false };
+}
+onLog?.(
+  `Make a Post: filter panel confirmed by live label="${liveFilterPanel.label}" — ` +
+  "calibrated Most-Right Filter is now safe to dispatch",
+);
 
 const mostRightFilter = await resolveCalibratedControlWithRetries(
   "makePostMostRightFilter",

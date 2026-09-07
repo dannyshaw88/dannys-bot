@@ -18,6 +18,12 @@ description: Chronological record of every attempt to get Make a Post working vi
 - The flow now waits for the image editor to render before tapping Filters and waits again for the Filters panel to open before selecting a filter. The calibration wizard instruction explicitly reflects the Crop → first Next → Filters order.
 - Status: API/frontend builds and workflow restart passed; physical-device confirmation is still required.
 
+### 2026-09-07 — Calibrated coordinates are not render-readiness proof
+- A follow-up device capture showed the runtime log going from the first Next directly to Most-Right Filter, with no Filters-button dispatch line. A saved calibration point can exist even while Instagram is still rendering the previous editor surface.
+- The flow now waits for a live `Filters` accessibility marker before dispatching the calibrated Filters point, then waits for a live filter-thumbnail marker before allowing the calibrated Most-Right Filter point. If either surface never appears, it captures evidence and aborts without a blind tap.
+- **Lesson:** use calibration for the actual device-space tap, but use live UI evidence to prove the target screen is ready first; never treat a valid calibration map as proof that the screen has rendered.
+- Status: code-level fix applied; API build/workflow restart and physical-device confirmation still required.
+
 ### 2026-09-04 — Both Next buttons must use their separate device mirror calibrations
 - The supplied device screenshots confirmed that Make a Post has two different Next controls: the first is the picker/header Next and the second is the lower editor Next. They must not share a live-node lookup or coordinate.
 - **Root cause identified in the implementation:** the calibration test uses the exact/manual tap path, while the Make-a-Post operation was calling the generic bot tap path after resolving calibration. That path adds a small jitter, which is inappropriate for a small calibrated control.
