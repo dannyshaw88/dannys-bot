@@ -18,12 +18,15 @@ export type CollisionConfig = {
 export type CollisionLease = {
   id: string;
   collisionPrevented: boolean;
+  manualOverride: boolean;
 };
 
 export type CollisionRequestOptions = {
   source: CollisionSource;
   owner: string;
   onQueued?: () => void;
+  /** Explicit user-triggered HST runs bypass the scheduled rest window. */
+  manualOverride?: boolean;
 };
 
 type CollisionQueueEntry = {
@@ -32,6 +35,7 @@ type CollisionQueueEntry = {
   readyAt: number;
   source: CollisionSource;
   owner: string;
+  manualOverride: boolean;
   resolve: (lease: CollisionLease) => void;
 };
 
@@ -100,7 +104,7 @@ function describe(source: CollisionSource, owner: string, slotIdx: number): stri
 }
 
 function resolveCancelled(entry: CollisionQueueEntry): void {
-  entry.resolve({ id: "", collisionPrevented: false });
+  entry.resolve({ id: "", collisionPrevented: false, manualOverride: entry.manualOverride });
 }
 
 function processCollisionQueue(serial: string): void {
@@ -115,7 +119,15 @@ function processCollisionQueue(serial: string): void {
     return;
   }
 
-  state.queue.sort((a, b) => a.readyAt - b.readyAt || a.slotIdx - b.slotIdx || a.id.localeCompare(b.id));
+  // An explicit user toggle has priority over scheduled turns. Among scheduled
+  // turns, retain the original due-time ordering; among manual turns, retain
+  // arrival order through the lease id.
+  state.queue.sort((a, b) =>
+    Number(b.manualOverride) - Number(a.manualOverride) ||
+    a.readyAt - b.readyAt ||
+    a.slotIdx - b.slotIdx ||
+    a.id.localeCompare(b.id),
+  );
   const next = state.queue.shift()!;
   state.busy = true;
   state.activeLeaseId = next.id;
@@ -127,7 +139,11 @@ function processCollisionQueue(serial: string): void {
     `[COLLISION] ${serial} acquired queued ${describe(next.source, next.owner, next.slotIdx)} ` +
     `lease=${next.id} due=${new Date(next.readyAt).toISOString()} waitedMs=${waitMs}`,
   );
-  next.resolve({ id: next.id, collisionPrevented: true });
+  next.resolve({
+    id: next.id,
+    collisionPrevented: !next.manualOverride,
+    manualOverride: next.manualOverride,
+  });
 }
 
 function applyCollisionConfig(serial: string, config: CollisionConfig): CollisionConfig {
@@ -198,7 +214,11 @@ export async function requestCollisionSlot(
         `[COLLISION] ${serial} acquired immediate ${describe(options.source, options.owner, slotIdx)} ` +
         `lease=${id} due=${new Date(readyAt).toISOString()}`,
       );
-      resolve({ id, collisionPrevented: false });
+      resolve({
+        id,
+        collisionPrevented: false,
+        manualOverride: options.manualOverride === true,
+      });
       return;
     }
 
@@ -208,15 +228,28 @@ export async function requestCollisionSlot(
       readyAt,
       source: options.source,
       owner: options.owner,
+      manualOverride: options.manualOverride === true,
       resolve,
     });
     console.info(
       `[COLLISION] ${serial} queued ${describe(options.source, options.owner, slotIdx)} ` +
+      `${options.manualOverride ? "manual-override " : ""}` +
       `lease=${id} due=${new Date(readyAt).toISOString()} ` +
       `active=${state.activeSource}/${state.activeOwner}/slot${state.activeSlot ?? "none"} ` +
       `queueLength=${state.queue.length}`,
     );
-    options.onQueued?.();
+    // A manual request may skip an idle device rest window immediately. It
+    // still queues behind a currently-running cycle so two callers never send
+    // simultaneous ADB input to the same phone.
+    if (options.manualOverride && state.activeLeaseId === null) {
+      if (state.restTimer !== null) {
+        clearTimeout(state.restTimer);
+        state.restTimer = null;
+      }
+      processCollisionQueue(serial);
+    } else if (!options.manualOverride) {
+      options.onQueued?.();
+    }
   });
 }
 
@@ -245,7 +278,8 @@ export function releaseCollisionSlot(
   state.activeSource = null;
   state.activeOwner = null;
 
-  if (skipRest || !state.config.enabled) {
+  const manualQueued = state.queue.some(entry => entry.manualOverride);
+  if (skipRest || lease.manualOverride || !state.config.enabled || manualQueued) {
     console.info(`[COLLISION] ${serial} released ${released}; continuing without rest`);
     processCollisionQueue(serial);
     return;

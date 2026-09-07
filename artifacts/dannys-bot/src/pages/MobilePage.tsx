@@ -3991,7 +3991,7 @@ const MAX_HST_ACCOUNT_SLOTS = 10;
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string) => Promise<CollisionLease>, releaseSlot?: (lease: CollisionLease, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig, isActive = false, slotId?: string) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string, manualOverride?: boolean) => Promise<CollisionLease>, releaseSlot?: (lease: CollisionLease, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig, isActive = false, slotId?: string) {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -4051,6 +4051,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // Forces an explicit ON event to replace an old recovery timer with an
   // immediate cycle, even when the state was already true in this runtime.
   const forceImmediateToggleRef = useRef(false);
+  // Marks the next cycle as an explicit user request so it can bypass the
+  // scheduled collision-rest window. This must survive the direct reschedule
+  // path used by Statistics broadcasts.
+  const manualCollisionOverrideRef = useRef(false);
   const toggleSignalRef = useRef(0);
   const [toggleSignal, setToggleSignal] = useState(0);
   // Counts explicit master-toggle edits so a settings response that was
@@ -4139,8 +4143,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // marker so that cleanup cannot kill the newly restarted HST loop.
       explicitToggleOffRef.current = false;
       manualToggleOnRef.current = true;
+      manualCollisionOverrideRef.current = true;
     } else {
       explicitToggleOffRef.current = true; // explicit user action — cleanup should abort
+      manualCollisionOverrideRef.current = false;
     }
     setSettings(s => ({ ...s, enabled }));
     toggleSignalRef.current += 1;
@@ -4180,9 +4186,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const nextSettings = { ...settingsRef.current, enabled: event.enabled };
     lastSavedRef.current = JSON.stringify(nextSettings);
     explicitToggleOffRef.current = !event.enabled;
+    if (!event.enabled) manualCollisionOverrideRef.current = false;
     if (event.enabled) {
       manualToggleOnRef.current = true;
       forceImmediateToggleRef.current = true;
+      manualCollisionOverrideRef.current = true;
       // Statistics toggles arrive after the API persistence round-trip.
       // Trigger the already-mounted runtime directly instead of waiting for
       // the settings/hydration effect to run again. The normal effect remains
@@ -4575,7 +4583,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     let recoveredFireAt: number | null = null;
     const forceImmediateToggle = forceImmediateToggleRef.current;
     if (_hstTimers.has(key)) {
-      if (rescheduleFnRef.current !== null && !forceImmediateToggle) {
+      if (
+        rescheduleFnRef.current !== null &&
+        !forceImmediateToggle &&
+        !manualToggleOnRef.current
+      ) {
         // Case A — same instance, valid closures, leave the timer alone.
         return;
       }
@@ -4649,9 +4661,15 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // Collision preventer: wait for device to be free before running.
       // Hoisted so post-cycle scheduling can use it as a CP-active fallback.
       collisionLeaseRef.current = null;
+      // Read this at fire-time so Statistics' direct reschedule path and the
+      // normal React effect path both mark the same immediate user request.
+      const manualCollisionOverride = manualCollisionOverrideRef.current;
+      manualCollisionOverrideRef.current = false;
       let collisionPrevented = false;
       if (requestSlot && slotIdx !== undefined) {
-        onLog?.(`[HST-DBG] ${_dbgTag} — awaiting collision-preventer slot…`);
+        onLog?.(manualCollisionOverride
+          ? `[HST-DBG] ${_dbgTag} — manual toggle override; bypassing scheduled collision rest`
+          : `[HST-DBG] ${_dbgTag} — awaiting collision-preventer slot…`);
         srvLog(`${_dbgTag} — requesting collision-preventer slot (slotIdx=${slotIdx})`);
         // onQueued fires immediately when the device is busy so the dashboard
         // "COLLISION PREVENTED" timestamp reflects the moment of the collision,
@@ -4665,7 +4683,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           }
           onLog?.(`[HST-DBG] ${_dbgTag} — collision detected; queued, waiting for rest window`);
         };
-        const lease = await requestSlot(slotIdx, hstTurnAt, onQueued, "hst-ui", _dbgTag);
+        const lease = await requestSlot(slotIdx, hstTurnAt, onQueued, "hst-ui", _dbgTag, manualCollisionOverride);
         collisionLeaseRef.current = lease;
         collisionPrevented = lease.collisionPrevented;
         srvLog(`${_dbgTag} — collision-preventer request resolved (collisionPrevented=${collisionPrevented})`);
@@ -4675,7 +4693,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           collisionLeaseRef.current = null;
           return;
         }
-        onLog?.(`[HST-DBG] ${_dbgTag} — slot acquired (collisionPrevented=${collisionPrevented})`);
+        onLog?.(`[HST-DBG] ${_dbgTag} — slot acquired (collisionPrevented=${collisionPrevented}, manualOverride=${manualCollisionOverride})`);
       }
       const s = settingsRef.current;
       const min = Math.max(1, Math.min(s.feedScrollMin, s.feedScrollMax));
@@ -5155,9 +5173,15 @@ function useCollisionPreventer(serial: string | null) {
     onQueued?: () => void,
     source: CollisionSource = "hst-ui",
     owner = `slot${slotIdx}`,
+    manualOverride = false,
   ): Promise<CollisionLease> => {
-    if (!serial) return Promise.resolve({ id: "", collisionPrevented: false });
-    return requestCollisionSlot(serial, slotIdx, readyAt, { source, owner, onQueued });
+    if (!serial) return Promise.resolve({ id: "", collisionPrevented: false, manualOverride });
+    return requestCollisionSlot(serial, slotIdx, readyAt, {
+      source,
+      owner,
+      onQueued,
+      manualOverride,
+    });
   }, [serial]);
 
   const releaseSlot = useCallback((lease: CollisionLease, skipRest = false) => {
@@ -8817,7 +8841,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   onPrevSlot?: () => void;
   onNextSlot?: () => void;
   slotCount?: number;
-  requestSlot?: (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string) => Promise<CollisionLease>;
+  requestSlot?: (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string, manualOverride?: boolean) => Promise<CollisionLease>;
   releaseSlot?: (lease: CollisionLease, skipRest?: boolean) => void;
   cancelQueuedSlot?: (idx: number) => void;
   refreshKey?: number;
