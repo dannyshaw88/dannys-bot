@@ -249,7 +249,13 @@ await tapMakePostControl("calibrated first Next", nextBtn1, "calibration");
 // The filter controls are deliberately separate calibrations. Their
 // positions are device/build-specific and must not use accessibility or
 // positional fallbacks. Instagram opens the filter controls only after the
-// picker/header Next has been tapped.
+// picker/header Next has been tapped. The editor transition is animated and
+// the filter point is near the bottom controls, so do not fire it immediately
+// after the header tap: on a slow device the tap can land on the old editor
+// surface, and the later finish-filter point can then land on the editor's
+// second Next.
+onLog?.("Make a Post: waiting for the image editor to finish rendering before opening Filters…");
+await sleepOrAbort(serial, 1800, "navigation", "computed");
 const filtersButton = await resolveCalibratedControlWithRetries(
   "makePostFilters",
   "Filters button",
@@ -261,7 +267,8 @@ if (!filtersButton) {
 }
 onLog?.(`Make a Post: tapping calibrated Filters button at (${filtersButton.x}, ${filtersButton.y})…`);
 await tapMakePostControl("calibrated Filters button", filtersButton, "calibration");
-await sleepOrAbort(serial, 700);
+onLog?.("Make a Post: waiting for the Filters panel to finish opening…");
+await sleepOrAbort(serial, 1400, "navigation", "computed");
 
 const mostRightFilter = await resolveCalibratedControlWithRetries(
   "makePostMostRightFilter",

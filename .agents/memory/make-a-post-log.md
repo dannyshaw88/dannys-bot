@@ -13,6 +13,11 @@ description: Chronological record of every attempt to get Make a Post working vi
 - The new points use the same device-size validation and exact/manual dispatch as the existing Make a Post controls. Missing or stale points abort safely rather than falling back to guessed coordinates.
 - Status: API and frontend builds passed; physical-device confirmation is still required.
 
+### 2026-09-07 — Editor transition must settle before the calibrated Filters tap
+- A real-device log showed the first Next dispatch and calibrated Filters dispatch occurring about 100 ms apart. The editor had not finished rendering, so the later Finish Filter point—near the second Next point—could become an accidental second Next.
+- The flow now waits for the image editor to render before tapping Filters and waits again for the Filters panel to open before selecting a filter. The calibration wizard instruction explicitly reflects the Crop → first Next → Filters order.
+- Status: API/frontend builds and workflow restart passed; physical-device confirmation is still required.
+
 ### 2026-09-04 — Both Next buttons must use their separate device mirror calibrations
 - The supplied device screenshots confirmed that Make a Post has two different Next controls: the first is the picker/header Next and the second is the lower editor Next. They must not share a live-node lookup or coordinate.
 - **Root cause identified in the implementation:** the calibration test uses the exact/manual tap path, while the Make-a-Post operation was calling the generic bot tap path after resolving calibration. That path adds a small jitter, which is inappropriate for a small calibrated control.

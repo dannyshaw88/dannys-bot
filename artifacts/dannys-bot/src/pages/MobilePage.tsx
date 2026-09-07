@@ -2487,7 +2487,7 @@ const NAVIGATION_CONTROLS: Array<{
   { id: "profile", label: "Profile", instruction: "Show Instagram's bottom navigation, then tap the Profile tab on the physical phone." },
   { id: "createPost", label: "Plus / create post", instruction: "Show the Instagram surface where the post + button is visible, then tap that + on the physical phone." },
   { id: "makePostCropToFit", label: "Make-a-Post Crop to Fit", instruction: "Open Instagram's Make-a-Post image picker with an image selected, then tap the two-arrow Crop to Fit control on the physical phone." },
-  { id: "makePostFilters", label: "Make-a-Post Filters", instruction: "After tapping Crop to Fit in the Make-a-Post picker, tap the Filters button on the physical phone." },
+  { id: "makePostFilters", label: "Make-a-Post Filters", instruction: "After tapping Crop to Fit and the first Next in the Make-a-Post picker, wait for the editor, then tap the Filters button on the physical phone." },
   { id: "makePostMostRightFilter", label: "Make-a-Post Most-Right Filter", instruction: "After opening Make-a-Post Filters, tap the most-right filter thumbnail on the physical phone." },
   { id: "makePostFinishFilterSelection", label: "Make-a-Post Finish Filter Selection", instruction: "After selecting a Make-a-Post filter, tap the button that finishes filter selection on the physical phone." },
   { id: "makePostFirstNext", label: "Make-a-Post First Next (top)", instruction: "Open the Make-a-Post image picker with an image selected, then tap the first Next button at the top of the physical phone." },
