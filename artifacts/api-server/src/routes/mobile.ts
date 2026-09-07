@@ -879,18 +879,72 @@ function escapeXmlSvg(s: string): string {
     .replace(/'/g, "&apos;");
 }
 
-// Pick a colour for a single log line based on its content — mirrors the
-// colour assignments used by the frontend Debugging Log panel.
-function debugLogLineColor(line: string): string {
-  if (line.includes("▶")) return "#f97316";          // tool header — orange
-  if (line.includes("✓")) return "#4ade80";           // success — green
-  if (line.includes("✗")) return "#f87171";           // failure — red
-  if (line.includes("[RST-DBG]")) return "#facc15";   // reset debug — yellow
-  if (/Cycle complete/i.test(line)) return "#c084fc"; // cycle end — purple
-  if (/Follow:|Follows:/i.test(line)) return "#60a5fa"; // follow — blue
-  if (/Inject/i.test(line)) return "#22d3ee";         // inject browsing — cyan
-  if (/error|failed/i.test(line)) return "#f87171";   // error words — red
-  return "#cbd5e1";                                   // default — light grey
+// Keep the server-side composite on the same persistent colour system as the
+// frontend Debugging Log panel. Tool context owns the whole active block:
+// success/error words and nested media types must not recolour their parent
+// tool. System text is white; account-switch destinations are pink inside the
+// gold account-switch block.
+type DebugScreenshotTool =
+  | "explore"
+  | "feed"
+  | "reels"
+  | "directMessaging"
+  | "stories"
+  | "makePost"
+  | "follow"
+  | "randomActions"
+  | "postStory"
+  | "updateProfile"
+  | "updateBio";
+
+type DebugScreenshotContext = DebugScreenshotTool | "accountSwitch";
+
+const DEBUG_SCREENSHOT_TOOL_COLORS: Record<DebugScreenshotContext, string> = {
+  explore: "#4ade80",
+  feed: "#fb923c",
+  reels: "#f87171",
+  directMessaging: "#c4b5fd",
+  stories: "#22d3ee",
+  makePost: "#c084fc",
+  follow: "#60a5fa",
+  randomActions: "#facc15",
+  postStory: "#f472b6",
+  updateProfile: "#a3e635",
+  updateBio: "#34d399",
+  accountSwitch: "#fbbf24",
+};
+
+const DEBUG_ACCOUNT_SWITCH_RE =
+  /\b(?:pre-switch|post-switch|switching to instagram account|account switch(?:er|ing|ed)?|account selector|account-header|long-pressing profile tab|profile tab found|account switch method|destination @|found @[\w.]+ in switcher|dismissed post-switch popup)\b/i;
+
+function detectDebugScreenshotToolHeader(line: string): DebugScreenshotTool | null {
+  if (/▶\s*(?:View\s+)?Explore\b/i.test(line)) return "explore";
+  if (/▶\s*(?:View\s+)?Feed\b/i.test(line)) return "feed";
+  if (/(?:▶\s*(?:Starting\s+)?View\s+Reels\b|\bReel Viewer\b)/i.test(line)) return "reels";
+  if (/▶\s*(?:Direct Messaging|Check Inbox)\b/i.test(line)) return "directMessaging";
+  if (/▶.*(?:View\s+)?Stories\b/i.test(line)) return "stories";
+  if (/▶\s*Make a Post\b/i.test(line)) return "makePost";
+  if (/▶\s*Follow Users\b/i.test(line)) return "follow";
+  if (/▶\s*Random Actions\b/i.test(line)) return "randomActions";
+  if (/▶\s*Post Story\b/i.test(line)) return "postStory";
+  if (/▶\s*Update Profile(?: Picture)?\b/i.test(line)) return "updateProfile";
+  if (/▶\s*Update Bio\b/i.test(line)) return "updateBio";
+  return null;
+}
+
+function inferDebugScreenshotTool(line: string): DebugScreenshotTool | null {
+  if (/\bView Explore\b|\bExplore (?:loop|consumption|grid|page)\b/i.test(line)) return "explore";
+  if (/\bView Feed\b/i.test(line)) return "feed";
+  if (/\b(?:Reel|Reels)\b|\bReel Viewer\b/i.test(line)) return "reels";
+  if (/\b(?:Direct Messaging|Check Inbox|DM inbox)\b/i.test(line)) return "directMessaging";
+  if (/\b(?:Story|Stories|story feed|story tray)\b/i.test(line)) return "stories";
+  if (/\bMake a Post\b/i.test(line)) return "makePost";
+  if (/\b(?:Follow Users|Spread Follow|Inject Browsing|following)\b/i.test(line)) return "follow";
+  if (/\bRandom Actions\b|^jitter-/i.test(line)) return "randomActions";
+  if (/\bPost Story\b/i.test(line)) return "postStory";
+  if (/\bUpdate Profile(?: Picture)?\b/i.test(line)) return "updateProfile";
+  if (/\bUpdate Bio\b/i.test(line)) return "updateBio";
+  return null;
 }
 
 async function captureDebugScreenshot(serial: string, label: string, generation: number): Promise<void> {
@@ -970,20 +1024,35 @@ async function captureDebugScreenshot(serial: string, label: string, generation:
 
       // ── 3. Render the debug log panel as SVG ──────────────────────────────────
       const bufLines = debugLogBuffer.get(serial) ?? [];
-      const wrappedLines = bufLines.flatMap((line) => {
-        if (!line.length) return [""];
-        const parts: string[] = [];
+      let currentTool: DebugScreenshotContext | null = null;
+      const coloredLines = bufLines.map(line => {
+        const headerTool = detectDebugScreenshotToolHeader(line);
+        if (headerTool) currentTool = headerTool;
+        const accountSwitch = DEBUG_ACCOUNT_SWITCH_RE.test(line);
+        if (accountSwitch) currentTool = "accountSwitch";
+        const cycleBoundary = /Cycle\s+(complete|failed|aborted)/i.test(line);
+        const inferredTool = currentTool ?? inferDebugScreenshotTool(line);
+        const color = cycleBoundary
+            ? "#ffffff"
+            : inferredTool
+              ? DEBUG_SCREENSHOT_TOOL_COLORS[inferredTool]
+              : "#ffffff";
+        if (cycleBoundary) currentTool = null;
+        return { line, color };
+      });
+      const wrappedLines = coloredLines.flatMap(({ line, color }) => {
+        if (!line.length) return [{ line: "", color }];
+        const parts: Array<{ line: string; color: string }> = [];
         for (let offset = 0; offset < line.length; offset += LOG_CHARS_PER_LINE) {
-          parts.push(line.slice(offset, offset + LOG_CHARS_PER_LINE));
+          parts.push({ line: line.slice(offset, offset + LOG_CHARS_PER_LINE), color });
         }
         return parts;
       });
       const visibleLines = wrappedLines.slice(-MAX_LOG_ROWS);
       const headerY = PADDING + LINE_H;
       const firstTextY = TARGET_H - PADDING - (visibleLines.length - 1) * LINE_H;
-      const textRows = visibleLines.map((line, i) => {
+      const textRows = visibleLines.map(({ line, color }, i) => {
         const y = firstTextY + i * LINE_H;
-        const color = debugLogLineColor(line);
         const display = escapeXmlSvg(line);
         return `<text x="${PADDING}" y="${y}" fill="${color}" font-family="monospace" font-size="11">${display}</text>`;
       }).join("\n    ");
@@ -991,7 +1060,7 @@ async function captureDebugScreenshot(serial: string, label: string, generation:
       const svgStr = `<?xml version="1.0" encoding="UTF-8"?>
   <svg xmlns="http://www.w3.org/2000/svg" width="${LOG_W}" height="${TARGET_H}">
     <rect width="${LOG_W}" height="${TARGET_H}" fill="#0f172a"/>
-   <text x="${PADDING}" y="${headerY}" fill="#94a3b8" font-family="monospace" font-size="11" font-weight="bold">── Debugging Log ──</text>
+   <text x="${PADDING}" y="${headerY}" fill="#ffffff" font-family="monospace" font-size="11" font-weight="bold">── Debugging Log ──</text>
   ${textRows}
 </svg>`;
 

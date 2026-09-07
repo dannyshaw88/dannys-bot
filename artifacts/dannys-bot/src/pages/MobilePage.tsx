@@ -61,6 +61,77 @@ import {
 
 declare const __API_PORT__: string;
 
+// ─── Persistent debugging-log colour system ───────────────────────────────────
+// Tool identity owns the colour for the whole active block. Message content
+// (for example, "this post is a Reel" inside View Explore) must never replace
+// the parent tool's colour.
+type DebugTool =
+  | "explore"
+  | "feed"
+  | "reels"
+  | "directMessaging"
+  | "stories"
+  | "makePost"
+  | "follow"
+  | "randomActions"
+  | "postStory"
+  | "updateProfile"
+  | "updateBio";
+
+type DebugLogContext = DebugTool | "accountSwitch";
+
+const DEBUG_TOOL_COLORS: Record<DebugLogContext, string> = {
+  explore: "#4ade80",          // green
+  feed: "#fb923c",             // orange
+  reels: "#f87171",            // red
+  directMessaging: "#c4b5fd", // lavender
+  stories: "#22d3ee",          // cyan
+  makePost: "#c084fc",         // purple
+  follow: "#60a5fa",           // blue
+  randomActions: "#facc15",    // yellow
+  postStory: "#f472b6",        // pink
+  updateProfile: "#a3e635",    // lime
+  updateBio: "#34d399",        // emerald
+  accountSwitch: "#fbbf24",    // gold; the destination handle is pink below
+};
+
+const ACCOUNT_SWITCH_LOG_RE =
+  /\b(?:pre-switch|post-switch|switching to instagram account|account switch(?:er|ing|ed)?|account selector|account-header|target=@|long-pressing profile tab|profile tab found|account switch method|destination @|found @[\w.]+ in switcher|dismissed post-switch popup)\b/i;
+
+function isAccountSwitchLogMessage(message: string): boolean {
+  return ACCOUNT_SWITCH_LOG_RE.test(message);
+}
+
+function detectDebugToolHeader(message: string): DebugTool | null {
+  if (/▶\s*(?:View\s+)?Explore\b/i.test(message)) return "explore";
+  if (/▶\s*(?:View\s+)?Feed\b/i.test(message)) return "feed";
+  if (/(?:▶\s*(?:Starting\s+)?View\s+Reels\b|\bReel Viewer\b)/i.test(message)) return "reels";
+  if (/▶\s*(?:Direct Messaging|Check Inbox)\b/i.test(message)) return "directMessaging";
+  if (/▶.*(?:View\s+)?Stories\b/i.test(message)) return "stories";
+  if (/▶\s*Make a Post\b/i.test(message)) return "makePost";
+  if (/▶\s*Follow Users\b/i.test(message)) return "follow";
+  if (/▶\s*Random Actions\b/i.test(message)) return "randomActions";
+  if (/▶\s*Post Story\b/i.test(message)) return "postStory";
+  if (/▶\s*Update Profile(?: Picture)?\b/i.test(message)) return "updateProfile";
+  if (/▶\s*Update Bio\b/i.test(message)) return "updateBio";
+  return null;
+}
+
+function inferDebugToolFromMessage(message: string): DebugTool | null {
+  if (/\bView Explore\b|\bExplore (?:loop|consumption|grid|page)\b/i.test(message)) return "explore";
+  if (/\bView Feed\b/i.test(message)) return "feed";
+  if (/\b(?:Reel|Reels)\b|\bReel Viewer\b/i.test(message)) return "reels";
+  if (/\b(?:Direct Messaging|Check Inbox|DM inbox)\b/i.test(message)) return "directMessaging";
+  if (/\b(?:Story|Stories|story feed|story tray)\b/i.test(message)) return "stories";
+  if (/\bMake a Post\b/i.test(message)) return "makePost";
+  if (/\b(?:Follow Users|Spread Follow|Inject Browsing|following)\b/i.test(message)) return "follow";
+  if (/\bRandom Actions\b|^jitter-/i.test(message)) return "randomActions";
+  if (/\bPost Story\b/i.test(message)) return "postStory";
+  if (/\bUpdate Profile(?: Picture)?\b/i.test(message)) return "updateProfile";
+  if (/\bUpdate Bio\b/i.test(message)) return "updateBio";
+  return null;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 // UsbPhone is imported from mobileShared
@@ -11348,9 +11419,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
 
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto bg-black/90 border border-border rounded-xl p-3 font-mono text-[11px] leading-relaxed">
         {lines.length === 0
-          ? <p className="text-white/30">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
+           ? <p className="text-white">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
           : (() => {
-            let currentTool: string | null = null;
+             let currentTool: DebugLogContext | null = null;
              const timestampOf = (line: string) => line.match(/^\[([^\]]+)\]/)?.[1] ?? "";
              // Accessibility/XML dumps are often logged one node per line,
              // with a slightly different timestamp on each row. Treat a
@@ -11440,13 +11511,10 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               const ts  = m?.[1] ?? '';
               const dur = m?.[2] ?? '';
               const msg = m ? (m[3] ?? '') : l;
-               // Account switching emits several related diagnostics. Keep the
-               // target handle pink in all of them, not just the initial
-               // "Switching to Instagram account" header. In particular, the
-               // current profile-tab flow logs the destination in messages such
-               // as "destination @name" and "Found @name in switcher".
-               const isAccountSwitchMessage =
-                 /Switching to Instagram account|account switcher|account selector|Account-header|target=@|destination @|Found @[\w.]+ in switcher|account switch to @/i.test(msg);
+                // Account switching is always gold. The destination handle is
+                // highlighted pink, but that emphasis must not recolour the
+                // surrounding switch diagnostics.
+                const isAccountSwitchMessage = isAccountSwitchLogMessage(msg);
                const accountSwitchTarget = isAccountSwitchMessage
                  ? msg.match(/(^|[\s(":=])(@[A-Za-z0-9._]{2,40})(?=$|[\s"…—,.;:)])/i)
                  : null;
@@ -11457,81 +11525,21 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                  ? accountTargetStart + (accountSwitchTarget?.[2].length ?? 0)
                  : -1;
 
-              // Track the active tool from ▶ header lines so ALL sub-messages
-              // that follow inherit the tool's colour (e.g. every explore
-              // sub-action is green, not just lines that contain "Explore").
-               if      (/▶ View Explore/.test(msg))    currentTool = 'explore';
-               else if (/▶ View Feed/.test(msg))       currentTool = 'feed';
-               else if (/(?:▶\s*(?:Starting\s+)?View Reels\b|\bReel Viewer\b)/i.test(msg)) currentTool = 'reels';
-              else if (/▶ (?:Direct Messaging|Check Inbox)/.test(msg)) currentTool = 'directmessaging';
-              else if (/▶.*[Ss]tories/.test(msg))     currentTool = 'stories';
-              else if (/▶ Make a Post/.test(msg))     currentTool = 'makepost';
-              else if (/▶ Follow Users/.test(msg))    currentTool = 'follow';
-              else if (/▶ Random Actions/.test(msg))  currentTool = 'randomactions';
-              else if (/^▶/.test(msg))                currentTool = null;
-              if (/Cycle\s+(complete|failed|aborted)/i.test(msg)) currentTool = null;
-
-               // Colour the message based on its tool / prefix.
-               // Once a tool stamp is active, its colour owns the whole block:
-               // success, warning, error, and diagnostic sub-lines must not
-               // fall through to the generic white/status colours.
-                 let msgClass = 'text-white';
-                 const isFeedMessage = currentTool === 'feed' || /\bView Feed\b|▶\s*View Feed\b/i.test(msg);
-                 // Story-feed waits and tray diagnostics can be emitted while
-                 // the surrounding cycle is still tagged as Feed. Stories
-                 // own these messages, so they must override Feed orange.
-                 const isStoryMessage = currentTool === 'stories' ||
-                   /\b(?:Story|Stories|story|stories)\b/i.test(msg) ||
-                   /waiting for (?:the )?story feed/i.test(msg);
-                 const isDirectMessagingMessage = currentTool === 'directmessaging' ||
-                   /▶\s*(?:Direct Messaging|Check Inbox)\b|\b(?:Direct Messaging|Check Inbox)\b/i.test(msg);
-                  // Reel Viewer owns the whole active block. Some of its
-                  // diagnostics mention Feed/Stories or contain generic
-                  // "screen" text, so Reels must be checked before those
-                  // message-specific classifications.
-                  const isReelsMessage = currentTool === 'reels' ||
-                    /\b(?:Reel|Reels)\b/i.test(msg) ||
-                    /▶\s*(?:Starting\s+)?View Reels\b|\bReel Viewer\b/i.test(msg);
-                const activeToolClass =
-                  currentTool === 'explore' ? 'text-green-400' :
-                  currentTool === 'feed' ? 'text-orange-400' :
-                   currentTool === 'reels' ? 'text-red-500' :
-                  currentTool === 'directmessaging' ? 'text-slate-300' :
-                  currentTool === 'stories' ? 'text-cyan-400' :
-                  currentTool === 'makepost' ? 'text-purple-400' :
-                  currentTool === 'follow' ? 'text-blue-400' :
-                  currentTool === 'randomactions' ? 'text-purple-400' :
-                  null;
-                  if (isReelsMessage) {
-                    msgClass = 'text-red-500';
-                  } else if (isStoryMessage) {
-                   msgClass = 'text-blue-400';
-                 } else if (isFeedMessage) {
-                   msgClass = 'text-orange-400';
-                 } else if (isDirectMessagingMessage) {
-                   msgClass = 'text-slate-300';
-                 } else if (activeToolClass) {
-                  msgClass = activeToolClass;
-                // Follow owns one color, including Spread Follow, inject
-                // browsing, success, navigation, and failure lines. Keep this
-                // ahead of generic ERROR/success rules so a Follow failure
-                // cannot turn red or white and lose its tool identity.
-                } else if (/\bFollow\b|\bfollowing\b|\bSpread Follow\b|\bInject Browsing\b/i.test(msg))
-                                                                      msgClass = 'text-blue-400';
-                else if (isFeedMessage)                                      msgClass = 'text-orange-400';
-                else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
-                                                                     msgClass = 'text-green-400';
-                 else if (isDirectMessagingMessage)                            msgClass = 'text-slate-300';
-                else if (/▶.*[Ss]tories|\b[Ss]tories\b/.test(msg))  msgClass = 'text-cyan-400';
-                else if (/\bMake a Post\b|▶ Make a Post/.test(msg))  msgClass = 'text-purple-400';
-                else if (/\bRandom Actions\b|▶ Random Actions|^jitter-/.test(msg)) msgClass = 'text-purple-400';
-                else if (/Switching to Instagram account|account switcher|Long-pressing profile tab|Profile tab found/.test(msg))
-                                                                     msgClass = 'text-amber-400';
-                else if (/^(ERROR|FAILED|✗)/.test(msg))              msgClass = 'text-rose-500';
-                else if (/^⚠/.test(msg))                             msgClass = 'text-yellow-400';
-                else if (/^[✓✅]/.test(msg))                         msgClass = 'text-white/90';
-                else if (/shuffled/.test(msg))                       msgClass = 'text-blue-400';
-                else if (/^▶/.test(msg))                             msgClass = 'text-white/90';
+              // Track the active tool from its header. Once active, that tool
+              // owns every following line until the next tool header or cycle
+              // boundary. This is deliberately context-first: a Reel opened
+              // from Explore is still an Explore log line and stays green.
+              const detectedHeader = detectDebugToolHeader(msg);
+              if (detectedHeader) currentTool = detectedHeader;
+              if (isAccountSwitchMessage) currentTool = "accountSwitch";
+              const inferredTool = currentTool ?? inferDebugToolFromMessage(msg);
+              const isCycleBoundary = /Cycle\s+(complete|failed|aborted)/i.test(msg);
+              const messageColor = isCycleBoundary
+                  ? "#ffffff"
+                  : inferredTool
+                    ? DEBUG_TOOL_COLORS[inferredTool]
+                    : "#ffffff";
+              if (isCycleBoundary) currentTool = null;
 
                 return (
                   <div key={key} className="flex min-w-0 py-[1px]">
@@ -11540,11 +11548,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                      {groupControl}
                    </span>
                    <span className="shrink-0 whitespace-nowrap text-white w-[5rem]">{dur ? `[${dur}]` : ''}</span>
-                  <span className={`flex-1 min-w-0 break-words ${msgClass}`}>
+                   <span className="flex-1 min-w-0 break-words" style={{ color: messageColor }}>
                     {accountSwitchTarget ? (
                       <>
                         {msg.slice(0, accountTargetStart)}
-                        <span className="text-pink-400 font-semibold">{msg.slice(accountTargetStart, accountTargetEnd)}</span>
+                         <span className="font-semibold" style={{ color: "#f472b6" }}>{msg.slice(accountTargetStart, accountTargetEnd)}</span>
                         {msg.slice(accountTargetEnd)}
                       </>
                     ) : msg}
