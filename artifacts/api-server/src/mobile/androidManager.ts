@@ -5314,21 +5314,51 @@ function _findUniqueLiveActionNode(
       onLog?.(`[live-action] rejected ${source}: identified node is disabled`);
       return null;
     }
-    if (match.actionOwnerIndex == null) {
+    let ownerIndex = match.actionOwnerIndex;
+    let ownerResolution: "ancestor" | "geometric-ancestor" | "self" = "ancestor";
+    if (ownerIndex == null) {
+      // The inspector and some vendor UIAutomator dumps expose the semantic
+      // child and its clickable ViewGroup as separate flat records even when
+      // the XML nesting is missing or malformed. The attached Redmi dump is
+      // exactly this shape:
+      //   row_feed_button_like [33,747][99,874]  (semantic child)
+      //   ViewGroup             [33,747][110,874] (clickable owner)
+      // Keep the child as the tap point, but recover the owner by geometry.
+      // Choose the smallest enabled clickable node containing the child's
+      // centre; this avoids promoting a full-screen clickable media overlay.
+      const geometricOwners = nodes
+        .map((node, index) => ({ node, index }))
+        .filter(({ node, index }) =>
+          index !== nodes.indexOf(match) &&
+          node.clickable &&
+          node.enabled &&
+          match.x >= node.x1 && match.x <= node.x2 &&
+          match.y >= node.y1 && match.y <= node.y2 &&
+          node.width <= 220 &&
+          node.height <= 220,
+        )
+        .sort((a, b) => (a.node.width * a.node.height) - (b.node.width * b.node.height));
+      if (geometricOwners.length > 0) {
+        ownerIndex = geometricOwners[0].index;
+        ownerResolution = "geometric-ancestor";
+      }
+    }
+    if (ownerIndex == null) {
       onLog?.(
         `[live-action] rejected ${source}: identified node has no enabled clickable ancestor ` +
         `(child-clickable=${match.clickable})`,
       );
       return null;
     }
-    const owner = nodes[match.actionOwnerIndex];
+    const owner = nodes[ownerIndex];
+    if (ownerIndex === nodes.indexOf(match)) ownerResolution = "self";
     // Keep the exact semantic child's centre as the tap point. It lies inside
     // the owning clickable ancestor and avoids turning a confirmed icon action
     // into a broad row/container tap; the ancestor is used only to prove the
     // accessibility ACTION_CLICK is available.
     onLog?.(
       `[live-action] resolved ${source}: child=(${match.x},${match.y}) ` +
-      `owner=(${owner.x},${owner.y}) ${match.actionOwnerIndex === nodes.indexOf(match) ? "self" : "ancestor"}`,
+      `owner=(${owner.x},${owner.y}) ${ownerResolution}`,
     );
     return { x: match.x, y: match.y };
   };
@@ -5414,9 +5444,30 @@ export async function findFeedActionIcons(
     onLog,
   );
   if (!liveLike) {
+    const inventory = _liveActionNodes(xml)
+      .filter(node =>
+        node.y >= 0 &&
+        node.width <= 220 &&
+        node.height <= 220 &&
+        (node.resourceId.includes("row_feed_") ||
+          node.resourceId.includes("reposts_ufi") ||
+          /^(?:like|unlike|comment|repost|send|direct|message|add to saved|remove from saved)$/i.test(node.contentDesc.trim())),
+      )
+      .map(node =>
+        `(${node.x},${node.y}) rid="${node.resourceId}" desc="${node.contentDesc}" ` +
+        `text="${node.text}" clickable=${node.clickable} owner=${node.actionOwnerIndex != null}`,
+      )
+      .join(" | ");
+    onLog?.(`[feed-icons] semantic action inventory before Like rejection: ${inventory || "(none)"}`);
     onLog?.("[feed-icons] live row_feed_button_like node not found or ambiguous — skipping post actions");
     return null;
   }
+  const liveComment = _findUniqueLiveActionNode(
+    xml,
+    [":id/row_feed_button_comment"],
+    ["Comment"],
+    onLog,
+  );
   const liveShareFeed = _findUniqueLiveActionNode(xml, [":id/reposts_ufi_icon"], ["Repost"], onLog);
   const liveShareDm = _findUniqueLiveActionNode(xml, [":id/row_feed_button_share"], ["Send", "Direct", "Message"], onLog);
   const liveSave = _findUniqueLiveActionNode(
@@ -5432,11 +5483,12 @@ export async function findFeedActionIcons(
   );
   onLog?.(
     `[feed-icons] live nodes — like:(${liveLike.x},${liveLike.y}) ` +
+    `comment:${liveComment ? `(${liveComment.x},${liveComment.y})` : "null"} ` +
     `shareFeed:${liveShareFeed ? `(${liveShareFeed.x},${liveShareFeed.y})` : "null"} ` +
     `shareDm:${liveShareDm ? `(${liveShareDm.x},${liveShareDm.y})` : "null"} ` +
     `save:${liveSave ? `(${liveSave.x},${liveSave.y})` : "null"}`,
   );
-  return { like: liveLike, comment: null, shareFeed: liveShareFeed, shareDm: liveShareDm, save: liveSave, alreadyLiked: liveAlreadyLiked };
+  return { like: liveLike, comment: liveComment, shareFeed: liveShareFeed, shareDm: liveShareDm, save: liveSave, alreadyLiked: liveAlreadyLiked };
 
 
 
