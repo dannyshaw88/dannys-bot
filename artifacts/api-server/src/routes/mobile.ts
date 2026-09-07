@@ -5058,7 +5058,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   const hstOperationContext: any = {
     android, fs, fsPromises, path, storage, logger, deviceProfileSwipe,
-    getScreenSize, isCycleAborted, sleepOrAbort, hstRandomDelay,
+    getScreenSize, getScreenSizeAsync: android.getScreenSizeAsync, isCycleAborted, sleepOrAbort, hstRandomDelay,
     rollRange, getDeviceDensity: (s: string) => android.getDeviceDensity(s),
     loadInstanceConfigs, consumptionScrollWeights, rollFeedConsumptionGesture, rollScrollVelocity,
     _viewFeedLastDmRecipient, _viewStoriesLastDmRecipient, _viewExploreLastDmRecipient,

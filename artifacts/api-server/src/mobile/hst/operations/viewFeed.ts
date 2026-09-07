@@ -2,6 +2,7 @@ export interface ViewFeedOperationContext {
   android: any;
   deviceProfileSwipe: (...args: any[]) => Promise<any>;
   getScreenSize: (...args: any[]) => any;
+  getScreenSizeAsync?: (...args: any[]) => Promise<any>;
   isCycleAborted: (...args: any[]) => boolean;
   logger: any;
   sleepOrAbort: (...args: any[]) => Promise<void>;
@@ -28,7 +29,7 @@ export async function runCheckFeedLoop(serial: string, params: {
     onLog?: (msg: string) => void;
   } , context: ViewFeedOperationContext): Promise<{
  count: number; likes: number; likeFailures: number; sharesFeed: number; sharesDm: number; saves: number; captionExpands: number; strayNavRecoveries: number; audioTaps: number; hashtagTaps: number; authorVisits: number }> {
-    const { android, deviceProfileSwipe, getScreenSize, isCycleAborted, logger, sleepOrAbort, consumptionScrollWeights, rollFeedConsumptionGesture, loadInstanceConfigs, _viewFeedLastDmRecipient, dismissSaveCollectionPrompt } = context;
+    const { android, deviceProfileSwipe, getScreenSize, getScreenSizeAsync, isCycleAborted, logger, sleepOrAbort, consumptionScrollWeights, rollFeedConsumptionGesture, loadInstanceConfigs, _viewFeedLastDmRecipient, dismissSaveCollectionPrompt } = context;
     params.onLog?.("[TRACE] feed: start");
     const {
       count, delayMinSec = 5, delayMaxSec = 10, likePercentMin: rawLikePercentMin = 0, likePercentMax: rawLikePercentMax = 0, likesMin, likesMax,
@@ -187,7 +188,9 @@ export async function runCheckFeedLoop(serial: string, params: {
       xml: string;
     };
     const scanViewFeedA11y = async (): Promise<ViewFeedScan | null> => {
+      const scanStartedAt = Date.now();
       const xml = await android.dumpUi(serial).catch(() => "");
+      onLog?.(`View Feed a11y scan timing: dump=${Date.now() - scanStartedAt}ms`);
       if (!xml) return null;
       if (
         xml.includes('text="Ad"') || xml.includes('content-desc="Ad"') ||
@@ -223,7 +226,12 @@ export async function runCheckFeedLoop(serial: string, params: {
         onLog?.("View Feed action scan: no usable live action row — skipping actions");
         return null;
       }
-      const screen = getScreenSize(serial);
+      // Avoid blocking the API event loop with a synchronous wm-size probe in
+      // the hot action-bar path. The async resolver also coalesces concurrent
+      // probes and uses the same cached logical display dimensions.
+      const screen = getScreenSizeAsync
+        ? await getScreenSizeAsync(serial)
+        : getScreenSize(serial);
       const liveLikeNode = nodes.find(n =>
         (n.rid.endsWith("row_feed_button_like") || /^(?:like|unlike)$/i.test(n.desc)) &&
         n.x === actionIcons.like.x &&

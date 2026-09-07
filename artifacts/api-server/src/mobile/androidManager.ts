@@ -5288,9 +5288,17 @@ function _findUniqueLiveActionNode(
   resourceIdSuffixes: string[],
   contentDescriptions: string[],
   onLog?: (message: string) => void,
-  options?: { allowDescriptionFallback?: boolean },
+  options?: {
+    allowDescriptionFallback?: boolean;
+    /** Restrict a control to the action row selected from the live Like node. */
+    preferredRowY?: number;
+    preferredRowTolerance?: number;
+    /** Resolve duplicate identities only when this live node was selected safely. */
+    preferredMatch?: LiveActionNode | null;
+  },
+  parsedNodes?: LiveActionNode[],
 ): { x: number; y: number } | null {
-  const nodes = _liveActionNodes(xml);
+  const nodes = parsedNodes ?? _liveActionNodes(xml);
   // A label/resource match is not enough: Instagram also exposes count
   // nodes and row-sized containers near the action icons. Keep the compact
   // control-size guard, but do NOT require the matched node itself to be
@@ -5304,6 +5312,14 @@ function _findUniqueLiveActionNode(
     !/^\s*[\d,.]+[KMB]?\s*$/i.test(node.text),
   );
   const resolve = (matches: LiveActionNode[], source: string): { x: number; y: number } | null => {
+    if (options?.preferredRowY != null) {
+      const tolerance = options.preferredRowTolerance ?? 84;
+      matches = matches.filter(match => Math.abs(match.y - options.preferredRowY!) <= tolerance);
+    }
+    if (matches.length > 1 && options?.preferredMatch) {
+      const preferred = matches.filter(match => match === options.preferredMatch);
+      if (preferred.length === 1) matches = preferred;
+    }
     if (matches.length > 1) {
       onLog?.(`[live-action] rejected ${source}: ambiguous identity (${matches.length} matches)`);
       return null;
@@ -5386,6 +5402,88 @@ function _findUniqueLiveActionNode(
 }
 
 /**
+ * Feed RecyclerViews keep neighbouring posts in the accessibility tree. When
+ * more than one Like identity is present, choose one only if it has a unique
+ * visible media row nearest the viewport centre. This avoids both failure
+ * modes: blindly using a recycled post, and rejecting the centered post just
+ * because another row is still mounted.
+ */
+function _pickCenteredFeedLikeNode(
+  xml: string,
+  nodes: LiveActionNode[],
+  onLog?: (message: string) => void,
+): LiveActionNode | null {
+  const candidates = nodes.filter(node =>
+    node.width > 0 &&
+    node.height > 0 &&
+    node.width <= 180 &&
+    node.height <= 180 &&
+    (node.resourceId === "com.instagram.android:id/row_feed_button_like" ||
+      node.resourceId.endsWith(":id/row_feed_button_like")),
+  );
+  if (candidates.length <= 1) return candidates[0] ?? null;
+
+  const { w, h } = _getScreenSize(xml);
+  const mediaNodes = nodes.filter(node =>
+    /(?:carousel_)?media_group/.test(node.resourceId) &&
+    node.x2 > node.x1 &&
+    node.y2 > node.y1 &&
+    node.y1 < h &&
+    node.y2 <= h,
+  );
+  const scored = candidates
+    .map(candidate => {
+      const media = mediaNodes
+        .filter(node =>
+          node.y1 < candidate.y &&
+          node.x2 > candidate.x1 &&
+          node.x1 < candidate.x2 &&
+          candidate.y - node.y2 <= h * 0.18,
+        )
+        .sort((a, b) =>
+          Math.abs(candidate.y - a.y2) - Math.abs(candidate.y - b.y2),
+        )[0];
+      if (!media) return null;
+      const mediaCenterY = (media.y1 + media.y2) / 2;
+      const mediaCenterX = (media.x1 + media.x2) / 2;
+      return {
+        candidate,
+        score: Math.abs(mediaCenterY - h / 2) +
+          Math.abs(mediaCenterX - w / 2) * 0.08,
+        gap: candidate.y - media.y2,
+      };
+    })
+    .filter((entry): entry is {
+      candidate: LiveActionNode;
+      score: number;
+      gap: number;
+    } => entry != null)
+    .sort((a, b) => a.score - b.score);
+
+  if (!scored.length) {
+    onLog?.("[feed-icons] Like identities found, but none has an adjacent visible media row");
+    return null;
+  }
+  const best = scored[0];
+  const second = scored[1];
+  // A small score gap means two mounted posts are equally plausible. Keep the
+  // fail-closed behaviour in that case instead of guessing between them.
+  const minSeparation = Math.max(36, h * 0.025);
+  if (second && second.score - best.score < minSeparation) {
+    onLog?.(
+      `[feed-icons] Like identities remain ambiguous after centered-row scoring ` +
+      `(best=${Math.round(best.score)}, second=${Math.round(second.score)})`,
+    );
+    return null;
+  }
+  onLog?.(
+    `[feed-icons] selected centered Like row at (${best.candidate.x},${best.candidate.y}) ` +
+    `(media gap=${Math.round(best.gap)}px, score=${Math.round(best.score)})`,
+  );
+  return best.candidate;
+}
+
+/**
  * Locates Instagram's feed post action-bar icons (Like, Comment, Repost,
  * Send) for whatever post is on screen right now, instead of assuming
  * they always sit at fixed screen-width percentages.
@@ -5437,14 +5535,23 @@ export async function findFeedActionIcons(
     return null;
   }
 
+  // Parse the live tree once. Re-parsing the full XML for each of the five
+  // controls was needlessly expensive on large Instagram trees and made the
+  // action-bar scan look like an ADB timeout.
+  const liveNodes = _liveActionNodes(xml);
+  const preferredLike = options?.strictViewFeed
+    ? _pickCenteredFeedLikeNode(xml, liveNodes, onLog)
+    : null;
   const liveLike = _findUniqueLiveActionNode(
     xml,
     [":id/row_feed_button_like"],
     ["Like", "Unlike"],
     onLog,
+    { preferredMatch: preferredLike },
+    liveNodes,
   );
   if (!liveLike) {
-    const inventory = _liveActionNodes(xml)
+    const inventory = liveNodes
       .filter(node =>
         node.y >= 0 &&
         node.width <= 220 &&
@@ -5467,16 +5574,34 @@ export async function findFeedActionIcons(
     [":id/row_feed_button_comment"],
     ["Comment"],
     onLog,
+    { preferredRowY: liveLike.y },
+    liveNodes,
   );
-  const liveShareFeed = _findUniqueLiveActionNode(xml, [":id/reposts_ufi_icon"], ["Repost"], onLog);
-  const liveShareDm = _findUniqueLiveActionNode(xml, [":id/row_feed_button_share"], ["Send", "Direct", "Message"], onLog);
+  const liveShareFeed = _findUniqueLiveActionNode(
+    xml,
+    [":id/reposts_ufi_icon"],
+    ["Repost"],
+    onLog,
+    { preferredRowY: liveLike.y },
+    liveNodes,
+  );
+  const liveShareDm = _findUniqueLiveActionNode(
+    xml,
+    [":id/row_feed_button_share"],
+    ["Send", "Direct", "Message"],
+    onLog,
+    { preferredRowY: liveLike.y },
+    liveNodes,
+  );
   const liveSave = _findUniqueLiveActionNode(
     xml,
     [":id/row_feed_button_save"],
     ["Add to Saved", "Remove from Saved"],
     onLog,
+    { preferredRowY: liveLike.y },
+    liveNodes,
   );
-  const liveAlreadyLiked = _liveActionNodes(xml).some(node =>
+  const liveAlreadyLiked = liveNodes.some(node =>
     (node.resourceId === "com.instagram.android:id/row_feed_button_like" ||
       node.resourceId.endsWith(":id/row_feed_button_like")) &&
     node.contentDesc.trim().toLowerCase() === "unlike",
