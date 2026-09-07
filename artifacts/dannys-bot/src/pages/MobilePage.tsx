@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
 import { useParams, useSearch } from "wouter";
-import { _hstTimers, _hstStop, _hstNextRunAt, _hstUiMounted } from "@/lib/hstRunner";
+import { _hstTimers, _hstStop, _hstNextRunAt, _hstUiMounted, registerHstToggleHandler } from "@/lib/hstRunner";
 import { persistHstToggle, type HstToggleEvent } from "@/lib/hstToggleCoordinator";
 import {
   requestCollisionSlot,
@@ -4225,20 +4225,19 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     return () => window.removeEventListener("mobile_trustscore_changed", onTrustScoreChanged);
   }, [phone?.serial, slotIdx]);
 
-  // Listen for toggle signals broadcast by the Statistics page
-  // (MobileSlotSessionToggle).  When the user presses the toggle on the Stats
-  // page it persists the change to the DB via the API, then broadcasts here so
-  // the in-memory settings state AND the run-loop refs are updated exactly as if
-  // the user had pressed the toggle directly on this slot's panel.
+  // Register a direct handler for toggle signals broadcast by the Statistics
+  // page (MobileSlotSessionToggle). DOM events and BroadcastChannel are routed
+  // through App.tsx, but the mounted runtime receives the command directly so
+  // an immediate manual ON cannot be lost during React listener/effect
+  // cleanup timing.
   useEffect(() => {
     const serial = phone?.serial;
-    if (!serial) return;
-    let bc: BroadcastChannel | null = null;
-    const handleToggle = (rawEvent: unknown) => {
-      const event = rawEvent as Partial<HstToggleEvent> ?? {};
+    if (!serial || slotIdx === undefined) return;
+    const handler = (rawEvent: HstToggleEvent) => {
+      const event = rawEvent as Partial<HstToggleEvent>;
       if (
         event.serial === serial &&
-        event.slotIdx === (slotIdx ?? 0) &&
+        event.slotIdx === slotIdx &&
         (!event.slotId || event.slotId === slotId) &&
         typeof event.enabled === "boolean" &&
         typeof event.revision === "number" &&
@@ -4248,18 +4247,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         applyEnabledFromCoordinator(event as HstToggleEvent);
       }
     };
-    const onWindowToggle = (event: Event) => handleToggle((event as CustomEvent).detail);
-    window.addEventListener("aura-slot-toggle", onWindowToggle);
-    try {
-      bc = new BroadcastChannel("aura-slot-toggle");
-       bc.onmessage = (ev: MessageEvent) => {
-         handleToggle(ev.data);
-       };
-    } catch { /* BroadcastChannel unavailable */ }
-    return () => {
-      window.removeEventListener("aura-slot-toggle", onWindowToggle);
-      try { bc?.close(); } catch {}
-    };
+    return registerHstToggleHandler(serial, slotIdx, handler);
   }, [phone?.serial, slotIdx, slotId, applyEnabledFromCoordinator]);
 
   useEffect(() => {

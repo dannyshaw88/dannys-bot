@@ -15,16 +15,17 @@ Startup recovery is a separate scheduler path and must forward the persisted sta
 
 **How to apply:** Include `slotId` in the per-slot settings response and in every background cycle request; keep numeric slot indexes only for locating the current slot record.
 
-The mounted MobilePage slot runtime is the authoritative owner when present; the
-always-mounted app listener must not start a second background loop for the same
-serial/slot broadcast.
+The mounted MobilePage slot runtime is the authoritative owner when present; route
+toggle broadcasts through its direct shared handler, and let the app listener start
+a background loop only when no mounted handler exists for that serial/slot.
 
-**Why:** A Stats-page ON broadcast was consumed by both starters, so the first
-toggle could persist `enabled=true` without reliably starting the visible slot
-runtime.
+**Why:** DOM/BroadcastChannel delivery can cross React cleanup timing. A mounted
+runtime can otherwise miss the wake command while the app listener suppresses its
+fallback to avoid duplicate cycles, leaving the toggle persisted but idle.
 
-**How to apply:** Track mounted runtime keys in shared HST state and let the
-app-level listener start only slots that have no mounted runtime.
+**How to apply:** Register one serial/slot handler with shared HST state. The
+app-level listener invokes it directly when present; otherwise it starts the
+background runner with the manual immediate/force path.
 
 Lifted automation-status snapshots must be equality-preserving before they
 update a parent-owned map; repeated identical child reports should return the

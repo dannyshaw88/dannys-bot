@@ -3,7 +3,7 @@ import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-q
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { useState, useEffect, Component, type ReactNode, type ErrorInfo } from "react";
-import { startHstLoop, stopHstLoop, _hstUiMounted } from "@/lib/hstRunner";
+import { startHstLoop, stopHstLoop, _hstToggleHandlers } from "@/lib/hstRunner";
 
 import { Dashboard } from "@/pages/Dashboard";
 import { StatsPage } from "@/pages/StatsPage";
@@ -191,22 +191,22 @@ function HstToggleListener() {
     const handleToggle = (data: any) => {
       const { serial, slotIdx, enabled, requestId, source } = data ?? {};
       if (typeof serial !== "string" || typeof slotIdx !== "number") return;
+      const handler = _hstToggleHandlers.get(`${serial}:${slotIdx}`);
+      if (handler) {
+        handler(data);
+        return;
+      }
       if (enabled) {
         // MobilePage's mounted runtime owns this slot when present. Starting
-        // the background runner as well races its immediate schedule and can
-        // make the first toggle appear ignored. The listener is only needed
-        // for Stats-page toggles when MobilePage is not mounted.
-        if (!_hstUiMounted.has(`${serial}:${slotIdx}`)) {
-          // A manual ON is authoritative even when startup recovery already
-          // left a long-delay timer behind. Replace that timer and wake the
-          // device now instead of silently treating the click as a no-op.
-          startHstLoop(serial, slotIdx, {
-            immediate: true,
-            force: true,
-            requestId: typeof requestId === "string" ? requestId : undefined,
-            source: typeof source === "string" ? source : "unknown",
-          });
-        }
+        // the background runner as well. The direct handler above owns the
+        // mounted case; this fallback is only for Stats-page toggles when
+        // MobilePage is not mounted.
+        startHstLoop(serial, slotIdx, {
+          immediate: true,
+          force: true,
+          requestId: typeof requestId === "string" ? requestId : undefined,
+          source: typeof source === "string" ? source : "unknown",
+        });
       } else {
         stopHstLoop(serial, slotIdx);
       }

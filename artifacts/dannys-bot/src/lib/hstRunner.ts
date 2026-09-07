@@ -15,7 +15,32 @@ export const _hstNextRunAt = new Map<string, number>();
 // must not start a second background owner for the same broadcast while one of
 // these runtimes is present; all owners share collisionCoordinator.ts.
 export const _hstUiMounted = new Set<string>();
+type HstToggleHandler = (event: {
+  serial: string;
+  slotIdx: number;
+  slotId?: string;
+  enabled: boolean;
+  revision: number;
+  requestId: string;
+  source: string;
+}) => void;
+// Direct same-window bridge for manual toggles. DOM events/BroadcastChannel
+// remain useful across app contexts, but a mounted runtime must not depend on
+// React listener timing to receive an immediate wake command.
+export const _hstToggleHandlers = new Map<string, HstToggleHandler>();
 const _hstStarting = new Set<string>();
+
+export function registerHstToggleHandler(
+  serial: string,
+  slotIdx: number,
+  handler: HstToggleHandler,
+): () => void {
+  const key = `${serial}:${slotIdx}`;
+  _hstToggleHandlers.set(key, handler);
+  return () => {
+    if (_hstToggleHandlers.get(key) === handler) _hstToggleHandlers.delete(key);
+  };
+}
 
 import {
   requestCollisionSlot,
