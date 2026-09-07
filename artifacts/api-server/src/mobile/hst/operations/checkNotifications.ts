@@ -2,7 +2,7 @@ export interface CheckNotificationsOperationContext {
   android: {
     tapCalibratedNavigationControl(serial: string, control: "home" | "notifications" | "settingsBack", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
-    findRandomNotificationItem(serial: string): Promise<{ x: number; y: number } | null>;
+    findRandomNotificationItem(serial: string, onLog?: (message: string) => void): Promise<{ x: number; y: number } | null>;
     isInstagramNotificationsScreen?(serial: string): Promise<boolean>;
     isInstagramBackSurfaceOpen?(serial: string): Promise<boolean>;
     pressBack(serial: string): Promise<void>;
@@ -70,20 +70,23 @@ export async function runCheckNotifications(
 
   const clickChance = rollRange(clickPctMin, clickPctMax) / 100;
   if (clickChance > 0 && Math.random() < clickChance) {
-    const item = await android.findRandomNotificationItem(serial).catch(() => null);
+    const item = await android.findRandomNotificationItem(serial, onLog).catch(() => null);
     if (item) {
       onLog?.(`Random Actions: tapping notification text at (${item.x},${item.y})`);
       await android.tap(serial, item.x, item.y);
-      onLog?.("Random Actions: ✓ tapped notification item");
       await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
       const returnedToNotifications = await android.isInstagramNotificationsScreen?.(serial).catch(() => false) ?? false;
-      if (!returnedToNotifications) {
+      if (returnedToNotifications) {
+        onLog?.("Random Actions: notification item tap did not leave Notifications — treating it as a miss");
+        logger.warn({ serial, x: item.x, y: item.y }, "[check-notifications] notification item tap left Notifications open");
+      } else {
         const detailBackAvailable = await android.isInstagramBackSurfaceOpen?.(serial).catch(() => false) ?? false;
         if (!detailBackAvailable) {
           onLog?.("Random Actions: notification detail surface was not confirmed — skipping calibrated Back cleanup");
           logger.warn({ serial }, "[check-notifications] detail surface/back control not confirmed");
           return;
         }
+        onLog?.("Random Actions: ✓ notification item opened a detail surface");
         await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
         await hstRandomDelay(serial, 2500, 10000);
       }

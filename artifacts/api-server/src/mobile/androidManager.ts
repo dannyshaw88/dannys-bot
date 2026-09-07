@@ -12111,22 +12111,76 @@ export async function findDmConversationItem(serial: string): Promise<{ x: numbe
  * its parent row handles the notification navigation while avoiding the
  * profile-picture affordance.
  */
-export async function findRandomNotificationItem(serial: string): Promise<{ x: number; y: number } | null> {
+export async function findRandomNotificationItem(
+  serial: string,
+  onLog?: (message: string) => void,
+): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
-  const { w, h } = getScreenSize(serial);
+  // Use the same live hierarchy coordinate space as the node bounds. The
+  // physical display can include a navigation bar that UIAutomator excludes;
+  // mixing wm size with XML bounds shifts the bottom cutoff and makes the
+  // selector inspect the wrong part of the page.
+  const { w, h } = _getScreenSize(xml);
   const topSkip = Math.round(h * 0.10); // skip the fixed header row ("Notifications")
   const botSkip = Math.round(h * 0.92); // skip the bottom nav bar
-  const textMinX = Math.round(w * 0.25); // leave the avatar column alone
-  const textMaxX = Math.round(w * 0.82); // leave Follow / X controls alone
-  const rowMergeGap = Math.round(h * 0.055);
-  const excludedLabels = /^(?:follow|following|requested|remove|delete|notifications?|filter|more|close|dismiss|like|comment|share)$/i;
+  const rowMergeGap = Math.round(h * 0.035);
+  const excludedLabels = /^(?:follow|following|requested|message|remove|delete|notifications?|filter|more|close|dismiss|like|comment|share)$/i;
   const excludedInformationalRows = [
     /you['’]re\s+all\s+caught\s+up/i,
     /your\s+weekly\s+recap\s+is\s+ready/i,
   ];
+  const visibleNodes: Array<{
+    x1: number; y1: number; x2: number; y2: number;
+    text: string; contentDesc: string; resourceId: string; clickable: boolean;
+  }> = [];
+  const excludedControls: string[] = [];
+  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = nodeRe.exec(xml)) !== null) {
+    const attrs = m[1];
+    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+    if (!bm) continue;
+    const x1 = Number(bm[1]); const y1 = Number(bm[2]);
+    const x2 = Number(bm[3]); const y2 = Number(bm[4]);
+    if (x2 <= x1 || y2 <= y1) continue;
+    const text = attrs.match(/\btext="([^"]*)"/i)?.[1]?.trim() ?? "";
+    const contentDesc = attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1]?.trim() ?? "";
+    const resourceId = attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+    if (y2 <= topSkip || y1 >= botSkip) continue;
+    visibleNodes.push({
+      x1, y1, x2, y2, text, contentDesc, resourceId,
+      clickable: /clickable="true"/i.test(attrs),
+    });
+  }
+
+  // Prefer live avatar/image bounds when Instagram exposes them. This keeps
+  // the body target immediately to the right of the actual avatar column
+  // instead of assuming that the body always starts at one quarter of the
+  // screen. If this build hides avatar semantics, use a conservative
+  // left-side guard only as a fallback.
+  const avatarRight = visibleNodes
+    .filter(node =>
+      node.x2 - node.x1 < w * 0.40 &&
+      /(?:profile\s*picture|avatar|profile[_-]?image|notification[_-]?.*(?:image|photo))/i
+        .test(`${node.text} ${node.contentDesc} ${node.resourceId}`),
+    )
+    .reduce((right, node) => Math.max(right, node.x2), 0);
+  const bodyMinX = avatarRight > 0 ? avatarRight : Math.round(w * 0.12);
+
+  // Follow/Message/Remove controls are the right-side action column. Their
+  // live left edge is a safer boundary than a fixed screen percentage.
+  const actionColumnLeft = visibleNodes
+    .filter(node =>
+      [node.text, node.contentDesc].some(label =>
+        /^(?:follow|following|requested|message|remove|delete)$/i.test(label),
+      ) ||
+      /(?:follow|message|remove|delete)(?:[_-]?(?:button|action|control))?/i.test(node.resourceId),
+    )
+    .reduce((left, node) => Math.min(left, node.x1), w);
+
   const candidates: Array<{
     x: number;
     y: number;
@@ -12135,44 +12189,53 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
     y1: number;
     y2: number;
     text: string;
+    contentDesc: string;
+    resourceId: string;
+    clickable: boolean;
     score: number;
   }> = [];
-  const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
-  let m: RegExpExecArray | null;
-  while ((m = nodeRe.exec(xml)) !== null) {
-    const attrs = m[1];
-    const bm = attrs.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-    if (!bm) continue;
-    const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
+  for (const node of visibleNodes) {
+    const { x1, y1, x2, y2, text, contentDesc, resourceId, clickable } = node;
+    const label = text || contentDesc;
     const cx = Math.round((x1 + x2) / 2);
     const cy = Math.round((y1 + y2) / 2);
-    if (cy < topSkip || cy > botSkip) continue;
-    if (x1 < textMinX || cx > textMaxX || x2 <= x1 || y2 <= y1) continue;
+    if (x1 < bodyMinX || cx >= actionColumnLeft) continue;
+    if (!label || excludedLabels.test(label)) continue;
+    if (/^(?:@?[\w.]{2,40})$/.test(label) && !/\s/.test(label)) continue;
+    if (/profile\s*picture|avatar|story\s+of/i.test(label)) continue;
 
-    const text = (
-      attrs.match(/\btext="([^"]*)"/i)?.[1] ??
-      attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1] ??
-      ""
-    ).trim();
-    if (!text || excludedLabels.test(text)) continue;
-    if (/^(?:@?[\w.]{2,40})$/.test(text) && !/\s/.test(text)) continue;
-    if (/profile\s*picture|avatar|story\s+of/i.test(text)) continue;
-
-    const resourceId = attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
-    if (/(?:follow|remove|dismiss|close|overflow|more|like|comment|share)/i.test(resourceId)) continue;
+    if (/(?:follow|remove|dismiss|close|overflow|more|like|comment|share)/i.test(resourceId)) {
+      excludedControls.push(
+        `${resourceId || "no-resource-id"} bounds=[${x1},${y1}][${x2},${y2}] ` +
+        `text=${JSON.stringify(text)} contentDesc=${JSON.stringify(contentDesc)} clickable=${clickable}`,
+      );
+      continue;
+    }
 
     // Prefer a notification sentence/action over a standalone username or
     // timestamp. Longer text is normally the body node on this screen.
     let score = Math.min(text.length, 140);
-    if (/\b(?:liked|likes|commented|mentioned|started following|requested|shared|posted|replied|tagged|your|story|reel|photo|video)\b/i.test(text)) {
+    if (/\b(?:liked|likes|commented|mentioned|started following|requested|shared|posted|replied|tagged|your|story|reel|photo|video)\b/i.test(label)) {
       score += 80;
     }
-    if (/\b(?:\d+\s*(?:m|h|d|w)|just now|yesterday)\b/i.test(text)) {
+    if (/\b(?:\d+\s*(?:m|h|d|w)|just now|yesterday)\b/i.test(label)) {
       score -= 45;
     }
-    candidates.push({ x: cx, y: cy, x1, x2, y1, y2, text, score });
+    candidates.push({ x: cx, y: cy, x1, x2, y1, y2, text: label, contentDesc, resourceId, clickable, score });
   }
-  if (!candidates.length) return null;
+  onLog?.(
+    `[notifications] row scan bounds=${w}x${h} bodyMinX=${bodyMinX} ` +
+    `actionColumnLeft=${actionColumnLeft === w ? "none" : actionColumnLeft} ` +
+    `visibleNodes=${visibleNodes.length} candidates=${candidates.length} ` +
+    `excludedControls=${excludedControls.length}`,
+  );
+  if (excludedControls.length) {
+    onLog?.(`[notifications] excluded controls: ${excludedControls.slice(0, 12).join(" | ")}`);
+  }
+  if (!candidates.length) {
+    onLog?.("[notifications] no notification body candidates survived the live bounds/identity filters");
+    return null;
+  }
 
   // UIAutomator often exposes the same notification as several text nodes.
   // Collapse nearby nodes into rows, then choose the strongest body-text node
@@ -12197,6 +12260,19 @@ export async function findRandomNotificationItem(serial: string): Promise<{ x: n
   if (!rowCandidates.length) return null;
 
   const selected = rowCandidates[Math.floor(Math.random() * rowCandidates.length)];
+  onLog?.(
+    `[notifications] candidates: ${rowCandidates.slice(0, 12).map(candidate =>
+      `bounds=[${candidate.x1},${candidate.y1}][${candidate.x2},${candidate.y2}] ` +
+      `text=${JSON.stringify(candidate.text)} contentDesc=${JSON.stringify(candidate.contentDesc)} ` +
+      `resourceId=${JSON.stringify(candidate.resourceId)} clickable=${candidate.clickable} ` +
+      `tap=(${candidate.x},${candidate.y})`,
+    ).join(" | ")}`,
+  );
+  onLog?.(
+    `[notifications] selected text=${JSON.stringify(selected.text)} ` +
+    `bounds=[${selected.x1},${selected.y1}][${selected.x2},${selected.y2}] ` +
+    `tap=(${selected.x},${selected.y})`,
+  );
   return { x: selected.x, y: selected.y };
 }
 

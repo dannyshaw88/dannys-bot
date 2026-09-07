@@ -11447,9 +11447,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
               // Track the active tool from ▶ header lines so ALL sub-messages
               // that follow inherit the tool's colour (e.g. every explore
               // sub-action is green, not just lines that contain "Explore").
-              if      (/▶ View Explore/.test(msg))    currentTool = 'explore';
-              else if (/▶ View Feed/.test(msg))       currentTool = 'feed';
-              else if (/▶ View Reels/.test(msg))      currentTool = 'reels';
+               if      (/▶ View Explore/.test(msg))    currentTool = 'explore';
+               else if (/▶ View Feed/.test(msg))       currentTool = 'feed';
+               else if (/(?:▶\s*(?:Starting\s+)?View Reels\b|\bReel Viewer\b)/i.test(msg)) currentTool = 'reels';
               else if (/▶ (?:Direct Messaging|Check Inbox)/.test(msg)) currentTool = 'directmessaging';
               else if (/▶.*[Ss]tories/.test(msg))     currentTool = 'stories';
               else if (/▶ Make a Post/.test(msg))     currentTool = 'makepost';
@@ -11472,8 +11472,13 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                    /waiting for (?:the )?story feed/i.test(msg);
                  const isDirectMessagingMessage = currentTool === 'directmessaging' ||
                    /▶\s*(?:Direct Messaging|Check Inbox)\b|\b(?:Direct Messaging|Check Inbox)\b/i.test(msg);
-                 const isReelsMessage = !isFeedMessage &&
-                   (/\b(?:Reel|Reels)\b/i.test(msg) || /▶\s*View Reels\b/i.test(msg));
+                  // Reel Viewer owns the whole active block. Some of its
+                  // diagnostics mention Feed/Stories or contain generic
+                  // "screen" text, so Reels must be checked before those
+                  // message-specific classifications.
+                  const isReelsMessage = currentTool === 'reels' ||
+                    /\b(?:Reel|Reels)\b/i.test(msg) ||
+                    /▶\s*(?:Starting\s+)?View Reels\b|\bReel Viewer\b/i.test(msg);
                 const activeToolClass =
                   currentTool === 'explore' ? 'text-green-400' :
                   currentTool === 'feed' ? 'text-orange-400' :
@@ -11484,14 +11489,14 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                   currentTool === 'follow' ? 'text-blue-400' :
                   currentTool === 'randomactions' ? 'text-purple-400' :
                   null;
-                 if (isStoryMessage) {
+                  if (isReelsMessage) {
+                    msgClass = 'text-red-500';
+                  } else if (isStoryMessage) {
                    msgClass = 'text-blue-400';
                  } else if (isFeedMessage) {
                    msgClass = 'text-orange-400';
                  } else if (isDirectMessagingMessage) {
                    msgClass = 'text-slate-300';
-                 } else if (isReelsMessage) {
-                   msgClass = 'text-red-500';
                  } else if (activeToolClass) {
                   msgClass = activeToolClass;
                 // Follow owns one color, including Spread Follow, inject
@@ -11504,7 +11509,6 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 else if (/\bView Explore\b|▶ View Explore|[Ee]xplore/.test(msg))
                                                                      msgClass = 'text-green-400';
                  else if (isDirectMessagingMessage)                            msgClass = 'text-slate-300';
-                 else if (isReelsMessage)                                      msgClass = 'text-red-500';
                 else if (/▶.*[Ss]tories|\b[Ss]tories\b/.test(msg))  msgClass = 'text-cyan-400';
                 else if (/\bMake a Post\b|▶ Make a Post/.test(msg))  msgClass = 'text-purple-400';
                 else if (/\bRandom Actions\b|▶ Random Actions|^jitter-/.test(msg)) msgClass = 'text-purple-400';

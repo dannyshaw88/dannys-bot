@@ -14,3 +14,13 @@ For the optional notification-item tap, target a text-bearing node in the notifi
 **Why:** The avatar opens the notifying user's profile or Story. A Story opened from a notification can leave the Random Actions flow on the wrong surface and break its cleanup sequence.
 
 **How to apply:** Keep the click inside the notification text bounds, log the exact text-target coordinate, and verify the notification surface before the existing Back cleanup.
+
+Notification-item success must only be logged after the post-tap dump proves that
+Notifications was replaced by a detail surface with a usable Back/Close control.
+
+**Why:** A text node can accept an ADB tap without opening its row, leaving the
+Notifications page visible; logging success first hides that miss and can make
+the following cleanup look like a successful navigation.
+
+**How to apply:** Treat a still-visible Notifications header as a miss, skip
+detail cleanup for that branch, and keep the normal verified Notifications exit.
