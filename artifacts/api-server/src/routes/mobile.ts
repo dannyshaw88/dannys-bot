@@ -18,6 +18,7 @@ import { getDeviceLabel } from "./usb-phones";
 import { getUsbDiagnostics } from "../mobile/usbDiagnostics";
 import {
   mobileAutomationProcessLockOwned,
+  waitForMobileAutomationProcessLock,
   startMobileAutomationProcessLock,
 } from "../mobile/mobileAutomationProcessLock";
 import { fixAiSlop } from "../instagram/fixAiSlop";
@@ -5949,6 +5950,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.warn({ err: error, serial }, "Could not verify device state before automation cycle");
       res.status(503).json({ error: "Could not verify device connection before starting automation" });
       return;
+    }
+    if (!mobileAutomationProcessLockOwned()) {
+      logger.info({ serial }, "[HST] waiting for this API process to acquire the mobile automation lock");
+      const acquired = await waitForMobileAutomationProcessLock();
+      if (acquired) {
+        logger.info({ serial }, "[HST] mobile automation lock acquired; continuing requested cycle");
+      }
     }
     if (!mobileAutomationProcessLockOwned()) {
       res.status(409).json({

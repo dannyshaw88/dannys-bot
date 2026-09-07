@@ -124,3 +124,23 @@ export function startMobileAutomationProcessLock(): void {
 export function mobileAutomationProcessLockOwned(): boolean {
   return owned;
 }
+
+/**
+ * Wait for this API process to become the mobile-automation owner.
+ *
+ * Manual HST toggles can arrive during the short handoff between an old
+ * Electron/API process exiting and the replacement process acquiring the
+ * shared lock. Returning a 409 immediately makes the UI look enabled while
+ * silently losing the user's requested first cycle.
+ */
+export async function waitForMobileAutomationProcessLock(
+  timeoutMs = 45_000,
+): Promise<boolean> {
+  if (owned) return true;
+  beginAcquireLoop();
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (!owned && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  return owned;
+}
