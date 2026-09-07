@@ -14,3 +14,9 @@ The Explore boundary must recognise every emitted Explore header form, including
 **Why:** The renderer only recognised `View Explore` without the `Starting` prefix, so the prior gold account-switch context leaked into the Explore block shown in device screenshots.
 
 **How to apply:** Let explicit Explore tool text reset the context before evaluating account-switch phrases, and keep the same precedence in the live React renderer and server-generated composites.
+
+The server's rolling screenshot buffer must store the resolved context alongside each line. Never reclassify the visible 40-line window from message words after its tool header has rolled out; a Follow line mentioning a Reel must remain Follow-blue.
+
+**Why:** The screenshot buffer can begin in the middle of a tool block, where content-only inference changed nested Reel text to red even though the active tool was Follow.
+
+**How to apply:** Resolve context at log-ingest time, persist it by device, reset it at cycle boundaries, and leave unknown/system lines white until an explicit tool header establishes ownership.

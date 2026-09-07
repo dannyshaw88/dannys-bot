@@ -852,7 +852,14 @@ const SCREENSHOTS_DIR: string = process.env.EQUINOX_DATA_DIR
 // Rolling per-device log buffer — last 40 lines, updated by pushDebugLogLine
 // which is called from tLog before captureDebugScreenshot so the current line
 // is already in the buffer when the composite is built.
-const debugLogBuffer = new Map<string, string[]>();
+const debugLogBuffer = new Map<string, Array<{
+  line: string;
+  context: DebugScreenshotContext | null;
+}>>();
+// Keep the active tool context outside the rolling 40-line buffer. A screenshot
+// often begins after the tool header, so deriving colour from only the visible
+// text can incorrectly turn a Follow line containing "Reel" red.
+const debugLogContextBySerial = new Map<string, DebugScreenshotContext | null>();
 const DEBUG_LOG_BUFFER_SIZE = 40;
 // ADB screencap calls must be serialized per device. Without this queue, rapid
 // log lines start overlapping child processes and some frames never get saved.
@@ -863,9 +870,10 @@ const debugScreenshotTimestamps = new Map<string, Set<string>>();
 const debugScreenshotGenerations = new Map<string, number>();
 
 function pushDebugLogLine(serial: string, line: string): void {
+  const context = advanceDebugScreenshotContext(serial, line);
   let buf = debugLogBuffer.get(serial);
   if (!buf) { buf = []; debugLogBuffer.set(serial, buf); }
-  buf.push(line);
+  buf.push({ line, context });
   if (buf.length > DEBUG_LOG_BUFFER_SIZE) buf.shift();
 }
 
@@ -932,19 +940,24 @@ function detectDebugScreenshotToolHeader(line: string): DebugScreenshotTool | nu
   return null;
 }
 
-function inferDebugScreenshotTool(line: string): DebugScreenshotTool | null {
-  if (/\bView Explore\b|\bExplore (?:loop|consumption|grid|page)\b/i.test(line)) return "explore";
-  if (/\bView Feed\b/i.test(line)) return "feed";
-  if (/\b(?:Reel|Reels)\b|\bReel Viewer\b/i.test(line)) return "reels";
-  if (/\b(?:Direct Messaging|Check Inbox|DM inbox)\b/i.test(line)) return "directMessaging";
-  if (/\b(?:Story|Stories|story feed|story tray)\b/i.test(line)) return "stories";
-  if (/\bMake a Post\b/i.test(line)) return "makePost";
-  if (/\b(?:Follow Users|Spread Follow|Inject Browsing|following)\b/i.test(line)) return "follow";
-  if (/\bRandom Actions\b|^jitter-/i.test(line)) return "randomActions";
-  if (/\bPost Story\b/i.test(line)) return "postStory";
-  if (/\bUpdate Profile(?: Picture)?\b/i.test(line)) return "updateProfile";
-  if (/\bUpdate Bio\b/i.test(line)) return "updateBio";
-  return null;
+function advanceDebugScreenshotContext(
+  serial: string,
+  line: string,
+): DebugScreenshotContext | null {
+  let current = debugLogContextBySerial.get(serial) ?? null;
+  const headerTool = detectDebugScreenshotToolHeader(line);
+  if (headerTool) {
+    current = headerTool;
+  } else if (DEBUG_ACCOUNT_SWITCH_RE.test(line)) {
+    current = "accountSwitch";
+  }
+
+  const lineContext = current;
+  if (/Cycle\s+(complete|failed|aborted)/i.test(line)) {
+    current = null;
+  }
+  debugLogContextBySerial.set(serial, current);
+  return lineContext;
 }
 
 async function captureDebugScreenshot(serial: string, label: string, generation: number): Promise<void> {
@@ -1024,22 +1037,13 @@ async function captureDebugScreenshot(serial: string, label: string, generation:
 
       // ── 3. Render the debug log panel as SVG ──────────────────────────────────
       const bufLines = debugLogBuffer.get(serial) ?? [];
-      let currentTool: DebugScreenshotContext | null = null;
-      const coloredLines = bufLines.map(line => {
-        const headerTool = detectDebugScreenshotToolHeader(line);
-        if (headerTool) currentTool = headerTool;
-        const accountSwitch = DEBUG_ACCOUNT_SWITCH_RE.test(line);
-        // Tool headers are hard context boundaries. Do not let a phrase such
-        // as "Pre-switch View Explore skipped" overwrite the Explore colour.
-        if (!headerTool && accountSwitch) currentTool = "accountSwitch";
+      const coloredLines = bufLines.map(({ line, context }) => {
         const cycleBoundary = /Cycle\s+(complete|failed|aborted)/i.test(line);
-        const inferredTool = currentTool ?? inferDebugScreenshotTool(line);
         const color = cycleBoundary
             ? "#ffffff"
-            : inferredTool
-              ? DEBUG_SCREENSHOT_TOOL_COLORS[inferredTool]
+            : context
+              ? DEBUG_SCREENSHOT_TOOL_COLORS[context]
               : "#ffffff";
-        if (cycleBoundary) currentTool = null;
         return { line, color };
       });
       const wrappedLines = coloredLines.flatMap(({ line, color }) => {
@@ -6355,6 +6359,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // before it can write into the freshly cleared directory.
       debugScreenshotQueues.delete(serial);
       debugLogBuffer.delete(serial);
+      debugLogContextBySerial.delete(serial);
       debugScreenshotTimestamps.delete(serial);
       await fsPromises.rm(
         path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial)),

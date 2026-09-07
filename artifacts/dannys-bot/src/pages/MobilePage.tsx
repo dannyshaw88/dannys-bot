@@ -117,21 +117,6 @@ function detectDebugToolHeader(message: string): DebugTool | null {
   return null;
 }
 
-function inferDebugToolFromMessage(message: string): DebugTool | null {
-  if (/\bView Explore\b|\bExplore (?:loop|consumption|grid|page)\b/i.test(message)) return "explore";
-  if (/\bView Feed\b/i.test(message)) return "feed";
-  if (/\b(?:Reel|Reels)\b|\bReel Viewer\b/i.test(message)) return "reels";
-  if (/\b(?:Direct Messaging|Check Inbox|DM inbox)\b/i.test(message)) return "directMessaging";
-  if (/\b(?:Story|Stories|story feed|story tray)\b/i.test(message)) return "stories";
-  if (/\bMake a Post\b/i.test(message)) return "makePost";
-  if (/\b(?:Follow Users|Spread Follow|Inject Browsing|following)\b/i.test(message)) return "follow";
-  if (/\bRandom Actions\b|^jitter-/i.test(message)) return "randomActions";
-  if (/\bPost Story\b/i.test(message)) return "postStory";
-  if (/\bUpdate Profile(?: Picture)?\b/i.test(message)) return "updateProfile";
-  if (/\bUpdate Bio\b/i.test(message)) return "updateBio";
-  return null;
-}
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 // UsbPhone is imported from mobileShared
@@ -11196,6 +11181,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
   const [exportingUsbDiagnostics, setExportingUsbDiagnostics] = React.useState(false);
   const [expandedLogGroups, setExpandedLogGroups] = React.useState<Set<string>>(() => new Set());
+  const debugLogContextRef = useRef<DebugLogContext | null>(null);
+
+  useEffect(() => {
+    debugLogContextRef.current = null;
+  }, [serial]);
 
   // Only auto-scroll when the user is currently at (or near) the bottom.
   // Use the scroll container directly instead of scrollIntoView(): the
@@ -11433,7 +11423,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
         {lines.length === 0
            ? <p className="text-white">No activity yet — taps, swipes, keys, and automation cycles will show up here.</p>
           : (() => {
-             let currentTool: DebugLogContext | null = null;
+              // Keep the last known context across client-side Clear actions.
+              // Without this, a cleared panel falls back to matching words in
+              // nested messages and can recolour a Follow block red because it
+              // mentions a Reel.
+              let currentTool: DebugLogContext | null = debugLogContextRef.current;
              const timestampOf = (line: string) => line.match(/^\[([^\]]+)\]/)?.[1] ?? "";
              // Accessibility/XML dumps are often logged one node per line,
              // with a slightly different timestamp on each row. Treat a
@@ -11547,12 +11541,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                // previous gold account-switch block to Explore green.
                if (detectedHeader) currentTool = detectedHeader;
                else if (isAccountSwitchMessage) currentTool = "accountSwitch";
-              const inferredTool = currentTool ?? inferDebugToolFromMessage(msg);
               const isCycleBoundary = /Cycle\s+(complete|failed|aborted)/i.test(msg);
               const messageColor = isCycleBoundary
                   ? "#ffffff"
-                  : inferredTool
-                    ? DEBUG_TOOL_COLORS[inferredTool]
+                   : currentTool
+                     ? DEBUG_TOOL_COLORS[currentTool]
                     : "#ffffff";
               if (isCycleBoundary) currentTool = null;
 
@@ -11575,7 +11568,7 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                 </div>
               );
              };
-              return groups.map((group, groupIndex) => {
+              const renderedGroups = groups.map((group, groupIndex) => {
                 // Keep ordinary same-timestamp groups compact, but show only
                 // the summary/header for Reels bursts. Reels often immediately
                 // emit a very large accessibility/XML dump; showing three
@@ -11650,7 +11643,9 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
                     ))}
                   </React.Fragment>
                 );
-             });
+              });
+              debugLogContextRef.current = currentTool;
+              return renderedGroups;
           })()
         }
         <div ref={bottomRef} />
