@@ -1206,18 +1206,39 @@ export async function runCheckFeedLoop(serial: string, params: {
         const consumptionDwellMs = Math.round(
           dwellMin + Math.random() * (dwellMax - dwellMin) + actionBonus,
         );
+        const globalDwellOverride = loadInstanceConfigs()[serial]?.devicePrefs?.motherCodeOverrides?.globalDwell;
+        const usesGlobalDwellOverride = Boolean(globalDwellOverride);
+        const globalDwellMinMs = usesGlobalDwellOverride
+          ? Math.min(globalDwellOverride.minMs, globalDwellOverride.maxMs)
+          : null;
+        const globalDwellMaxMs = usesGlobalDwellOverride
+          ? Math.max(globalDwellOverride.minMs, globalDwellOverride.maxMs)
+          : null;
         const dwellStartedAt = Date.now();
         onLog?.(
-          `View Feed ${i + 1}/${count}: consumption dwell ${consumptionDwellMs}ms ` +
-          `(mode=${sv.mode}, action=${actionTaken ? "yes" : "no"})`,
+          `View Feed ${i + 1}/${count}: consumption dwell ` +
+          `${usesGlobalDwellOverride ? `global override ${globalDwellMinMs}-${globalDwellMaxMs}ms (base ${consumptionDwellMs}ms)` : `${consumptionDwellMs}ms`} ` +
+          `(mode=${sv.mode}, action=${actionTaken ? "yes" : "no"}, ` +
+          `global-override=${usesGlobalDwellOverride ? `${globalDwellMinMs}-${globalDwellMaxMs}ms` : "none"})`,
         );
         logger.info({
           serial,
           mode: sv.mode,
           dwellMs: consumptionDwellMs,
           actionTaken,
+          globalDwellOverride: usesGlobalDwellOverride
+            ? {
+                minMs: globalDwellMinMs,
+                maxMs: globalDwellMaxMs,
+              }
+            : null,
         }, "[check-feed] consumption dwell");
-        await sleepOrAbort(serial, consumptionDwellMs, "globalDwell");
+        await sleepOrAbort(
+          serial,
+          consumptionDwellMs,
+          "globalDwell",
+          usesGlobalDwellOverride ? "computed" : "static",
+        );
         const feedTimingBeforeConfiguredDelay = Date.now();
         const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
         await sleepOrAbort(serial, Math.round(delaySec * 1000));
