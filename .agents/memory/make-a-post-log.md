@@ -9,7 +9,7 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 ### 2026-09-07 — Mobile Make a Post now has a calibrated filter-selection sequence
 - Added three independent fixed-control calibration points to the mobile Make a Post flow: Filters, Most-Right Filter, and Finish Filter Selection.
-- Runtime order is now Crop to Fit → Filters → a random 1–15 exact tap count on the calibrated Most-Right Filter point → Finish Filter Selection → the existing first Next.
+- Runtime order is now Crop to Fit → the calibrated first Next → Filters → a random 1–15 exact tap count on the calibrated Most-Right Filter point → Finish Filter Selection.
 - The new points use the same device-size validation and exact/manual dispatch as the existing Make a Post controls. Missing or stale points abort safely rather than falling back to guessed coordinates.
 - Status: API and frontend builds passed; physical-device confirmation is still required.
 

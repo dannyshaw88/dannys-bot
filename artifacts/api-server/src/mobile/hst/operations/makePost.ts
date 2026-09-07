@@ -230,71 +230,6 @@ await sleepOrAbort(serial, 500);
     return point;
   };
 
-  // The filter controls are deliberately separate calibrations. Their
-  // positions are device/build-specific and must not use accessibility or
-  // positional fallbacks.
-  const filtersButton = await resolveCalibratedControlWithRetries(
-    "makePostFilters",
-    "Filters button",
-  );
-  if (!filtersButton) {
-    await android.pressBack(serial);
-    await android.removeDeviceFile(serial, devicePath).catch(() => {});
-    return { posted: false };
-  }
-  onLog?.(`Make a Post: tapping calibrated Filters button at (${filtersButton.x}, ${filtersButton.y})…`);
-  await tapMakePostControl("calibrated Filters button", filtersButton, "calibration");
-  await sleepOrAbort(serial, 700);
-
-  const mostRightFilter = await resolveCalibratedControlWithRetries(
-    "makePostMostRightFilter",
-    "Most-Right Filter",
-  );
-  if (!mostRightFilter) {
-    await android.pressBack(serial);
-    await android.removeDeviceFile(serial, devicePath).catch(() => {});
-    return { posted: false };
-  }
-
-  // Keep the requested filter variation bounded and deterministic at the
-  // action level: choose 1–15 exact taps on the calibrated right-most filter.
-  const filterTapCount = 1 + Math.floor(Math.random() * 15);
-  onLog?.(
-    `Make a Post: selecting Most-Right Filter with ${filterTapCount} calibrated tap${filterTapCount === 1 ? "" : "s"} ` +
-    `at (${mostRightFilter.x}, ${mostRightFilter.y})…`,
-  );
-  for (let filterTap = 0; filterTap < filterTapCount; filterTap++) {
-    await tapMakePostControl(
-      `calibrated Most-Right Filter (${filterTap + 1}/${filterTapCount})`,
-      mostRightFilter,
-      "calibration",
-    );
-    if (filterTap + 1 < filterTapCount) {
-      await sleepOrAbort(serial, 90 + Math.floor(Math.random() * 111));
-    }
-  }
-  await sleepOrAbort(serial, 300);
-
-  const finishFilterSelection = await resolveCalibratedControlWithRetries(
-    "makePostFinishFilterSelection",
-    "Finish Filter Selection",
-  );
-  if (!finishFilterSelection) {
-    await android.pressBack(serial);
-    await android.removeDeviceFile(serial, devicePath).catch(() => {});
-    return { posted: false };
-  }
-  onLog?.(
-    `Make a Post: tapping calibrated Finish Filter Selection at ` +
-    `(${finishFilterSelection.x}, ${finishFilterSelection.y})…`,
-  );
-  await tapMakePostControl(
-    "calibrated Finish Filter Selection",
-    finishFilterSelection,
-    "calibration",
-  );
-  await sleepOrAbort(serial, 700);
-
 await sleepOrAbort(serial, 700);
 let nextBtn1: { x: number; y: number } | null = null;
 for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
@@ -310,6 +245,72 @@ if (!nextBtn1) {
 
 onLog?.(`Make a Post: found calibrated first "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
 await tapMakePostControl("calibrated first Next", nextBtn1, "calibration");
+
+// The filter controls are deliberately separate calibrations. Their
+// positions are device/build-specific and must not use accessibility or
+// positional fallbacks. Instagram opens the filter controls only after the
+// picker/header Next has been tapped.
+const filtersButton = await resolveCalibratedControlWithRetries(
+  "makePostFilters",
+  "Filters button",
+);
+if (!filtersButton) {
+  await android.pressBack(serial);
+  await android.removeDeviceFile(serial, devicePath).catch(() => {});
+  return { posted: false };
+}
+onLog?.(`Make a Post: tapping calibrated Filters button at (${filtersButton.x}, ${filtersButton.y})…`);
+await tapMakePostControl("calibrated Filters button", filtersButton, "calibration");
+await sleepOrAbort(serial, 700);
+
+const mostRightFilter = await resolveCalibratedControlWithRetries(
+  "makePostMostRightFilter",
+  "Most-Right Filter",
+);
+if (!mostRightFilter) {
+  await android.pressBack(serial);
+  await android.removeDeviceFile(serial, devicePath).catch(() => {});
+  return { posted: false };
+}
+
+// Keep the requested filter variation bounded and deterministic at the
+// action level: choose 1–15 exact taps on the calibrated right-most filter.
+const filterTapCount = 1 + Math.floor(Math.random() * 15);
+onLog?.(
+  `Make a Post: selecting Most-Right Filter with ${filterTapCount} calibrated tap${filterTapCount === 1 ? "" : "s"} ` +
+  `at (${mostRightFilter.x}, ${mostRightFilter.y})…`,
+);
+for (let filterTap = 0; filterTap < filterTapCount; filterTap++) {
+  await tapMakePostControl(
+    `calibrated Most-Right Filter (${filterTap + 1}/${filterTapCount})`,
+    mostRightFilter,
+    "calibration",
+  );
+  if (filterTap + 1 < filterTapCount) {
+    await sleepOrAbort(serial, 90 + Math.floor(Math.random() * 111));
+  }
+}
+await sleepOrAbort(serial, 300);
+
+const finishFilterSelection = await resolveCalibratedControlWithRetries(
+  "makePostFinishFilterSelection",
+  "Finish Filter Selection",
+);
+if (!finishFilterSelection) {
+  await android.pressBack(serial);
+  await android.removeDeviceFile(serial, devicePath).catch(() => {});
+  return { posted: false };
+}
+onLog?.(
+  `Make a Post: tapping calibrated Finish Filter Selection at ` +
+  `(${finishFilterSelection.x}, ${finishFilterSelection.y})…`,
+);
+await tapMakePostControl(
+  "calibrated Finish Filter Selection",
+  finishFilterSelection,
+  "calibration",
+);
+await sleepOrAbort(serial, 700);
 
 // Instagram keeps the picker tree alive while the image-editor transition
 // runs. A single 1.5 s expand-toggle check races that transition: it can
