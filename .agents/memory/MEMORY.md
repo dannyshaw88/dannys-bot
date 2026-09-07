@@ -108,6 +108,7 @@
 - [Males Only allowlist filter](males-only-allowlist-filter.md) — explicit comma-separated names match HikerAPI username, full name, or bio; never infer gender
 - [Mobile offline HST gate](mobile-offline-hst-gate.md) — pause all slot cycles on non-ready ADB state while preserving the saved toggle for reconnect resume
 - [Follow exact-target gate](follow-exact-target-gate.md) — never select a search result by row order; require an exact username node or abort and clear before the next target
+- [Private profile Inject Browsing gate](private-profile-inject-browsing.md) — detect the live private-profile notice before rolling browsing; still allow Follow when Skip Private is off
 - [Mobile account restriction screen](mobile-account-restriction-screen.md) — pause on Instagram’s “What happened” restriction overlay, tap live top-right close, verify dismissal, then resume
 - [UIAutomator attribute order](ui-automator-attribute-order.md) — parse complete nodes; never assume text/content-desc appears before bounds
 - [Follow search template scan](follow-search-template-scan.md) — large multi-template search must be single-flight and yield during scans to protect native screenshot work

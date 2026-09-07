@@ -782,6 +782,22 @@ export async function runFollowUsersStep(
     return hasProfileHeader && hasFollowControl;
   };
 
+  // Instagram's private-profile notice is the authoritative live signal for
+  // Inject Browsing. HikerAPI metadata can be stale, and the private-profile
+  // resource id is not present on every Instagram build.
+  const isPrivateProfileNotice = (xml: string): boolean => {
+    const normalized = (xml || "")
+      .replace(/&amp;/g, "&")
+      .replace(/\s+/g, " ");
+    return (
+      /(?:text|content-desc)="[^"]*this\s+account\s+is\s+private[^"]*"/i.test(normalized) ||
+      /(?:text|content-desc)="[^"]*follow\s+this\s+profile\s+to\s+see\s+their\s+photos\s+and\s+videos[^"]*"/i.test(normalized) ||
+      normalized.includes("row_profile_header_empty_profile_notice_title") ||
+      normalized.includes("row_profile_header_empty_profile_notice_subtitle") ||
+      /private_profile/i.test(normalized)
+    );
+  };
+
   // The search bar is also visible on some profile surfaces (including the
   // account's own profile), so "EditText/search" alone cannot prove that the
   // first Back reached Search Results.  These profile-only markers are stable
@@ -1296,6 +1312,10 @@ export async function runFollowUsersStep(
         await sleepOrAbort(serial, 1500);
         profileXml = await android.dumpUi(serial).catch(() => "");
       }
+      // Calculate this before the Inject Browsing roll. Private users may
+      // still be followed, but their profile must not be treated as a public
+      // grid for injected browsing.
+      let privateProfileDetected = isPrivateProfileNotice(profileXml);
 
       // ── Profile-quality filter gate ────────────────────────────────────
       // ONE shared XML dump covers ALL active profile-quality filters:
@@ -1308,6 +1328,7 @@ export async function runFollowUsersStep(
           if (!profileXml || !profileXml.includes("</hierarchy>")) {
             await sleepOrAbort(serial, 1000);
             profileXml = await android.dumpUi(serial).catch(() => "");
+            privateProfileDetected = isPrivateProfileNotice(profileXml);
           }
 
           // ── Verified badge ──────────────────────────────────────────────
@@ -1327,24 +1348,7 @@ export async function runFollowUsersStep(
 
           // ── Private account ─────────────────────────────────────────────
           if (filters.skipPrivate) {
-            // Instagram's private-profile UI is exposed as a notice block,
-            // not consistently as a `private_profile` resource.  Current
-            // builds expose:
-            //   row_profile_header_empty_profile_notice_title
-            //   text="This account is private"
-            // and a subtitle telling the user to follow to see photos.
-            // Match the live accessibility dump case-insensitively because
-            // Android/Instagram builds vary the capitalization.
-            const normalizedPrivateXml = profileXml
-              .replace(/&amp;/g, "&")
-              .replace(/\s+/g, " ");
-            const isPrivate =
-              /(?:text|content-desc)="[^"]*this\s+account\s+is\s+private[^"]*"/i.test(normalizedPrivateXml) ||
-              /(?:text|content-desc)="[^"]*follow\s+this\s+profile\s+to\s+see\s+their\s+photos\s+and\s+videos[^"]*"/i.test(normalizedPrivateXml) ||
-              normalizedPrivateXml.includes("row_profile_header_empty_profile_notice_title") ||
-              normalizedPrivateXml.includes("row_profile_header_empty_profile_notice_subtitle") ||
-              /private_profile/i.test(normalizedPrivateXml);
-            if (isPrivate) {
+            if (privateProfileDetected) {
               onLog?.(`Follow: @${username} is private — skipping (Private Users filter)`);
               if (params.writeSkippedUsers) storage.addSkippedUser(username, "private-account").catch(() => {});
               await returnToClearedFollowSearch();
@@ -1493,13 +1497,17 @@ export async function runFollowUsersStep(
       // whether it happens before or after the Follow tap. A before-follow
       // miss no longer skips browsing — it just moves it to run after the
       // follow instead.
-      const { willBrowse, browseBeforeFollow } = browsing
-        ? rollInjectBrowsingDecision(browsing)
+      const browsingForTarget = privateProfileDetected ? undefined : browsing;
+      if (privateProfileDetected && browsing) {
+        onLog?.(`Follow: @${username} is private — skipping Inject Browsing`);
+      }
+      const { willBrowse, browseBeforeFollow } = browsingForTarget
+        ? rollInjectBrowsingDecision(browsingForTarget)
         : { willBrowse: false, browseBeforeFollow: false };
 
-      if (browsing && willBrowse && browseBeforeFollow) {
+      if (browsingForTarget && willBrowse && browseBeforeFollow) {
         onLog?.("Inject Browsing: rolled to browse this profile before following");
-        const didScroll = await runProfileBrowsingSequence(serial, browsing, onLog, onLike, context).catch((e: any) => {
+        const didScroll = await runProfileBrowsingSequence(serial, browsingForTarget, onLog, onLike, context).catch((e: any) => {
           if (e?.message === "cycle-aborted") throw e;
           onLog?.(`Inject Browsing: error — ${e?.message}`);
           return 0;
@@ -1547,7 +1555,7 @@ export async function runFollowUsersStep(
           }
           await sleepOrAbort(serial, 500);
         }
-      } else if (browsing && willBrowse && !browseBeforeFollow) {
+      } else if (browsingForTarget && willBrowse && !browseBeforeFollow) {
         onLog?.("Inject Browsing: rolled to browse this profile after following");
       }
 
@@ -1556,8 +1564,8 @@ export async function runFollowUsersStep(
       // session ends identically. The user is NOT added to any skip list and
       // CAN be scraped and followed again in a future cycle or by another
       // account — the goal is purely to add variation to the follow pattern.
-      if (browsing && willBrowse && browseBeforeFollow && browsing.abandonFollowPctMin > 0) {
-        const abandonChance = rollRange(browsing.abandonFollowPctMin, browsing.abandonFollowPctMax) / 100;
+      if (browsingForTarget && willBrowse && browseBeforeFollow && browsingForTarget.abandonFollowPctMin > 0) {
+        const abandonChance = rollRange(browsingForTarget.abandonFollowPctMin, browsingForTarget.abandonFollowPctMax) / 100;
         if (Math.random() < abandonChance) {
           onLog?.(`Follow: ↩ abandoned follow @${username} after inject-browsing (variation — user can be re-scraped)`);
           await tapCalibratedProfileBack("abandoned follow — returned to search results");
@@ -1594,8 +1602,8 @@ export async function runFollowUsersStep(
       // same profile page, regardless of whether the follow tap itself
       // succeeded (a missed/duplicate Follow tap shouldn't also skip the
       // browsing that was already decided for this user).
-      if (browsing && willBrowse && !browseBeforeFollow) {
-        await runProfileBrowsingSequence(serial, browsing, onLog, onLike, context).catch((e: any) => {
+      if (browsingForTarget && willBrowse && !browseBeforeFollow) {
+        await runProfileBrowsingSequence(serial, browsingForTarget, onLog, onLike, context).catch((e: any) => {
           if (e?.message === "cycle-aborted") throw e;
           onLog?.(`Inject Browsing: error — ${e?.message}`);
         });
