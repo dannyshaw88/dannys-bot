@@ -215,6 +215,86 @@ if (!expandToggle) {
 await tapMakePostControl("calibrated Crop to Fit", expandToggle, "calibration");
 await sleepOrAbort(serial, 500);
 
+  const resolveCalibratedControlWithRetries = async (
+    control: string,
+    label: string,
+    attempts = 4,
+    waitMs = 400,
+  ): Promise<{ x: number; y: number } | null> => {
+    let point: { x: number; y: number } | null = null;
+    for (let scan = 0; scan < attempts && !point; scan++) {
+      point = resolveCalibratedControl(control);
+      if (!point && scan + 1 < attempts) await sleepOrAbort(serial, waitMs);
+    }
+    if (!point) onLog?.(`Make a Post: calibrated ${label} is unavailable`);
+    return point;
+  };
+
+  // The filter controls are deliberately separate calibrations. Their
+  // positions are device/build-specific and must not use accessibility or
+  // positional fallbacks.
+  const filtersButton = await resolveCalibratedControlWithRetries(
+    "makePostFilters",
+    "Filters button",
+  );
+  if (!filtersButton) {
+    await android.pressBack(serial);
+    await android.removeDeviceFile(serial, devicePath).catch(() => {});
+    return { posted: false };
+  }
+  onLog?.(`Make a Post: tapping calibrated Filters button at (${filtersButton.x}, ${filtersButton.y})…`);
+  await tapMakePostControl("calibrated Filters button", filtersButton, "calibration");
+  await sleepOrAbort(serial, 700);
+
+  const mostRightFilter = await resolveCalibratedControlWithRetries(
+    "makePostMostRightFilter",
+    "Most-Right Filter",
+  );
+  if (!mostRightFilter) {
+    await android.pressBack(serial);
+    await android.removeDeviceFile(serial, devicePath).catch(() => {});
+    return { posted: false };
+  }
+
+  // Keep the requested filter variation bounded and deterministic at the
+  // action level: choose 1–15 exact taps on the calibrated right-most filter.
+  const filterTapCount = 1 + Math.floor(Math.random() * 15);
+  onLog?.(
+    `Make a Post: selecting Most-Right Filter with ${filterTapCount} calibrated tap${filterTapCount === 1 ? "" : "s"} ` +
+    `at (${mostRightFilter.x}, ${mostRightFilter.y})…`,
+  );
+  for (let filterTap = 0; filterTap < filterTapCount; filterTap++) {
+    await tapMakePostControl(
+      `calibrated Most-Right Filter (${filterTap + 1}/${filterTapCount})`,
+      mostRightFilter,
+      "calibration",
+    );
+    if (filterTap + 1 < filterTapCount) {
+      await sleepOrAbort(serial, 90 + Math.floor(Math.random() * 111));
+    }
+  }
+  await sleepOrAbort(serial, 300);
+
+  const finishFilterSelection = await resolveCalibratedControlWithRetries(
+    "makePostFinishFilterSelection",
+    "Finish Filter Selection",
+  );
+  if (!finishFilterSelection) {
+    await android.pressBack(serial);
+    await android.removeDeviceFile(serial, devicePath).catch(() => {});
+    return { posted: false };
+  }
+  onLog?.(
+    `Make a Post: tapping calibrated Finish Filter Selection at ` +
+    `(${finishFilterSelection.x}, ${finishFilterSelection.y})…`,
+  );
+  await tapMakePostControl(
+    "calibrated Finish Filter Selection",
+    finishFilterSelection,
+    "calibration",
+  );
+  await sleepOrAbort(serial, 700);
+
 await sleepOrAbort(serial, 700);
 let nextBtn1: { x: number; y: number } | null = null;
 for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
