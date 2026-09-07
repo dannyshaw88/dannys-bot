@@ -458,9 +458,34 @@ export async function runViewExplorePage(serial: string, params: {
         saves > exploreActionsBefore.saves ||
         authorVisits > exploreActionsBefore.authorVisits;
       const exploreDwellMs = Math.round(2800 + Math.random() * 4200 + (exploreActionTaken ? 1200 : 0));
-      onLog?.(`View Explore ${i + 1}/${scrollCount}: consumption dwell ${exploreDwellMs}ms (action=${exploreActionTaken ? "yes" : "no"})`);
-      logger.info({ serial, dwellMs: exploreDwellMs, actionTaken: exploreActionTaken }, "[view-explore] consumption dwell");
-      await sleepOrAbort(serial, exploreDwellMs);
+        const globalDwellOverride = loadInstanceConfigs()[serial]?.devicePrefs?.motherCodeOverrides?.globalDwell;
+        const usesGlobalDwellOverride = Boolean(globalDwellOverride);
+        const globalDwellMinMs = usesGlobalDwellOverride
+          ? Math.min(globalDwellOverride.minMs, globalDwellOverride.maxMs)
+          : null;
+        const globalDwellMaxMs = usesGlobalDwellOverride
+          ? Math.max(globalDwellOverride.minMs, globalDwellOverride.maxMs)
+          : null;
+        onLog?.(
+          `View Explore ${i + 1}/${scrollCount}: consumption dwell ` +
+          `${usesGlobalDwellOverride ? `global override ${globalDwellMinMs}-${globalDwellMaxMs}ms (base ${exploreDwellMs}ms)` : `${exploreDwellMs}ms`} ` +
+          `(action=${exploreActionTaken ? "yes" : "no"}, ` +
+          `global-override=${usesGlobalDwellOverride ? `${globalDwellMinMs}-${globalDwellMaxMs}ms` : "none"})`,
+        );
+        logger.info({
+          serial,
+          dwellMs: exploreDwellMs,
+          actionTaken: exploreActionTaken,
+          globalDwellOverride: usesGlobalDwellOverride
+            ? { minMs: globalDwellMinMs, maxMs: globalDwellMaxMs }
+            : null,
+        }, "[view-explore] consumption dwell");
+        await sleepOrAbort(
+          serial,
+          exploreDwellMs,
+          "globalDwell",
+          usesGlobalDwellOverride ? "computed" : "static",
+        );
       // Preserve the user-configured delay in addition to consumption time.
       const delaySec = delayLoSec + Math.random() * (delayHiSec - delayLoSec);
       if (delaySec > 0) await sleepOrAbort(serial, Math.round(delaySec * 1000));
