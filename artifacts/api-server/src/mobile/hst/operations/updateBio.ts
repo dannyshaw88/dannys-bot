@@ -56,20 +56,55 @@ export async function runUpdateBio(
     }
     await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
 
-    // 3. Verify Edit Profile page loaded, then tap the bio field.
+    // 3. Instagram can leave the Edit Profile shell on a blank loading
+    // spinner for several seconds after the verified Edit profile tap. A
+    // single dump here races that render and used to abort while the page was
+    // visibly still loading. Poll one dump at a time, and require both the
+    // form marker and the actual Bio field before tapping anything.
     {
-      const xml = await android.dumpUi(serial);
-      if (!xml.includes("edit_profile_fields") && !xml.includes("prism_form_field_container")) {
-        onLog?.("Update Bio: ✗ Edit Profile page did not load after verified Edit profile-node tap");
+      const editProfileReadyAttempts = 12;
+      let editProfileXml = "";
+      let bioField: RegExpMatchArray | null = null;
+      let lastState = "";
+      for (let attempt = 0; attempt < editProfileReadyAttempts; attempt++) {
+        try {
+          editProfileXml = await android.dumpUi(serial);
+        } catch {
+          editProfileXml = "";
+        }
+        const hasEditProfileMarker =
+          editProfileXml.includes("edit_profile_fields") ||
+          editProfileXml.includes("prism_form_field_container");
+        // The bio section is a Button with resource-id ending in "bio"; its
+        // EditText child is what we tap to place the cursor.
+        bioField =
+          editProfileXml.match(/resource-id="[^"]*\bbio\b[^/]*\/?>[\s\S]*?<[^>]*EditText[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+          editProfileXml.match(/resource-id="[^"]*\bbio\b[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
+        const state = `${hasEditProfileMarker ? "form-marker" : "loading"}:${bioField ? "bio-field" : "no-bio-field"}`;
+        if (state !== lastState) {
+          onLog?.(
+            `Update Bio: waiting for Edit Profile form — ${state} ` +
+            `(attempt ${attempt + 1}/${editProfileReadyAttempts})`,
+          );
+          lastState = state;
+        }
+        if (hasEditProfileMarker && bioField) break;
+        if (attempt + 1 < editProfileReadyAttempts) {
+          await sleepOrAbort(serial, 500, "navigation");
+        }
+      }
+      if (!bioField ||
+          (!editProfileXml.includes("edit_profile_fields") &&
+           !editProfileXml.includes("prism_form_field_container"))) {
+        onLog?.("Update Bio: ✗ Edit Profile page did not finish loading with a Bio field after verified Edit profile-node tap");
         await android.pressBack(serial); return;
       }
-      onLog?.("Update Bio: ✓ Edit Profile page loaded after verified Edit profile-node tap");
-      // The bio section is a Button with resource-id ending in "bio"; its
-      // EditText child is what we tap to place the cursor.
-      const m = xml.match(/resource-id="[^"]*\bbio\b[^"]*"[^/]*\/?>[\s\S]*?<[^>]*EditText[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
-                xml.match(/resource-id="[^"]*\bbio\b[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
-      if (!m) { onLog?.("Update Bio: ✗ bio field not found in Edit Profile"); await android.pressBack(serial); return; }
-      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      onLog?.("Update Bio: ✓ Edit Profile page loaded with Bio field after verified Edit profile-node tap");
+      await android.tap(
+        serial,
+        Math.round((+bioField[1] + +bioField[3]) / 2),
+        Math.round((+bioField[2] + +bioField[4]) / 2),
+      );
       onLog?.("Update Bio: tapped bio field");
     }
     // Wait for the dedicated Bio edit screen to open (it's a separate screen from Edit Profile).
@@ -83,22 +118,41 @@ export async function runUpdateBio(
     //     from the Bio screen's own dump forces Android to initialise the input
     //     connection before we try to type.
     {
-      const bioXml = await android.dumpUi(serial);
+      let bioXml = "";
+      let bioScreenReady = false;
+      const bioScreenAttempts = 8;
+      for (let attempt = 0; attempt < bioScreenAttempts; attempt++) {
+        try {
+          bioXml = await android.dumpUi(serial);
+        } catch {
+          bioXml = "";
+        }
+        if (bioXml.includes("edit_bio_layout")) {
+          bioScreenReady = true;
+          break;
+        }
+        if (attempt + 1 < bioScreenAttempts) {
+          await sleepOrAbort(serial, 400, "navigation");
+        }
+      }
       // `prism_form_field_container` is also present on the surrounding Edit
       // Profile form, so it cannot prove that the dedicated Bio screen opened.
       // Require the Bio screen's own layout marker before looking for an
       // EditText. This prevents the first EditText on Edit Profile (Name)
       // from being mistaken for the Bio field.
-      if (bioXml.includes("edit_bio_layout")) {
+      if (bioScreenReady) {
         // Tap the EditText (the actual text field, not the outer container).
         const et = bioXml.match(/\bEditText\b[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
         if (et) {
           await android.tap(serial, Math.round((+et[1] + +et[3]) / 2), Math.round((+et[2] + +et[4]) / 2));
           onLog?.("Update Bio: confirmed focus on Bio edit screen");
           await sleepOrAbort(serial, 500);
+        } else {
+          onLog?.("Update Bio: ⚠ Bio edit screen loaded but its EditText was not exposed — pressing Back");
+          await android.pressBack(serial); return;
         }
       } else {
-        onLog?.("Update Bio: ⚠ Bio edit screen did not open — pressing Back");
+        onLog?.(`Update Bio: ⚠ Bio edit screen did not open after ${bioScreenAttempts} checks — pressing Back`);
         await android.pressBack(serial); return;
       }
     }
