@@ -5107,9 +5107,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const getScreenSize = android.getScreenSize;
 
   /**
+   * Return the top edge of Instagram's first-save collection sheet from the
+   * live accessibility tree. The sheet height is not consistent across
+   * devices, so a fixed percentage of screen height is not a safe dismissal
+   * point.
+   */
+  const findCollectionSheetTop = (xml: string): number | null => {
+    const markerRe = /pinned_save_row|collect the posts you love|start a collection|save to collection/i;
+    const nodeRe = /<node\b([^>]*)>/gi;
+    let top: number | null = null;
+    let match: RegExpExecArray | null;
+    while ((match = nodeRe.exec(xml)) !== null) {
+      const attrs = match[1];
+      if (!markerRe.test(attrs)) continue;
+      const bounds = attrs.match(/\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+      if (!bounds) continue;
+      const y1 = Number(bounds[2]);
+      const y2 = Number(bounds[4]);
+      if (y2 <= y1) continue;
+      top = top === null ? y1 : Math.min(top, y1);
+    }
+    return top;
+  };
+
+  /**
    * Dismiss Instagram's first-save collection sheet only after positively
-   * detecting its accessibility markers. The tap stays inside the confirmed
-   * clear scrim above the sheet and is randomized within that safe region.
+   * detecting its accessibility markers. The tap is randomized in the live
+   * scrim above the sheet, with a device-relative safety gap.
    */
   const dismissSaveCollectionPrompt = async (
     serial: string,
@@ -5121,10 +5145,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return false;
     }
     const { w, h } = getScreenSize(serial);
-    const x = Math.round(w * (0.10 + Math.random() * 0.80));
-    const y = Math.round(h * (0.04 + Math.random() * 0.15));
+    const sheetTop = findCollectionSheetTop(xml);
+    if (sheetTop === null) {
+      // Do not guess a coordinate when the sheet was detected only by a
+      // marker whose bounds were unavailable. Back is safer than tapping
+      // inside an unknown modal surface.
+      onLog?.(`${context}: collection prompt detected but sheet bounds were unavailable — pressing Back`);
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 300);
+      return true;
+    }
+    const safetyGap = Math.max(24, Math.min(72, Math.round(h * 0.05)));
+    const safeMaxY = sheetTop - safetyGap;
+    if (safeMaxY < 4) {
+      onLog?.(`${context}: collection sheet leaves no confirmed scrim above y=${sheetTop} — pressing Back`);
+      await android.pressBack(serial);
+      await sleepOrAbort(serial, 300);
+      return true;
+    }
+    const safeMinY = Math.max(2, Math.round(safeMaxY * 0.35));
+    const x = Math.round(w * (0.20 + Math.random() * 0.60));
+    const y = Math.round(safeMinY + Math.random() * Math.max(1, safeMaxY - safeMinY));
     await android.tap(serial, x, y);
-    onLog?.(`${context}: dismissed collection prompt at randomized top-scrim point (${x},${y})`);
+    onLog?.(`${context}: dismissed collection prompt at scrim point (${x},${y}), sheetTop=${sheetTop}, safeY<=${safeMaxY}`);
     await sleepOrAbort(serial, 300);
     return true;
   };

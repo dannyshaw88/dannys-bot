@@ -3515,8 +3515,8 @@ export async function dismissInstagramInterstitials(
   // save/ribbon icon on a feed post when the account has no existing
   // collections. The sheet slides up and presents "Start a collection" CTA.
   // The correct dismiss is to tap the transparent background_dimmer ABOVE the
-  // sheet (y ≈ 12 % of screen height), which is always safe — no interactive
-  // controls exist in that zone while the collection sheet is visible.
+  // sheet. The sheet's top edge varies by device, so derive the scrim point
+  // from the live node bounds instead of using a fixed screen percentage.
   //
   // Detection uses id="pinned_save_row" (the saved-item row inside the sheet,
   // unique to this sheet type) OR the empty-state title text as a fallback.
@@ -3524,9 +3524,37 @@ export async function dismissInstagramInterstitials(
   // create a collection instead of dismissing the sheet.
   if (xml.includes('id="pinned_save_row"') || xml.includes('text="Collect the posts you love"')) {
     const { w: _csW, h: _csH } = _getScreenSize(xml);
-    _adbTap(adb, serial, Math.round(_csW * 0.50), Math.round(_csH * 0.12));
+    const collectionMarkerRe = /pinned_save_row|collect the posts you love|start a collection|save to collection/i;
+    const collectionNodeRe = /<node\b([^>]*)>/gi;
+    let collectionSheetTop: number | null = null;
+    let collectionNode: RegExpExecArray | null;
+    while ((collectionNode = collectionNodeRe.exec(xml)) !== null) {
+      const attrs = collectionNode[1];
+      if (!collectionMarkerRe.test(attrs)) continue;
+      const bounds = attrs.match(/\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+      if (!bounds) continue;
+      const y1 = Number(bounds[2]);
+      const y2 = Number(bounds[4]);
+      if (y2 > y1) collectionSheetTop = collectionSheetTop === null ? y1 : Math.min(collectionSheetTop, y1);
+    }
+    if (collectionSheetTop === null) {
+      _adbKeyevent(adb, serial, "4");
+      await _sleep(400);
+      return "Collect the posts you love — bounds unavailable, Back";
+    }
+    const safetyGap = Math.max(24, Math.min(72, Math.round(_csH * 0.05)));
+    const safeMaxY = collectionSheetTop - safetyGap;
+    if (safeMaxY < 4) {
+      _adbKeyevent(adb, serial, "4");
+      await _sleep(400);
+      return "Collect the posts you love — no safe scrim, Back";
+    }
+    const safeMinY = Math.max(2, Math.round(safeMaxY * 0.35));
+    const scrimX = Math.round(_csW * (0.20 + Math.random() * 0.60));
+    const scrimY = Math.round(safeMinY + Math.random() * Math.max(1, safeMaxY - safeMinY));
+    _adbTap(adb, serial, scrimX, scrimY);
     await _sleep(400);
-    return "Collect the posts you love — dimmer tap";
+    return `Collect the posts you love — scrim tap (${scrimX},${scrimY}), sheetTop=${collectionSheetTop}`;
   }
 
   // "Sharing posts" bottom sheet — Instagram shows this on the caption/share
