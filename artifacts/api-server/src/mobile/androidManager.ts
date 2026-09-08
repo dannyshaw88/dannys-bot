@@ -3538,14 +3538,14 @@ export async function dismissInstagramInterstitials(
       if (y2 > y1) collectionSheetTop = collectionSheetTop === null ? y1 : Math.min(collectionSheetTop, y1);
     }
     if (collectionSheetTop === null) {
-      _adbKeyevent(adb, serial, "4");
+      await pressBack(serial);
       await _sleep(400);
       return "Collect the posts you love — bounds unavailable, Back";
     }
     const safetyGap = Math.max(24, Math.min(72, Math.round(_csH * 0.05)));
     const safeMaxY = collectionSheetTop - safetyGap;
     if (safeMaxY < 4) {
-      _adbKeyevent(adb, serial, "4");
+      await pressBack(serial);
       await _sleep(400);
       return "Collect the posts you love — no safe scrim, Back";
     }
