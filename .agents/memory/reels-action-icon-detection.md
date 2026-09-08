@@ -57,3 +57,17 @@ visible control is elsewhere, causing a share tap to open the likes/count sheet.
 
 **How to apply:** Reject numeric count text, non-clickable nodes, and oversized
 bounds before resolving any action coordinate. Missing validation means skip.
+
+Action-bar scans do not prove that an action was selected for the current reel.
+The action percentages are rolled before scanning, and an unavailable selected
+action can be the only reason the scan produces no tap. Log the per-reel action
+plan separately from the resolved icon inventory, await the complete action
+transaction, and use only a short settle barrier before swiping.
+
+**Why:** A real-device log showed Like/DM/Save icons resolved but no tap lines;
+the selected action was Share-to-Feed, whose verified resource ID was absent.
+The swipe began only after the awaited transaction, so blaming the watch dwell
+would have led to the wrong fix.
+
+**How to apply:** When diagnosing a silent scan, compare the action plan,
+available icons, tap/verification lines, and swipe timestamp in that order.

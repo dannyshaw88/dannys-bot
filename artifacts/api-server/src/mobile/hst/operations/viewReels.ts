@@ -135,6 +135,18 @@ export async function runViewReelsLoop(serial: string, params: {
     const wantSave      = savePercentMax > 0 && Math.random() * 100 < rollRange(savePercentMin, savePercentMax);
     const wantShareDm     = shareDmPercentMax > 0 && Math.random() * 100 < rollRange(shareDmPercentMin, shareDmPercentMax);
     const wantClickAuthor = clickAuthorPctMax > 0 && Math.random() * 100 < rollRange(clickAuthorPctMin, clickAuthorPctMax);
+    const actionPlan = [
+      wantLike ? "Like" : null,
+      wantShareFeed ? "Share-to-Feed" : null,
+      wantShareDm ? "DM-share" : null,
+      wantSave ? "Save" : null,
+      wantClickAuthor ? "Author" : null,
+    ].filter((value): value is string => value !== null);
+    onLog?.(
+      `Reel ${i + 1}/${totalReels}: action plan — ` +
+      `${actionPlan.length > 0 ? actionPlan.join(", ") : "none"}; ` +
+      `swipe waits for all selected actions to finish`,
+    );
 
     // Holds the last UIAutomator dump from the reel-player poll below.
     // Declared here (outside the poll block) so the ad-detection check at
@@ -472,6 +484,12 @@ export async function runViewReelsLoop(serial: string, params: {
         return false;
       });
       if (skipReelAfterAction) continue;
+      // The transaction above awaits every selected action, including any
+      // sheet open/close and verification work. Keep a short explicit settle
+      // barrier after the transaction so the next calibrated swipe cannot
+      // compete with Instagram's final icon-state animation.
+      onLog?.(`Reel ${i + 1}/${totalReels}: selected actions complete — settling before swipe`);
+      await sleepOrAbort(serial, 350);
     }
 
     // ── Click Author — navigate to creator profile, scroll, then Back ──────
