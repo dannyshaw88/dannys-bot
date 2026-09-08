@@ -4852,6 +4852,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostActivatePctMax: s.makePostActivatePctMax,
             makePostPerSessionMin: s.makePostPerSessionMin,
             makePostPerSessionMax: s.makePostPerSessionMax,
+            makePostFilterChanceMin: s.makePostFilterChanceMin,
+            makePostFilterChanceMax: s.makePostFilterChanceMax,
             makePostAlterationEnabled: s.makePostAlterationEnabled,
             makePostAlterationLevel: s.makePostAlterationLevel,
             makePostImageSettingsEnabled: s.makePostImageSettingsEnabled,
@@ -7801,10 +7803,7 @@ export function AutomationSettingsPanel({
           )}
         </div>
 
-        {/* ── Make a Post — ported from the old browser-automation tool's
-             "Make a Post" settings (13 Jul 2026). Config/persistence only:
-             there is no phone gallery-picker / IG composer automation wired
-             up yet, this just saves the settings for when that's built. ─ */}
+         {/* ── Make a Post — settings and mobile gallery-picker automation. ─ */}
         <div className="border-t border-border" />
 
         <div className="space-y-3 relative">
@@ -7870,6 +7869,20 @@ export function AutomationSettingsPanel({
                       value={settings.makePostRerunChanceMax}
                       onChange={e => setSettings(s => ({ ...s, makePostRerunChanceMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                       disabled={fieldDisabled("makePostRerunChanceMax")} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm text-muted-foreground block text-center">Filters Chance %</Label>
+                  <div className="flex items-center gap-2">
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostFilterChanceMin}
+                      onChange={e => setSettings(s => ({ ...s, makePostFilterChanceMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("makePostFilterChanceMin")} />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.makePostFilterChanceMax}
+                      onChange={e => setSettings(s => ({ ...s, makePostFilterChanceMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("makePostFilterChanceMax")} />
                   </div>
                 </div>
               </div>

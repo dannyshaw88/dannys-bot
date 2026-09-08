@@ -703,6 +703,8 @@ type AutomationSettings = {
   makePostActivatePctMax?: number;
   makePostPerSessionMin?: number;
   makePostPerSessionMax?: number;
+  makePostFilterChanceMin?: number;
+  makePostFilterChanceMax?: number;
   makePostAlterationEnabled?: boolean;
   makePostAlterationLevel?: "small" | "medium" | "high";
   makePostImageSettingsEnabled?: boolean;
@@ -2332,7 +2334,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostActivatePctMin: z.number().min(0).max(100).default(100),
     makePostActivatePctMax: z.number().min(0).max(100).default(100),
     makePostPerSessionMin: z.number().min(1).max(20).default(1),
-    makePostPerSessionMax: z.number().min(1).max(20).default(1),
+     makePostPerSessionMax: z.number().min(1).max(20).default(1),
+     makePostFilterChanceMin: z.number().min(0).max(100).default(0),
+     makePostFilterChanceMax: z.number().min(0).max(100).default(100),
     makePostAlterationEnabled: z.boolean().default(true),
     makePostAlterationLevel: z.enum(["small", "medium", "high"]).default("small"),
     makePostImageSettingsEnabled: z.boolean().default(true),
@@ -2496,8 +2500,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
       makePostEnabled: false,
       makePostActivatePctMin: 100, makePostActivatePctMax: 100,
-      makePostPerSessionMin: 1, makePostPerSessionMax: 1,
-      makePostAlterationEnabled: true, makePostAlterationLevel: "small",
+       makePostPerSessionMin: 1, makePostPerSessionMax: 1,
+       makePostFilterChanceMin: 0, makePostFilterChanceMax: 100,
+       makePostAlterationEnabled: true, makePostAlterationLevel: "small",
       makePostImageSettingsEnabled: true,
       makePostDisableWhenExhausted: true,
       makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
@@ -3159,8 +3164,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
         makePostEnabled: false,
         makePostActivatePctMin: 100, makePostActivatePctMax: 100,
-        makePostPerSessionMin: 1, makePostPerSessionMax: 1,
-        makePostAlterationEnabled: true, makePostAlterationLevel: "small",
+         makePostPerSessionMin: 1, makePostPerSessionMax: 1,
+         makePostFilterChanceMin: 0, makePostFilterChanceMax: 100,
+         makePostAlterationEnabled: true, makePostAlterationLevel: "small",
         makePostImageSettingsEnabled: true,
         makePostDisableWhenExhausted: true,
         makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
@@ -6274,8 +6280,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         followActivatePctMin, followActivatePctMax,
         randomJitterActivatePctMin, randomJitterActivatePctMax,
         makePostEnabled, makePostActivatePctMin, makePostActivatePctMax,
-        makePostPerSessionMin, makePostPerSessionMax,
-        makePostLocalFolderEnabled, makePostLocalFolderPath,
+         makePostPerSessionMin, makePostPerSessionMax,
+         makePostFilterChanceMin, makePostFilterChanceMax,
+         makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom, makePostAddLocation,
         makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
         makePostImageSettings, makePostFixAiSlop, makePostMetadataCleanup, makePostFrequencyDisruption, makePostCaptionText,
@@ -6810,8 +6817,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 alterationEnabled: makePostAlterationEnabled,
                 alterationLevel: makePostAlterationLevel,
                 imageSettingsEnabled: makePostImageSettingsEnabled,
-                imageSettings: makePostImageSettings,
-                doFixAiSlop: makePostFixAiSlop,
+                     imageSettings: makePostImageSettings,
+                     filterChanceMin: makePostFilterChanceMin,
+                     filterChanceMax: makePostFilterChanceMax,
+                     doFixAiSlop: makePostFixAiSlop,
                 frequencyDisruption: makePostFrequencyDisruption,
                 onLog: (msg) => tLog(`  ${msg}`),
               }).catch((e: any) => {

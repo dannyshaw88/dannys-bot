@@ -370,6 +370,8 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
         makePostActivatePctMax: s.makePostActivatePctMax,
         makePostPerSessionMin: s.makePostPerSessionMin,
         makePostPerSessionMax: s.makePostPerSessionMax,
+        makePostFilterChanceMin: s.makePostFilterChanceMin,
+        makePostFilterChanceMax: s.makePostFilterChanceMax,
          makePostRerunChanceMin: s.makePostRerunChanceMin,
          makePostRerunChanceMax: s.makePostRerunChanceMax,
         makePostAlterationEnabled: s.makePostAlterationEnabled,

@@ -218,6 +218,7 @@ export interface AutomationSettingsData {
   makePostEnabled: boolean;
   makePostActivatePctMin: number; makePostActivatePctMax: number;
   makePostPerSessionMin: number; makePostPerSessionMax: number;
+  makePostFilterChanceMin: number; makePostFilterChanceMax: number;
   makePostAlterationEnabled: boolean;
   makePostAlterationLevel: "small" | "medium" | "high";
   makePostImageSettingsEnabled: boolean;
@@ -363,6 +364,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   makePostEnabled: false,
   makePostActivatePctMin: 100, makePostActivatePctMax: 100,
   makePostPerSessionMin: 1, makePostPerSessionMax: 1,
+  makePostFilterChanceMin: 0, makePostFilterChanceMax: 100,
   makePostAlterationEnabled: true,
   makePostAlterationLevel: "small",
   makePostImageSettingsEnabled: true,
@@ -465,6 +467,8 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "makePostMetadataCleanup",
   "makePostFrequencyDisruption",
   "makePostEnabled",
+  "makePostFilterChanceMin",
+  "makePostFilterChanceMax",
   "makePostDisableWhenExhausted",
   "makePostLocalFolderEnabled",
   "makePostLocalFolderNoRepeat",

@@ -7,6 +7,12 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 **Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
 
+### 2026-09-08 — Filters is now an independent 0–100% action
+- The Make a Post operation now samples a dedicated Filters chance range for each post attempt.
+- The default range is 0/100 so Filters is no longer part of every post. A 0/0 range skips the Filters button, filter thumbnail, and finish-selection taps but continues through the editor's second Next. A 100/100 range always runs it.
+- **Lesson:** optional UI actions need their own explicit gate around the full action sequence; gating only the first tap can leave later calibrated taps executing against the wrong screen.
+- Status: code-level fix applied; physical-device confirmation is still required.
+
 ### 2026-09-08 — Filters was dispatched during the editor's blank transition
 - The supplied captures show the calibrated first Next dispatch completing, followed about 350 ms later by the calibrated Filters dispatch. A blank transition screen was still visible several seconds later; the editor row containing Filter was only visible much later.
 - **Root cause:** the code resolved the Filters calibration before the first Next and then fired that exact coordinate after a fixed 350 ms pause. Calibration made the coordinate accurate, but it did not prove that Instagram had rendered the target screen.

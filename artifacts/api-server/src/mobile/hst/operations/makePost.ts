@@ -22,6 +22,7 @@ export async function runMakePostStep(serial: string, opts: {
   localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
   deleteAfterUpload: boolean; captionText: string; addLocation?: boolean;
   accountUsername?: string; slotIdx?: number; homeTapCount?: number;
+  filterChanceMin?: number; filterChanceMax?: number;
   doFixAiSlop?: boolean; alterationEnabled?: boolean; alterationLevel?: any;
   imageSettingsEnabled?: boolean; imageSettings?: any; frequencyDisruption?: boolean;
   onLog?: (msg: string) => void;
@@ -34,6 +35,7 @@ export async function runMakePostStep(serial: string, opts: {
     localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
     captionText, doFixAiSlop, alterationEnabled, alterationLevel,
     imageSettingsEnabled, imageSettings, frequencyDisruption, addLocation, accountUsername, slotIdx, onLog,
+    filterChanceMin = 0, filterChanceMax = 100,
     homeTapCount = 1,
   } = opts;
 
@@ -246,6 +248,19 @@ if (!nextBtn1) {
 onLog?.(`Make a Post: found calibrated first "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
 await tapMakePostControl("calibrated first Next", nextBtn1, "calibration");
 
+const filterChanceLo = Math.max(0, Math.min(100, Math.min(filterChanceMin, filterChanceMax)));
+const filterChanceHi = Math.max(0, Math.min(100, Math.max(filterChanceMin, filterChanceMax)));
+const sampledFilterChance = filterChanceLo === filterChanceHi
+  ? filterChanceLo
+  : filterChanceLo + Math.random() * (filterChanceHi - filterChanceLo);
+const filterRoll = Math.random();
+const applyFilters = sampledFilterChance > 0 && filterRoll < sampledFilterChance / 100;
+onLog?.(
+  `Make a Post: Filters chance roll sampled=${sampledFilterChance.toFixed(1)}% ` +
+  `draw=${(filterRoll * 100).toFixed(1)}% → ${applyFilters ? "RUN" : "SKIP"}`,
+);
+
+if (applyFilters) {
 // The first Next opens a slow editor transition on this device. The editor
 // can remain blank for several seconds while the bottom controls are not yet
 // rendered. Do not send the calibrated Filters tap into that transition:
@@ -359,6 +374,9 @@ await tapMakePostControl(
   "calibration",
 );
 await sleepOrAbort(serial, 700);
+} else {
+  onLog?.("Make a Post: Filters sequence skipped by the configured chance roll");
+}
 
 // Instagram keeps the picker tree alive while the image-editor transition
 // runs. A single 1.5 s expand-toggle check races that transition: it can

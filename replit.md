@@ -199,6 +199,7 @@ The server debug export records ADB input and execution timing, but not the cycl
 - This does not prove the post is visible on the Instagram profile. Use the per-slot cycle notebook for the operation’s success/failure lines and profile verification for publication visibility.
 - Normal feed Make a Post currently uses its 1.2-second scanner settle; the shared MediaStore audit is used by the Story/Profile Picture paths, not the regular feed-post path.
 - A real-device capture showed the first calibrated Next dispatch completing while Instagram was still on a blank transition screen; the calibrated Filters tap followed only 350 ms later, while the editor's Filter row was not visibly present until roughly 16 seconds after that transition began. Make a Post must wait for a live `Filter` control near the saved Filters calibration point after the first Next, then tap the exact calibrated point; if that control never appears, save evidence and abort rather than blind-tapping.
+- Make a Post's Filters sequence is independently chance-gated with `makePostFilterChanceMin`/`makePostFilterChanceMax`, defaulting to 0/100 so Filters is not run on every post. A 0/0 range must skip Filters, Most-Right Filter, and Finish Filter Selection while continuing to the editor's second Next; 100/100 always runs it.
 
 ---
 
