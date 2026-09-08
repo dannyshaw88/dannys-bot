@@ -7,6 +7,13 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 **Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
 
+### 2026-09-08 — Filters was dispatched during the editor's blank transition
+- The supplied captures show the calibrated first Next dispatch completing, followed about 350 ms later by the calibrated Filters dispatch. A blank transition screen was still visible several seconds later; the editor row containing Filter was only visible much later.
+- **Root cause:** the code resolved the Filters calibration before the first Next and then fired that exact coordinate after a fixed 350 ms pause. Calibration made the coordinate accurate, but it did not prove that Instagram had rendered the target screen.
+- **Fix:** resolve the first Next and dispatch it without a pre-transition UI gate. After that tap, poll the live accessibility tree for a `Filter` control whose current bounds are near the saved Filters calibration point. Tap the exact calibrated point only after that positive render check; otherwise capture evidence and abort safely.
+- **Lesson:** calibrated coordinates establish where a fixed control is, not when the control exists. Readiness belongs after the preceding transition and must be bounded, location-validated, and fail-closed.
+- Status: code-level fix applied; physical-device confirmation is still required.
+
 ### 2026-09-07 — Mobile Make a Post now has a calibrated filter-selection sequence
 - Added three independent fixed-control calibration points to the mobile Make a Post flow: Filters, Most-Right Filter, and Finish Filter Selection.
 - Runtime order is now Crop to Fit → the calibrated first Next → Filters → a random 1–15 exact tap count on the calibrated Most-Right Filter point → Finish Filter Selection.

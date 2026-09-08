@@ -230,18 +230,6 @@ await sleepOrAbort(serial, 500);
     return point;
   };
 
-// Resolve the next calibrated point before dispatching the first Next. The
-// transition itself must not be blocked by a live UI lookup.
-const filtersButton = await resolveCalibratedControlWithRetries(
-  "makePostFilters",
-  "Filters button",
-);
-if (!filtersButton) {
-  await android.pressBack(serial);
-  await android.removeDeviceFile(serial, devicePath).catch(() => {});
-  return { posted: false };
-}
-
 await sleepOrAbort(serial, 700);
 let nextBtn1: { x: number; y: number } | null = null;
 for (let nextScan = 0; nextScan < 4 && !nextBtn1; nextScan++) {
@@ -258,9 +246,67 @@ if (!nextBtn1) {
 onLog?.(`Make a Post: found calibrated first "Next" at (${nextBtn1.x}, ${nextBtn1.y}) — tapping…`);
 await tapMakePostControl("calibrated first Next", nextBtn1, "calibration");
 
-// This is an exact calibrated tap. Keep only a short transition settle; do
-// not poll UIAutomator or wait for a label before dispatching it.
-await sleepOrAbort(serial, 350, "navigation", "computed");
+// The first Next opens a slow editor transition on this device. The editor
+// can remain blank for several seconds while the bottom controls are not yet
+// rendered. Do not send the calibrated Filters tap into that transition:
+// wait for the live Filter control to appear near its saved calibration point.
+// This is deliberately after the first Next, so the readiness check cannot
+// suppress the preceding calibrated navigation tap.
+const waitForCalibratedLiveControl = async (
+  control: string,
+  label: string,
+  liveLabel: string,
+  attempts = 20,
+  waitMs = 500,
+): Promise<{ x: number; y: number } | null> => {
+  const point = resolveCalibratedControl(control);
+  if (!point) {
+    onLog?.(`Make a Post: calibrated ${label} is unavailable`);
+    return null;
+  }
+  let lastState = "";
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const live = await android.findButtonByLabel(serial, liveLabel).catch(() => null);
+    const nearPoint = Boolean(
+      live &&
+      Math.abs(live.x - point.x) <= 220 &&
+      Math.abs(live.y - point.y) <= 180,
+    );
+    const state = !live
+      ? "not-exposed"
+      : nearPoint
+        ? `ready-live=(${live.x},${live.y})`
+        : `wrong-location=(${live.x},${live.y})`;
+    if (state !== lastState) {
+      onLog?.(
+        `Make a Post: waiting for rendered ${label} near calibrated ` +
+        `(${point.x},${point.y}) — ${state} ` +
+        `(attempt ${attempt + 1}/${attempts})`,
+      );
+      lastState = state;
+    }
+    if (nearPoint) return point;
+    if (attempt + 1 < attempts) {
+      await sleepOrAbort(serial, waitMs, "navigation", "computed");
+    }
+  }
+  return null;
+};
+
+const filtersButton = await waitForCalibratedLiveControl(
+  "makePostFilters",
+  "Filters button",
+  "Filter",
+);
+if (!filtersButton) {
+  onLog?.("Make a Post: ✗ Filters button never rendered at its calibrated location — aborting safely");
+  const evidence = await android.captureDebugEvidence?.(serial, "make-post-filters-not-rendered");
+  if (evidence) onLog?.(`Make a Post: Filters readiness evidence saved at ${evidence}`);
+  await android.pressBack(serial);
+  await android.removeDeviceFile(serial, devicePath).catch(() => {});
+  return { posted: false };
+}
+
 onLog?.(`Make a Post: tapping calibrated Filters button at (${filtersButton.x}, ${filtersButton.y})…`);
 await tapMakePostControl("calibrated Filters button", filtersButton, "calibration");
 
