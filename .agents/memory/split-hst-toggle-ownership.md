@@ -27,6 +27,20 @@ fallback to avoid duplicate cycles, leaving the toggle persisted but idle.
 app-level listener invokes it directly when present; otherwise it starts the
 background runner with the manual immediate/force path.
 
+An accepted manual ON must survive the short gap between the app-level event
+listener and the mounted slot handler. Retain the request by serial/slot until
+the handler registers; otherwise a slot that mounts just after the toggle is
+incorrectly treated as startup recovery and waits its full interval.
+
+**Why:** A real OFF→ON persisted successfully while the slot runtime was
+mounting, but hydration later scheduled the account 174 minutes out because
+the immediate event had already been discarded.
+
+**How to apply:** Route accepted events through one shared handoff, retain
+pending immediate ON requests, and consume them when the slot handler
+registers. Deduplicate the window event and BroadcastChannel copies by request
+ID.
+
 Lifted automation-status snapshots must be equality-preserving before they
 update a parent-owned map; repeated identical child reports should return the
 existing map reference.

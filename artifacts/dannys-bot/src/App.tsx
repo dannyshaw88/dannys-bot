@@ -3,7 +3,7 @@ import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-q
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { useState, useEffect, Component, type ReactNode, type ErrorInfo } from "react";
-import { startHstLoop, stopHstLoop, _hstToggleHandlers } from "@/lib/hstRunner";
+import { startHstLoop, routeHstToggle } from "@/lib/hstRunner";
 
 import { Dashboard } from "@/pages/Dashboard";
 import { StatsPage } from "@/pages/StatsPage";
@@ -188,28 +188,30 @@ function HstAutoRestart() {
 function HstToggleListener() {
   useEffect(() => {
     let bc: BroadcastChannel | null = null;
+    const handledRequestIds = new Set<string>();
     const handleToggle = (data: any) => {
       const { serial, slotIdx, enabled, requestId, source } = data ?? {};
       if (typeof serial !== "string" || typeof slotIdx !== "number") return;
-      const handler = _hstToggleHandlers.get(`${serial}:${slotIdx}`);
-      if (handler) {
-        handler(data);
-        return;
+      if (typeof enabled !== "boolean") return;
+      // persistHstToggle delivers once through a same-window CustomEvent and
+      // once through BroadcastChannel. They represent one accepted command.
+      if (typeof requestId === "string") {
+        if (handledRequestIds.has(requestId)) return;
+        handledRequestIds.add(requestId);
+        if (handledRequestIds.size > 256) {
+          const oldest = handledRequestIds.values().next().value;
+          if (oldest) handledRequestIds.delete(oldest);
+        }
       }
-      if (enabled) {
-        // MobilePage's mounted runtime owns this slot when present. Starting
-        // the background runner as well. The direct handler above owns the
-        // mounted case; this fallback is only for Stats-page toggles when
-        // MobilePage is not mounted.
-        startHstLoop(serial, slotIdx, {
-          immediate: true,
-          force: true,
-          requestId: typeof requestId === "string" ? requestId : undefined,
-          source: typeof source === "string" ? source : "unknown",
-        });
-      } else {
-        stopHstLoop(serial, slotIdx);
-      }
+      routeHstToggle({
+        serial,
+        slotIdx,
+        enabled,
+        ...(typeof data.slotId === "string" ? { slotId: data.slotId } : {}),
+        revision: typeof data.revision === "number" ? data.revision : 1,
+        requestId: typeof requestId === "string" ? requestId : `legacy-${serial}-${slotIdx}`,
+        source: source === "phone-farm" ? "phone-farm" : "statistics",
+      });
     };
     const onWindowToggle = (event: Event) => {
       handleToggle((event as CustomEvent).detail);

@@ -6,6 +6,7 @@
  * App.tsx's always-mounted HstToggleListener can start/stop the automation
  * loop even when MobilePage is not in the route tree.
  */
+import type { HstToggleEvent } from "./hstToggleCoordinator";
 
 // ── Shared maps (imported by MobilePage so they use the same instances) ──────
 export const _hstTimers   = new Map<string, ReturnType<typeof setTimeout>>();
@@ -28,6 +29,11 @@ type HstToggleHandler = (event: {
 // remain useful across app contexts, but a mounted runtime must not depend on
 // React listener timing to receive an immediate wake command.
 export const _hstToggleHandlers = new Map<string, HstToggleHandler>();
+// An accepted manual ON can arrive a moment before MobilePage finishes
+// registering the mounted slot handler. Keep that command long enough for the
+// handler to attach instead of allowing hydration to reinterpret it as startup
+// recovery.
+const _hstPendingImmediate = new Map<string, HstToggleEvent>();
 const _hstStarting = new Set<string>();
 
 export function registerHstToggleHandler(
@@ -37,9 +43,49 @@ export function registerHstToggleHandler(
 ): () => void {
   const key = `${serial}:${slotIdx}`;
   _hstToggleHandlers.set(key, handler);
+  const pending = _hstPendingImmediate.get(key);
+  if (pending) {
+    queueMicrotask(() => {
+      if (
+        _hstToggleHandlers.get(key) === handler &&
+        _hstPendingImmediate.get(key)?.requestId === pending.requestId
+      ) {
+        _hstPendingImmediate.delete(key);
+        handler(pending);
+      }
+    });
+  }
   return () => {
     if (_hstToggleHandlers.get(key) === handler) _hstToggleHandlers.delete(key);
   };
+}
+
+/**
+ * Route an accepted toggle event to the mounted slot runtime when available.
+ * If the runtime is between mount phases, retain an immediate ON until its
+ * handler registers. Without this handoff, an enabled slot can be mistaken
+ * for a restart-recovered slot and receive a full interval delay.
+ */
+export function routeHstToggle(event: HstToggleEvent): void {
+  const key = `${event.serial}:${event.slotIdx}`;
+  const handler = _hstToggleHandlers.get(key);
+  if (handler) {
+    _hstPendingImmediate.delete(key);
+    handler(event);
+    return;
+  }
+  if (event.enabled) {
+    _hstPendingImmediate.set(key, event);
+    startHstLoop(event.serial, event.slotIdx, {
+      immediate: true,
+      force: true,
+      requestId: event.requestId,
+      source: event.source,
+    });
+  } else {
+    _hstPendingImmediate.delete(key);
+    stopHstLoop(event.serial, event.slotIdx);
+  }
 }
 
 import {
@@ -165,6 +211,7 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
     _hstNextRunAt.delete(key);
     return;
   }
+  _hstPendingImmediate.delete(key);
 
   // Fetch current settings from the server.
   let s: Record<string, unknown>;
