@@ -36,6 +36,12 @@ description: Chronological record of every attempt to get Make a Post working vi
 - **Fix:** the audit now polls MediaStore for the exact pushed path before the picker opens and aborts safely if indexing is not observed. The flow cannot continue to a stale gallery selection when the assigned image is unavailable.
 - Status: API build passed and workflow restarted; physical-device confirmation is still required.
 
+### 2026-09-08 — MediaStore verification is one check, not a retry loop
+- The shared device-media audit was issuing six MediaStore queries and logging five waits before failing. That delayed the upload flow without changing the result when the scanner did not expose the row.
+- **Fix:** keep the MediaStore safety gate, but perform one query after the existing scanner broadcast and abort immediately if the exact staged file is absent. The byte/shape/hash audit remains after a successful row lookup.
+- **Lesson:** this gate prevents stale gallery selection; it must not become a multi-attempt dwell that consumes the tool cycle.
+- Status: code-level fix applied; API build/workflow restart and physical-device confirmation required.
+
 ### 2026-08-26 — Home lookup is shared, but the recovery pass is Make a Post-only
 - Investigation of the real-device failure screenshot and git history showed that Make a Post calls the same shared visual `findHomeTab` detector used by Feed, Stories, Explore, Notifications, and Random Actions. The Reels matcher work did not change it.
 - The shared detector had previously been tightened globally to the first navigation slot and the lower navigation band. A single pass can still capture the account-switch settling frame before that row is visually ready.

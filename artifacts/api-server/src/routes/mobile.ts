@@ -4655,24 +4655,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // adb push only proves that bytes exist on the filesystem. Instagram's
       // picker reads MediaStore, so require the scanner to expose this exact
       // path before allowing the compose flow to continue.
-      let mediaRow: { found: boolean; raw: string; fields: Record<string, string> } | null = null;
-      for (let attempt = 1; attempt <= 6; attempt++) {
-        mediaRow = await android.queryMediaStoreFile(serial, devicePath).catch(() => null);
-        if (mediaRow?.found) {
-          onLog?.(
-            `Media audit before Instagram: MediaStore indexed ` +
-            `attempt=${attempt} displayName=${mediaRow.fields._display_name ?? path.basename(devicePath)} ` +
-            `size=${mediaRow.fields.size ?? "unknown"}`,
-          );
-          break;
-        }
-        if (attempt < 6) {
-          onLog?.(`Media audit before Instagram: waiting for MediaStore index (${attempt}/5)…`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
+      // pushFileToDevice already broadcasts MEDIA_SCANNER_SCAN_FILE. This is
+      // one bounded verification, not a retry loop: the caller asked for a
+      // single media-store check and should fail immediately if Android has
+      // not indexed this staged file yet.
+      const mediaRow = await android.queryMediaStoreFile(serial, devicePath).catch(() => null);
+      if (mediaRow?.found) {
+        onLog?.(
+          `Media audit before Instagram: MediaStore indexed ` +
+          `attempt=1 displayName=${mediaRow.fields._display_name ?? path.basename(devicePath)} ` +
+          `size=${mediaRow.fields.size ?? "unknown"}`,
+        );
+      } else {
+        onLog?.(
+          `Media audit before Instagram: MediaStore did not index ` +
+          `${path.basename(devicePath)} on the single check — aborting`,
+        );
       }
       if (!mediaRow?.found) {
-        throw new Error(`MediaStore did not index ${path.basename(devicePath)} after media scan`);
+        throw new Error(`MediaStore did not index ${path.basename(devicePath)} on the first media check`);
       }
       pulledPath = await android.pullFileFromDevice(serial, devicePath);
       const bytes = await fsPromises.readFile(pulledPath);
