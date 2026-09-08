@@ -42,6 +42,12 @@ description: Chronological record of every attempt to get Make a Post working vi
 - **Lesson:** this gate prevents stale gallery selection; it must not become a multi-attempt dwell that consumes the tool cycle.
 - Status: code-level fix applied; API build/workflow restart and physical-device confirmation required.
 
+### 2026-09-08 — The supplied export shows two accepted posts, not a failed first post
+- The 09:08 export contains one cycle (`6v21ascvt8xhgxbiyckny9`) on the same serial and slot. It shows two complete Make a Post input sequences: final Share at 09:29:57 and again at 09:31:13.
+- Each final Share is followed by the 1.5-second upload-state dwell and then the dispatcher’s success-only 5-second upload-confirmed dwell (ending at 09:30:10 and 09:31:25). The second sequence is therefore the second post in the same `postCount` loop, not proof of a rerun rescuing a failed first attempt.
+- **Lesson:** server input logs can prove that the mobile flow reached and accepted both Share actions, but cannot prove profile visibility. The cycle notebook is the authoritative source for the `tLog` success/failure lines. Normal feed Make a Post also uses the 1.2-second scanner settle, not the shared MediaStore audit used by Story/Profile Picture.
+- Status: investigation corrected; no code change indicated by this export.
+
 ### 2026-08-26 — Home lookup is shared, but the recovery pass is Make a Post-only
 - Investigation of the real-device failure screenshot and git history showed that Make a Post calls the same shared visual `findHomeTab` detector used by Feed, Stories, Explore, Notifications, and Random Actions. The Reels matcher work did not change it.
 - The shared detector had previously been tightened globally to the first navigation slot and the lower navigation band. A single pass can still capture the account-switch settling frame before that row is visually ready.

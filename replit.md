@@ -190,6 +190,15 @@ Every push to GitHub must include a version bump in both `package.json` (root) a
 
 Every push must include a new entry at the top of `CHANGELOG.md` describing what changed in plain English from the user's perspective.
 
+### Make a Post log interpretation
+
+The server debug export records ADB input and execution timing, but not the cycle notebook's `tLog` payload. When investigating a suspected failed post, distinguish:
+
+- Two complete Share sequences in one cycle may simply be the configured `postCount` loop, not a retry.
+- The dispatcher’s 5-second `upload confirmed` dwell runs only after `runMakePostStep()` returns `{ posted: true }`; a final Share followed by that dwell is API-level submission evidence.
+- This does not prove the post is visible on the Instagram profile. Use the per-slot cycle notebook for the operation’s success/failure lines and profile verification for publication visibility.
+- Normal feed Make a Post currently uses its 1.2-second scanner settle; the shared MediaStore audit is used by the Story/Profile Picture paths, not the regular feed-post path.
+
 ---
 
 ## User preferences
