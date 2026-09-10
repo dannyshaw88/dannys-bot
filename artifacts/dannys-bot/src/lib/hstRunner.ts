@@ -36,6 +36,32 @@ export const _hstToggleHandlers = new Map<string, HstToggleHandler>();
 const _hstPendingImmediate = new Map<string, HstToggleEvent>();
 const _hstStarting = new Set<string>();
 
+type HstDebugFields = Record<string, string | number | boolean | null | undefined>;
+
+/**
+ * Background HST work runs outside MobilePage, so its console output is not
+ * forwarded through the UI's onLog callback. Send every ownership/timer
+ * boundary to the API-backed debug log as well as the browser console.
+ */
+function logBackgroundHst(
+  event: string,
+  serial: string,
+  slotIdx: number,
+  fields: HstDebugFields = {},
+): void {
+  const detail = JSON.stringify({ serial, slotIdx, ...fields });
+  const msg = `background event=${event} ${detail}`;
+  console.info(`[HST-RECOVERY] ${msg}`);
+  void fetch("/api/hst-dbg", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ msg }),
+    keepalive: true,
+  }).catch(() => {
+    // Diagnostics must never affect the HST loop.
+  });
+}
+
 export function registerHstToggleHandler(
   serial: string,
   slotIdx: number,
@@ -115,21 +141,33 @@ export function startHstLoop(
   // A mounted MobilePage runtime owns this slot's timer and should also own
   // its settings lifecycle. Recovery must not create a second timer while the
   // UI instance is present; both paths still share the collision coordinator.
-  if (_hstUiMounted.has(key)) return;
+  if (_hstUiMounted.has(key)) {
+    logBackgroundHst("start-skipped-ui-owner", serial, slotIdx, { key });
+    return;
+  }
   if (options.force) {
     const existingTimer = _hstTimers.get(key);
     if (existingTimer !== undefined) {
       clearTimeout(existingTimer);
       _hstTimers.delete(key);
+      logBackgroundHst("forced-timer-replaced", serial, slotIdx, { key });
     }
     _hstStarting.delete(key);
   } else if (_hstTimers.has(key) || _hstStarting.has(key)) {
+    logBackgroundHst("start-skipped-existing-owner", serial, slotIdx, {
+      key,
+      hasTimer: _hstTimers.has(key),
+      starting: _hstStarting.has(key),
+    });
     return; // already owned/starting
   }
-  console.info(
-    `[HST-RECOVERY] starting loop ${key} immediate=${options.immediate !== false} ` +
-    `force=${Boolean(options.force)} requestId=${options.requestId ?? "none"} source=${options.source ?? "unknown"}`,
-  );
+  logBackgroundHst("start", serial, slotIdx, {
+    key,
+    immediate: options.immediate !== false,
+    force: Boolean(options.force),
+    requestId: options.requestId ?? "none",
+    source: options.source ?? "unknown",
+  });
   _hstStop.delete(key);
   if (options.immediate !== false) {
     scheduleNextBg(serial, slotIdx, key, 0); // manual toggle-on
@@ -160,26 +198,77 @@ export function stopHstLoop(serial: string, slotIdx: number): void {
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function scheduleNextBg(serial: string, slotIdx: number, key: string, delayMs: number): void {
-  const t = setTimeout(() => runCycleBg(serial, slotIdx, key), Math.round(delayMs));
+  const roundedDelayMs = Math.round(delayMs);
+  const fireAt = Date.now() + roundedDelayMs;
+  const t = setTimeout(() => {
+    logBackgroundHst("timer-callback-entered", serial, slotIdx, {
+      key,
+      scheduledFireAt: _hstNextRunAt.get(key) ?? fireAt,
+      timerPresentAtCallback: _hstTimers.has(key),
+      stopFlag: _hstStop.has(key),
+      uiOwner: _hstUiMounted.has(key),
+    });
+    void runCycleBg(serial, slotIdx, key).catch((error: any) => {
+      logBackgroundHst("unexpected-run-rejection", serial, slotIdx, {
+        key,
+        name: error?.name ?? "Error",
+        message: error?.message ?? String(error),
+        stopFlag: _hstStop.has(key),
+        uiOwner: _hstUiMounted.has(key),
+      });
+      // A rejected promise otherwise kills this background slot permanently.
+      // Keep it observable and alive unless ownership has changed explicitly.
+      if (!_hstStop.has(key) && !_hstUiMounted.has(key)) {
+        scheduleNextBg(serial, slotIdx, key, 60_000);
+        logBackgroundHst("unexpected-run-retry-scheduled", serial, slotIdx, {
+          key,
+          retryDelayMs: 60_000,
+        });
+      }
+    });
+  }, roundedDelayMs);
   _hstTimers.set(key, t);
-  _hstNextRunAt.set(key, Date.now() + Math.round(delayMs));
-  console.info(`[HST-RECOVERY] scheduled ${key} in ${(delayMs / 60000).toFixed(1)}m`);
+  _hstNextRunAt.set(key, fireAt);
+  logBackgroundHst("timer-scheduled", serial, slotIdx, {
+    key,
+    delayMs: roundedDelayMs,
+    fireAt,
+  });
 }
 
 async function scheduleRestartRecovery(serial: string, slotIdx: number, key: string): Promise<void> {
   let settings: Record<string, unknown> | null = null;
+  logBackgroundHst("recovery-settings-fetch-start", serial, slotIdx, { key });
   try {
     const r = await fetch(
       `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`,
     );
     const body = await r.json().catch(() => null);
     if (r.ok && body && typeof body === "object") settings = body as Record<string, unknown>;
-  } catch {
+    logBackgroundHst("recovery-settings-fetch-response", serial, slotIdx, {
+      key,
+      status: r.status,
+      ok: r.ok,
+      bodyObject: Boolean(body && typeof body === "object"),
+      enabled: typeof body?.enabled === "boolean" ? body.enabled : null,
+    });
+  } catch (error: any) {
+    logBackgroundHst("recovery-settings-fetch-error", serial, slotIdx, {
+      key,
+      name: error?.name ?? "Error",
+      message: error?.message ?? String(error),
+    });
     // Keep the recovery alive through a transient API startup/network failure.
   }
 
   _hstStarting.delete(key);
-  if (_hstTimers.has(key) || _hstStop.has(key) || _hstUiMounted.has(key)) return;
+  if (_hstTimers.has(key) || _hstStop.has(key) || _hstUiMounted.has(key)) {
+    logBackgroundHst("recovery-exit-after-settings", serial, slotIdx, {
+      key,
+      reason: _hstTimers.has(key) ? "timer-already-owned" : _hstStop.has(key) ? "stop-flag" : "ui-owner",
+    });
+    return;
+  }
   if (!settings) {
     // Keep trying to hydrate the interval after an API startup race.  Do not
     // call runCycleBg here: that path is allowed to return on a network error,
@@ -188,7 +277,7 @@ async function scheduleRestartRecovery(serial: string, slotIdx: number, key: str
     return;
   }
   if (!settings.enabled) {
-    console.info(`[HST-RECOVERY] ${key} settings disabled after hydration; loop stopped`);
+    logBackgroundHst("recovery-stopped-disabled", serial, slotIdx, { key });
     return;
   }
 
@@ -206,7 +295,17 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
   const hstTurnAt = _hstNextRunAt.get(key) ?? Date.now();
   _hstNextRunAt.delete(key);
 
+  logBackgroundHst("run-entered", serial, slotIdx, {
+    key,
+    hstTurnAt,
+    stopFlag: _hstStop.has(key),
+    uiOwner: _hstUiMounted.has(key),
+  });
   if (_hstStop.has(key) || _hstUiMounted.has(key)) {
+    logBackgroundHst("run-skipped-owner", serial, slotIdx, {
+      key,
+      reason: _hstStop.has(key) ? "stop-flag" : "ui-owner",
+    });
     _hstStop.delete(key);
     _hstNextRunAt.delete(key);
     return;
@@ -215,19 +314,33 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
 
   // Fetch current settings from the server.
   let s: Record<string, unknown>;
+  logBackgroundHst("cycle-settings-fetch-start", serial, slotIdx, { key });
   try {
     const r = await fetch(
       `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings`,
     );
     const body = await r.json().catch(() => null);
     if (!r.ok || !body) {
+      logBackgroundHst("cycle-settings-fetch-response-invalid", serial, slotIdx, {
+        key,
+        status: r.status,
+        ok: r.ok,
+        bodyPresent: Boolean(body),
+        retryDelayMs: 60_000,
+      });
       // The API may still be restarting. Keep recovery alive without ever
       // converting an unavailable settings response into an immediate cycle.
       scheduleNextBg(serial, slotIdx, key, 60_000);
       return;
     }
     s = body as Record<string, unknown>;
-  } catch {
+  } catch (error: any) {
+    logBackgroundHst("cycle-settings-fetch-error", serial, slotIdx, {
+      key,
+      name: error?.name ?? "Error",
+      message: error?.message ?? String(error),
+      retryDelayMs: 60_000,
+    });
     // Keep the background loop alive even when the API briefly restarts.  A
     // retry is deliberately delayed so a network failure can never turn into
     // an immediate cycle after software restart.
@@ -236,10 +349,14 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
   }
 
   if (!s.enabled) {
-    console.info(`[HST-RECOVERY] ${key} settings disabled before cycle; loop stopped`);
+    logBackgroundHst("cycle-stopped-disabled", serial, slotIdx, { key });
     return; // toggle was turned off in the DB
   }
   if (_hstStop.has(key) || _hstUiMounted.has(key)) {
+    logBackgroundHst("cycle-skipped-after-settings", serial, slotIdx, {
+      key,
+      reason: _hstStop.has(key) ? "stop-flag" : "ui-owner",
+    });
     _hstStop.delete(key);
     _hstNextRunAt.delete(key);
     return;
@@ -249,17 +366,41 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
   const feedMax = Math.max(feedMin, Number(s.feedScrollMax ?? 10));
   const count   = Math.floor(Math.random() * (feedMax - feedMin + 1)) + feedMin;
   const cycleId = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-  const collisionLease = await requestCollisionSlot(serial, slotIdx, hstTurnAt, {
-    source: "hst-background",
-    owner: key,
-  });
+  logBackgroundHst("collision-request-start", serial, slotIdx, { key, hstTurnAt });
+  let collisionLease: Awaited<ReturnType<typeof requestCollisionSlot>>;
+  try {
+    collisionLease = await requestCollisionSlot(serial, slotIdx, hstTurnAt, {
+      source: "hst-background",
+      owner: key,
+    });
+    logBackgroundHst("collision-request-resolved", serial, slotIdx, {
+      key,
+      collisionPrevented: collisionLease.collisionPrevented,
+    });
+  } catch (error: any) {
+    logBackgroundHst("collision-request-error", serial, slotIdx, {
+      key,
+      name: error?.name ?? "Error",
+      message: error?.message ?? String(error),
+    });
+    throw error;
+  }
   if (_hstStop.has(key) || _hstUiMounted.has(key)) {
+    logBackgroundHst("cycle-skipped-after-collision", serial, slotIdx, {
+      key,
+      reason: _hstStop.has(key) ? "stop-flag" : "ui-owner",
+    });
     _hstStop.delete(key);
     releaseCollisionSlot(serial, collisionLease, true);
     return;
   }
 
   try {
+    logBackgroundHst("cycle-post-start", serial, slotIdx, {
+      key,
+      cycleId,
+      count,
+    });
     const cycleResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -459,6 +600,12 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
         dismissDirection: s.dismissDirection,
       }),
     });
+    logBackgroundHst("cycle-post-response", serial, slotIdx, {
+      key,
+      cycleId,
+      status: cycleResponse.status,
+      ok: cycleResponse.ok,
+    });
     if (cycleResponse.status === 409) {
       // Another slot on this device is currently running. Keep this slot's
       // turn alive and retry shortly rather than waiting for the full interval
@@ -466,7 +613,21 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
       scheduleNextBg(serial, slotIdx, key, 10_000 + Math.random() * 10_000);
       return;
     }
-  } catch {
+    if (!cycleResponse.ok) {
+      logBackgroundHst("cycle-post-non-ok", serial, slotIdx, {
+        key,
+        cycleId,
+        status: cycleResponse.status,
+        retryDelayMs: "configured-interval",
+      });
+    }
+  } catch (error: any) {
+    logBackgroundHst("cycle-post-error", serial, slotIdx, {
+      key,
+      name: error?.name ?? "Error",
+      message: error?.message ?? String(error),
+      retryDelayMs: 60_000,
+    });
     // Keep the loop alive through a transient API/network failure. A delayed
     // retry is safer than relying on MobilePage to be mounted.
     scheduleNextBg(serial, slotIdx, key, 60_000);

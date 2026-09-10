@@ -4540,6 +4540,19 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     if (!_phone || invalidHstSlot || deviceUnavailable || !settings.enabled || !hydrated) { setRunning(false); return; }
     const serial = _phone.serial;
     const key = `${serial}:${slotIdx ?? 0}`;
+    const hstDebugTag = slotUsername ? `@${slotUsername}` : `slot${slotIdx ?? 0}`;
+
+    // Keep background and mounted-runtime scheduling in the same server-backed
+    // diagnostic stream. The Windows Electron log must show timer ownership
+    // before and after every React cleanup/remount boundary.
+    const srvLog = (msg: string) => {
+      fetch('/api/hst-dbg', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msg }),
+        keepalive: true,
+      }).catch(() => {});
+    };
 
     // ── Safety: never double-schedule / remount recovery ─────────────────────
     // There are two cases where _hstTimers already has this key:
@@ -4562,6 +4575,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         !manualToggleOnRef.current
       ) {
         // Case A — same instance, valid closures, leave the timer alone.
+        srvLog(`${hstDebugTag} — timer ownership preserved (existing timer, remainingMs=${Math.max(0, (_hstNextRunAt.get(key) ?? Date.now()) - Date.now())})`);
         return;
       }
       // Case B — remount, or an explicit ON event replacing a stale recovery
@@ -4569,6 +4583,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const staleHandle = _hstTimers.get(key)!;
       clearTimeout(staleHandle);
       _hstTimers.delete(key);
+      srvLog(`${hstDebugTag} — stale timer replaced during remount/force (hadNextRunAt=${Boolean(_hstNextRunAt.get(key))})`);
       // Restore nextRunAt from the module-level mirror so the timestamp
       // reappears immediately on screen.
       const savedFireAt = _hstNextRunAt.get(key);
@@ -4583,19 +4598,27 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // Clear any stale stop flag left from a previous disable cycle.
     _hstStop.delete(key);
 
-    // ── Server-side diagnostic log ────────────────────────────────────────
-    const srvLog = (msg: string) => {
-      fetch('/api/hst-dbg', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ msg }),
-      }).catch(() => {});
-    };
-
     // Stores the next timer handle in the module-level map and returns it.
     const scheduleNext = (delayMs: number) => {
-      const t = setTimeout(runCycle, Math.round(delayMs));
+      const roundedDelayMs = Math.round(delayMs);
+      const scheduledFireAt = _hstNextRunAt.get(key) ?? Date.now() + roundedDelayMs;
+      const t = setTimeout(() => {
+        srvLog(`${hstDebugTag} — timer callback entered (scheduledFireAt=${scheduledFireAt}, stop=${_hstStop.has(key)}, uiOwner=true)`);
+        void runCycle().catch((error: any) => {
+          srvLog(`${hstDebugTag} — unhandled run rejection (name=${error?.name ?? "Error"}, message=${error?.message ?? String(error)})`);
+          onLog?.(`[HST-DBG] ${hstDebugTag} — unhandled run rejection: ${error?.message ?? String(error)}`);
+          if (!_hstStop.has(key) && phoneRef.current?.serial === serial) {
+            const retryDelayMs = 60_000;
+            const retryFireAt = Date.now() + retryDelayMs;
+            _hstNextRunAt.set(key, retryFireAt);
+            setNextRunAt(retryFireAt);
+            scheduleNext(retryDelayMs);
+            srvLog(`${hstDebugTag} — unhandled run retry scheduled (delayMs=${retryDelayMs})`);
+          }
+        });
+      }, roundedDelayMs);
       _hstTimers.set(key, t);
+      srvLog(`${hstDebugTag} — timer scheduled (delayMs=${roundedDelayMs}, fireAt=${scheduledFireAt})`);
       return t;
     };
 
@@ -4656,7 +4679,13 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           }
           onLog?.(`[HST-DBG] ${_dbgTag} — collision detected; queued, waiting for rest window`);
         };
-        const lease = await requestSlot(slotIdx, hstTurnAt, onQueued, "hst-ui", _dbgTag, manualCollisionOverride);
+        let lease: CollisionLease;
+        try {
+          lease = await requestSlot(slotIdx, hstTurnAt, onQueued, "hst-ui", _dbgTag, manualCollisionOverride);
+        } catch (error: any) {
+          srvLog(`${_dbgTag} — collision-preventer threw (name=${error?.name ?? "Error"}, message=${error?.message ?? String(error)})`);
+          throw error;
+        }
         collisionLeaseRef.current = lease;
         collisionPrevented = lease.collisionPrevented;
         srvLog(`${_dbgTag} — collision-preventer request resolved (collisionPrevented=${collisionPrevented})`);
@@ -4895,6 +4924,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           }),
         });
         const body = await r.json().catch(() => null);
+        srvLog(`${_dbgTag} — cycle response (status=${r.status}, ok=${r.ok}, error=${body?.error ?? "none"})`);
         if (Array.isArray(body?.executionTrace)) {
           for (const entry of body.executionTrace) {
             onLog?.(`[EXECUTION TRACE] ${entry}`);
@@ -4933,10 +4963,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       } catch (e: any) {
         if ((e as any)?.name === "AbortError") {
           const acctTag = slotUsername ? `@${slotUsername} — ` : "";
+          srvLog(`${_dbgTag} — cycle fetch aborted (message=${e?.message ?? "AbortError"})`);
           onLog?.(`${acctTag}Cycle aborted — toggle turned off`);
           return;
         }
         const acctTag = slotUsername ? `@${slotUsername} — ` : "";
+        srvLog(`${_dbgTag} — cycle fetch threw (name=${(e as any)?.name ?? "Error"}, message=${e?.message ?? "network error"})`);
         onLog?.(`[HST-DBG] ${_dbgTag} — fetch/cycle threw: name=${(e as any)?.name} message=${e?.message}`);
         onLog?.(`${acctTag}Cycle failed — ${e?.message ?? "network error"}`);
       } finally {

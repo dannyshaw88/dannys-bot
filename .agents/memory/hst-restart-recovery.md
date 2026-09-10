@@ -10,3 +10,9 @@ Software restart loses browser-memory timers, so previously enabled HST slots ne
 **How to apply:** Keep startup recovery and manual toggle-on as distinct call modes. Recovery must treat unavailable settings or network failures as delayed retries, and the per-slot settings response must include the persisted account username so restart-triggered cycles send `slotIdx`, `slotUsername`, `sourceType: "phone"`, and `serial:slot` metadata together.
 
 Manual off→on reliability also depends on keeping `hydrated` true during same-device refreshes. Only a changed device/slot identity should reset the hydration gate; preserve explicit toggle edits made while a settings refresh is in flight.
+
+Background recovery must report API-backed stage markers for timer scheduling, callback entry, ownership exits, settings hydration, collision acquisition, cycle POST/response, and unexpected promise rejection. The timer callback must observe `runCycleBg()` rejections so a thrown collision/request error cannot silently kill a slot's loop.
+
+**Why:** Browser-console recovery messages were not present in the Windows Electron debug log, and the unobserved `setTimeout` promise boundary could make a slot disappear after its timer fired without any server-visible evidence.
+
+**How to apply:** Route background diagnostics through `/api/hst-dbg`; include serial, slot index, stage, status/error, and retry/ownership reason. Keep the retry delayed and only reschedule when the slot is not explicitly stopped or owned by the mounted runtime.
