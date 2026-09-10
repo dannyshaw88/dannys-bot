@@ -12219,10 +12219,12 @@ export async function findInstagramDmTab(serial: string): Promise<{ x: number; y
 }
 
 /**
- * Find a random tappable conversation thread row in the Instagram DM inbox.
- * Returns one of the top-3 most-recent rows (chosen at random) so the bot
- * naturally gravitates toward active conversations without always tapping
- * the very first one.
+ * Find any visible inbox row to tap.
+ *
+ * Check Inbox intentionally does not inspect sender names, message text,
+ * content-desc, resource IDs, or clickable flags. Instagram exposes several
+ * different row hierarchies across builds, and this tool only needs one
+ * generic row coordinate before pressing Back.
  */
 export async function findDmConversationItem(serial: string): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
@@ -12230,12 +12232,12 @@ export async function findDmConversationItem(serial: string): Promise<{ x: numbe
   const xml = await _uiDump(adb, serial).catch(() => "");
   if (!xml) return null;
   const { w, h } = _getScreenSize(xml);
-  const topSkip  = Math.round(h * 0.12); // skip the DM header row
-  const botSkip  = Math.round(h * 0.88); // skip bottom nav
-  // Conversation rows span almost the full width and are clickable.
-  // Require width > 50% of screen width to exclude narrow icon-only nodes.
-  const minW = Math.round(w * 0.50);
-  const candidates: { x: number; y: number }[] = [];
+  const topSkip = Math.round(h * 0.12); // skip the fixed inbox/header controls
+  const botSkip = Math.round(h * 0.88); // skip the bottom navigation
+  const minRowH = Math.max(24, Math.round(h * 0.025));
+  const maxRowH = Math.round(h * 0.24);
+  const minRowW = Math.round(w * 0.35);
+  const candidates: Array<{ x: number; y: number; area: number }> = [];
   const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
   let m: RegExpExecArray | null;
   while ((m = nodeRe.exec(xml)) !== null) {
@@ -12244,16 +12246,33 @@ export async function findDmConversationItem(serial: string): Promise<{ x: numbe
     if (!bm) continue;
     const x1 = Number(bm[1]), y1 = Number(bm[2]), x2 = Number(bm[3]), y2 = Number(bm[4]);
     const rowW = x2 - x1;
-    const cy = Math.round((y1 + y2) / 2);
-    if (rowW < minW) continue;
-    if (cy < topSkip || cy > botSkip) continue;
-    candidates.push({ x: Math.round((x1 + x2) / 2), y: cy });
+    const rowH = y2 - y1;
+    if (rowW < minRowW || rowH < minRowH || rowH > maxRowH) continue;
+    if (y1 < topSkip || y2 > botSkip) continue;
+    candidates.push({
+      x: Math.round((x1 + x2) / 2),
+      y: Math.round((y1 + y2) / 2),
+      area: rowW * rowH,
+    });
   }
   if (candidates.length === 0) return null;
-  // Sort top-to-bottom (most recent first in IG inbox) and pick from top 3.
-  candidates.sort((a, b) => a.y - b.y);
-  const pool = candidates.slice(0, 3);
-  return pool[Math.floor(Math.random() * pool.length)];
+  // Prefer the largest row-like node at each vertical position so nested
+  // accessibility children do not create dozens of duplicate tap choices.
+  candidates.sort((a, b) => a.y - b.y || b.area - a.area);
+  const rows: Array<{ x: number; y: number; area: number }> = [];
+  const rowMergeGap = Math.max(minRowH, Math.round(h * 0.035));
+  for (const candidate of candidates) {
+    const existing = rows.find(row => Math.abs(row.y - candidate.y) <= rowMergeGap);
+    if (!existing) {
+      rows.push(candidate);
+    } else if (candidate.area > existing.area) {
+      existing.x = candidate.x;
+      existing.y = candidate.y;
+      existing.area = candidate.area;
+    }
+  }
+  if (rows.length === 0) return null;
+  return rows[Math.floor(Math.random() * rows.length)];
 }
 
 /**
