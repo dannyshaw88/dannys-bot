@@ -91,6 +91,11 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
   currentTool.set(serial, "ACCOUNT SWITCHING");
   log(`[TRACE] step-1 account-switch: target=@${username}`);
   log(`▶ Switching to Instagram account: @${username}…`);
+  if (launchPopup) {
+    log(`▶ Popup detected before account-switch verification during launch cleanup (${launchPopup})`);
+  } else {
+    log("▶ No popup detected before account-switch verification during launch cleanup");
+  }
 
   // Intentionally not configurable: retain the established 50/50 method mix.
   const useProfileTabLongPress = Math.random() < 0.5;
@@ -124,22 +129,42 @@ export async function runAccountSwitch(context: AccountSwitchOperationContext): 
   );
   if (switched) {
     log("[TRACE] step-1 account-switch: confirmed");
+    log(`▶ Account-switch handoff verified for @${username}`);
     logger.info({ serial, username }, "[account-switch] confirmed");
     steps.push(`account-switch(@${username})`);
     lastActiveUsername.set(serial, username);
     const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
     if (postSwitchPopup) {
+      log(`▶ Post-switch popup detected after account verification (${postSwitchPopup})`);
       log(`▶ Dismissed post-switch popup (${postSwitchPopup})`);
       await sleepOrAbort(serial, 500);
+    } else {
+      log("▶ No post-switch popup detected after account verification");
     }
   } else {
-    log("[TRACE] step-1 account-switch: failed");
-    logger.warn({ serial, username }, "[account-switch] returned false");
-    log(`✗ Account switch to @${username} failed — continuing with tools`);
-    steps.push("account-switch(attempted — continuing)");
+    log("[TRACE] step-1 account-switch: unknown");
+    logger.warn({ serial, username }, "[account-switch] handoff unknown");
+    // One bounded recovery pass may clear a genuine post-switch interstitial
+    // (including the "Why you're seeing this post" sheet). It never retries
+    // the account-row tap and never makes the surface safe for tool execution
+    // by itself; the caller must still skip the dispatcher below.
+    log("▶ Checking for a post-switch popup after unknown account verification");
+    const postSwitchPopup = await android.dismissInstagramInterstitials(serial).catch(() => null);
+    if (postSwitchPopup) {
+      log(`▶ Post-switch popup detected after unknown account verification (${postSwitchPopup})`);
+      log(`▶ Dismissed post-switch popup (${postSwitchPopup}); account handoff remains unknown`);
+      await sleepOrAbort(serial, 500);
+    } else {
+      log("▶ No post-switch popup detected after unknown account verification");
+    }
+    log(`✗ Account switch to @${username} is unknown — tool dispatcher must be skipped`);
+    steps.push("account-switch(unknown — dispatcher skipped)");
   }
 
-  // Preserve the slot's stable identity even if the device-side switch failed.
-  lastActiveUsername.set(serial, username || lastActiveUsername.get(serial) || "");
+  // Do not attribute later metrics to the target account when the handoff is
+  // unknown. The previous active account remains the only known identity.
+  if (!switched) {
+    lastActiveUsername.set(serial, lastActiveUsername.get(serial) || "");
+  }
   return switched;
 }

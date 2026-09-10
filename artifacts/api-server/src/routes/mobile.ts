@@ -6945,7 +6945,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
 
       // Account-switch orchestration is isolated from the cycle dispatcher.
-      await runAccountSwitch({
+      const accountSwitchVerified = await runAccountSwitch({
         android,
         serial,
         username: resolvedSlotUsername,
@@ -6961,19 +6961,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         swipeGesture: loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture,
       });
 
-      // ── Step 2: Shuffleable tool dispatcher ──────────────────────────────
-      // When shuffleToolOrder is on the six tools are Fisher-Yates shuffled
-      // into a random order before each cycle. When off they run in the
-      // default sequence: Feed → Stories → Reels → Follow → Post → Jitter.
-      //
-      // Exit safety guarantee:
-      //   • Stories: the Stories operation owns entry, viewer actions, and
-      //     its exit gesture before returning control to this dispatcher.
-      //   • Reels: the Reels operation owns the full-screen viewer exit before
-      //     returning control to this dispatcher.
-      //   • All other tools self-navigate to their own starting position
-      //     (Search tab, Home tab, compose "+") so they work from any screen.
-      // (likes, sharesFeed, etc. already hoisted before try — no re-declaration needed)
+      if (!accountSwitchVerified) {
+        // The low-level switch has already performed its one bounded
+        // post-tap verification and, if needed, one popup cleanup pass.
+        // Never run a tool from an ambiguous Instagram surface.
+        tLog("[TRACE] step-2 tool-dispatcher: skipped-account-switch-unknown");
+        tLog("✗ Account-switch handoff is unknown — skipping Stories and all remaining dispatcher tools for this cycle");
+        steps.push("tool-dispatcher(skipped — account-switch unknown)");
+      } else {
+        // ── Step 2: Shuffleable tool dispatcher ──────────────────────────────
+        // When shuffleToolOrder is on the six tools are Fisher-Yates shuffled
+        // into a random order before each cycle. When off they run in the
+        // default sequence: Feed → Stories → Reels → Follow → Post → Jitter.
+        //
+        // Exit safety guarantee:
+        //   • Stories: the Stories operation owns entry, viewer actions, and
+        //     its exit gesture before returning control to this dispatcher.
+        //   • Reels: the Reels operation owns the full-screen viewer exit before
+        //     returning control to this dispatcher.
+        //   • All other tools self-navigate to their own starting position
+        //     (Search tab, Home tab, compose "+") so they work from any screen.
+        // (likes, sharesFeed, etc. already hoisted before try — no re-declaration needed)
 
       const trace = (msg: string) => {
         const totalSec = ((Date.now() - cycleStart) / 1000).toFixed(1);
@@ -7874,6 +7882,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         _sfBackupQueue = [];
       }
       trace(`cycle-tools-complete count=${_toolSeq.length}`);
+      }
 
       // 5. Close Instagram completely — recents switcher + swipe away, not a
       // force-stop, so the device behaves like a person put it down.

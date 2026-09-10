@@ -10735,7 +10735,7 @@ export async function switchToInstagramAccount(
   }
 
   // 5. Tap the username row to switch accounts.
-  onLog?.(`  ✓ Found exact text @${clean} in switcher — tapping text at (${coords.x},${coords.y})…`);
+  onLog?.(`  ✓ Found exact text @${clean} in switcher — account row tapped at (${coords.x},${coords.y})…`);
   await _adbTapAsync(adbPath, serial, coords.x, coords.y);
 
   // 6. Verify the resulting surface. A different account closes the sheet and
@@ -10761,21 +10761,28 @@ export async function switchToInstagramAccount(
         "i",
       ).test(postTapXml);
       if (!selectedTargetRow) {
-        onLog?.(`  ⚠ @${clean} tap result was not verifiable — continuing without another account tap`);
-        return true;
+        onLog?.(`  ⚠ @${clean} account row was tapped, but the post-switch surface is unknown — no second account tap will be attempted`);
+        return false;
       }
       onLog?.(`  ↳ @${clean} was already active and its selected row remains open — pressing Android Back once`);
       await pressBack(serial).catch(() => {});
        await _sleep(700 + Math.floor(Math.random() * 4301));
       const afterBackXml = await _uiDump(adbPath, serial).catch(() => "");
-      const stillNotHome =
-        !!afterBackXml &&
-        !/content-desc="Home[^"]*"/.test(afterBackXml) &&
-        !_findByResId(afterBackXml, ":id/feed_tab", ":id/home_tab");
-      if (stillNotHome) {
-        onLog?.(`  ⚠ Account sheet did not verify closed after the single Back; continuing`);
-      }
+       const homeAfterBack =
+         !!afterBackXml &&
+         (/content-desc="Home[^"]*"/.test(afterBackXml) ||
+           !!_findByResId(afterBackXml, ":id/feed_tab", ":id/home_tab"));
+       if (!homeAfterBack) {
+         onLog?.(`  ⚠ Account sheet did not verify closed after the single Back — account-switch handoff is unknown`);
+         return false;
+       }
+       onLog?.(`  ✓ @${clean} was already active; account sheet closed and Home was verified after the single Back`);
+     } else {
+       onLog?.(`  ✓ Account switch to @${clean} verified on Home after the account-row tap`);
     }
+   } else {
+     onLog?.(`  ⚠ Account row @${clean} was tapped, but the post-switch verification dump was empty — account-switch handoff is unknown`);
+     return false;
   }
 
   // 7. The post-tap verification dump above is the readiness check. Do not
