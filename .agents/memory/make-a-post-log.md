@@ -7,6 +7,11 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 **Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
 
+### 2026-09-10 — Randomized dwell before the calibrated second Next
+- The first and second Next controls already use the exact/manual tap path with no humanisation jitter. The second Next was being dispatched after only a fixed 700ms transition wait.
+- **Fix:** replace that wait with a random 1.0–2.5 second dwell immediately before the calibrated second-Next tap. No extra readiness gate or tap offset was added.
+- Status: code-level fix applied; physical-device confirmation is still required.
+
 ### 2026-09-08 — Filters is now an independent 0–100% action
 - The Make a Post operation now samples a dedicated Filters chance range for each post attempt.
 - The default range is 0/100 so Filters is no longer part of every post. A 0/0 range skips the Filters button, filter thumbnail, and finish-selection taps but continues through the editor's second Next. A 100/100 range always runs it.

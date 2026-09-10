@@ -386,13 +386,14 @@ await sleepOrAbort(serial, 700);
 // Resolve the editor's second Next from its own device-specific mirror
 // calibration. It is deliberately separate from the picker header Next above:
 // both controls are calibrated independently because they occupy different
-// positions on the phone.
-let editorNext: { x: number; y: number } | null = null;
-for (let advanceScan = 0; advanceScan < 10 && !editorNext; advanceScan++) {
-  await sleepOrAbort(serial, advanceScan === 0 ? 700 : 500);
-  editorNext = resolveCalibratedControl("makePostSecondNext");
-  if (editorNext) break;
-}
+// positions on the phone. Give Instagram a randomized 1–2.5 second editor
+// transition dwell before dispatching the fixed calibrated point.
+const secondNextDwellMs = 1000 + Math.floor(Math.random() * 1501);
+onLog?.(
+  `Make a Post: waiting ${(secondNextDwellMs / 1000).toFixed(1)}s before calibrated second Next…`,
+);
+await sleepOrAbort(serial, secondNextDwellMs, "navigation", "computed");
+const editorNext = resolveCalibratedControl("makePostSecondNext");
 if (!editorNext) {
   onLog?.("Make a Post: calibrated second Next is unavailable — aborting this attempt");
   const evidence = await android.captureDebugEvidence?.(serial, "make-post-second-next-unavailable");
