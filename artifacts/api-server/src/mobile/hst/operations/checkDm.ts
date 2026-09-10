@@ -1,10 +1,9 @@
 export interface CheckDmOperationContext {
   android: {
-    tapCalibratedNavigationControl(serial: string, control: "directMessages", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
+    tapCalibratedNavigationControl(serial: string, control: "directMessages" | "settingsBack", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
     dismissInstagramInterstitials(serial: string): Promise<string | null>;
     findDmConversationItem(serial: string): Promise<{ x: number; y: number } | null>;
-    pressBack(serial: string): Promise<void>;
   };
   getScreenSize(serial: string): { w: number; h: number };
   deviceProfileSwipe(
@@ -61,7 +60,8 @@ export async function runCheckDmLoop(
       await android.tap(serial, item.x, item.y);
       onLog?.("Check Inbox: ✓ opened conversation thread");
       await sleepOrAbort(serial, 2000 + Math.round(Math.random() * 1500));
-      await android.pressBack(serial);
+      const threadBack = await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
+      onLog?.(`Check Inbox: tapped calibrated Back via mirror at (${threadBack.x},${threadBack.y})`);
       await sleepOrAbort(serial, 600);
     } else {
       onLog?.("Check Inbox: no conversation thread found — skipping tap");
@@ -70,7 +70,8 @@ export async function runCheckDmLoop(
     onLog?.("Check Inbox: click-thread roll missed — skipping");
   }
 
-  await android.pressBack(serial);
+  const inboxBack = await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
+  onLog?.(`Check Inbox: tapped calibrated Back via mirror at (${inboxBack.x},${inboxBack.y})`);
   await sleepOrAbort(serial, 800);
   onLog?.("Check Inbox: ✓ DM inbox check done");
 }

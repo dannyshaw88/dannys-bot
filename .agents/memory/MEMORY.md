@@ -19,6 +19,7 @@
 - [Artifact auto-creation duplicate-engine hazard](artifact-duplicate-engine-hazard.md) — Replit can auto-create artifact-managed workflows that run a second live copy of a stateful backend; must gate with a cross-process lock, not assume one instance
 - [mobileSessionGet error contract drift](mobile-session-get-error-contract.md) — thrown-Error classification code must be re-verified whenever the function it classifies changes its throw/return contract, or "network error" fallbacks silently swallow real session kills
 - [DM inbox host fix](dm-warmup-sequence.md) — direct_v2/inbox must use webGet (www.instagram.com + EB cookies), NOT mobileSessionGet (i.instagram.com) — same root cause as follow/repost host mismatch; warm-up sequence does NOT fix 4415001
+- [Check Inbox row targeting](check-inbox-row-targeting.md) — select any geometry-qualified inbox row; do not require sender/text/resource semantics before tapping and backing out
 - [API Leak Check socks5 geo](api-leak-check-socks5.md) — resolveProxyGeo uses raw TCP HTTP CONNECT (HTTP proxies only); for socks5 fall back to fetching ip-api.com through SocksProxyAgent directly
 - [Mobile mirror video stream](mobile-mirror-video-stream.md) — phone mirror uses WebCodecs H.264 decode (client side); PNG polling is fallback-only; AU cuts need first_mb_in_slice==0
 - [Mirror wake and stale status](mirror-wake-and-stale-status.md) — keep the 10-second Farm-page wake as one initial retry; never periodically wake during automation, and tolerate longer decoder gaps
