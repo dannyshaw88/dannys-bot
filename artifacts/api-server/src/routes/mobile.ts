@@ -1872,16 +1872,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // The explicit mirror open already called ensureScreenOn above. Keep
       // the requested 10-second grace for a phone opened from the Farm page,
-      // but make it a single retry only when that initial screen check said
-      // the display was not already on. Never wake a running automation cycle.
+      // but make it a single retry only when the display is STILL off. The
+      // initial `screenOnBefore` value is stale as soon as either ensureScreenOn
+      // or the operator's physical Power press wakes the phone. Previously we
+      // used that stale value and injected KEYCODE_WAKEUP after the operator
+      // had already opened Instagram, which is an unsafe manual-launch race.
+      // Never wake a running automation cycle.
       if (screenOnBefore !== true) {
         initialWakeRetryTimer = setTimeout(() => {
           initialWakeRetryTimer = null;
           if (!running || ws.readyState !== 1 || automationCycleInProgress.has(serial)) return;
-          void execFileP(adbPath, [
-            "-s", serial, "shell", "input", "keyevent", "224",
-          ], { encoding: "utf8", timeout: 3000 } as any).catch(() => {});
-          logger.info({ serial }, "[mobile-video] issued one-time initial wake retry");
+          void (async () => {
+            const screenStillOff = await android.isScreenOn(serial).catch(() => null);
+            if (screenStillOff !== false) {
+              logger.info({ serial, screenStillOff }, "[mobile-video] skipped initial wake retry; device is already awake");
+              return;
+            }
+            await execFileP(adbPath, [
+              "-s", serial, "shell", "input", "keyevent", "224",
+            ], { encoding: "utf8", timeout: 3000 } as any).catch(() => {});
+            logger.info({ serial }, "[mobile-video] issued one-time initial wake retry");
+          })();
         }, 10_000);
       }
 

@@ -7,4 +7,4 @@ The mirror's 10-second wake behavior is an initial Farm-page recovery grace peri
 
 **Why:** The H.264 stream can have multi-second gaps during UIAutomator and chained ADB work while the phone remains awake and tools continue successfully. A client asleep threshold shorter than the server's automation stall tolerance turns those normal gaps into a false “Screen is asleep” overlay.
 
-**How to apply:** Keep one delayed wake retry only when the connection started with the screen not confirmed on, and skip it once automation is active. Make client stale-frame thresholds match the server's automation-aware stall policy rather than treating every short decode gap as a sleeping phone.
+**How to apply:** Keep one delayed wake retry only when the connection started with the screen not confirmed on, re-check the live screen state immediately before sending it, and skip it once automation is active. A physical Power press or `ensureScreenOn` can make the original state stale while the timer is pending. Make client stale-frame thresholds match the server's automation-aware stall policy rather than treating every short decode gap as a sleeping phone.
