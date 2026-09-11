@@ -6479,7 +6479,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // 2. Open Instagram.
       tLog("▶ Opening Instagram…");
-      await android.launchInstagram(serial, { diagnostic: true });
+      await android.launchInstagram(serial, {
+        diagnostic: true,
+        diagnosticContext: `hst-cycle:${incomingCycleId}:slot-${incomingSlotIdx}`,
+      });
       steps.push("launch-instagram");
       // Reduced from 1200 → 400 ms: the UIAutomator dump below (~5-15 s) waits
       // for UI idle itself, so a long fixed sleep before it is redundant.
@@ -9200,6 +9203,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     if (on) mirrorLive.add(serial);
     else    mirrorLive.delete(serial);
     res.json({ ok: true });
+  });
+
+  // Evidence from the browser's decoded H.264 canvas. This is intentionally
+  // separate from the ADB screencap probe: comparing both samples at nearby
+  // timestamps tells us whether a white launch surface is on the phone or
+  // whether the mirror is replaying/frozen on an old white frame.
+  app.post("/api/mobile/devices/:serial/mirror-frame-evidence", (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const evidence = z.object({
+        source: z.enum(["h264", "png"]),
+        videoW: z.number().int().positive().max(10000),
+        videoH: z.number().int().positive().max(10000),
+        canvasW: z.number().int().positive().max(10000),
+        canvasH: z.number().int().positive().max(10000),
+        nearWhitePct: z.number().min(0).max(100),
+        nearBlackPct: z.number().min(0).max(100),
+        meanLuma: z.number().min(0).max(255),
+        lumaVariance: z.number().min(0).max(100000),
+        decodedAgeMs: z.number().min(0).max(120000),
+        fps: z.number().min(0).max(240),
+        automationActive: z.boolean(),
+      }).parse(req.body);
+      logger.info({ serial, ...evidence }, "[mobile-video] decoded-frame-evidence");
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(400).json({ ok: false, error: e?.message ?? "Invalid mirror frame evidence" });
+    }
   });
 
   // Returns the set of device serials where the phone mirror is powered on.

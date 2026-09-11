@@ -367,6 +367,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const fpsCountRef  = useRef(0);
   const frameSeenRef = useRef(false);
   const lastDecodedAtRef = useRef(0);
+  const lastMirrorEvidenceAtRef = useRef(0);
   // Video mode: true H.264 stream decoded with WebCodecs (near-instant).
   // Falls back to the legacy PNG-polling endpoint if screenrecord/WebCodecs
   // isn't available on this machine/device.
@@ -555,6 +556,62 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       return ctxRef.current;
     };
 
+    const reportMirrorFrameEvidence = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, videoW: number, videoH: number) => {
+      const now = Date.now();
+      if (now - lastMirrorEvidenceAtRef.current < 1000) return;
+      lastMirrorEvidenceAtRef.current = now;
+      try {
+        const rect = drawRectRef.current;
+        if (!rect || canvas.width < 1 || canvas.height < 1) return;
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const stepX = Math.max(1, Math.floor(rect.dw / 48));
+        const stepY = Math.max(1, Math.floor(rect.dh / 96));
+        let sampled = 0;
+        let nearWhite = 0;
+        let nearBlack = 0;
+        let lumaSum = 0;
+        let lumaSquaredSum = 0;
+        const xEnd = Math.min(canvas.width, Math.ceil(rect.dx + rect.dw));
+        const yEnd = Math.min(canvas.height, Math.ceil(rect.dy + rect.dh));
+        for (let y = Math.max(0, Math.floor(rect.dy)); y < yEnd; y += stepY) {
+          for (let x = Math.max(0, Math.floor(rect.dx)); x < xEnd; x += stepX) {
+            const offset = (y * canvas.width + x) * 4;
+            const r = pixels[offset];
+            const g = pixels[offset + 1];
+            const b = pixels[offset + 2];
+            const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            sampled++;
+            if (r >= 245 && g >= 245 && b >= 245) nearWhite++;
+            if (r <= 10 && g <= 10 && b <= 10) nearBlack++;
+            lumaSum += luma;
+            lumaSquaredSum += luma * luma;
+          }
+        }
+        if (!sampled) return;
+        const meanLuma = lumaSum / sampled;
+        void fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/mirror-frame-evidence`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: useVideoRef.current ? "h264" : "png",
+            videoW,
+            videoH,
+            canvasW: canvas.width,
+            canvasH: canvas.height,
+            nearWhitePct: (nearWhite / sampled) * 100,
+            nearBlackPct: (nearBlack / sampled) * 100,
+            meanLuma,
+            lumaVariance: Math.max(0, lumaSquaredSum / sampled - meanLuma * meanLuma),
+            decodedAgeMs: Math.max(0, now - lastDecodedAtRef.current),
+            fps: fpsCountRef.current,
+            automationActive: automationActiveRef.current,
+          }),
+        }).catch(() => {});
+      } catch {
+        // Canvas readback can be unavailable during teardown or decoder reset.
+      }
+    };
+
     const drawFrame = (frame: VideoFrame) => {
       const canvas = canvasRef.current;
       if (!canvas) { frame.close(); return; }
@@ -585,6 +642,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           ctx.fillStyle = "#000";
           ctx.fillRect(0, 0, cw, ch);
           ctx.drawImage(frame, dx, dy, dw, dh);
+          reportMirrorFrameEvidence(canvas, ctx, frame.displayWidth, frame.displayHeight);
         }
       }
       frame.close();

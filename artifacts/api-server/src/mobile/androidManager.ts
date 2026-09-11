@@ -767,6 +767,7 @@ export async function isPackageInstalled(serial: string, pkg: string): Promise<b
 
 type InstagramLaunchOptions = {
   diagnostic?: boolean;
+  diagnosticContext?: string;
 };
 
 export type InstagramForegroundSnapshot = {
@@ -843,6 +844,7 @@ async function collectInstagramLaunchSample(
   phase: string,
   startedAt: number,
   adb: string,
+  diagnosticContext: string,
 ): Promise<void> {
   const [foreground, pid, frame, surfaces] = await Promise.all([
     getForegroundSnapshot(serial).catch(() => ({
@@ -862,6 +864,7 @@ async function collectInstagramLaunchSample(
     .slice(0, 20);
   logger.info({
     serial,
+    diagnosticContext,
     phase,
     elapsedMs: Date.now() - startedAt,
     foreground,
@@ -876,6 +879,7 @@ async function logInstagramLaunchLogcat(
   serial: string,
   startedAt: number,
   adb: string,
+  diagnosticContext: string,
 ): Promise<void> {
   const logcat = await runAdb(adb, [
     "-s", serial, "shell", "logcat", "-d", "-v", "threadtime", "-t", "400",
@@ -886,6 +890,7 @@ async function logInstagramLaunchLogcat(
     .slice(-120);
   logger.info({
     serial,
+    diagnosticContext,
     elapsedMs: Date.now() - startedAt,
     lines: relevantLogcat,
   }, "[instagram-launch-probe] logcat");
@@ -893,35 +898,40 @@ async function logInstagramLaunchLogcat(
 
 async function runInstagramLaunchDiagnostic(
   serial: string,
-  startInstagram: () => void,
+  startInstagram: () => unknown,
+  diagnosticContext = "unspecified",
 ): Promise<void> {
   const startedAt = Date.now();
   const adb = requireTool(detectToolset().adb, "adb");
 
-  await collectInstagramLaunchSample(serial, "before-am-start", startedAt, adb);
+  await collectInstagramLaunchSample(serial, "before-am-start", startedAt, adb, diagnosticContext);
   let launchStatus: number | null = null;
+  let launchStdout = "";
   let launchStderr = "";
   try {
-    const result = startInstagram() as unknown as { status?: number | null; stderr?: Buffer | string };
+    const result = startInstagram() as { status?: number | null; stdout?: Buffer | string; stderr?: Buffer | string };
     launchStatus = result?.status ?? null;
+    launchStdout = result?.stdout ? String(result.stdout).trim().slice(0, 1000) : "";
     launchStderr = result?.stderr ? String(result.stderr).trim().slice(0, 500) : "";
   } catch (error: any) {
     launchStderr = error?.message ?? String(error);
   }
   logger.info({
     serial,
+    diagnosticContext,
     launchStatus,
+    launchStdout: launchStdout || null,
     launchStderr: launchStderr || null,
   }, "[instagram-launch-probe] am-start");
-  await collectInstagramLaunchSample(serial, "after-am-start", startedAt, adb);
+  await collectInstagramLaunchSample(serial, "after-am-start", startedAt, adb, diagnosticContext);
 
   await new Promise(resolve => setTimeout(resolve, 250));
-  await collectInstagramLaunchSample(serial, "plus-250ms", startedAt, adb);
+  await collectInstagramLaunchSample(serial, "plus-250ms", startedAt, adb, diagnosticContext);
   await new Promise(resolve => setTimeout(resolve, 750));
-  await collectInstagramLaunchSample(serial, "plus-1000ms", startedAt, adb);
+  await collectInstagramLaunchSample(serial, "plus-1000ms", startedAt, adb, diagnosticContext);
   await new Promise(resolve => setTimeout(resolve, 2000));
-  await collectInstagramLaunchSample(serial, "plus-3000ms", startedAt, adb);
-  await logInstagramLaunchLogcat(serial, startedAt, adb);
+  await collectInstagramLaunchSample(serial, "plus-3000ms", startedAt, adb, diagnosticContext);
+  await logInstagramLaunchLogcat(serial, startedAt, adb, diagnosticContext);
 }
 
 type InstagramLaunchWatch = { cancelled: boolean };
@@ -964,14 +974,14 @@ export function armInstagramLaunchDiagnostic(serial: string): { windowMs: number
             elapsedMs: Date.now() - startedAt,
             foreground,
           }, "[instagram-launch-probe] manual-foreground-detected");
-          await collectInstagramLaunchSample(serial, "manual-foreground-detected", startedAt, adb);
+          await collectInstagramLaunchSample(serial, "manual-foreground-detected", startedAt, adb, "manual-watch");
           await new Promise(resolve => setTimeout(resolve, 250));
-          await collectInstagramLaunchSample(serial, "manual-plus-250ms", startedAt, adb);
+          await collectInstagramLaunchSample(serial, "manual-plus-250ms", startedAt, adb, "manual-watch");
           await new Promise(resolve => setTimeout(resolve, 750));
-          await collectInstagramLaunchSample(serial, "manual-plus-1000ms", startedAt, adb);
+          await collectInstagramLaunchSample(serial, "manual-plus-1000ms", startedAt, adb, "manual-watch");
           await new Promise(resolve => setTimeout(resolve, 2000));
-          await collectInstagramLaunchSample(serial, "manual-plus-3000ms", startedAt, adb);
-          await logInstagramLaunchLogcat(serial, startedAt, adb);
+          await collectInstagramLaunchSample(serial, "manual-plus-3000ms", startedAt, adb, "manual-watch");
+          await logInstagramLaunchLogcat(serial, startedAt, adb, "manual-watch");
           return;
         }
         await new Promise(resolve => setTimeout(resolve, 250));
@@ -1011,7 +1021,7 @@ export async function launchInstagram(
   ], { encoding: "utf8", timeout: 10000 });
 
   if (options?.diagnostic) {
-    await runInstagramLaunchDiagnostic(serial, start);
+    await runInstagramLaunchDiagnostic(serial, start, options.diagnosticContext);
     return;
   }
   start();
