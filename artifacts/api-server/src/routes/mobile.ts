@@ -2721,6 +2721,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateBioActivatePctMin",
     "updateBioActivatePctMax",
     "updateBioText",
+    "makePostEnabled",
     "makePostLocalFolderPath",
     "makePostAddLocation",
     "makePostAlterationEnabled",
@@ -3273,9 +3274,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // by trustScoreDisabledTools instead.
       if (assignment.scoreId) {
         const isTrustScoreCopy = body.trustScoreCopy === true;
+        const copyToolOverrides = isTrustScoreCopy
+          ? Object.fromEntries(
+            ["makePostEnabled"]
+              .filter(field => typeof body[field] === "boolean")
+              .map(field => [field, body[field]]),
+          )
+          : {};
         const toolOverrides = {
           ...(base.trustScoreToolOverrides ?? {}),
-          ...(isTrustScoreCopy ? {} : Object.fromEntries(
+          ...(isTrustScoreCopy ? copyToolOverrides : Object.fromEntries(
             [...TRUST_SCORE_TOOL_FIELDS]
               .filter(field => typeof body[field] === "boolean")
               .map(field => [field, body[field]]),
@@ -3284,7 +3292,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         body.trustScoreToolOverrides = toolOverrides;
         for (const field of Object.keys(body)) {
           const allowedForRequest = isTrustScoreCopy
-            ? COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field)
+            ? COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field) || field === "trustScoreToolOverrides"
             : TRUST_SCORE_SLOT_OWNED_FIELDS.has(field) || field.startsWith("trustScore");
           if (
             field !== "trustScoreCopy" &&
