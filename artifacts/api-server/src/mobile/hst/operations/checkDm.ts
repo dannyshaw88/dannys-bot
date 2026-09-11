@@ -70,8 +70,5 @@ export async function runCheckDmLoop(
     onLog?.("Check Inbox: click-thread roll missed — skipping");
   }
 
-  const inboxBack = await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
-  onLog?.(`Check Inbox: tapped calibrated Back via mirror at (${inboxBack.x},${inboxBack.y})`);
-  await sleepOrAbort(serial, 800);
   onLog?.("Check Inbox: ✓ DM inbox check done");
 }
