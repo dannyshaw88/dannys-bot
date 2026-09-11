@@ -842,7 +842,7 @@ function isInstagramWhiteScreen(summary: InstagramLaunchFrameSummary | null): bo
 }
 
 /**
- * Watches Instagram's rendered content for the first 15 seconds after launch.
+ * Watches Instagram's rendered content for the first 20 seconds after launch.
  * If the persistent blank-white surface appears, Android Back is pressed once,
  * then the screen is rechecked after five seconds. Back/recheck repeats until
  * Instagram presents a non-white surface.
@@ -851,11 +851,11 @@ export async function clearInstagramWhiteScreenAfterLaunch(
   serial: string,
   onLog?: (message: string) => void,
 ): Promise<boolean> {
-  const watchDeadline = Date.now() + 15_000;
+  const watchDeadline = Date.now() + 20_000;
   let whiteDetected = false;
   let lastSummary: InstagramLaunchFrameSummary | null = null;
 
-  onLog?.("▶ Watching Instagram launch screen for up to 15 seconds…");
+  onLog?.("▶ Watching Instagram launch screen for up to 20 seconds…");
   while (Date.now() < watchDeadline) {
     const foreground = await getForegroundSnapshot(serial).catch(() => null);
     if (foreground && isInstagramForeground(foreground)) {
