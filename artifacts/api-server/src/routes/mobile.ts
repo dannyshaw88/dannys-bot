@@ -6505,6 +6505,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // to 60 s overhead.  One shared dump collapses them to ~1 dump.
       // If any dialog IS dismissed the screen changes — we pass `undefined` so
       // the next check does its own fresh dump instead of using stale XML.
+      const launchForeground = await android.getForegroundSnapshot(serial).catch(() => null);
+      if (launchForeground && android.isInstagramChallengeActivity(launchForeground)) {
+        steps.push("instagram-challenge-activity");
+        tLog("⚠ Instagram ChallengeActivity is foreground with no normal launch surface — stopping safely");
+        return res.json({
+          ok: false,
+          steps,
+          error: "Instagram opened an unresolved ChallengeActivity instead of the normal launch surface",
+        });
+      }
       tLog("▶ UIAutomator: scanning for ads-choice dialog…");
       const launchXml = await android.getUiDump(serial).catch(() => "");
       const adsChoice = await android.dismissAdsChoiceDialog(serial, launchXml).catch(() => ({ dismissed: false, steps: [] as string[] }));
