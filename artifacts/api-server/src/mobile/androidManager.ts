@@ -834,6 +834,66 @@ function summarizeInstagramLaunchFrame(
   };
 }
 
+function isInstagramWhiteScreen(summary: InstagramLaunchFrameSummary | null): boolean {
+  if (!summary) return false;
+  return summary.nearWhitePct >= 97 &&
+    summary.meanLuma >= 247 &&
+    summary.lumaVariance <= 120;
+}
+
+/**
+ * Watches Instagram's rendered content for the first 15 seconds after launch.
+ * If the persistent blank-white surface appears, Android Back is pressed once,
+ * then the screen is rechecked after five seconds. Back/recheck repeats until
+ * Instagram presents a non-white surface.
+ */
+export async function clearInstagramWhiteScreenAfterLaunch(
+  serial: string,
+  onLog?: (message: string) => void,
+): Promise<boolean> {
+  const watchDeadline = Date.now() + 15_000;
+  let whiteDetected = false;
+  let lastSummary: InstagramLaunchFrameSummary | null = null;
+
+  onLog?.("▶ Watching Instagram launch screen for up to 15 seconds…");
+  while (Date.now() < watchDeadline) {
+    const foreground = await getForegroundSnapshot(serial).catch(() => null);
+    if (foreground && isInstagramForeground(foreground)) {
+      lastSummary = summarizeInstagramLaunchFrame(await _captureScreenPixels(serial));
+      if (isInstagramWhiteScreen(lastSummary)) {
+        whiteDetected = true;
+        break;
+      }
+    }
+    await _sleep(750);
+  }
+
+  if (!whiteDetected) {
+    onLog?.("  ✓ No persistent white Instagram screen detected");
+    return true;
+  }
+
+  let backPresses = 0;
+  while (whiteDetected) {
+    backPresses++;
+    onLog?.(`⚠ White Instagram screen detected — pressing Android Back (${backPresses})`);
+    await pressBack(serial);
+    await _sleep(5_000);
+
+    const foreground = await getForegroundSnapshot(serial).catch(() => null);
+    if (!foreground || !isInstagramForeground(foreground)) {
+      onLog?.("⚠ Android Back left Instagram before a usable screen appeared — stopping safely");
+      return false;
+    }
+
+    lastSummary = summarizeInstagramLaunchFrame(await _captureScreenPixels(serial));
+    whiteDetected = isInstagramWhiteScreen(lastSummary);
+  }
+
+  onLog?.(`  ✓ Instagram white screen cleared after ${backPresses} Android Back press${backPresses === 1 ? "" : "es"} — continuing`);
+  return true;
+}
+
 function isInstagramForeground(snapshot: InstagramForegroundSnapshot): boolean {
   return [snapshot.focusedWindow, snapshot.focusedApp, snapshot.topResumedActivity]
     .some(value => typeof value === "string" && /com\.instagram\.android/i.test(value));

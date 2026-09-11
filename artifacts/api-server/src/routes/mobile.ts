@@ -6479,15 +6479,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // 2. Open Instagram.
       tLog("▶ Opening Instagram…");
-      await android.launchInstagram(serial, {
-        diagnostic: true,
-        diagnosticContext: `hst-cycle:${incomingCycleId}:slot-${incomingSlotIdx}`,
-      });
+      await android.launchInstagram(serial);
       steps.push("launch-instagram");
-      // Reduced from 1200 → 400 ms: the UIAutomator dump below (~5-15 s) waits
-      // for UI idle itself, so a long fixed sleep before it is redundant.
-      // 400 ms is enough for the IG process to appear before the dump starts.
-      await sleepOrAbort(serial, 400);
+      const whiteScreenCleared = await android.clearInstagramWhiteScreenAfterLaunch(serial, tLog);
+      if (!whiteScreenCleared) {
+        steps.push("instagram-white-screen-recovery-failed");
+        return res.json({
+          ok: false,
+          steps,
+          error: "Instagram did not return to a usable foreground screen after white-screen recovery",
+        });
+      }
+      steps.push("instagram-white-screen-guard");
       // Android can raise the USB/MTP phone-data dialog after the pre-launch
       // check, especially after a cable or hub re-enumeration. It sits above
       // Instagram and blocks every later action, so check once more after the
@@ -6505,16 +6508,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // to 60 s overhead.  One shared dump collapses them to ~1 dump.
       // If any dialog IS dismissed the screen changes — we pass `undefined` so
       // the next check does its own fresh dump instead of using stale XML.
-      const launchForeground = await android.getForegroundSnapshot(serial).catch(() => null);
-      if (launchForeground && android.isInstagramChallengeActivity(launchForeground)) {
-        steps.push("instagram-challenge-activity");
-        tLog("⚠ Instagram ChallengeActivity is foreground with no normal launch surface — stopping safely");
-        return res.json({
-          ok: false,
-          steps,
-          error: "Instagram opened an unresolved ChallengeActivity instead of the normal launch surface",
-        });
-      }
       tLog("▶ UIAutomator: scanning for ads-choice dialog…");
       const launchXml = await android.getUiDump(serial).catch(() => "");
       const adsChoice = await android.dismissAdsChoiceDialog(serial, launchXml).catch(() => ({ dismissed: false, steps: [] as string[] }));
