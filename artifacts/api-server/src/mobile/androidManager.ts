@@ -6228,6 +6228,18 @@ export async function findReelActionIcons(
     );
     safeShareDm = null;
   }
+  if (safeSave && safeShareDm) {
+    const separation = Math.hypot(safeSave.x - safeShareDm.x, safeSave.y - safeShareDm.y);
+    const saveIsBelowDm = safeSave.y > safeShareDm.y + 24;
+    if (separation < 80 || !saveIsBelowDm) {
+      onLog?.(
+        `[reel-icons] rejected Save: resolved point (${safeSave.x},${safeSave.y}) ` +
+        `is not safely below/distinct from Share-via-DM (${safeShareDm.x},${safeShareDm.y}); ` +
+        `separation=${separation.toFixed(1)} — skipping Save only`,
+      );
+      safeSave = null;
+    }
+  }
   // Save is intentionally accessibility-only on Reels. The visual bookmark
   // matcher can correlate with the Likes/statistics area when the Save control
   // is absent, which risks tapping the wrong action. A missing live Save node
@@ -8760,6 +8772,16 @@ function _extractShareSheetRecipients(
  * list already leaks this exact signal (feed-only ids/labels) whenever the
  * sheet has gone away underneath us.
  */
+export function isInstagramShareSheetXml(xml: string): boolean {
+  return Boolean(xml) && (
+    xml.includes("direct_private_share") ||
+    xml.includes("grid_view_pog_avatar_view") ||
+    xml.includes("Copy link") ||
+    xml.includes("Add to story") ||
+    xml.includes("android.widget.EditText")
+  );
+}
+
 export async function confirmAndScanShareSheet(
   serial: string,
   onLog?: (line: string) => void,
@@ -8811,12 +8833,7 @@ export async function confirmAndScanShareSheet(
   //   android.widget.EditText   — the sheet's search box class; always
   //                               present in every share-sheet variant,
   //                               never present on a plain post/Reel view
-  const sheetOpen =
-    xml.includes("direct_private_share") ||
-    xml.includes("grid_view_pog_avatar_view") ||
-    xml.includes("Copy link") ||
-    xml.includes("Add to story") ||
-    xml.includes("android.widget.EditText");
+  const sheetOpen = isInstagramShareSheetXml(xml);
   if (!sheetOpen) {
     onLog?.("[share-sheet] no share-sheet marker found — sheet not open");
     return { sheetOpen: false, sendBtn: null, recipients: [], preSelectedRecipients: [] };

@@ -339,19 +339,39 @@ export async function runViewReelsLoop(serial: string, params: {
         }
         if (wantSave) {
           // ── View Reels — Save (isolated; not shared with any other tool) ──
-          if (icons.alreadySaved) {
+          // Never reuse the original all-actions coordinate here. Like/repost
+          // animations and recycled Reel nodes can make that dump stale before
+          // Save runs. Resolve Save and its competing DM action from one fresh
+          // dump immediately before the tap.
+          const freshSaveIcons = await android.findReelActionIcons(
+            serial,
+            (msg) => onLog?.(`  ${msg}`),
+          ).catch(() => null);
+          if (freshSaveIcons?.alreadySaved) {
             onLog?.(`Reel ${i + 1}/${totalReels}: already saved — skipping save`);
-          } else if (!icons.save) {
-            onLog?.(`Reel ${i + 1}/${totalReels}: Save icon not found — skipping`);
+          } else if (!freshSaveIcons?.save) {
+            onLog?.(`Reel ${i + 1}/${totalReels}: fresh Save identity not found or conflicts with DM — skipping`);
           } else {
-            await android.tap(serial, icons.save.x, icons.save.y);
-            saves++;
-            onLog?.(`Reel ${i + 1}/${totalReels}: saved at (${icons.save.x},${icons.save.y})`);
-             // Wait long enough for Instagram to show the first-save
-             // collection sheet if it's going to (common on new accounts).
+            const savePoint = freshSaveIcons.save;
+            onLog?.(`Reel ${i + 1}/${totalReels}: tapping freshly validated Save at (${savePoint.x},${savePoint.y})…`);
+            await android.tap(serial, savePoint.x, savePoint.y);
+            // Wait long enough for Instagram to show either the first-save
+            // collection sheet or an incorrectly targeted DM sheet.
             await sleepOrAbort(serial, 600);
             const _vrSaveXml = await android.dumpUi(serial).catch(() => "");
-             await dismissSaveCollectionPrompt(serial, _vrSaveXml, onLog, `Reel ${i + 1}/${totalReels}`);
+            if (android.isInstagramShareSheetXml(_vrSaveXml)) {
+              logger.error(
+                { serial, reel: i + 1, savePoint },
+                "[view-reels] Save tap opened DM share sheet; closing and refusing save count",
+              );
+              onLog?.(`Reel ${i + 1}/${totalReels}: ✗ Save target opened the DM sheet — closed it and did not count a save`);
+              await android.pressBack(serial).catch(() => {});
+              await sleepOrAbort(serial, 300);
+            } else {
+              saves++;
+              onLog?.(`Reel ${i + 1}/${totalReels}: saved at (${savePoint.x},${savePoint.y})`);
+              await dismissSaveCollectionPrompt(serial, _vrSaveXml, onLog, `Reel ${i + 1}/${totalReels}`);
+            }
           }
         }
         if (wantShareDm) {

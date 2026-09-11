@@ -29,13 +29,19 @@ coordinate fallbacks.
 
 Reels Save uses the same validated live accessibility action-node matcher as
 Like, with `save_button` plus the `Add to Saved` / `Remove from Saved` labels.
+It must be resolved from a fresh dump immediately before the Save tap, not from
+the earlier all-actions scan. When the DM action is also present, Save must be
+clearly below and spatially distinct from it. After the tap, a detected DM
+share sheet means the Save failed: close it and do not count a save.
 
 **Why:** The Reels visual bookmark reference was unavailable in the runtime,
 while the live UI dump exposes the Save action node and state label directly.
+Real-device evidence showed an earlier Save coordinate later opening the DM
+sheet and being counted as success before the resulting surface was inspected.
 
 **How to apply:** Keep Save independent from Like, Repost, and DM resolution;
-resolve it from the current dump and fail closed when the node is absent or
-ambiguous.
+resolve it immediately before tapping and fail closed when the node is absent,
+ambiguous, too close to DM, out of vertical order, or opens the DM sheet.
 
 For Reels Share-to-Feed, require a verified repost-specific resource ID. Do not
 fall back to a generic `content-desc="Repost"` match: on a real device that
