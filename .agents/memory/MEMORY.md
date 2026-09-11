@@ -155,3 +155,4 @@
 - [Debug screenshot capture timing](debug-screenshot-capture-timing.md) — filename time orders the phone frame; embedded log labels can be stale behind the per-device capture queue
 - [WhatsApp contact automation safety](whatsapp-contact-automation-safety.md) — resolve contacts and Send from the live picker/composer; fail closed when WhatsApp’s layout or labels change
 - [Manual Instagram launch diagnostics](manual-instagram-launch-probe.md) — physical/mirror app opens bypass launchInstagram; arm a foreground-transition watcher before tapping Instagram
+- [Instagram launch-surface interpretation](manual-instagram-launch-probe.md) — a brief near-white frame with Splash Screen/starting_reveal surfaces can be normal; judge delayed frames before calling it a render failure
