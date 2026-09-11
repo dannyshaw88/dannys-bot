@@ -10453,6 +10453,40 @@ export async function switchToInstagramAccount(
   if (!adbPath) { onLog?.("  ⚠ ADB not found — cannot switch account"); return false; }
 
   const clean = username.replace(/^@/, "").trim();
+  const summarizeSwitchXml = (xml: string) => ({
+    xmlLength: xml.length,
+    complete: xml.includes("</hierarchy>"),
+    rootBounds: xml.match(/<hierarchy[^>]*bounds="([^"]+)"/i)?.[1] ?? "",
+    packages: [...new Set(Array.from(xml.matchAll(/\bpackage="([^"]+)"/gi), m => m[1]))].slice(0, 8),
+    markers: [...new Set(
+      (xml.match(/action_bar_username_container|bottom_nav|tab_bar|profile_tab|account|switch|chooser|dialog|bottom_sheet|modal|white|loading/gi) ?? [])
+        .map(marker => marker.toLowerCase()),
+    )].slice(0, 20),
+  });
+  const captureSwitchEvidence = async (
+    label: string,
+    details: Record<string, unknown> = {},
+  ): Promise<void> => {
+    const startedAt = Date.now();
+    const evidenceDir = await captureDebugEvidence(serial, `account-switch-${label}`);
+    onLog?.(
+      `[account-switch-debug] ${label} ` +
+      `${JSON.stringify({ ...details, evidenceDir: evidenceDir ?? "CAPTURE_FAILED", captureMs: Date.now() - startedAt })}`,
+    );
+  };
+  const matchingAccountNodes = (xml: string) => {
+    const wanted = new Set([clean.toLowerCase(), `@${clean.toLowerCase()}`]);
+    const nodes: string[] = [];
+    for (const match of xml.matchAll(/<node\b([^>]*)>/gi)) {
+      const attrs = match[1];
+      const text = attrs.match(/\btext="([^"]*)"/i)?.[1]?.trim().toLowerCase() ?? "";
+      const contentDesc = attrs.match(/content-desc="([^"]*)"/i)?.[1]?.trim().toLowerCase() ?? "";
+      if (!wanted.has(text) && !wanted.has(contentDesc)) continue;
+      nodes.push(attrs.slice(0, 700));
+      if (nodes.length >= 8) break;
+    }
+    return nodes;
+  };
 
   // A restriction surface can be left over from the previous account or
   // appear while Instagram is restoring its session. Clear it before looking
@@ -10512,6 +10546,12 @@ export async function switchToInstagramAccount(
   onLog?.(`  ↳ Profile tab found at (${profileTab.x},${profileTab.y}) via ${profileTabSource} — waiting ${PROFILE_TAB_SETTLE_MS}ms for Instagram to finish rendering…`);
   await _sleep(PROFILE_TAB_SETTLE_MS);
 
+  await captureSwitchEvidence("before-profile-gesture", {
+    method: switchMethod?.useProfileTabLongPress ? "profile-long-press" : "profile-tap",
+    point: profileTab,
+    preloaded: summarizeSwitchXml(preloadedXml || ""),
+  });
+
   let postHeaderTapXml = "";
   if (switchMethod?.useProfileTabLongPress) {
     const holdDurationMs = Math.max(2000, Math.min(5000, Math.round(switchMethod.holdDurationMs ?? 2000)));
@@ -10525,6 +10565,11 @@ export async function switchToInstagramAccount(
     await _sleep(300 + Math.floor(Math.random() * 701));
     postHeaderTapXml = await _uiDump(adbPath, serial).catch(() => "");
     onLog?.(`  ↳ Profile-tab long-press result: xmlLength=${postHeaderTapXml.length}, hasAccountSheet=${/(?:account|switch|chooser|dialog|bottom_sheet|modal)/i.test(postHeaderTapXml)}`);
+    await captureSwitchEvidence("after-profile-long-press", {
+      gesturePoint: profileTab,
+      xml: summarizeSwitchXml(postHeaderTapXml),
+      targetNodes: matchingAccountNodes(postHeaderTapXml),
+    });
   } else {
   // 2. Open the active account profile with a single tap. Instagram's newer
   // account UI no longer reliably opens the account list from a long-press.
@@ -10536,6 +10581,10 @@ export async function switchToInstagramAccount(
   await _sleep(400 + Math.floor(Math.random() * 401));
   const profileAfterTabTapXml = await _uiDump(adbPath, serial).catch(() => "");
   onLog?.(`  ↳ Profile-tab tap result: xmlLength=${profileAfterTabTapXml.length}, changed=${profileBeforeTapXml ? profileAfterTabTapXml !== profileBeforeTapXml : "not-comparable"}, hasProfileHeader=${/action_bar_username_container/i.test(profileAfterTabTapXml)}, hasBottomNav=${/bottom_nav|tab_bar|profile_tab/i.test(profileAfterTabTapXml)}`);
+  await captureSwitchEvidence("after-profile-tab-tap-before-header", {
+    gesturePoint: profileTab,
+    xml: summarizeSwitchXml(profileAfterTabTapXml),
+  });
 
   // 3. On the profile screen, tap the username in the top header. Restrict
   // the match to the header region so a username in a post or suggestion
@@ -10623,6 +10672,12 @@ export async function switchToInstagramAccount(
     sheetMarkers: (postHeaderTapXml.match(/(?:account|switch|chooser|dialog|bottom_sheet|modal|action_bar_username_container)/gi) ?? []).slice(0, 20),
   };
   onLog?.(`  ↳ Account-header tap result: xmlLength=${postHeaderTapXml.length}, state=${JSON.stringify(postHeaderState)}`);
+  await captureSwitchEvidence("after-profile-header-tap-before-row", {
+    tapPoint: profileHeaderUsername,
+    tapNode: headerNode,
+    xml: summarizeSwitchXml(postHeaderTapXml),
+    targetNodes: matchingAccountNodes(postHeaderTapXml),
+  });
   }
 
   // 4. Dump the accessibility tree and look for the target username.
@@ -10735,6 +10790,11 @@ export async function switchToInstagramAccount(
 
   // 5. Tap the username row to switch accounts.
   onLog?.(`  ✓ Found exact text @${clean} in switcher — account row tapped at (${coords.x},${coords.y})…`);
+  await captureSwitchEvidence("before-account-row-tap", {
+    tapPoint: coords,
+    xml: summarizeSwitchXml(xml),
+    targetNodes: matchingAccountNodes(xml),
+  });
   await _adbTapAsync(adbPath, serial, coords.x, coords.y);
 
   // 6. Verify the resulting surface. A different account closes the sheet and
@@ -10749,6 +10809,10 @@ export async function switchToInstagramAccount(
    await _sleep(1500 + Math.floor(Math.random() * 1001));
    await dismissInstagramAccountRestriction(serial, onLog);
   const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
+   await captureSwitchEvidence("after-account-row-tap", {
+     tapPoint: coords,
+     xml: summarizeSwitchXml(postTapXml),
+   });
   if (postTapXml) {
      const homeFeedVisible =
        /content-desc="Home[^"]*"/.test(postTapXml) ||
