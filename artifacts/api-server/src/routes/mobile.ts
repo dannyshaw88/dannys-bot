@@ -8623,32 +8623,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // pillarboxed) relative to the device's real resolution, so tap
   // coordinates captured against the video's pixel size need rescaling
   // through the real content sub-rect before they're sent to adb.
-  type RescaledInputPoint = {
-    x: number;
-    y: number;
-    rescaled: boolean;
-    video: [number,number];
-    device: [number,number];
-    from: [number,number];
-    to: [number,number];
-    contentRect: { x: number; y: number; w: number; h: number } | null;
-    insideVideoContent: boolean | null;
-    likelyAndroidNavigationRegion: boolean | null;
-  };
-
-  async function rescaleForDevice(serial: string, x: number, y: number, videoW?: number, videoH?: number): Promise<RescaledInputPoint> {
-    const noOp: RescaledInputPoint = {
-      x,
-      y,
-      rescaled: false,
-      video: [videoW ?? 0, videoH ?? 0],
-      device: [0,0],
-      from: [x,y],
-      to: [x,y],
-      contentRect: null,
-      insideVideoContent: null,
-      likelyAndroidNavigationRegion: null,
-    };
+  async function rescaleForDevice(serial: string, x: number, y: number, videoW?: number, videoH?: number): Promise<{ x: number; y: number; rescaled: boolean; video: [number,number]; device: [number,number]; from: [number,number]; to: [number,number] }> {
+    const noOp = { x, y, rescaled: false, video: [videoW ?? 0, videoH ?? 0] as [number,number], device: [0,0] as [number,number], from: [x,y] as [number,number], to: [x,y] as [number,number] };
     if (!videoW || !videoH) return noOp;
     try {
       const tools = await android.detectToolsetAsync();
@@ -8676,27 +8652,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const realW = parseInt(m[1]);
       const realH = parseInt(m[2]);
       const device: [number,number] = [realW, realH];
-      const rect = videoContentRect(videoW, videoH, realW, realH);
-      const insideVideoContent =
-        x >= rect.x && x <= rect.x + rect.w &&
-        y >= rect.y && y <= rect.y + rect.h;
-      // This is diagnostic only. Android's exact gesture/navigation inset
-      // differs by navigation mode and OEM, so do not reject or alter input
-      // based on this flag. It identifies the bottom band where a mapped
-      // point could have crossed out of the app and into system navigation.
-      const likelyAndroidNavigationRegion =
-        y >= Math.round(realH * 0.92);
-      if (realW === videoW && realH === videoH) {
-        return {
-          ...noOp,
-          x,
-          y,
-          device,
-          contentRect: rect,
-          insideVideoContent,
-          likelyAndroidNavigationRegion,
-        };
-      }
+      if (realW === videoW && realH === videoH) return { ...noOp, device };
       // NOTE: a previous version of this function skipped rescaling whenever
       // the video and device aspect ratios differed by more than 2%, on the
       // theory that a mismatched AR meant `wm size` was reporting an
@@ -8721,79 +8677,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // from the video's pixel space into that space is correct regardless
       // of whether the two aspect ratios match, as long as the video frame
       // itself isn't letterboxed (screenrecord doesn't add letterbox bars).
+      const rect = videoContentRect(videoW, videoH, realW, realH);
       const rx = Math.round(Math.min(realW - 1, Math.max(0, ((x - rect.x) / rect.w) * realW)));
       const ry = Math.round(Math.min(realH - 1, Math.max(0, ((y - rect.y) / rect.h) * realH)));
-      logger.info({
-        serial,
-        from: [x, y],
-        to: [rx, ry],
-        video: [videoW, videoH],
-        real: [realW, realH],
-        contentRect: rect,
-        insideVideoContent,
-        likelyAndroidNavigationRegion,
-      }, "[mobile-tap] rescaled tap for downscaled/letterboxed video");
-      return {
-        x: rx,
-        y: ry,
-        rescaled: true,
-        video: [videoW, videoH],
-        device,
-        from: [x, y],
-        to: [rx, ry],
-        contentRect: rect,
-        insideVideoContent,
-        likelyAndroidNavigationRegion,
-      };
+      logger.info({ serial, from: [x, y], to: [rx, ry], video: [videoW, videoH], real: [realW, realH], contentRect: rect }, "[mobile-tap] rescaled tap for downscaled/letterboxed video");
+      return { x: rx, y: ry, rescaled: true, video: [videoW, videoH], device, from: [x, y], to: [rx, ry] };
     } catch { return noOp; }
-  }
-
-  /**
-   * A manual mirror trace is intentionally opt-in through Session Recorder.
-   * The before capture is allowed to finish before dispatching the tap so the
-   * evidence really describes the state that received it; normal unrecorded
-   * manual taps retain their existing latency and timing.
-   */
-  async function recordManualTapState(
-    serial: string,
-    phase: "before" | "after",
-    trace: {
-      video: [number, number];
-      device: [number, number];
-      from: [number, number];
-      to: [number, number];
-      contentRect: { x: number; y: number; w: number; h: number } | null;
-      insideVideoContent: boolean | null;
-      likelyAndroidNavigationRegion: boolean | null;
-    },
-  ): Promise<void> {
-    if (!sessionRecorder.isRecording(serial)) return;
-
-    const traceText = JSON.stringify({
-      phase,
-      video: trace.video,
-      device: trace.device,
-      mirrorPoint: trace.from,
-      devicePoint: trace.to,
-      contentRect: trace.contentRect,
-      insideVideoContent: trace.insideVideoContent,
-      likelyAndroidNavigationRegion: trace.likelyAndroidNavigationRegion,
-    });
-    // addLog starts the recorder's screenshot capture immediately. The
-    // foreground snapshot and UI dump then explain what that screenshot shows.
-    sessionRecorder.addLog(serial, `[manual-tap-trace] ${phase} ${traceText}`);
-    try {
-      const [foreground, xml] = await Promise.all([
-        android.getForegroundSnapshot(serial),
-        android.dumpUi(serial),
-      ]);
-      sessionRecorder.addLog(serial, `[manual-tap-trace] ${phase} foreground ${JSON.stringify(foreground)}`);
-      if (xml) sessionRecorder.addDump(serial, xml, `manual tap ${phase} UI state`);
-    } catch (error: any) {
-      // Evidence is best-effort and must never prevent the operator's input
-      // from reaching the device, even if ADB disappears during a dump.
-      sessionRecorder.addLog(serial, `[manual-tap-trace] ${phase} diagnostic capture failed: ${error?.message ?? error}`);
-    }
   }
 
   app.post("/api/mobile/devices/:serial/input/tap", async (req: Request, res: Response) => {
@@ -8801,20 +8690,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const input = tapSchema.parse(req.body);
       const serial = p(req, "serial");
       const result = await rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
-      await recordManualTapState(serial, "before", result);
+      // Tag as manual and, when recording, capture the screen state immediately
+      // after the tap so the macro export shows what was on screen at each step.
       await android.tap(serial, result.x, result.y, "manual");
-      await recordManualTapState(serial, "after", result);
-      res.json({
-        ok: true,
-        rescaled: result.rescaled,
-        video: result.video,
-        device: result.device,
-        from: result.from,
-        to: result.to,
-        contentRect: result.contentRect,
-        insideVideoContent: result.insideVideoContent,
-        likelyAndroidNavigationRegion: result.likelyAndroidNavigationRegion,
-      });
+      if (sessionRecorder.isRecording(serial)) {
+        // Fire async — don't block the tap response (dump takes ~1-2s)
+        android.dumpUi(serial)
+          .then(xml => { if (xml) sessionRecorder.addDump(serial, xml, "screen after manual tap"); })
+          .catch(() => { /* ignore dump errors during macro recording */ });
+      }
+      res.json({ ok: true, rescaled: result.rescaled, video: result.video, device: result.device, from: result.from, to: result.to });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
@@ -8852,17 +8737,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const result = await rescaleForDevice(serial, input.x, input.y, input.videoW, input.videoH);
       await android.swipe(serial, result.x, result.y, result.x, result.y, 2000);
-      res.json({
-        ok: true,
-        rescaled: result.rescaled,
-        video: result.video,
-        device: result.device,
-        from: result.from,
-        to: result.to,
-        contentRect: result.contentRect,
-        insideVideoContent: result.insideVideoContent,
-        likelyAndroidNavigationRegion: result.likelyAndroidNavigationRegion,
-      });
+      res.json({ ok: true, rescaled: result.rescaled, video: result.video, device: result.device, from: result.from, to: result.to });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
