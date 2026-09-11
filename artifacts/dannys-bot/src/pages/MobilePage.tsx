@@ -1150,7 +1150,16 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             addLog(`Double-tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
           } else {
             const body = await r.json().catch(() => null);
-            if (body?.rescaled) addLog(`Rescale: video ${body.video[0]}×${body.video[1]} → device ${body.device[0]}×${body.device[1]}, tap (${body.from[0]},${body.from[1]}) → (${body.to[0]},${body.to[1]})`);
+            if (body?.rescaled) {
+              const rect = body.contentRect
+                ? `, content [${Math.round(body.contentRect.x)},${Math.round(body.contentRect.y)} ${Math.round(body.contentRect.w)}×${Math.round(body.contentRect.h)}]`
+                : "";
+              addLog(
+                `Rescale: video ${body.video[0]}×${body.video[1]} → device ${body.device[0]}×${body.device[1]}, ` +
+                `tap (${body.from[0]},${body.from[1]}) → (${body.to[0]},${body.to[1]})${rect}, ` +
+                `inside content=${body.insideVideoContent}, bottom system-region risk=${body.likelyAndroidNavigationRegion}`,
+              );
+            }
           }
         } catch (err: any) {
           addLog(`Double-tap FAILED — ${err?.message ?? "network error"}`);
@@ -1177,7 +1186,16 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             addLog(`Tap FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
           } else {
             const body = await r.json().catch(() => null);
-            if (body?.rescaled) addLog(`Rescale: video ${body.video[0]}×${body.video[1]} → device ${body.device[0]}×${body.device[1]}, tap (${body.from[0]},${body.from[1]}) → (${body.to[0]},${body.to[1]})`);
+            if (body?.rescaled) {
+              const rect = body.contentRect
+                ? `, content [${Math.round(body.contentRect.x)},${Math.round(body.contentRect.y)} ${Math.round(body.contentRect.w)}×${Math.round(body.contentRect.h)}]`
+                : "";
+              addLog(
+                `Rescale: video ${body.video[0]}×${body.video[1]} → device ${body.device[0]}×${body.device[1]}, ` +
+                `tap (${body.from[0]},${body.from[1]}) → (${body.to[0]},${body.to[1]})${rect}, ` +
+                `inside content=${body.insideVideoContent}, bottom system-region risk=${body.likelyAndroidNavigationRegion}`,
+              );
+            }
           }
         } catch (err: any) {
           addLog(`Tap FAILED — ${err?.message ?? "network error"}`);
