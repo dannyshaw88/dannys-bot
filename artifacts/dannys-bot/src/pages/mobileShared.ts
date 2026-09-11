@@ -516,6 +516,7 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "updateBioActivatePctMin",
   "updateBioActivatePctMax",
   "updateBioText",
+  "makePostEnabled",
   "makePostAlterationEnabled",
   "makePostAlterationLevel",
   "makePostImageSettingsEnabled",
