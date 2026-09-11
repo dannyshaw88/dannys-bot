@@ -11207,7 +11207,17 @@ export async function switchToInstagramAccount(
   });
   await _adbTapAsync(adbPath, serial, coords.x, coords.y);
 
-  // 6. Verify the resulting surface. A different account closes the sheet and
+  // 6. The account-row tap can trigger the same blank-white Instagram surface
+  // as the initial app launch. Recover it before taking the verification dump;
+  // otherwise the empty/partial hierarchy is incorrectly classified as an
+  // unknown account handoff.
+  const postSwitchWhiteScreenCleared = await clearInstagramWhiteScreenAfterLaunch(serial, onLog);
+  if (!postSwitchWhiteScreenCleared) {
+    onLog?.(`⚠ @${clean} account row was tapped, but Instagram did not return to a usable screen after white-screen recovery`);
+    return false;
+  }
+
+  // 7. Verify the resulting surface. A different account closes the sheet and
   // logs in naturally, so no Back is needed. When the tapped row is the
   // already-active account, Instagram can leave the account sheet open; in
   // that one case, dismiss it with exactly one Android Back. Never retry Back.
@@ -11258,7 +11268,7 @@ export async function switchToInstagramAccount(
      return false;
   }
 
-  // 7. The post-tap verification dump above is the readiness check. Do not
+  // 8. The post-tap verification dump above is the readiness check. Do not
   // add another random dwell after the account is already loaded.
   return true;
 }
