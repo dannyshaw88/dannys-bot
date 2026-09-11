@@ -10512,6 +10512,23 @@ export async function switchToInstagramAccount(
   onLog?.(`  ↳ Profile tab found at (${profileTab.x},${profileTab.y}) via ${profileTabSource} — waiting ${PROFILE_TAB_SETTLE_MS}ms for Instagram to finish rendering…`);
   await _sleep(PROFILE_TAB_SETTLE_MS);
 
+  // The calibrated point can remain valid while Instagram's activity is
+  // rebuilding underneath it. Verify the live navigation surface before
+  // sending either the profile tap or the long-press. This is one readiness
+  // check, not a retry.
+  const navigationSurfaceXml = await _uiDump(adbPath, serial).catch(() => "");
+  const hasInstagramNavigationSurface =
+    /bottom_nav|tab_bar|profile_tab/i.test(navigationSurfaceXml) &&
+    !/android\.widget\.ProgressBar|loading/i.test(navigationSurfaceXml);
+  if (!hasInstagramNavigationSurface) {
+    onLog?.(
+      `  ⚠ Instagram navigation surface was not verified before the profile gesture ` +
+      `(xmlLength=${navigationSurfaceXml.length}, complete=${navigationSurfaceXml.includes("</hierarchy>")}) — ` +
+      "blank/unknown surface; aborting without a blind tap",
+    );
+    return false;
+  }
+
   let postHeaderTapXml = "";
   if (switchMethod?.useProfileTabLongPress) {
     const holdDurationMs = Math.max(2000, Math.min(5000, Math.round(switchMethod.holdDurationMs ?? 2000)));
@@ -10528,7 +10545,7 @@ export async function switchToInstagramAccount(
   } else {
   // 2. Open the active account profile with a single tap. Instagram's newer
   // account UI no longer reliably opens the account list from a long-press.
-  const profileBeforeTapXml = preloadedXml || "";
+  const profileBeforeTapXml = navigationSurfaceXml;
   onLog?.(`  ↳ Tapping profile tab at (${profileTab.x},${profileTab.y}) to open the active account profile…`);
   await _adbTapAsync(adbPath, serial, profileTab.x, profileTab.y);
   // The following dump is the readiness check; a long random pause here only
@@ -10543,6 +10560,17 @@ export async function switchToInstagramAccount(
   // Do not dump the unchanged profile screen a second time. The dump above
   // already captured the header after the profile-tab tap.
   const profileXml = profileAfterTabTapXml;
+  const hasProfileSurface =
+    /action_bar_username_container|change_avatar_button|(?:text|content-desc)="Edit profile"/i.test(profileXml) &&
+    /bottom_nav|tab_bar|profile_tab/i.test(profileXml);
+  if (!hasProfileSurface) {
+    onLog?.(
+      `  ⚠ Profile surface was not verified after the profile-tab tap ` +
+      `(xmlLength=${profileXml.length}, complete=${profileXml.includes("</hierarchy>")}) — ` +
+      "aborting without a guessed header tap",
+    );
+    return false;
+  }
   let profileHeaderUsername = _findTopProfileUsername(profileXml);
   if (!profileHeaderUsername) {
     const profileDumpDiagnostics = (() => {
@@ -10582,7 +10610,7 @@ export async function switchToInstagramAccount(
       x: Math.round(screen.w * 0.50),
       y: Math.round(screen.h * 0.08),
     };
-    onLog?.(`  ⚠ Could not find the active-account selector in the profile header — using fallback tap at (${fallbackHeader.x},${fallbackHeader.y}) and continuing`);
+    onLog?.(`  ⚠ Could not find the active-account selector in the verified profile header — using fallback tap at (${fallbackHeader.x},${fallbackHeader.y})`);
     profileHeaderUsername = fallbackHeader;
   }
   const headerNode = (() => {
@@ -10623,6 +10651,21 @@ export async function switchToInstagramAccount(
     sheetMarkers: (postHeaderTapXml.match(/(?:account|switch|chooser|dialog|bottom_sheet|modal|action_bar_username_container)/gi) ?? []).slice(0, 20),
   };
   onLog?.(`  ↳ Account-header tap result: xmlLength=${postHeaderTapXml.length}, state=${JSON.stringify(postHeaderState)}`);
+  const hasAccountSheetMarker = /(?:switch|chooser|dialog|bottom_sheet|modal)/i.test(postHeaderTapXml);
+  const hasAccountSheetSurface =
+    postHeaderState.targetLabelPresent ||
+    hasAccountSheetMarker ||
+    (postHeaderState.accountRowLabelCount >= 2 &&
+      postHeaderState.hasScrollableSheet &&
+      !postHeaderState.hasEditProfile);
+  if (!hasAccountSheetSurface) {
+    onLog?.(
+      `  ⚠ Account sheet was not verified after the header tap ` +
+      `(xmlLength=${postHeaderTapXml.length}, complete=${postHeaderTapXml.includes("</hierarchy>")}) — ` +
+      "aborting without scrolling or tapping outside the sheet",
+    );
+    return false;
+  }
 
   }
 
@@ -10644,6 +10687,21 @@ export async function switchToInstagramAccount(
   let xml = postHeaderTapXml;
   let coords: { x: number; y: number } | null = null;
   const switcherScreenHeight = getScreenSize(serial).h;
+  const findAccountRowInSheet = (sourceXml: string): { x: number; y: number } | null => {
+    const candidate = _findVisibleAccountText(sourceXml, switcherScreenHeight, clean, `@${clean}`);
+    if (!candidate) return null;
+    const sheetBounds = _findScrollableBounds(sourceXml);
+    if (sheetBounds &&
+        (candidate.x < sheetBounds.x1 || candidate.x > sheetBounds.x2 ||
+         candidate.y < sheetBounds.y1 || candidate.y > sheetBounds.y2)) {
+      onLog?.(
+        `  ⚠ @${clean} matched at (${candidate.x},${candidate.y}) outside the live account-sheet bounds ` +
+        `(${sheetBounds.x1},${sheetBounds.y1})–(${sheetBounds.x2},${sheetBounds.y2}) — refusing the tap`,
+      );
+      return null;
+    }
+    return candidate;
+  };
   const SWITCHER_POLL_MIN_MS = 1500;
   const SWITCHER_POLL_MAX_MS = 5000;
   const SWITCHER_MAX_POLL = 2;
@@ -10653,7 +10711,7 @@ export async function switchToInstagramAccount(
     if (!(p === 0 && xml)) {
       xml = await _uiDump(adbPath, serial).catch(() => "");
     }
-    coords = _findVisibleAccountText(xml, switcherScreenHeight, clean, `@${clean}`);
+    coords = findAccountRowInSheet(xml);
     if (coords) break; // found — proceed to tap
     if (p < SWITCHER_MAX_POLL - 1) {
       const pollWaitMs = SWITCHER_POLL_MIN_MS + Math.floor(Math.random() * (SWITCHER_POLL_MAX_MS - SWITCHER_POLL_MIN_MS + 1));
@@ -10721,7 +10779,7 @@ export async function switchToInstagramAccount(
         ], 4000).catch(() => {});
          await _sleep(400 + Math.floor(Math.random() * 4601));
         xml = await _uiDump(adbPath, serial).catch(() => "");
-        coords = _findVisibleAccountText(xml, switcherScreenHeight, clean, `@${clean}`);
+        coords = findAccountRowInSheet(xml);
       }
     }
 
@@ -10750,10 +10808,16 @@ export async function switchToInstagramAccount(
    await _sleep(1500 + Math.floor(Math.random() * 1001));
    await dismissInstagramAccountRestriction(serial, onLog);
   const postTapXml = await _uiDump(adbPath, serial).catch(() => "");
+   const postTapComplete = postTapXml.includes("</hierarchy>");
+   const postTapHomeVisible =
+     /content-desc="Home[^"]*"/.test(postTapXml) ||
+     !!_findByResId(postTapXml, ":id/feed_tab", ":id/home_tab");
+   onLog?.(
+     `  ↳ Account-row handoff result: xmlLength=${postTapXml.length}, complete=${postTapComplete}, ` +
+     `home=${postTapHomeVisible}`,
+   );
   if (postTapXml) {
-    const homeFeedVisible =
-      /content-desc="Home[^"]*"/.test(postTapXml) ||
-      !!_findByResId(postTapXml, ":id/feed_tab", ":id/home_tab");
+     const homeFeedVisible = postTapHomeVisible;
     if (!homeFeedVisible) {
       const escapedClean = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const selectedTargetRow = new RegExp(
