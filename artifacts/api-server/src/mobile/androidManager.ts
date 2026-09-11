@@ -858,6 +858,13 @@ async function logInstagramChallengeDiagnostics(
   }));
   if (!isInstagramChallengeActivity(foreground)) return;
 
+  logger.warn({
+    serial,
+    diagnosticContext,
+    elapsedMs: Date.now() - startedAt,
+    foreground,
+  }, "[instagram-challenge-probe] started");
+
   const [xml, webviewProvider, webviewState, instagramPackage, logcat] = await Promise.all([
     getUiDump(serial).catch(() => ""),
     runAdb(adb, ["-s", serial, "shell", "cmd", "webviewupdate", "get-current-webview-package"], 5000),
