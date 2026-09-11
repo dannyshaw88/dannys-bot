@@ -6479,7 +6479,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // 2. Open Instagram.
       tLog("▶ Opening Instagram…");
-      await android.launchInstagram(serial);
+      await android.launchInstagram(serial, { diagnostic: true });
       steps.push("launch-instagram");
       // Reduced from 1200 → 400 ms: the UIAutomator dump below (~5-15 s) waits
       // for UI idle itself, so a long fixed sleep before it is redundant.
@@ -8440,7 +8440,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
 
   app.post("/api/mobile/devices/:serial/instagram/launch", async (req: Request, res: Response) => {
-    try { await android.launchInstagram(p(req, "serial")); res.json({ ok: true }); }
+    try { await android.launchInstagram(p(req, "serial"), { diagnostic: true }); res.json({ ok: true }); }
     catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 

@@ -765,15 +765,158 @@ export async function isPackageInstalled(serial: string, pkg: string): Promise<b
   return stdout.split(/\r?\n/).some(l => l.trim() === `package:${pkg}`);
 }
 
-export async function launchInstagram(serial: string): Promise<void> {
+type InstagramLaunchOptions = {
+  diagnostic?: boolean;
+};
+
+type InstagramLaunchFrameSummary = {
+  width: number;
+  height: number;
+  sampled: number;
+  nearWhitePct: number;
+  nearBlackPct: number;
+  meanLuma: number;
+  lumaVariance: number;
+};
+
+function summarizeInstagramLaunchFrame(
+  image: { width: number; height: number; channels: number; pixels: Buffer } | null,
+): InstagramLaunchFrameSummary | null {
+  if (!image || image.channels < 3 || image.width < 1 || image.height < 1) return null;
+
+  // Exclude the status and navigation bars. The attached failure evidence has
+  // both bars visible while the app content is uniformly white.
+  const yStart = Math.floor(image.height * 0.08);
+  const yEnd = Math.ceil(image.height * 0.92);
+  const xStep = Math.max(1, Math.floor(image.width / 120));
+  const yStep = Math.max(1, Math.floor(image.height / 120));
+  const stride = image.width * image.channels;
+  let sampled = 0;
+  let nearWhite = 0;
+  let nearBlack = 0;
+  let lumaSum = 0;
+  let lumaSquaredSum = 0;
+
+  for (let y = yStart; y < yEnd; y += yStep) {
+    const row = y * stride;
+    for (let x = 0; x < image.width; x += xStep) {
+      const offset = row + x * image.channels;
+      const r = image.pixels[offset];
+      const g = image.pixels[offset + 1];
+      const b = image.pixels[offset + 2];
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      sampled++;
+      if (r >= 245 && g >= 245 && b >= 245) nearWhite++;
+      if (r <= 10 && g <= 10 && b <= 10) nearBlack++;
+      lumaSum += luma;
+      lumaSquaredSum += luma * luma;
+    }
+  }
+
+  if (!sampled) return null;
+  const meanLuma = lumaSum / sampled;
+  return {
+    width: image.width,
+    height: image.height,
+    sampled,
+    nearWhitePct: Number(((nearWhite / sampled) * 100).toFixed(2)),
+    nearBlackPct: Number(((nearBlack / sampled) * 100).toFixed(2)),
+    meanLuma: Number(meanLuma.toFixed(2)),
+    lumaVariance: Number(Math.max(0, lumaSquaredSum / sampled - meanLuma * meanLuma).toFixed(2)),
+  };
+}
+
+async function runInstagramLaunchDiagnostic(
+  serial: string,
+  startInstagram: () => void,
+): Promise<void> {
+  const startedAt = Date.now();
+  const adb = requireTool(detectToolset().adb, "adb");
+
+  const sample = async (phase: string) => {
+    const [foreground, pid, frame, surfaces] = await Promise.all([
+      getForegroundSnapshot(serial).catch(() => ({
+        focusedWindow: null,
+        focusedApp: null,
+        topResumedActivity: null,
+        screenOn: null,
+      })),
+      runAdb(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], 3000),
+      _captureScreenPixels(serial),
+      runAdb(adb, ["-s", serial, "shell", "dumpsys", "SurfaceFlinger", "--list"], 5000),
+    ]);
+    const surfaceMatches = surfaces
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => /instagram|surfaceview|bufferqueue/i.test(line))
+      .slice(0, 20);
+    logger.info({
+      serial,
+      phase,
+      elapsedMs: Date.now() - startedAt,
+      foreground,
+      instagramPid: pid.trim() || null,
+      frame: summarizeInstagramLaunchFrame(frame),
+      surfaceMatches,
+    }, "[instagram-launch-probe] sample");
+  };
+
+  await sample("before-am-start");
+  let launchStatus: number | null = null;
+  let launchStderr = "";
+  try {
+    const result = startInstagram() as unknown as { status?: number | null; stderr?: Buffer | string };
+    launchStatus = result?.status ?? null;
+    launchStderr = result?.stderr ? String(result.stderr).trim().slice(0, 500) : "";
+  } catch (error: any) {
+    launchStderr = error?.message ?? String(error);
+  }
+  logger.info({
+    serial,
+    launchStatus,
+    launchStderr: launchStderr || null,
+  }, "[instagram-launch-probe] am-start");
+  await sample("after-am-start");
+
+  await new Promise(resolve => setTimeout(resolve, 250));
+  await sample("plus-250ms");
+  await new Promise(resolve => setTimeout(resolve, 750));
+  await sample("plus-1000ms");
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  await sample("plus-3000ms");
+
+  const logcat = await runAdb(adb, [
+    "-s", serial, "shell", "logcat", "-d", "-v", "threadtime", "-t", "400",
+  ], 8000);
+  const relevantLogcat = logcat
+    .split(/\r?\n/)
+    .filter(line => /instagram|ActivityTaskManager|WindowManager|SurfaceFlinger|BufferQueue|OpenGLRenderer|FATAL EXCEPTION|AndroidRuntime/i.test(line))
+    .slice(-120);
+  logger.info({
+    serial,
+    elapsedMs: Date.now() - startedAt,
+    lines: relevantLogcat,
+  }, "[instagram-launch-probe] logcat");
+}
+
+export async function launchInstagram(
+  serial: string,
+  options?: InstagramLaunchOptions,
+): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   // Use am start instead of monkey — monkey can trigger ADB server restarts
   // which kill scrcpy connections. am start is a clean single-activity launch.
-  spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
+  const start = () => spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
     "com.instagram.android/com.instagram.mainactivity.LauncherActivity",
     "--activity-clear-top",
   ], { encoding: "utf8", timeout: 10000 });
+
+  if (options?.diagnostic) {
+    await runInstagramLaunchDiagnostic(serial, start);
+    return;
+  }
+  start();
 }
 
 /**
