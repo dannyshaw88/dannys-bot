@@ -839,6 +839,69 @@ function isInstagramForeground(snapshot: InstagramForegroundSnapshot): boolean {
     .some(value => typeof value === "string" && /com\.instagram\.android/i.test(value));
 }
 
+export function isInstagramChallengeActivity(snapshot: InstagramForegroundSnapshot): boolean {
+  return [snapshot.focusedWindow, snapshot.focusedApp, snapshot.topResumedActivity]
+    .some(value => typeof value === "string" && /com\.instagram\.android.*challenge\.activity\./i.test(value));
+}
+
+async function logInstagramChallengeDiagnostics(
+  serial: string,
+  startedAt: number,
+  adb: string,
+  diagnosticContext: string,
+): Promise<void> {
+  const foreground = await getForegroundSnapshot(serial).catch(() => ({
+    focusedWindow: null,
+    focusedApp: null,
+    topResumedActivity: null,
+    screenOn: null,
+  }));
+  if (!isInstagramChallengeActivity(foreground)) return;
+
+  const [xml, webviewProvider, webviewState, instagramPackage, logcat] = await Promise.all([
+    getUiDump(serial).catch(() => ""),
+    runAdb(adb, ["-s", serial, "shell", "cmd", "webviewupdate", "get-current-webview-package"], 5000),
+    runAdb(adb, ["-s", serial, "shell", "dumpsys", "webviewupdate"], 5000),
+    runAdb(adb, ["-s", serial, "shell", "dumpsys", "package", "com.instagram.android"], 5000),
+    runAdb(adb, ["-s", serial, "shell", "logcat", "-d", "-v", "threadtime", "-t", "800"], 10000),
+  ]);
+
+  const uiNodeTags = (xml.match(/<node\b[^>]*>/g) ?? []).slice(0, 80).map(tag => {
+    const className = tag.match(/\bclass="([^"]*)"/i)?.[1] ?? null;
+    const resourceId = tag.match(/\bresource-id="([^"]*)"/i)?.[1] ?? null;
+    const bounds = tag.match(/\bbounds="([^"]*)"/i)?.[1] ?? null;
+    const text = tag.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+    const contentDesc = tag.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "";
+    return {
+      className,
+      resourceId,
+      bounds,
+      hasText: Boolean(text),
+      textLength: text.length,
+      hasContentDesc: Boolean(contentDesc),
+      contentDescLength: contentDesc.length,
+    };
+  });
+  const relevantLogcat = logcat
+    .split(/\r?\n/)
+    .filter(line => /challenge|webview|chromium|cronet|graphql|okhttp|networksecurity|ssl|tls|dns|socket|http|exception|fatal|androidruntime/i.test(line))
+    .slice(-240);
+  const packageVersion = instagramPackage.match(/versionName=([^\s]+)/i)?.[1] ?? null;
+
+  logger.warn({
+    serial,
+    diagnosticContext,
+    elapsedMs: Date.now() - startedAt,
+    foreground,
+    uiNodeCount: uiNodeTags.length,
+    uiNodeTags,
+    webviewProvider: webviewProvider.trim() || null,
+    webviewState: webviewState.split(/\r?\n/).filter(line => /current|provider|package|version|error|fallback/i.test(line)).slice(-80),
+    instagramPackageVersion: packageVersion,
+    relevantLogcat,
+  }, "[instagram-challenge-probe] empty-or-unrendered-challenge");
+}
+
 async function collectInstagramLaunchSample(
   serial: string,
   phase: string,
@@ -931,6 +994,7 @@ async function runInstagramLaunchDiagnostic(
   await collectInstagramLaunchSample(serial, "plus-1000ms", startedAt, adb, diagnosticContext);
   await new Promise(resolve => setTimeout(resolve, 2000));
   await collectInstagramLaunchSample(serial, "plus-3000ms", startedAt, adb, diagnosticContext);
+  await logInstagramChallengeDiagnostics(serial, startedAt, adb, diagnosticContext);
   await logInstagramLaunchLogcat(serial, startedAt, adb, diagnosticContext);
 }
 
@@ -981,6 +1045,7 @@ export function armInstagramLaunchDiagnostic(serial: string): { windowMs: number
           await collectInstagramLaunchSample(serial, "manual-plus-1000ms", startedAt, adb, "manual-watch");
           await new Promise(resolve => setTimeout(resolve, 2000));
           await collectInstagramLaunchSample(serial, "manual-plus-3000ms", startedAt, adb, "manual-watch");
+          await logInstagramChallengeDiagnostics(serial, startedAt, adb, "manual-watch");
           await logInstagramLaunchLogcat(serial, startedAt, adb, "manual-watch");
           return;
         }
