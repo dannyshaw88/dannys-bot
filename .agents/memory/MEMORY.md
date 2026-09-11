@@ -154,3 +154,4 @@
 - [Notification Back surface guard](notification-back-surface-guard.md) — calibrated upper-left Back is Home's Create button when the notification surface disappears; confirm the live surface first
 - [Debug screenshot capture timing](debug-screenshot-capture-timing.md) — filename time orders the phone frame; embedded log labels can be stale behind the per-device capture queue
 - [WhatsApp contact automation safety](whatsapp-contact-automation-safety.md) — resolve contacts and Send from the live picker/composer; fail closed when WhatsApp’s layout or labels change
+- [Manual Instagram launch diagnostics](manual-instagram-launch-probe.md) — physical/mirror app opens bypass launchInstagram; arm a foreground-transition watcher before tapping Instagram

@@ -8444,6 +8444,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
+  app.post("/api/mobile/devices/:serial/instagram/launch-diagnostic", (req: Request, res: Response) => {
+    try {
+      const result = android.armInstagramLaunchDiagnostic(p(req, "serial"));
+      res.json({ ok: true, ...result });
+    } catch (e: any) {
+      res.status(400).json({ error: e?.message ?? "Could not arm Instagram launch diagnostic" });
+    }
+  });
+
   app.post("/api/mobile/devices/:serial/instagram/stop", async (req: Request, res: Response) => {
     try { await android.stopInstagram(p(req, "serial")); res.json({ ok: true }); }
     catch (e: any) { res.status(400).json({ error: e?.message }); }

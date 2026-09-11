@@ -769,6 +769,13 @@ type InstagramLaunchOptions = {
   diagnostic?: boolean;
 };
 
+export type InstagramForegroundSnapshot = {
+  focusedWindow: string | null;
+  focusedApp: string | null;
+  topResumedActivity: string | null;
+  screenOn: boolean | null;
+};
+
 type InstagramLaunchFrameSummary = {
   width: number;
   height: number;
@@ -826,6 +833,64 @@ function summarizeInstagramLaunchFrame(
   };
 }
 
+function isInstagramForeground(snapshot: InstagramForegroundSnapshot): boolean {
+  return [snapshot.focusedWindow, snapshot.focusedApp, snapshot.topResumedActivity]
+    .some(value => typeof value === "string" && /com\.instagram\.android/i.test(value));
+}
+
+async function collectInstagramLaunchSample(
+  serial: string,
+  phase: string,
+  startedAt: number,
+  adb: string,
+): Promise<void> {
+  const [foreground, pid, frame, surfaces] = await Promise.all([
+    getForegroundSnapshot(serial).catch(() => ({
+      focusedWindow: null,
+      focusedApp: null,
+      topResumedActivity: null,
+      screenOn: null,
+    })),
+    runAdb(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], 3000),
+    _captureScreenPixels(serial),
+    runAdb(adb, ["-s", serial, "shell", "dumpsys", "SurfaceFlinger", "--list"], 5000),
+  ]);
+  const surfaceMatches = surfaces
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => /instagram|surfaceview|bufferqueue/i.test(line))
+    .slice(0, 20);
+  logger.info({
+    serial,
+    phase,
+    elapsedMs: Date.now() - startedAt,
+    foreground,
+    instagramForeground: isInstagramForeground(foreground),
+    instagramPid: pid.trim() || null,
+    frame: summarizeInstagramLaunchFrame(frame),
+    surfaceMatches,
+  }, "[instagram-launch-probe] sample");
+}
+
+async function logInstagramLaunchLogcat(
+  serial: string,
+  startedAt: number,
+  adb: string,
+): Promise<void> {
+  const logcat = await runAdb(adb, [
+    "-s", serial, "shell", "logcat", "-d", "-v", "threadtime", "-t", "400",
+  ], 8000);
+  const relevantLogcat = logcat
+    .split(/\r?\n/)
+    .filter(line => /instagram|ActivityTaskManager|WindowManager|SurfaceFlinger|BufferQueue|OpenGLRenderer|FATAL EXCEPTION|AndroidRuntime/i.test(line))
+    .slice(-120);
+  logger.info({
+    serial,
+    elapsedMs: Date.now() - startedAt,
+    lines: relevantLogcat,
+  }, "[instagram-launch-probe] logcat");
+}
+
 async function runInstagramLaunchDiagnostic(
   serial: string,
   startInstagram: () => void,
@@ -833,35 +898,7 @@ async function runInstagramLaunchDiagnostic(
   const startedAt = Date.now();
   const adb = requireTool(detectToolset().adb, "adb");
 
-  const sample = async (phase: string) => {
-    const [foreground, pid, frame, surfaces] = await Promise.all([
-      getForegroundSnapshot(serial).catch(() => ({
-        focusedWindow: null,
-        focusedApp: null,
-        topResumedActivity: null,
-        screenOn: null,
-      })),
-      runAdb(adb, ["-s", serial, "shell", "pidof", "com.instagram.android"], 3000),
-      _captureScreenPixels(serial),
-      runAdb(adb, ["-s", serial, "shell", "dumpsys", "SurfaceFlinger", "--list"], 5000),
-    ]);
-    const surfaceMatches = surfaces
-      .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(line => /instagram|surfaceview|bufferqueue/i.test(line))
-      .slice(0, 20);
-    logger.info({
-      serial,
-      phase,
-      elapsedMs: Date.now() - startedAt,
-      foreground,
-      instagramPid: pid.trim() || null,
-      frame: summarizeInstagramLaunchFrame(frame),
-      surfaceMatches,
-    }, "[instagram-launch-probe] sample");
-  };
-
-  await sample("before-am-start");
+  await collectInstagramLaunchSample(serial, "before-am-start", startedAt, adb);
   let launchStatus: number | null = null;
   let launchStderr = "";
   try {
@@ -876,27 +913,88 @@ async function runInstagramLaunchDiagnostic(
     launchStatus,
     launchStderr: launchStderr || null,
   }, "[instagram-launch-probe] am-start");
-  await sample("after-am-start");
+  await collectInstagramLaunchSample(serial, "after-am-start", startedAt, adb);
 
   await new Promise(resolve => setTimeout(resolve, 250));
-  await sample("plus-250ms");
+  await collectInstagramLaunchSample(serial, "plus-250ms", startedAt, adb);
   await new Promise(resolve => setTimeout(resolve, 750));
-  await sample("plus-1000ms");
+  await collectInstagramLaunchSample(serial, "plus-1000ms", startedAt, adb);
   await new Promise(resolve => setTimeout(resolve, 2000));
-  await sample("plus-3000ms");
+  await collectInstagramLaunchSample(serial, "plus-3000ms", startedAt, adb);
+  await logInstagramLaunchLogcat(serial, startedAt, adb);
+}
 
-  const logcat = await runAdb(adb, [
-    "-s", serial, "shell", "logcat", "-d", "-v", "threadtime", "-t", "400",
-  ], 8000);
-  const relevantLogcat = logcat
-    .split(/\r?\n/)
-    .filter(line => /instagram|ActivityTaskManager|WindowManager|SurfaceFlinger|BufferQueue|OpenGLRenderer|FATAL EXCEPTION|AndroidRuntime/i.test(line))
-    .slice(-120);
-  logger.info({
-    serial,
-    elapsedMs: Date.now() - startedAt,
-    lines: relevantLogcat,
-  }, "[instagram-launch-probe] logcat");
+type InstagramLaunchWatch = { cancelled: boolean };
+const instagramLaunchWatches = new Map<string, InstagramLaunchWatch>();
+
+/**
+ * Arms a one-shot watcher for a manually opened Instagram app. This is
+ * separate from launchInstagram(): tapping Instagram on the physical phone
+ * never calls that function, so an am-start probe cannot see the transition.
+ */
+export function armInstagramLaunchDiagnostic(serial: string): { windowMs: number } {
+  const previousWatch = instagramLaunchWatches.get(serial);
+  if (previousWatch) previousWatch.cancelled = true;
+  const watch: InstagramLaunchWatch = { cancelled: false };
+  instagramLaunchWatches.set(serial, watch);
+  const windowMs = 15_000;
+
+  void (async () => {
+    const startedAt = Date.now();
+    let adb: string;
+    try {
+      adb = requireTool(detectToolset().adb, "adb");
+      const baseline = await getForegroundSnapshot(serial);
+      let sawNonInstagram = !isInstagramForeground(baseline);
+      const deadline = Date.now() + windowMs;
+      logger.info({
+        serial,
+        windowMs,
+        baseline,
+        baselineInstagramForeground: !sawNonInstagram,
+      }, "[instagram-launch-probe] manual-watch-armed");
+
+      while (!watch.cancelled && Date.now() < deadline) {
+        const foreground = await getForegroundSnapshot(serial);
+        const instagramForeground = isInstagramForeground(foreground);
+        if (!instagramForeground) sawNonInstagram = true;
+        if (sawNonInstagram && instagramForeground) {
+          logger.info({
+            serial,
+            elapsedMs: Date.now() - startedAt,
+            foreground,
+          }, "[instagram-launch-probe] manual-foreground-detected");
+          await collectInstagramLaunchSample(serial, "manual-foreground-detected", startedAt, adb);
+          await new Promise(resolve => setTimeout(resolve, 250));
+          await collectInstagramLaunchSample(serial, "manual-plus-250ms", startedAt, adb);
+          await new Promise(resolve => setTimeout(resolve, 750));
+          await collectInstagramLaunchSample(serial, "manual-plus-1000ms", startedAt, adb);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          await collectInstagramLaunchSample(serial, "manual-plus-3000ms", startedAt, adb);
+          await logInstagramLaunchLogcat(serial, startedAt, adb);
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+
+      logger.info({
+        serial,
+        elapsedMs: Date.now() - startedAt,
+        cancelled: watch.cancelled,
+      }, "[instagram-launch-probe] manual-watch-expired");
+    } catch (error: any) {
+      logger.warn({
+        serial,
+        error: error?.message ?? String(error),
+      }, "[instagram-launch-probe] manual-watch-failed");
+    } finally {
+      if (instagramLaunchWatches.get(serial) === watch) {
+        instagramLaunchWatches.delete(serial);
+      }
+    }
+  })();
+
+  return { windowMs };
 }
 
 export async function launchInstagram(
@@ -5102,12 +5200,7 @@ export async function pressBack(serial: string): Promise<void> {
  * unexpected app/launcher transitions. This deliberately records only window
  * identity and screen power state, not the full dumpsys payload.
  */
-export async function getForegroundSnapshot(serial: string): Promise<{
-  focusedWindow: string | null;
-  focusedApp: string | null;
-  topResumedActivity: string | null;
-  screenOn: boolean | null;
-}> {
+export async function getForegroundSnapshot(serial: string): Promise<InstagramForegroundSnapshot> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   try {

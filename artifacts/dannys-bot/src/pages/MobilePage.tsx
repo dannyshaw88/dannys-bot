@@ -3077,6 +3077,8 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
   }, [live]);
 
   const [clickTestMode, setClickTestMode] = useState(false);
+  const [launchTraceState, setLaunchTraceState] = useState<"idle" | "arming" | "armed" | "error">("idle");
+  const launchTraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCustomize, setShowCustomize] = useState(false);
   const [showCalibration, setShowCalibration] = useState(false);
   const [showNavigationCalibration, setShowNavigationCalibration] = useState(false);
@@ -3101,6 +3103,30 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       sendKey(phone.serial, 224, "Wake", onLog);
     }
   }, [manualLive, manualPowerActuallyOn, onLog, onPower, phone]);
+
+  const armInstagramLaunchTrace = useCallback(async () => {
+    if (!phone) return;
+    if (launchTraceTimerRef.current) clearTimeout(launchTraceTimerRef.current);
+    setLaunchTraceState("arming");
+    try {
+      const response = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(phone.serial)}/instagram/launch-diagnostic`,
+        { method: "POST" },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.ok) throw new Error(body?.error ?? "Could not arm launch trace");
+      setLaunchTraceState("armed");
+      onLog?.("Instagram launch trace armed — press Home, then open Instagram manually within 15 seconds");
+      launchTraceTimerRef.current = setTimeout(() => setLaunchTraceState("idle"), body.windowMs ?? 15_000);
+    } catch (error: any) {
+      setLaunchTraceState("error");
+      onLog?.(`Instagram launch trace failed — ${error?.message ?? "unknown error"}`);
+    }
+  }, [onLog, phone]);
+
+  useEffect(() => () => {
+    if (launchTraceTimerRef.current) clearTimeout(launchTraceTimerRef.current);
+  }, []);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
@@ -3353,6 +3379,25 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
                <Power className="w-3 h-3" />
              </button>
            )}
+            {isReady && phone && (
+              <button
+                type="button"
+                onClick={armInstagramLaunchTrace}
+                title="Arm Instagram launch trace, then press Home and open Instagram manually"
+                aria-label="Arm Instagram launch trace"
+                className={`transition-colors shrink-0 ${
+                  launchTraceState === "armed"
+                    ? "text-amber-300"
+                    : launchTraceState === "error"
+                      ? "text-red-400"
+                      : "text-white/20 hover:text-amber-300"
+                }`}
+              >
+                {launchTraceState === "arming"
+                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                  : <Bug className="w-3 h-3" />}
+              </button>
+            )}
           {isReady        && <span className="flex items-center gap-1 text-[9px] font-bold text-green-400 shrink-0"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />Live</span>}
           {isUnauthorized && <span className="text-[9px] font-semibold text-yellow-500 shrink-0">Auth needed</span>}
           {isOffline      && <span className="text-[9px] font-semibold text-red-500 shrink-0">Offline</span>}
