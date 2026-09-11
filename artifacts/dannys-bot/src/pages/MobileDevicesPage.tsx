@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, UserRound, RotateCcw, Download, ChevronDown, Check } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, Bug, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, UserRound, RotateCcw, Download, ChevronDown, Check } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
@@ -1162,6 +1162,7 @@ function DeviceCard({
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [rebooting, setRebooting] = useState(false);
+  const [traceState, setTraceState] = useState<"idle" | "arming" | "armed" | "error">("idle");
   const phoneAreaRef = useRef<HTMLDivElement>(null);
   const phoneFrameRef = useRef<HTMLDivElement>(null);
   const [simCenterX, setSimCenterX] = useState<number | null>(null);
@@ -1206,6 +1207,29 @@ function DeviceCard({
     }
     setTimeout(() => setRebooting(false), 15000);
   }, [device.serial, rebooting]);
+
+  const handleTrace = useCallback(async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!phone?.serial || !online || traceState === "arming") return;
+
+    setTraceState("arming");
+    try {
+      const response = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(phone.serial)}/instagram/launch-diagnostic`,
+        { method: "POST" },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.ok) {
+        throw new Error(body?.error ?? "Could not arm Instagram launch trace");
+      }
+      setTraceState("armed");
+      window.setTimeout(() => setTraceState("idle"), body.windowMs ?? 15_000);
+    } catch (error) {
+      console.error("[PhoneFarm] Instagram launch trace failed", error);
+      setTraceState("error");
+      window.setTimeout(() => setTraceState("idle"), 3_000);
+    }
+  }, [online, phone?.serial, traceState]);
 
   // ── Live mirror thumbnail ─────────────────────────────────────────────────
   // When the mirror is powered on (isStreaming), poll screencap.png every
@@ -1343,42 +1367,65 @@ function DeviceCard({
       </div>
 
       {/* Persistent device controls — kept in the top-right so they are
-          discoverable without hovering over the card. */}
-      <button
-        onClick={handleRestart}
-        disabled={rebooting}
-        title="Restart device"
-        aria-label="Restart device"
-        className="absolute top-2 right-26 z-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-green-500/10 hover:border-green-500 hover:text-green-500 text-muted-foreground disabled:cursor-not-allowed"
-      >
-        <RotateCcw className={`w-3 h-3 ${rebooting ? "animate-spin" : ""}`} />
-      </button>
-      <button
-        onClick={e => { e.stopPropagation(); onPower(); }}
-        title={powered ? "Power off phone" : "Power on phone"}
-        aria-label={powered ? "Power off phone" : "Power on phone"}
-        className={`absolute top-2 right-18 z-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/40 ${powered ? "text-emerald-500" : "text-muted-foreground hover:text-primary"}`}
-      >
-        <Power className="w-3 h-3" />
-      </button>
-
-      {/* Palette button */}
-      <button
-        onClick={e => { e.stopPropagation(); setPanelOpen(true); }}
-        title="Customise wallpaper & text"
-        className="absolute top-2 right-10 z-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground"
-      >
-        <Palette className="w-3 h-3" />
-      </button>
-
-      {/* Remove button */}
-      <button
-        onClick={e => { e.stopPropagation(); onRemove(); }}
-        title="Remove device from farm"
-        className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive text-muted-foreground"
-      >
-        <Trash2 className="w-3 h-3" />
-      </button>
+          discoverable without hovering over the card. Trace is deliberately
+          labeled: it is a diagnostic action, not the wallpaper control. */}
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+        <button
+          onClick={handleRestart}
+          disabled={rebooting}
+          title="Restart device"
+          aria-label="Restart device"
+          className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-green-500/10 hover:border-green-500 hover:text-green-500 text-muted-foreground disabled:cursor-not-allowed"
+        >
+          <RotateCcw className={`w-3 h-3 ${rebooting ? "animate-spin" : ""}`} />
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); onPower(); }}
+          title={powered ? "Power off phone" : "Power on phone"}
+          aria-label={powered ? "Power off phone" : "Power on phone"}
+          className={`w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/40 ${powered ? "text-emerald-500" : "text-muted-foreground hover:text-primary"}`}
+        >
+          <Power className="w-3 h-3" />
+        </button>
+        <button
+          onClick={handleTrace}
+          disabled={!phone?.serial || !online || traceState === "arming"}
+          title={
+            !online
+              ? "Trace requires a connected phone"
+              : traceState === "armed"
+                ? "Trace armed — press Home, then open Instagram manually within 15 seconds"
+                : "Arm Instagram launch trace"
+          }
+          aria-label="Arm Instagram launch trace"
+          className={`h-6 rounded-full border flex items-center justify-center gap-1 px-2 text-[10px] font-semibold transition-colors ${
+            traceState === "armed"
+              ? "border-amber-400/60 bg-amber-400/10 text-amber-500"
+              : traceState === "error"
+                ? "border-red-400/60 bg-red-400/10 text-red-500"
+                : "border-border bg-background text-muted-foreground hover:border-amber-400/60 hover:bg-amber-400/10 hover:text-amber-500"
+          } disabled:cursor-not-allowed disabled:opacity-50`}
+        >
+          {traceState === "arming" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bug className="w-3 h-3" />}
+          <span>{traceState === "armed" ? "Armed" : traceState === "error" ? "Retry" : "Trace"}</span>
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); setPanelOpen(true); }}
+          title="Customise wallpaper & text"
+          aria-label="Customise wallpaper & text"
+          className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground"
+        >
+          <Palette className="w-3 h-3" />
+        </button>
+        <button
+          onClick={e => { e.stopPropagation(); onRemove(); }}
+          title="Remove device from farm"
+          aria-label="Remove device from farm"
+          className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive text-muted-foreground"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
 
       <CustomizePanel
         open={panelOpen}
