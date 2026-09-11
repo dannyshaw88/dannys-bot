@@ -5204,7 +5204,7 @@ export async function getForegroundSnapshot(serial: string): Promise<InstagramFo
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   try {
-    const [windowResult, powerResult] = await Promise.all([
+    const [windowResult, powerResult, activityResult] = await Promise.all([
       execFileP(adb, ["-s", serial, "shell", "dumpsys", "window", "windows"], {
         encoding: "utf8",
         timeout: 3000,
@@ -5213,9 +5213,18 @@ export async function getForegroundSnapshot(serial: string): Promise<InstagramFo
         encoding: "utf8",
         timeout: 3000,
       } as any),
+      // MIUI/Android builds can omit mCurrentFocus and mFocusedApp from the
+      // window dump even while dumpsys activity still exposes the resumed
+      // activity. Keep this as a separate fallback source rather than
+      // inferring foreground state from a stale window record.
+      execFileP(adb, ["-s", serial, "shell", "dumpsys", "activity", "activities"], {
+        encoding: "utf8",
+        timeout: 3000,
+      } as any),
     ]);
     const windowText = `${windowResult.stdout ?? ""}\n${windowResult.stderr ?? ""}`;
     const powerText = `${powerResult.stdout ?? ""}\n${powerResult.stderr ?? ""}`;
+    const activityText = `${activityResult.stdout ?? ""}\n${activityResult.stderr ?? ""}`;
     const firstMatch = (patterns: RegExp[]): string | null => {
       for (const pattern of patterns) {
         const match = windowText.match(pattern);
@@ -5223,22 +5232,45 @@ export async function getForegroundSnapshot(serial: string): Promise<InstagramFo
       }
       return null;
     };
+    const lineMatching = (text: string, pattern: RegExp): string => (
+      text.split(/\r?\n/).find(line => pattern.test(line)) ?? ""
+    );
+    const componentFromLine = (line: string): string | null => {
+      // Handles both `u0 com.instagram.android/.activity.Main` and
+      // `com.instagram.android/.activity.Main` forms used by Android/MIUI.
+      const match = line.match(/\b(?:u\d+\s+)?([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+\/[^\s}\]]+)/);
+      return match?.[1]?.trim() ?? null;
+    };
+    const packageFromLine = (line: string): string | null => {
+      const component = componentFromLine(line);
+      return component?.split("/", 1)[0] ?? null;
+    };
+    const currentFocusLine = lineMatching(windowText, /mCurrentFocus\s*=/i);
+    const focusedAppLine = lineMatching(windowText, /mFocusedApp\s*=/i);
+    const resumedActivityLine = lineMatching(
+      activityText,
+      /(?:topResumedActivity|mResumedActivity|ResumedActivity)\s*[:=]/i,
+    );
+    const resumedLine = resumedActivityLine || lineMatching(activityText, /ActivityRecord\{/i);
+    const focusedWindowFallback = componentFromLine(currentFocusLine);
+    const focusedAppFallback = packageFromLine(focusedAppLine) ?? packageFromLine(resumedLine);
+    const topResumedFallback = componentFromLine(resumedLine);
     const snapshot = {
       focusedWindow: firstMatch([
         /mCurrentFocus=Window\{[^}]*\s([^}\s]+)\}/,
         /mCurrentFocus=([^\n]+)/,
-      ]),
+      ]) ?? focusedWindowFallback,
       focusedApp: firstMatch([
         /mFocusedApp=ActivityRecord\{[^}]*\s([^}\s]+)\}/,
         /mFocusedApp=([^\n]+)/,
-      ]),
+      ]) ?? focusedAppFallback,
       topResumedActivity: firstMatch([
         /topResumedActivity=ActivityRecord\{[^}]*\s([^}\s]+)\}/,
         /mResumedActivity: ActivityRecord\{[^}]*\s([^}\s]+)\}/,
-      ]),
-      screenOn: /Display Power: state=ON|mScreenOn=true|DisplayPowerController.*state=ON/i.test(powerText)
+      ]) ?? topResumedFallback,
+      screenOn: /Display Power: state=ON|mScreenOn=true|DisplayPowerController.*state=ON|mWakefulness=(?:Awake|Dreaming)/i.test(powerText)
         ? true
-        : /Display Power: state=OFF|mScreenOn=false|DisplayPowerController.*state=OFF/i.test(powerText)
+        : /Display Power: state=OFF|mScreenOn=false|DisplayPowerController.*state=OFF|mWakefulness=(?:Asleep|Dozing)/i.test(powerText)
           ? false
           : null,
     };
