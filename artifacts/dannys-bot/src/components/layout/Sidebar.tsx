@@ -4,7 +4,7 @@ import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, FileSearch } from "lucide-react";
+import { Loader2, FileSearch, Network, Smartphone } from "lucide-react";
 
 function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -140,10 +140,32 @@ export function Sidebar() {
   return (
     <div className="w-[133px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
 
-      {/* ── Header: logo centred, then Equinox text below ── */}
+      {/* ── Header: logo with API/network and mobile indicators ── */}
       <div className="flex flex-col items-center border-b border-border/50 pt-[14px] pb-[10px] px-2">
-        <img src="/bot-logo.png" alt="Aura Farming" className="w-[55px] h-[55px] shrink-0 object-contain mb-[6px]" />
-        <span className="font-bold text-base tracking-tight">
+        <div className="flex items-center justify-center gap-2">
+          <img src="/bot-logo.png" alt="Aura Farming" className="w-[55px] h-[55px] shrink-0 object-contain" />
+          <div className="flex flex-col items-center gap-1.5" aria-label="System connections">
+            <div
+              className="flex flex-col items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5 px-1 py-1"
+              title="API network"
+              aria-label="API network"
+            >
+              <Network className="h-4 w-4 text-cyan-400" strokeWidth={2.2} />
+              <span className="mt-0.5 text-[7px] font-bold leading-none tracking-wide text-cyan-400">API</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLocation("/mobile")}
+              className="flex flex-col items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5 px-1 py-1 transition-colors hover:bg-cyan-400/15"
+              title="Mobile devices"
+              aria-label="Mobile devices"
+            >
+              <Smartphone className="h-4 w-4 text-cyan-400" strokeWidth={2.2} />
+              <span className="mt-0.5 text-[7px] font-bold leading-none tracking-wide text-cyan-400">MOBILE</span>
+            </button>
+          </div>
+        </div>
+        <span className="mt-[6px] font-bold text-base tracking-tight">
           <span style={{ color: BRAND }}>Aura</span><span className="text-foreground">Farming</span>
         </span>
       </div>
