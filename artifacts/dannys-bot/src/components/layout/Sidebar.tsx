@@ -146,22 +146,20 @@ export function Sidebar() {
           <img src="/bot-logo.png" alt="Aura Farming" className="w-[55px] h-[55px] shrink-0 object-contain" />
           <div className="flex flex-col items-center gap-1.5" aria-label="System connections">
             <div
-              className="flex flex-col items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5 px-1 py-1"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5"
               title="API network"
               aria-label="API network"
             >
               <Network className="h-4 w-4 text-cyan-400" strokeWidth={2.2} />
-              <span className="mt-0.5 text-[7px] font-bold leading-none tracking-wide text-cyan-400">API</span>
             </div>
             <button
               type="button"
               onClick={() => setLocation("/mobile")}
-              className="flex flex-col items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5 px-1 py-1 transition-colors hover:bg-cyan-400/15"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5 transition-colors hover:bg-cyan-400/15"
               title="Mobile devices"
               aria-label="Mobile devices"
             >
               <Smartphone className="h-4 w-4 text-cyan-400" strokeWidth={2.2} />
-              <span className="mt-0.5 text-[7px] font-bold leading-none tracking-wide text-cyan-400">MOBILE</span>
             </button>
           </div>
         </div>
