@@ -139,11 +139,10 @@ export function Sidebar() {
   const switchEngine = (engine: "api" | "mobile") => {
     const path = engine === "mobile" ? "/mobile" : "/dashboard";
     window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, engine);
-    // Use a real top-level history transition. The Mobile Farm owns a
-    // full-screen shell and must be unmounted before the API workspace paints.
-    window.history.pushState({}, "", path);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    setLocation(path);
+    // The Mobile Farm owns a full-screen shell and can keep its own route
+    // tree alive during an in-app transition. A document navigation guarantees
+    // that shell is fully unloaded before the API workspace starts.
+    window.location.assign(path);
   };
   const navItems = [
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
