@@ -24,3 +24,13 @@ the following cleanup look like a successful navigation.
 
 **How to apply:** Treat a still-visible Notifications header as a miss, skip
 detail cleanup for that branch, and keep the normal verified Notifications exit.
+
+Rows containing the standalone word `Thread` or `Threads` must be excluded
+before random notification selection. These are Instagram cross-promotion rows
+and can launch the separate Threads app.
+
+**Why:** A real device showed the notification-row click opening Threads
+instead of an Instagram notification detail.
+
+**How to apply:** Apply the exclusion to the grouped row, not just the text
+node that wins scoring, because the marker may be exposed by a sibling node.

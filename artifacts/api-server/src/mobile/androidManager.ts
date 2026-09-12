@@ -12811,6 +12811,11 @@ export async function findRandomNotificationItem(
     /you['’]re\s+all\s+caught\s+up/i,
     /your\s+weekly\s+recap\s+is\s+ready/i,
   ];
+  // Instagram can show a Threads cross-promotion inside Notifications.
+  // Tapping that row launches the separate Threads app, not an Instagram
+  // notification detail. Reject the whole grouped row, including when only
+  // one of several UIAutomator text nodes contains the marker.
+  const excludedThreadsRows = /\bthreads?\b/i;
   const visibleNodes: Array<{
     x1: number; y1: number; x2: number; y2: number;
     text: string; contentDesc: string; resourceId: string; clickable: boolean;
@@ -12932,10 +12937,17 @@ export async function findRandomNotificationItem(
   }
   const rowCandidates = rows
     .filter(row => !row.some(candidate =>
-      excludedInformationalRows.some(pattern => pattern.test(candidate.text))
+      excludedInformationalRows.some(pattern => pattern.test(candidate.text)) ||
+      excludedThreadsRows.test(candidate.text),
     ))
     .map(row => row.sort((a, b) => b.score - a.score || (b.x2 - b.x1) - (a.x2 - a.x1))[0])
     .filter(Boolean);
+  const excludedThreadsCount = rows.filter(row =>
+    row.some(candidate => excludedThreadsRows.test(candidate.text)),
+  ).length;
+  if (excludedThreadsCount > 0) {
+    onLog?.(`[notifications] excluded ${excludedThreadsCount} row(s) containing Thread/Threads`);
+  }
   if (!rowCandidates.length) return null;
 
   const selected = rowCandidates[Math.floor(Math.random() * rowCandidates.length)];
