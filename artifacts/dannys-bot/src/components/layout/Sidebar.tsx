@@ -6,6 +6,8 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, FileSearch, Network, Smartphone } from "lucide-react";
 
+export const LAST_ENGINE_STORAGE_KEY = "aura-farming:last-engine";
+
 function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -121,6 +123,11 @@ export function Sidebar() {
 
   useEffect(() => {
     pushLocation(location);
+    if (location === "/mobile" || location.startsWith("/mobile/")) {
+      window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, "mobile");
+    } else if (location !== "/") {
+      window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, "api");
+    }
   }, [location]);
 
   // Read the cached proxy list (populated by AdapterRotationWatcher's global poll)
@@ -145,16 +152,24 @@ export function Sidebar() {
         <div className="flex items-center justify-center gap-2">
           <img src="/bot-logo.png" alt="Aura Farming" className="w-[55px] h-[55px] shrink-0 object-contain" />
           <div className="flex flex-col items-center gap-1.5" aria-label="System connections">
-            <div
+            <button
+              type="button"
+              onClick={() => {
+                window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, "api");
+                setLocation("/dashboard");
+              }}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5"
               title="API network"
               aria-label="API network"
             >
               <Network className="h-4 w-4 text-cyan-400" strokeWidth={2.2} />
-            </div>
+            </button>
             <button
               type="button"
-              onClick={() => setLocation("/mobile")}
+              onClick={() => {
+                window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, "mobile");
+                setLocation("/mobile");
+              }}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5 transition-colors hover:bg-cyan-400/15"
               title="Mobile devices"
               aria-label="Mobile devices"
