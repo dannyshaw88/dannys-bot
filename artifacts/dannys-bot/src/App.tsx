@@ -33,7 +33,6 @@ import { AuraFarmingBot } from "@/components/EquinoxBot";
 import { queryClient } from "@/lib/queryClient";
 import { useStatusEvents } from "@/hooks/use-profiles";
 import { Loader2 } from "lucide-react";
-import { LAST_ENGINE_STORAGE_KEY } from "@/components/layout/Sidebar";
 
 // ── Top-level Error Boundary ─────────────────────────────────────────────────
 // React 18 in production mode: if ANY component throws during render and there
@@ -105,14 +104,10 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 const SAVED_LOGIN_KEY = "equinox:savedLogin";
 
 function Router() {
-  const lastEngine = typeof window !== "undefined"
-    ? window.localStorage.getItem(LAST_ENGINE_STORAGE_KEY)
-    : null;
-
   return (
     <Switch>
       <Route path="/">
-        <Redirect to={lastEngine === "mobile" ? "/mobile" : "/dashboard"} />
+        <Redirect to="/dashboard" />
       </Route>
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/profiles" component={ProfilesPage} />

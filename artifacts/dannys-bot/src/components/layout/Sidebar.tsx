@@ -4,9 +4,7 @@ import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, FileSearch, Network, Smartphone } from "lucide-react";
-
-export const LAST_ENGINE_STORAGE_KEY = "aura-farming:last-engine";
+import { Loader2, FileSearch } from "lucide-react";
 
 function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -123,11 +121,6 @@ export function Sidebar() {
 
   useEffect(() => {
     pushLocation(location);
-    if (location === "/mobile" || location.startsWith("/mobile/")) {
-      window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, "mobile");
-    } else if (location !== "/") {
-      window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, "api");
-    }
   }, [location]);
 
   // Read the cached proxy list (populated by AdapterRotationWatcher's global poll)
@@ -136,14 +129,6 @@ export function Sidebar() {
   const anyAdapterRotating = proxies.some(p => p.proxyType === "adapter" && p.rotating);
 
   const BRAND = "#1AD2F2";
-  const switchEngine = (engine: "api" | "mobile") => {
-    const path = engine === "mobile" ? "/mobile" : "/dashboard";
-    window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, engine);
-    // The Mobile Farm owns a full-screen shell and can keep its own route
-    // tree alive during an in-app transition. A document navigation guarantees
-    // that shell is fully unloaded before the API workspace starts.
-    window.location.assign(path);
-  };
   const navItems = [
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
@@ -155,36 +140,10 @@ export function Sidebar() {
   return (
     <div className="w-[133px] bg-card border-r border-border h-screen flex flex-col fixed left-0 top-0">
 
-      {/* ── Header: logo with API/network and mobile indicators ── */}
+      {/* ── Header: logo centred, then Equinox text below ── */}
       <div className="flex flex-col items-center border-b border-border/50 pt-[14px] pb-[10px] px-2">
-        <div className="flex items-center justify-center gap-2">
-          <img src="/bot-logo.png" alt="Aura Farming" className="w-[55px] h-[55px] shrink-0 object-contain" />
-          <div className="flex flex-col items-center gap-1.5" aria-label="System connections">
-            <button
-              type="button"
-              onClick={() => {
-                switchEngine("api");
-              }}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5"
-              title="API network"
-              aria-label="API network"
-            >
-              <Network className="h-4 w-4 text-cyan-400" strokeWidth={2.2} />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                switchEngine("mobile");
-              }}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5 transition-colors hover:bg-cyan-400/15"
-              title="Mobile devices"
-              aria-label="Mobile devices"
-            >
-              <Smartphone className="h-4 w-4 text-cyan-400" strokeWidth={2.2} />
-            </button>
-          </div>
-        </div>
-        <span className="mt-[6px] font-bold text-base tracking-tight">
+        <img src="/bot-logo.png" alt="Aura Farming" className="w-[55px] h-[55px] shrink-0 object-contain mb-[6px]" />
+        <span className="font-bold text-base tracking-tight">
           <span style={{ color: BRAND }}>Aura</span><span className="text-foreground">Farming</span>
         </span>
       </div>
