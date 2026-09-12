@@ -136,6 +136,15 @@ export function Sidebar() {
   const anyAdapterRotating = proxies.some(p => p.proxyType === "adapter" && p.rotating);
 
   const BRAND = "#1AD2F2";
+  const switchEngine = (engine: "api" | "mobile") => {
+    const path = engine === "mobile" ? "/mobile" : "/dashboard";
+    window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, engine);
+    // Use a real top-level history transition. The Mobile Farm owns a
+    // full-screen shell and must be unmounted before the API workspace paints.
+    window.history.pushState({}, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    setLocation(path);
+  };
   const navItems = [
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
@@ -155,8 +164,7 @@ export function Sidebar() {
             <button
               type="button"
               onClick={() => {
-                window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, "api");
-                setLocation("/dashboard");
+                switchEngine("api");
               }}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5"
               title="API network"
@@ -167,8 +175,7 @@ export function Sidebar() {
             <button
               type="button"
               onClick={() => {
-                window.localStorage.setItem(LAST_ENGINE_STORAGE_KEY, "mobile");
-                setLocation("/mobile");
+                switchEngine("mobile");
               }}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-cyan-400/30 bg-cyan-400/5 transition-colors hover:bg-cyan-400/15"
               title="Mobile devices"
