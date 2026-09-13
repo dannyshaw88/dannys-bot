@@ -1180,12 +1180,33 @@ export async function openInstagramUrl(serial: string, url: string): Promise<voi
   }
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  await runAdbStrict(adb, [
-    "-s", serial, "shell", "am", "start", "-W",
-    "-a", "android.intent.action.VIEW",
-    "-d", url,
-    "-p", "com.instagram.android",
-  ], 15000);
+  // Message links are routed through Instagram's URL handler activity. Use
+  // that same in-app route first so a Reel URL is resolved by Instagram
+  // without leaving to Chrome or relying on Android's generic resolver.
+  try {
+    await runAdbStrict(adb, [
+      "-s", serial, "shell", "am", "start", "-W",
+      "-n", "com.instagram.android/com.instagram.url.UrlHandlerActivity",
+      "-a", "android.intent.action.VIEW",
+      "-d", url,
+      "--activity-clear-top",
+    ], 15000);
+  } catch (handlerError: any) {
+    // Instagram has renamed this activity on some builds. Keep the package-
+    // constrained fallback, but never fall back to an external browser.
+    await runAdbStrict(adb, [
+      "-s", serial, "shell", "am", "start", "-W",
+      "-a", "android.intent.action.VIEW",
+      "-d", url,
+      "-p", "com.instagram.android",
+      "--activity-clear-top",
+    ], 15000).catch((fallbackError: any) => {
+      throw new Error(
+        `Instagram URL handler failed: ${handlerError?.message ?? "unknown"}; ` +
+        `package-constrained fallback failed: ${fallbackError?.message ?? "unknown"}`,
+      );
+    });
+  }
 }
 
 /**

@@ -78,6 +78,16 @@ Before changing Reel Viewer behavior:
 - **Status:** **Retained**.
 - **Rule:** A DM sheet appearing without a DM log line indicates another action tapped the DM coordinate; inspect detector identity and action logs before changing the DM branch.
 
+## `artifacts/api-server/src/mobile/androidManager.ts`
+
+### `openInstagramUrl`
+
+- **Attempt:** Open a configured Reel with Android's generic `ACTION_VIEW` intent constrained to the Instagram package.
+- **Status:** **Hardened.**
+- **Evidence:** Share Reel source links are expected to behave like links tapped from an Instagram message. Generic intent resolution can fail to route a URL into the Reel viewer even when Instagram remains installed.
+- **Current behavior:** Target Instagram's `UrlHandlerActivity` first, then use the package-constrained `ACTION_VIEW` intent only if that activity is unavailable on the installed build. No external-browser fallback is permitted.
+- **Rule:** Share Reel must resolve source URLs inside Instagram before scanning Reel action nodes; a missing viewer confirmation is a skipped link, not a successful share.
+
 ## `artifacts/api-server/src/mobile/hst/operations/viewStories.ts`
 
 ### `findStoryLikeButtonViaA11y`

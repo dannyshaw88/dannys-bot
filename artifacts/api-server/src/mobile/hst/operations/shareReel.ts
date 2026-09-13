@@ -100,7 +100,7 @@ export async function runShareReel(
         if (isReelViewerXml(reelXml)) break;
       }
       if (!isReelViewerXml(reelXml)) {
-        onLog?.("Share Reel: Reel viewer was not confirmed after opening the link — skipping");
+        onLog?.(`Share Reel: Instagram opened the URL but the Reel viewer was not confirmed after ${6} polls — skipping`);
         logger.warn({ serial, url }, "[share-reel] Reel viewer was not confirmed");
         continue;
       }
