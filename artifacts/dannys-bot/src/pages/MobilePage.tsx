@@ -8238,15 +8238,17 @@ export function AutomationSettingsPanel({
             <label htmlFor={`share-reel-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">
               Share Reel
             </label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 px-2.5 text-xs"
-              onClick={() => setShowShareReelSources(value => !value)}
-            >
-              {showShareReelSources ? "Hide Sources" : "Sources"}
-            </Button>
+            {settings.shareReelEnabled && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setShowShareReelSources(value => !value)}
+              >
+                {showShareReelSources ? "Hide Sources" : "Sources"}
+              </Button>
+            )}
           </div>
 
           {settings.shareReelEnabled && (
@@ -8292,7 +8294,7 @@ export function AutomationSettingsPanel({
             </div>
           )}
 
-          {showShareReelSources && (
+          {settings.shareReelEnabled && showShareReelSources && (
             <div className="ml-1 border border-border/60 rounded-lg p-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs font-semibold text-foreground">Reel links</p>
