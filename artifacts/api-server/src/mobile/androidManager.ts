@@ -1160,6 +1160,36 @@ export async function launchInstagram(
 }
 
 /**
+ * Open a validated Instagram Reel URL with Android's explicit Instagram
+ * package constraint. This is separate from launchInstagram(): the Share Reel
+ * tool must deep-link to the configured Reel instead of merely bringing the
+ * current Instagram surface to the foreground.
+ */
+export async function openInstagramUrl(serial: string, url: string): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("invalid Instagram URL");
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    !/^(?:www\.)?instagram\.com$/i.test(parsed.hostname) ||
+    !/^\/reel\/[^/]+\/?$/i.test(parsed.pathname)
+  ) {
+    throw new Error("only https://www.instagram.com/reel/... links are supported");
+  }
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  await runAdbStrict(adb, [
+    "-s", serial, "shell", "am", "start", "-W",
+    "-a", "android.intent.action.VIEW",
+    "-d", url,
+    "-p", "com.instagram.android",
+  ], 15000);
+}
+
+/**
  * Open the Google Chrome app on the device and handle the Chrome first-run
  * experience (FRE) if it appears.
  *
