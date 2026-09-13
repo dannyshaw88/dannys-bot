@@ -1160,9 +1160,9 @@ export async function launchInstagram(
 }
 
 /**
- * Open a validated Instagram Reel URL with Android's explicit Instagram
- * package constraint. This is separate from launchInstagram(): the Share Reel
- * tool must deep-link to the configured Reel instead of merely bringing the
+ * Open a validated web URL with Android's explicit Instagram package
+ * constraint. This is separate from launchInstagram(): the Share Reel tool
+ * must deep-link to the configured source instead of merely bringing the
  * current Instagram surface to the foreground.
  */
 export async function openInstagramUrl(serial: string, url: string): Promise<void> {
@@ -1173,11 +1173,10 @@ export async function openInstagramUrl(serial: string, url: string): Promise<voi
     throw new Error("invalid Instagram URL");
   }
   if (
-    parsed.protocol !== "https:" ||
-    !/^(?:www\.)?instagram\.com$/i.test(parsed.hostname) ||
-    !/^\/reels?\/[^/]+\/?$/i.test(parsed.pathname)
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    !parsed.hostname
   ) {
-    throw new Error("only https://www.instagram.com/reel/... links are supported");
+    throw new Error("only http:// and https:// links are supported");
   }
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");

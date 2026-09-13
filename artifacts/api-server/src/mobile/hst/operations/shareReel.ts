@@ -24,17 +24,13 @@ export interface ShareReelOperationContext {
   slotIdx: number;
 }
 
-function normalizeReelUrl(value: string): string | null {
+function normalizeSourceUrl(value: string): string | null {
   const raw = value.trim();
   if (!raw) return null;
   try {
     const parsed = new URL(raw);
-    if (parsed.protocol !== "https:") return null;
-    if (!/^(?:www\.)?instagram\.com$/i.test(parsed.hostname)) return null;
-    if (!/^\/reels?\/[^/]+\/?$/i.test(parsed.pathname)) return null;
-    parsed.hostname = "www.instagram.com";
-    parsed.pathname = parsed.pathname.replace(/\/+$/, "") + "/";
-    parsed.search = "";
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    if (!parsed.hostname) return null;
     parsed.hash = "";
     return parsed.toString();
   } catch {
@@ -72,10 +68,10 @@ export async function runShareReel(
 ): Promise<{ processed: number; skipped: number }> {
   const { android, sleepOrAbort, rollRange, isCycleAborted, logger, onProcessed, slotIdx } = context;
   const { sources, processedLinks = [], processMin, processMax, onLog } = params;
-  const processed = new Set(processedLinks.map(normalizeReelUrl).filter((url): url is string => Boolean(url)));
+  const processed = new Set(processedLinks.map(normalizeSourceUrl).filter((url): url is string => Boolean(url)));
   const available = [...new Set(
     sources
-      .map(source => normalizeReelUrl(source.value))
+      .map(source => normalizeSourceUrl(source.value))
       .filter((url): url is string => Boolean(url)),
   )].filter(url => !processed.has(url));
 
