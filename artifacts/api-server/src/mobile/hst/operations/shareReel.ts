@@ -15,6 +15,11 @@ export interface ShareReelOperationContext {
     findButtonByLabel(serial: string, label: string): Promise<{ x: number; y: number } | null>;
     tap(serial: string, x: number, y: number): Promise<void>;
     pressBack(serial: string): Promise<void>;
+    tapCalibratedNavigationControl(
+      serial: string,
+      control: "settingsBack",
+      onLog?: (message: string) => void,
+    ): Promise<{ x: number; y: number }>;
   };
   sleepOrAbort: (serial: string, milliseconds: number) => Promise<void>;
   rollRange: (minimum: number, maximum: number) => number;
@@ -87,7 +92,8 @@ export async function runShareReel(
   onLog?.(`Share Reel: selected ${selected.length}/${available.length} unvisited Reel link(s)`);
 
   let completed = 0;
-  for (const url of selected) {
+  try {
+    for (const url of selected) {
     if (isCycleAborted?.(serial)) throw new Error("cycle-aborted");
     onLog?.(`Share Reel: opening ${url}`);
     try {
@@ -97,6 +103,25 @@ export async function runShareReel(
       for (let attempt = 0; attempt < 6; attempt++) {
         await sleepOrAbort(serial, attempt === 0 ? 2500 : 1500);
         reelXml = await android.dumpUi(serial).catch(() => "");
+        // Instagram can show the "shared this reel with you" social-context
+        // popup before the Reel action column becomes usable. Dismiss the
+        // live negative button first; never try to resolve Share to Feed
+        // against the popup surface.
+        if (
+          /dialog_container|negative_button_row|text="Not now"/i.test(reelXml) &&
+          /text="Not now"/i.test(reelXml)
+        ) {
+          const notNow = await android.findButtonByLabel(serial, "Not now").catch(() => null);
+          if (notNow) {
+            onLog?.(`Share Reel: shared-reel popup detected — tapping Not now at (${notNow.x},${notNow.y}) before Share to Feed`);
+            await android.tap(serial, notNow.x, notNow.y);
+            await sleepOrAbort(serial, 500);
+            reelXml = await android.dumpUi(serial).catch(() => "");
+          } else {
+            onLog?.("Share Reel: shared-reel popup detected but live Not now button was unavailable — skipping link");
+            continue;
+          }
+        }
         if (isReelViewerXml(reelXml)) break;
       }
       if (!isReelViewerXml(reelXml)) {
@@ -133,10 +158,21 @@ export async function runShareReel(
       processed.add(url);
       completed++;
       onLog?.(`Share Reel: ✓ shared ${url}`);
-    } catch (error: any) {
-      if (error?.message === "cycle-aborted") throw error;
-      logger.warn({ serial, url, error: error?.message ?? String(error) }, "[share-reel] link failed");
-      onLog?.(`Share Reel: link failed — ${error?.message ?? "unknown error"}`);
+      } catch (error: any) {
+        if (error?.message === "cycle-aborted") throw error;
+        logger.warn({ serial, url, error: error?.message ?? String(error) }, "[share-reel] link failed");
+        onLog?.(`Share Reel: link failed — ${error?.message ?? "unknown error"}`);
+      }
+    }
+  } finally {
+    if (!isCycleAborted?.(serial)) {
+      try {
+        const back = await android.tapCalibratedNavigationControl(serial, "settingsBack", onLog);
+        onLog?.(`Share Reel: exited Reel with calibrated Back at (${back.x},${back.y})`);
+      } catch (error: any) {
+        logger.warn({ serial, error: error?.message ?? String(error) }, "[share-reel] calibrated Back exit failed");
+        onLog?.(`Share Reel: calibrated Back exit failed — ${error?.message ?? "unknown error"}`);
+      }
     }
   }
 

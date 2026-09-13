@@ -78,6 +78,23 @@ Before changing Reel Viewer behavior:
 - **Status:** **Retained**.
 - **Rule:** A DM sheet appearing without a DM log line indicates another action tapped the DM coordinate; inspect detector identity and action logs before changing the DM branch.
 
+## `artifacts/api-server/src/mobile/hst/operations/shareReel.ts`
+
+### `shared this reel with you` popup
+
+- **Attempt:** Resolve the Reel action column immediately after the source URL opened.
+- **Status:** **Hardened.**
+- **Evidence:** The live dump showed `dialog_container` with `primary_button` = `Follow` and `negative_button` / `Not now`; this popup blocks the action column.
+- **Current behavior:** Detect the popup before Share to Feed, resolve the live `Not now` button, tap it, then re-dump before resolving Share to Feed.
+- **Rule:** Never press Share to Feed while this social-context popup is present.
+
+### `Share Reel` exit
+
+- **Attempt:** Leave the source Reel open after processing.
+- **Status:** **Replaced.**
+- **Current behavior:** Always finish the selected-link run through the device's calibrated `settingsBack` control, including link failure paths.
+- **Rule:** Share Reel owns its viewer exit; do not use a guessed coordinate or generic Android Back.
+
 ## `artifacts/api-server/src/mobile/androidManager.ts`
 
 ### `openInstagramUrl`
