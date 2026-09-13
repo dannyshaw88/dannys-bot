@@ -2751,6 +2751,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostImageSettingsEnabled",
     "makePostImageSettings",
     "postStoryLinkUrl",
+    "shareReelSources",
      "makePostFixAiSlop",
      "makePostMetadataCleanup",
      "makePostFrequencyDisruption",

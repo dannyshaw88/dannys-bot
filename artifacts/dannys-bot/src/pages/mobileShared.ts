@@ -539,6 +539,7 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "makePostLocalFolderPath",
   "makePostAddLocation",
   "postStoryLinkUrl",
+  "shareReelSources",
 ]);
 
 export const COPY_SECTIONS: CopySection[] = [
