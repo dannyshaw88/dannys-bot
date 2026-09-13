@@ -2,7 +2,7 @@ export interface CheckNotificationsOperationContext {
   android: {
     tapCalibratedNavigationControl(serial: string, control: "home" | "notifications" | "settingsBack", onLog?: (message: string) => void): Promise<{ x: number; y: number }>;
     tap(serial: string, x: number, y: number): Promise<void>;
-    findRandomNotificationItem(serial: string, onLog?: (message: string) => void): Promise<{ x: number; y: number } | null>;
+    findRandomNotificationItem(serial: string, onLog?: (message: string) => void): Promise<{ x: number; y: number; isComment?: boolean } | null>;
     isInstagramNotificationsScreen?(serial: string): Promise<boolean>;
     isInstagramBackSurfaceOpen?(serial: string): Promise<boolean>;
     pressBack(serial: string): Promise<void>;
@@ -79,6 +79,25 @@ export async function runCheckNotifications(
       if (returnedToNotifications) {
         onLog?.("Random Actions: notification item tap did not leave Notifications — treating it as a miss");
         logger.warn({ serial, x: item.x, y: item.y }, "[check-notifications] notification item tap left Notifications open");
+      } else if (item.isComment) {
+        // Comment notifications open Instagram's comments surface, which has
+        // no Instagram Back/Close node.  Only this classified branch uses
+        // Android BACK; other notification types must retain the live
+        // Back/Close guard and calibrated navigation control.
+        onLog?.("Random Actions: ✓ comment notification opened the comments surface — using Android Back");
+        await android.pressBack(serial);
+        await sleepOrAbort(serial, 700 + Math.round(Math.random() * 500));
+
+        // If the comment composer opened the keyboard, the first Android Back
+        // dismisses the keyboard rather than the comments surface.  Press
+        // Android Back once more only when the Notifications page is still
+        // absent; never use this recovery for non-comment notifications.
+        const returnedAfterCommentBack = await android.isInstagramNotificationsScreen?.(serial).catch(() => false) ?? false;
+        if (!returnedAfterCommentBack) {
+          onLog?.("Random Actions: comment surface remained open after Android Back — dismissing it with Android Back again");
+          await android.pressBack(serial);
+          await sleepOrAbort(serial, 700 + Math.round(Math.random() * 500));
+        }
       } else {
         const detailBackAvailable = await android.isInstagramBackSurfaceOpen?.(serial).catch(() => false) ?? false;
         if (!detailBackAvailable) {

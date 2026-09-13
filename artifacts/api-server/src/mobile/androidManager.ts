@@ -12687,7 +12687,7 @@ export async function findDmConversationItem(serial: string): Promise<{ x: numbe
 export async function findRandomNotificationItem(
   serial: string,
   onLog?: (message: string) => void,
-): Promise<{ x: number; y: number } | null> {
+): Promise<{ x: number; y: number; isComment: boolean } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const xml = await _uiDump(adb, serial).catch(() => "");
@@ -12829,12 +12829,21 @@ export async function findRandomNotificationItem(
       rows.push([candidate]);
     }
   }
+  const commentNotificationPattern = /\b(?:comment(?:ed|s?)?|repl(?:ied|y|ies))\b/i;
   const rowCandidates = rows
     .filter(row => !row.some(candidate =>
       excludedInformationalRows.some(pattern => pattern.test(candidate.text)) ||
       excludedThreadsRows.test(candidate.text),
     ))
-    .map(row => row.sort((a, b) => b.score - a.score || (b.x2 - b.x1) - (a.x2 - a.x1))[0])
+    .map(row => {
+      const selected = row.sort((a, b) => b.score - a.score || (b.x2 - b.x1) - (a.x2 - a.x1))[0];
+      return {
+        ...selected,
+        isComment: row.some(candidate =>
+          commentNotificationPattern.test(`${candidate.text} ${candidate.contentDesc}`),
+        ),
+      };
+    })
     .filter(Boolean);
   const excludedThreadsCount = rows.filter(row =>
     row.some(candidate => excludedThreadsRows.test(candidate.text)),
@@ -12855,10 +12864,11 @@ export async function findRandomNotificationItem(
   );
   onLog?.(
     `[notifications] selected text=${JSON.stringify(selected.text)} ` +
+    `type=${selected.isComment ? "comment" : "other"} ` +
     `bounds=[${selected.x1},${selected.y1}][${selected.x2},${selected.y2}] ` +
     `tap=(${selected.x},${selected.y})`,
   );
-  return { x: selected.x, y: selected.y };
+  return { x: selected.x, y: selected.y, isComment: selected.isComment };
 }
 
 /**
