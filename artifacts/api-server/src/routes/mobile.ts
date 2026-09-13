@@ -2685,6 +2685,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostFrequencyDisruption",
     "postStoryAddLink",
     "postStoryLinkUrl",
+    "shareReelSources",
     "shareReelProcessedLinks",
     // Follow Filters are owned by the Human Session Tool slot, not inherited
     // from the assigned TrustScore template.
@@ -2717,6 +2718,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "preSwitchEnabledMax",
     "preSwitchActionPercentMin",
     "preSwitchActionPercentMax",
+    "shareReelSources",
   ]);
   const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
     "followSources",

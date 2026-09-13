@@ -4571,6 +4571,33 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     return () => clearTimeout(t);
   }, [settings, phone?.serial, slotIdx, slotId]);
 
+  // Flush a pending slot-settings autosave when navigating away. Without this
+  // cleanup, leaving the HST page inside the 500 ms debounce window discards
+  // source-list changes before they reach the slot automation record.
+  useEffect(() => {
+    return () => {
+      if (!phone || !hydratedRef.current) return;
+      const serial = phone.serial;
+      const toSave = settingsRef.current;
+      const toSaveStr = JSON.stringify(toSave);
+      if (toSaveStr === lastSavedRef.current) return;
+      const slotIdentityQuery = slotId ? `?slotId=${encodeURIComponent(slotId)}` : "";
+      const saveUrl = slotIdx !== undefined
+        ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotIdentityQuery}`
+        : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
+      const { enabled: _enabled, ...settingsWithoutToggle } = toSave;
+      const payload = slotIdx !== undefined
+        ? JSON.stringify(settingsWithoutToggle)
+        : toSaveStr;
+      void fetch(saveUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: payload,
+      });
+    };
+  }, [phone?.serial, slotIdx, slotId]);
+
   // While the master toggle is on, repeatedly run the full automation
   // cycle (power on → open Instagram → scroll/like with the configured
   // settings → close Instagram → recycle airplane mode → power off)
@@ -5787,17 +5814,23 @@ export function AutomationSettingsPanel({
     ]),
     [],
   );
+  const templateEditableFields = useMemo(
+    () => new Set(["shareReelSources"]),
+    [],
+  );
   const lockedFields = useMemo(
     () => new Set(
-      templateLockedFields ??
-      (trustScoreActive
+      templateLockedFields
+        ? templateLockedFields.filter(field => !templateEditableFields.has(field))
+        :
+       (trustScoreActive
         ? (settings.trustScoreControlledFields ?? []).filter(field =>
             !TRUST_SCORE_FEATURE_FIELDS.has(field) &&
             !MAKE_POST_HST_IMAGE_FIELDS.has(field),
           )
-        : []),
+       : []),
     ),
-    [templateLockedFields, trustScoreActive, settings.trustScoreControlledFields],
+    [templateLockedFields, templateEditableFields, trustScoreActive, settings.trustScoreControlledFields],
   );
   const templateDisabledTools = useMemo(
     () => new Set(settings.trustScoreTemplateDisabledTools ?? []),
