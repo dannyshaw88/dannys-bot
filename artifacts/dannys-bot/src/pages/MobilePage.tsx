@@ -8244,7 +8244,6 @@ export function AutomationSettingsPanel({
               size="sm"
               className="h-7 px-2.5 text-xs"
               onClick={() => setShowShareReelSources(value => !value)}
-              disabled={fieldDisabled("shareReelSources")}
             >
               {showShareReelSources ? "Hide Sources" : "Sources"}
             </Button>
@@ -8289,9 +8288,6 @@ export function AutomationSettingsPanel({
                     />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground max-w-[360px] self-end">
-                  Opens each selected Instagram Reel link and taps only its verified Share to Feed/Repost control.
-                </p>
               </div>
             </div>
           )}
