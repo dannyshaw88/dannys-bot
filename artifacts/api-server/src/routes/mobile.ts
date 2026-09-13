@@ -6314,6 +6314,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         ...savedSlotSettings,
         ...parsedCycle,
       });
+      // Make a Post is slot-owned in the HST.  The cycle request can be
+      // in-flight while the autosave request is catching up, so do not let a
+      // stale parsed checkbox value override the persisted slot decision.
+      const persistedMakePostEnabled =
+        typeof savedSlotSettings?.trustScoreToolOverrides?.makePostEnabled === "boolean"
+          ? savedSlotSettings.trustScoreToolOverrides.makePostEnabled
+          : typeof savedSlotSettings?.makePostEnabled === "boolean"
+            ? savedSlotSettings.makePostEnabled
+            : undefined;
+      if (typeof persistedMakePostEnabled === "boolean") {
+        effectiveCycle.settings.makePostEnabled = persistedMakePostEnabled;
+      }
       const effectiveSettings: any = applyDevicePersonality(serial, effectiveCycle.settings);
       const {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
@@ -6686,7 +6698,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         reels: _activateTool("reels", "viewReelsEnabled", viewReelsActivatePctMin ?? 100, viewReelsActivatePctMax ?? 100),
         checkDm: _activateTool("checkDm", "checkDmEnabled", checkDmActivatePctMin ?? 100, checkDmActivatePctMax ?? 100),
         follow: _activateTool("follow", "followEnabled", followActivatePctMin, followActivatePctMax),
-        post: _activateTool("post", "makePostEnabled", makePostActivatePctMin, makePostActivatePctMax),
+        post: effectiveSettings.makePostEnabled === true &&
+          _activateTool("post", "makePostEnabled", makePostActivatePctMin, makePostActivatePctMax),
         postStory: _activateTool("postStory", "postStoryEnabled", postStoryActivatePctMin, postStoryActivatePctMax),
          shareReel: _activateTool("shareReel", "shareReelEnabled", shareReelActivatePctMin ?? 100, shareReelActivatePctMax ?? 100),
         // The master checkbox is a hard dispatch gate. Without this check,
@@ -7770,7 +7783,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         // ── Make a Post ─────────────────────────────────────────────────
         } else if (_tool === 'post') {
-          if (_toolActivated[_tool]) { // pre-rolled above
+          if (makePostEnabled === true && _toolActivated[_tool]) { // pre-rolled above; checkbox is an absolute gate
             tLog("[TRACE] make-a-post: start");
             // The frontend sends makePostLocalFolderPath from its React state.
             // If that state was stale/empty for any reason (hydration glitch,

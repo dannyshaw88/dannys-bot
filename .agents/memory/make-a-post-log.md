@@ -7,6 +7,12 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 **Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
 
+### 2026-09-13 — HST Make a Post checkbox must be an absolute execution gate
+- A cycle could still include Make a Post while the HST checkbox was unchecked because the cycle request merged parsed UI settings over persisted slot settings, and the dispatcher relied on the activation percentage roll without a final `makePostEnabled` check.
+- **Fix:** use the persisted slot-owned Make a Post value when available, require `makePostEnabled === true` when building the activated tool sequence, and require it again at dispatch.
+- **Lesson:** for slot-owned HST tool switches, activation percentage is subordinate to the checkbox; stale cycle payloads must not override the persisted switch.
+- Status: code-level fix applied; API build/workflow restart passed; physical-device confirmation is still required.
+
 ### 2026-09-10 — Randomized dwell before the calibrated second Next
 - The first and second Next controls already use the exact/manual tap path with no humanisation jitter. The second Next was being dispatched after only a fixed 700ms transition wait.
 - **Fix:** replace that wait with a random 1.0–2.5 second dwell immediately before the calibrated second-Next tap. No extra readiness gate or tap offset was added.
