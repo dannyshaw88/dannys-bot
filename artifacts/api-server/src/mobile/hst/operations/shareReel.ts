@@ -31,7 +31,7 @@ function normalizeReelUrl(value: string): string | null {
     const parsed = new URL(raw);
     if (parsed.protocol !== "https:") return null;
     if (!/^(?:www\.)?instagram\.com$/i.test(parsed.hostname)) return null;
-    if (!/^\/reel\/[^/]+\/?$/i.test(parsed.pathname)) return null;
+    if (!/^\/reels?\/[^/]+\/?$/i.test(parsed.pathname)) return null;
     parsed.hostname = "www.instagram.com";
     parsed.pathname = parsed.pathname.replace(/\/+$/, "") + "/";
     parsed.search = "";

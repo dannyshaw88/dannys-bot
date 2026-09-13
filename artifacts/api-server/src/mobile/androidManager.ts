@@ -1175,7 +1175,7 @@ export async function openInstagramUrl(serial: string, url: string): Promise<voi
   if (
     parsed.protocol !== "https:" ||
     !/^(?:www\.)?instagram\.com$/i.test(parsed.hostname) ||
-    !/^\/reel\/[^/]+\/?$/i.test(parsed.pathname)
+    !/^\/reels?\/[^/]+\/?$/i.test(parsed.pathname)
   ) {
     throw new Error("only https://www.instagram.com/reel/... links are supported");
   }

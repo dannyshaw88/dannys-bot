@@ -5886,18 +5886,32 @@ export function AutomationSettingsPanel({
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
   const [newShareReelSourceValue, setNewShareReelSourceValue] = useState('');
+  const [shareReelSourceError, setShareReelSourceError] = useState('');
   const importSourceFileRef = useRef<HTMLInputElement>(null);
   const importFollowUsersFileRef = useRef<HTMLInputElement>(null);
 
   const addShareReelSource = () => {
     const value = newShareReelSourceValue.trim();
     if (!value) return;
-    if (!/^https:\/\/(?:www\.)?instagram\.com\/reel\/[^/?#]+\/?(?:[?#].*)?$/i.test(value)) return;
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      setShareReelSourceError("Paste a full Instagram Reel link.");
+      return;
+    }
+    const isInstagramHost = /^(?:www\.)?instagram\.com$/i.test(parsed.hostname);
+    const isReelPath = /^\/reels?\/[^/]+/i.test(parsed.pathname);
+    if (parsed.protocol !== "https:" || !isInstagramHost || !isReelPath) {
+      setShareReelSourceError("Use a full https://www.instagram.com/reel/... link.");
+      return;
+    }
     setSettings(s => ({
       ...s,
       shareReelSources: [...s.shareReelSources, { type: "link", value }],
     }));
     setNewShareReelSourceValue("");
+    setShareReelSourceError("");
   };
 
   const handleImportFollowSources = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -8121,7 +8135,7 @@ export function AutomationSettingsPanel({
                     ) : (
                       <p className="text-xs text-muted-foreground">No profile posts have been made from this account yet.</p>
                     )}
-                  </div>
+               </div>
                 </div>
               )}
 
@@ -8327,9 +8341,12 @@ export function AutomationSettingsPanel({
                 <Input
                   type="url"
                   className="flex-1 min-w-0 text-xs h-8"
-                  placeholder="https://www.instagram.com/reel/..."
+                   placeholder="https://www.instagram.com/reel/..."
                   value={newShareReelSourceValue}
-                  onChange={e => setNewShareReelSourceValue(e.target.value)}
+                   onChange={e => {
+                     setNewShareReelSourceValue(e.target.value);
+                     if (shareReelSourceError) setShareReelSourceError("");
+                   }}
                   onKeyDown={e => { if (e.key === "Enter") addShareReelSource(); }}
                   disabled={fieldDisabled("shareReelSources")}
                 />
@@ -8341,6 +8358,9 @@ export function AutomationSettingsPanel({
                   onClick={addShareReelSource}
                   disabled={fieldDisabled("shareReelSources") || !newShareReelSourceValue.trim()}
                 >Add</Button>
+                 {shareReelSourceError && (
+                   <p className="text-xs text-destructive">{shareReelSourceError}</p>
+                 )}
               </div>
             </div>
           )}
