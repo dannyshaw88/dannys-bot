@@ -5178,8 +5178,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   /**
    * Dismiss Instagram's first-save collection sheet only after positively
-   * detecting its accessibility markers. The tap is randomized in the live
-   * scrim above the sheet, with a device-relative safety gap.
+   * detecting its accessibility markers. The tap must land immediately above
+   * the live sheet border. Tapping high in the scrim is not equivalent on
+   * Instagram builds that only dismiss this prompt from the border-adjacent
+   * outside surface.
    */
   const dismissSaveCollectionPrompt = async (
     serial: string,
@@ -5202,18 +5204,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return true;
     }
     const safetyGap = Math.max(24, Math.min(72, Math.round(h * 0.05)));
-    const safeMaxY = sheetTop - safetyGap;
-    if (safeMaxY < 4) {
+    const tapY = sheetTop - safetyGap;
+    if (tapY < 4) {
       onLog?.(`${context}: collection sheet leaves no confirmed scrim above y=${sheetTop} — pressing Back`);
       await android.pressBack(serial);
       await sleepOrAbort(serial, 300);
       return true;
     }
-    const safeMinY = Math.max(2, Math.round(safeMaxY * 0.35));
-    const x = Math.round(w * (0.20 + Math.random() * 0.60));
-    const y = Math.round(safeMinY + Math.random() * Math.max(1, safeMaxY - safeMinY));
+    const x = Math.round(w / 2);
+    const y = tapY;
     await android.tap(serial, x, y);
-    onLog?.(`${context}: dismissed collection prompt at scrim point (${x},${y}), sheetTop=${sheetTop}, safeY<=${safeMaxY}`);
+    onLog?.(`${context}: dismissed collection prompt at outside-border point (${x},${y}), sheetTop=${sheetTop}, gap=${safetyGap}`);
     await sleepOrAbort(serial, 300);
     return true;
   };

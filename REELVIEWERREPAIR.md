@@ -64,6 +64,14 @@ Before changing Reel Viewer behavior:
 - **Current behavior:** Re-scan immediately before Save; after tapping, inspect the resulting dump. If a DM share sheet opens, close it and do not increment the Save metric. If the Reel overflow sheet opens, resolve and tap its live Save node, dismiss any first-save collection prompt, and count only a verified saved state.
 - **Rule:** If detector identity conflicts, fresh Save is missing, or the resulting surface cannot be verified, skip/fail that Save without guessing a coordinate or using image matching.
 
+### `first-save collection sheet dismissal`
+
+- **Attempt:** Tap a randomized point somewhere in the accessibility-detected scrim above the collection sheet.
+- **Status:** **Replaced.**
+- **Evidence:** The Xiaomi Redmi A5 run showed the “Collect the posts you love” sheet remaining open; this Instagram build requires the dismissal tap immediately outside the sheet border rather than an arbitrary point higher in the scrim.
+- **Current behavior:** Resolve the live sheet top, tap the screen center one device-relative safety gap above that border, then continue with the existing live-state verification.
+- **Rule:** For this first-save prompt, “above the sheet” means border-adjacent outside-surface coordinates. Do not randomize the tap across the upper scrim.
+
 ### `Share via DM`
 
 - **Attempt:** Tap only when `wantShareDm` is true and `icons.shareDm` exists.
