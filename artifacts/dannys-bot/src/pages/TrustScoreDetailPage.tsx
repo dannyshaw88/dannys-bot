@@ -379,6 +379,8 @@ function TrustScoreAutomationEditor({
   const [saveError, setSaveError] = useState<string | null>(null);
   const hydratedRef = useRef(false);
   const lastSavedRef = useRef(JSON.stringify(AUTOMATION_DEFAULTS));
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const updateSettings = (update: React.SetStateAction<AutomationSettingsData>) => {
     setSettings(previous => {
       const proposed = typeof update === "function" ? update(previous) : update;
@@ -436,6 +438,23 @@ function TrustScoreAutomationEditor({
     }, 500);
     return () => clearTimeout(timer);
   }, [settings, trustScoreId]);
+
+  // A quick navigation can cancel the debounced autosave before its 500 ms
+  // timer fires. Flush the latest hydrated settings when leaving the editor.
+  useEffect(() => {
+    return () => {
+      if (!hydratedRef.current) return;
+      const serialized = JSON.stringify(settingsRef.current);
+      if (serialized === lastSavedRef.current) return;
+      void fetch(`/api/trust-score-templates/${encodeURIComponent(trustScoreId)}/mobile-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        keepalive: true,
+        body: serialized,
+      });
+    };
+  }, [trustScoreId]);
 
   const phone: UsbPhone = {
     serial: `__trustscore__${trustScoreId}`,
