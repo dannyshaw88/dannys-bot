@@ -6219,7 +6219,37 @@ export async function findReelActionIcons(
     }`,
   );
 
-  const liveLike = _findUniqueLiveActionNode(xml, [":id/like_button"], ["Like", "Unlike"], onLog);
+  let liveLike = _findUniqueLiveActionNode(xml, [":id/like_button"], ["Like", "Unlike"], onLog);
+  if (liveLike) {
+    const liveLikeNodes = _liveActionNodes(xml);
+    const pointInside = (point: { x: number; y: number }, node: LiveActionNode): boolean =>
+      point.x >= node.x1 && point.x <= node.x2 && point.y >= node.y1 && point.y <= node.y2;
+    const commentNodes = liveLikeNodes.filter(node =>
+      /(?:comment|comments|row_feed_button_comment)/i.test(node.resourceId) ||
+      /^(?:comment|comments)$/i.test(node.contentDesc.trim()) ||
+      /^(?:comment|comments)$/i.test(node.text.trim()),
+    );
+    const insideComment = commentNodes.find(node => pointInside(liveLike!, node));
+    const outsideRightColumn =
+      liveLike.x < screenW * 0.68 ||
+      liveLike.x > screenW * 0.98 ||
+      liveLike.y < screenH * 0.12 ||
+      liveLike.y >= screenH * 0.86;
+    if (insideComment) {
+      onLog?.(
+        `[reel-icons] rejected Like: resolved point (${liveLike.x},${liveLike.y}) ` +
+        `falls inside Comments bounds (${insideComment.x1},${insideComment.y1})-` +
+        `(${insideComment.x2},${insideComment.y2}); skipping Like`,
+      );
+      liveLike = null;
+    } else if (outsideRightColumn) {
+      onLog?.(
+        `[reel-icons] rejected Like: resolved point (${liveLike.x},${liveLike.y}) ` +
+        `is outside the live right-side action column; skipping Like`,
+      );
+      liveLike = null;
+    }
+  }
   if (!liveLike) {
     onLog?.("[reel-icons] live like_button node not found or ambiguous — skipping reel actions");
     return null;
