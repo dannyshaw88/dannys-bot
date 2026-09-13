@@ -5915,6 +5915,7 @@ export function AutomationSettingsPanel({
   const [showSurplus, setShowSurplus] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [showShareReelSources, setShowShareReelSources] = useState(false);
+  const [showShareReelShared, setShowShareReelShared] = useState(false);
   const [bioSpinEditorOpen, setBioSpinEditorOpen] = useState(false);
   const [bioSpinDraft, setBioSpinDraft] = useState("");
   const [maleNamesEditorOpen, setMaleNamesEditorOpen] = useState(false);
@@ -5926,6 +5927,31 @@ export function AutomationSettingsPanel({
   const [shareReelSourceError, setShareReelSourceError] = useState('');
   const importSourceFileRef = useRef<HTMLInputElement>(null);
   const importFollowUsersFileRef = useRef<HTMLInputElement>(null);
+  const sharedReelLinkSet = useMemo(() => {
+    const normalized = new Set<string>();
+    for (const value of settings.shareReelProcessedLinks ?? []) {
+      try {
+        const url = new URL(value.trim());
+        url.hash = "";
+        normalized.add(url.toString());
+      } catch {
+        if (value.trim()) normalized.add(value.trim());
+      }
+    }
+    return normalized;
+  }, [settings.shareReelProcessedLinks]);
+  const activeShareReelSources = useMemo(
+    () => settings.shareReelSources.filter(source => {
+      try {
+        const url = new URL(source.value.trim());
+        url.hash = "";
+        return !sharedReelLinkSet.has(url.toString());
+      } catch {
+        return !sharedReelLinkSet.has(source.value.trim());
+      }
+    }),
+    [settings.shareReelSources, sharedReelLinkSet],
+  );
 
   const addShareReelSource = () => {
     const value = newShareReelSourceValue.trim();
@@ -8292,15 +8318,26 @@ export function AutomationSettingsPanel({
               Share Reel
             </label>
             {settings.shareReelEnabled && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 px-2.5 text-xs"
-                onClick={() => setShowShareReelSources(value => !value)}
-              >
-                {showShareReelSources ? "Hide Sources" : "Sources"}
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs"
+                  onClick={() => setShowShareReelSources(value => !value)}
+                >
+                  {showShareReelSources ? "Hide Sources" : "Sources"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs"
+                  onClick={() => setShowShareReelShared(value => !value)}
+                >
+                  {showShareReelShared ? "Hide Shared" : "Shared"}
+                </Button>
+              </>
             )}
           </div>
 
@@ -8347,25 +8384,25 @@ export function AutomationSettingsPanel({
             </div>
           )}
 
-          {settings.shareReelEnabled && showShareReelSources && (
+           {settings.shareReelEnabled && showShareReelSources && (
             <div className="ml-1 border border-border/60 rounded-lg p-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs font-semibold text-foreground">Links</p>
                 <span className="text-xs text-muted-foreground">
-                  {settings.shareReelSources.length} source{settings.shareReelSources.length === 1 ? "" : "s"}
+                   {activeShareReelSources.length} active source{activeShareReelSources.length === 1 ? "" : "s"}
                 </span>
               </div>
-              {settings.shareReelSources.length ? (
+               {activeShareReelSources.length ? (
                 <div className="space-y-1 max-h-[220px] overflow-y-auto">
-                  {settings.shareReelSources.map((source, index) => (
-                    <div key={`${source.value}-${index}`} className="flex items-center gap-2 text-xs">
+                   {activeShareReelSources.map((source, index) => (
+                     <div key={`${source.value}-${index}`} className="flex items-center gap-2 text-xs">
                       <span className="flex-1 truncate text-foreground" title={source.value}>{source.value}</span>
                       <button
                         type="button"
                         className="text-muted-foreground hover:text-destructive shrink-0"
                         onClick={() => setSettings(s => ({
                           ...s,
-                          shareReelSources: s.shareReelSources.filter((_, sourceIndex) => sourceIndex !== index),
+                           shareReelSources: s.shareReelSources.filter(candidate => candidate.value !== source.value),
                         }))}
                         disabled={fieldDisabled("shareReelSources")}
                         aria-label={`Remove link ${index + 1}`}
@@ -8374,7 +8411,9 @@ export function AutomationSettingsPanel({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No links added yet.</p>
+                 <p className="text-xs text-muted-foreground">
+                   {settings.shareReelSources.length ? "All source links have been shared." : "No links added yet."}
+                 </p>
               )}
               <div className="flex items-center gap-2">
                 <Input
@@ -8403,6 +8442,28 @@ export function AutomationSettingsPanel({
               </div>
             </div>
           )}
+           {settings.shareReelEnabled && showShareReelShared && (
+             <div className="ml-1 border border-emerald-500/30 bg-emerald-500/5 rounded-lg p-3 space-y-2">
+               <div className="flex items-center justify-between gap-3">
+                 <p className="text-xs font-semibold text-foreground">Shared</p>
+                 <span className="text-xs text-muted-foreground">
+                   {settings.shareReelProcessedLinks?.length ?? 0} completed
+                 </span>
+               </div>
+               {(settings.shareReelProcessedLinks?.length ?? 0) > 0 ? (
+                 <div className="space-y-1 max-h-[220px] overflow-y-auto">
+                   {settings.shareReelProcessedLinks.map((link, index) => (
+                     <div key={`${link}-${index}`} className="flex items-center gap-2 text-xs">
+                       <span className="flex-1 truncate text-emerald-700 dark:text-emerald-300" title={link}>{link}</span>
+                       <span className="shrink-0 text-emerald-600 dark:text-emerald-400">Shared</span>
+                     </div>
+                   ))}
+                 </div>
+               ) : (
+                 <p className="text-xs text-muted-foreground">No shared links yet.</p>
+               )}
+             </div>
+           )}
         </div>
 
         <ImageSettingsDialog
