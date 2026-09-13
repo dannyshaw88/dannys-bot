@@ -5900,7 +5900,8 @@ export function AutomationSettingsPanel({
         : loadingExternal || FOLLOW_FILTER_FIELDS.has(field)
         ? false
         : trustScoreSlotLocked
-        ? !TRUST_SCORE_SLOT_EDITABLE_FIELDS.has(field) || templateDisabledTools.has(field)
+        ? !TRUST_SCORE_SLOT_EDITABLE_FIELDS.has(field) ||
+          (templateDisabledTools.has(field) && field !== "shareReelEnabled")
         : fieldLocked(field),
     );
   // Follow Users UI local state — hooks must come before any conditional return.

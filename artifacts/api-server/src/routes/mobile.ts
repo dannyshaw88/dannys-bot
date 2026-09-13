@@ -2852,7 +2852,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (const [field, value] of Object.entries(template)) {
       if (FOLLOW_FILTER_FIELDS.has(field)) continue;
       if (TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) continue;
-      if (TRUST_SCORE_TOOL_FIELDS.has(field) && templateDisabledTools.includes(field)) {
+      if (
+        TRUST_SCORE_TOOL_FIELDS.has(field) &&
+        templateDisabledTools.includes(field) &&
+        field !== "shareReelEnabled"
+      ) {
         effective[field] = false;
         continue;
       }
@@ -2861,7 +2865,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       effective[field] = value;
     }
     for (const field of TRUST_SCORE_TOOL_FIELDS) {
-      if (templateDisabledTools.includes(field)) {
+      if (templateDisabledTools.includes(field) && field !== "shareReelEnabled") {
         effective[field] = false;
       } else if (Object.prototype.hasOwnProperty.call(toolOverrides, field)) {
         effective[field] = Boolean(toolOverrides[field]);
