@@ -69,7 +69,7 @@ Before changing Reel Viewer behavior:
 - **Attempt:** Tap a randomized point somewhere in the accessibility-detected scrim above the collection sheet.
 - **Status:** **Replaced.**
 - **Evidence:** The Xiaomi Redmi A5 run showed the “Collect the posts you love” sheet remaining open; this Instagram build requires the dismissal tap immediately outside the sheet border rather than an arbitrary point higher in the scrim.
-- **Current behavior:** Resolve the live sheet top, tap the screen center one device-relative safety gap above that border, then continue with the existing live-state verification.
+- **Current behavior:** Resolve the live sheet top, tap the screen center once 8–12 px above that border through the exact/manual input path, then continue with the existing live-state verification.
 - **Rule:** For this first-save prompt, “above the sheet” means border-adjacent outside-surface coordinates. Do not randomize the tap across the upper scrim.
 
 ### `Share via DM`

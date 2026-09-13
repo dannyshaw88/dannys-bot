@@ -5203,7 +5203,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await sleepOrAbort(serial, 300);
       return true;
     }
-    const safetyGap = Math.max(24, Math.min(72, Math.round(h * 0.05)));
+    // This is a boundary-sensitive dismissal, not a humanized content tap.
+    // Keep the point just outside the border and use the exact/manual input
+    // path below so the tap cannot drift back onto the sheet.
+    const safetyGap = Math.max(8, Math.min(12, Math.round(h * 0.01)));
     const tapY = sheetTop - safetyGap;
     if (tapY < 4) {
       onLog?.(`${context}: collection sheet leaves no confirmed scrim above y=${sheetTop} — pressing Back`);
@@ -5213,8 +5216,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     const x = Math.round(w / 2);
     const y = tapY;
-    await android.tap(serial, x, y);
-    onLog?.(`${context}: dismissed collection prompt at outside-border point (${x},${y}), sheetTop=${sheetTop}, gap=${safetyGap}`);
+    await android.tap(serial, x, y, "manual");
+    onLog?.(`${context}: dismissed collection prompt with one exact outside-border tap at (${x},${y}), sheetTop=${sheetTop}, gap=${safetyGap}, jitter=0`);
     await sleepOrAbort(serial, 300);
     return true;
   };
