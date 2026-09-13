@@ -1,5 +1,5 @@
 export interface ShareReelSource {
-  type: "link";
+  type: string;
   value: string;
 }
 

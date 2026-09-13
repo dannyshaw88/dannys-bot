@@ -263,6 +263,11 @@ export interface AutomationSettingsData {
   postStoryFixAiSlop: boolean;
   postStoryAddLink: boolean;
   postStoryLinkUrl: string;
+  shareReelEnabled: boolean;
+  shareReelActivatePctMin: number; shareReelActivatePctMax: number;
+  shareReelProcessMin: number; shareReelProcessMax: number;
+  shareReelSources: { type: string; value: string }[];
+  shareReelProcessedLinks: string[];
   dismissDirection: "auto" | "left" | "up";
   /** Slot metadata returned by the effective-settings endpoint. */
   trustScoreId?: string | null;
@@ -426,6 +431,11 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   postStoryFixAiSlop: false,
   postStoryAddLink: false,
   postStoryLinkUrl: "",
+  shareReelEnabled: false,
+  shareReelActivatePctMin: 100, shareReelActivatePctMax: 100,
+  shareReelProcessMin: 1, shareReelProcessMax: 1,
+  shareReelSources: [],
+  shareReelProcessedLinks: [],
   dismissDirection: "auto",
 };
 
@@ -482,6 +492,8 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "makePostPostToStoryPctMax",
   "postStoryAddLink",
   "postStoryLinkUrl",
+  "shareReelSources",
+  "shareReelProcessedLinks",
 ]);
 
 /** Fields that stay restricted in Settings → TrustScores. Inject Browsing
@@ -527,6 +539,7 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "makePostLocalFolderPath",
   "makePostAddLocation",
   "postStoryLinkUrl",
+  "shareReelSources",
 ]);
 
 export const COPY_SECTIONS: CopySection[] = [
@@ -675,5 +688,11 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'storyPostAlteration', label: 'Image Alteration',    fields: ['postStoryAlterationEnabled','postStoryAlterationLevel'] },
     { key: 'storyPostImageSettings', label: 'Image Settings',   fields: ['postStoryImageSettingsEnabled','postStoryImageSettings'] },
     { key: 'storyPostFixAiSlop', label: 'Fix AI Slop',           fields: ['postStoryFixAiSlop'] },
+  ]},
+  { key: 'shareReel',      label: 'Share Reel', sub: [
+    { key: 'shareReelEnabled',  label: 'Enabled',             fields: ['shareReelEnabled'] },
+    { key: 'shareReelActivate', label: 'Activate Percentage', fields: ['shareReelActivatePctMin','shareReelActivatePctMax'] },
+    { key: 'shareReelProcess',  label: 'Process amount',      fields: ['shareReelProcessMin','shareReelProcessMax'] },
+    { key: 'shareReelSources',  label: 'Sources',              fields: ['shareReelSources'] },
   ]},
 ];

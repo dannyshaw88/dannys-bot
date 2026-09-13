@@ -4975,6 +4975,13 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             postStoryFixAiSlop: s.postStoryFixAiSlop,
             postStoryAddLink: s.postStoryAddLink,
             postStoryLinkUrl: s.postStoryLinkUrl,
+             shareReelEnabled: s.shareReelEnabled,
+             shareReelActivatePctMin: s.shareReelActivatePctMin,
+             shareReelActivatePctMax: s.shareReelActivatePctMax,
+             shareReelProcessMin: s.shareReelProcessMin,
+             shareReelProcessMax: s.shareReelProcessMax,
+             shareReelSources: s.shareReelSources,
+             shareReelProcessedLinks: s.shareReelProcessedLinks,
             shuffleToolOrder: s.shuffleToolOrder,
             dismissDirection: s.dismissDirection,
             slotUsername: slotUsername ?? "",
@@ -5750,7 +5757,7 @@ export function AutomationSettingsPanel({
   const TRUST_SCORE_FEATURE_FIELDS = new Set([
     "feedEnabled", "storiesEnabled", "viewExploreEnabled", "viewReelsEnabled",
     "checkDmEnabled", "followEnabled", "randomJitterEnabled", "makePostEnabled",
-    "postStoryEnabled",
+    "postStoryEnabled", "shareReelEnabled",
   ]);
   const MAKE_POST_HST_IMAGE_FIELDS = new Set([
     "makePostAlterationEnabled",
@@ -5870,6 +5877,7 @@ export function AutomationSettingsPanel({
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
   const [showSurplus, setShowSurplus] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const [showShareReelSources, setShowShareReelSources] = useState(false);
   const [bioSpinEditorOpen, setBioSpinEditorOpen] = useState(false);
   const [bioSpinDraft, setBioSpinDraft] = useState("");
   const [maleNamesEditorOpen, setMaleNamesEditorOpen] = useState(false);
@@ -5877,8 +5885,20 @@ export function AutomationSettingsPanel({
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
   const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
+  const [newShareReelSourceValue, setNewShareReelSourceValue] = useState('');
   const importSourceFileRef = useRef<HTMLInputElement>(null);
   const importFollowUsersFileRef = useRef<HTMLInputElement>(null);
+
+  const addShareReelSource = () => {
+    const value = newShareReelSourceValue.trim();
+    if (!value) return;
+    if (!/^https:\/\/(?:www\.)?instagram\.com\/reel\/[^/?#]+\/?(?:[?#].*)?$/i.test(value)) return;
+    setSettings(s => ({
+      ...s,
+      shareReelSources: [...s.shareReelSources, { type: "link", value }],
+    }));
+    setNewShareReelSourceValue("");
+  };
 
   const handleImportFollowSources = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -8198,6 +8218,131 @@ export function AutomationSettingsPanel({
                     Structural Pixel Disruption
                   </label>
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Share Reel — independent URL deep-link publisher ─────────── */}
+        <div className="border-t border-border" />
+        <div className="space-y-3 relative">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id={`share-reel-enabled-${slotIdx ?? 0}`}
+              checked={settings.shareReelEnabled}
+              onChange={e => setSettings(s => ({ ...s, shareReelEnabled: e.target.checked }))}
+              disabled={fieldDisabled("shareReelEnabled")}
+              className="w-4 h-4 accent-primary cursor-pointer"
+            />
+            <label htmlFor={`share-reel-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">
+              Share Reel
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setShowShareReelSources(value => !value)}
+              disabled={fieldDisabled("shareReelSources")}
+            >
+              {showShareReelSources ? "Hide Sources" : "Sources"}
+            </Button>
+          </div>
+
+          {settings.shareReelEnabled && (
+            <div className="pl-1 space-y-3">
+              <div className="flex items-start gap-6 flex-wrap">
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.shareReelActivatePctMin}
+                      onChange={e => setSettings(s => ({ ...s, shareReelActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("shareReelActivatePctMin")}
+                    />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input
+                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.shareReelActivatePctMax}
+                      onChange={e => setSettings(s => ({ ...s, shareReelActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("shareReelActivatePctMax")}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground block text-center">Process Amount</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.shareReelProcessMin}
+                      onChange={e => setSettings(s => ({ ...s, shareReelProcessMin: Math.max(0, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("shareReelProcessMin")}
+                    />
+                    <span className="text-muted-foreground text-sm">to</span>
+                    <Input
+                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      value={settings.shareReelProcessMax}
+                      onChange={e => setSettings(s => ({ ...s, shareReelProcessMax: Math.max(0, clamp4(Number(e.target.value))) }))}
+                      disabled={fieldDisabled("shareReelProcessMax")}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground max-w-[360px] self-end">
+                  Opens each selected Instagram Reel link and taps only its verified Share to Feed/Repost control.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {showShareReelSources && (
+            <div className="ml-1 border border-border/60 rounded-lg p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold text-foreground">Reel links</p>
+                <span className="text-xs text-muted-foreground">
+                  {settings.shareReelSources.length} source{settings.shareReelSources.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              {settings.shareReelSources.length ? (
+                <div className="space-y-1 max-h-[220px] overflow-y-auto">
+                  {settings.shareReelSources.map((source, index) => (
+                    <div key={`${source.value}-${index}`} className="flex items-center gap-2 text-xs">
+                      <span className="flex-1 truncate text-foreground" title={source.value}>{source.value}</span>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => setSettings(s => ({
+                          ...s,
+                          shareReelSources: s.shareReelSources.filter((_, sourceIndex) => sourceIndex !== index),
+                        }))}
+                        disabled={fieldDisabled("shareReelSources")}
+                        aria-label={`Remove Reel link ${index + 1}`}
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No Reel links added yet.</p>
+              )}
+              <div className="flex items-center gap-2">
+                <Input
+                  type="url"
+                  className="flex-1 min-w-0 text-xs h-8"
+                  placeholder="https://www.instagram.com/reel/..."
+                  value={newShareReelSourceValue}
+                  onChange={e => setNewShareReelSourceValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addShareReelSource(); }}
+                  disabled={fieldDisabled("shareReelSources")}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={addShareReelSource}
+                  disabled={fieldDisabled("shareReelSources") || !newShareReelSourceValue.trim()}
+                >Add</Button>
               </div>
             </div>
           )}

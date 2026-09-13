@@ -56,6 +56,7 @@ import {
 } from "../mobile/hst/operations/viewReels";
 import { runMakePostStep as runMakePostStepOperation } from "../mobile/hst/operations/makePost";
 import { runMakePostStoryStep as runMakePostStoryStepOperation } from "../mobile/hst/operations/postStory";
+import { runShareReel as runShareReelOperation } from "../mobile/hst/operations/shareReel";
 import { runUpdateProfilePicture as runUpdateProfilePictureOperation } from "../mobile/hst/operations/updateProfilePicture";
 import { runUpdateBio as runUpdateBioOperation } from "../mobile/hst/operations/updateBio";
 import { runRandomActionsStep, type RandomActionsOperationContext } from "../mobile/hst/operations/randomActions";
@@ -765,6 +766,13 @@ type AutomationSettings = {
     sharpen: { enabled: boolean; min: number; max: number };
     pixelate: { enabled: boolean; min: number; max: number };
   };
+  shareReelEnabled?: boolean;
+  shareReelActivatePctMin?: number;
+  shareReelActivatePctMax?: number;
+  shareReelProcessMin?: number;
+  shareReelProcessMax?: number;
+  shareReelSources?: { type: string; value: string }[];
+  shareReelProcessedLinks?: string[];
   // Device profile — OEM-specific Android system-shell behaviour.
   // 'auto' = look up ro.product.model in the server-side DEVICE_PROFILES table.
   // 'left' / 'up' = manual override stored per device.
@@ -2397,6 +2405,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       sharpen: { enabled: true, min: 1.0, max: 2.0 },
       pixelate: { enabled: true, min: 0.9, max: 2.1 },
     }),
+    shareReelEnabled: z.boolean().default(false),
+    shareReelActivatePctMin: z.number().min(0).max(100).default(100),
+    shareReelActivatePctMax: z.number().min(0).max(100).default(100),
+    shareReelProcessMin: z.number().min(0).max(100).default(1),
+    shareReelProcessMax: z.number().min(0).max(100).default(1),
+    shareReelSources: z.array(followSourceSchema).default([]),
+    shareReelProcessedLinks: z.array(z.string()).default([]),
     // ── Shuffle Tool Order — was missing from this persistence schema, causing
     //    zod to silently strip it on every POST so Copy Settings never saved it
     //    and the value reset to false on every restart.
@@ -2531,6 +2546,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         sharpen: { enabled: true, min: 1.0, max: 2.0 },
         pixelate: { enabled: true, min: 0.9, max: 2.1 },
       },
+      shareReelEnabled: false,
+      shareReelActivatePctMin: 100, shareReelActivatePctMax: 100,
+      shareReelProcessMin: 1, shareReelProcessMax: 1,
+      shareReelSources: [], shareReelProcessedLinks: [],
       dismissDirection: "auto" as const,
     };
     res.json({ ...defaults, ...cfg[p(req, "serial")]?.automation });
@@ -2666,6 +2685,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostFrequencyDisruption",
     "postStoryAddLink",
     "postStoryLinkUrl",
+    "shareReelSources",
+    "shareReelProcessedLinks",
     // Follow Filters are owned by the Human Session Tool slot, not inherited
     // from the assigned TrustScore template.
     "followFiltersEnabled",
@@ -2729,6 +2750,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostImageSettingsEnabled",
     "makePostImageSettings",
     "postStoryLinkUrl",
+    "shareReelSources",
      "makePostFixAiSlop",
      "makePostMetadataCleanup",
      "makePostFrequencyDisruption",
@@ -2743,6 +2765,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "randomJitterEnabled",
     "makePostEnabled",
     "postStoryEnabled",
+    "shareReelEnabled",
   ]);
   // Follow Filters are configured per Human Session Tool slot. They remain
   // visible/editable in TrustScore settings for compatibility, but TrustScore
@@ -3199,6 +3222,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         },
         postStoryFixAiSlop: false,
         postStoryAddLink: false, postStoryLinkUrl: "",
+        shareReelEnabled: false,
+        shareReelActivatePctMin: 100, shareReelActivatePctMax: 100,
+        shareReelProcessMin: 1, shareReelProcessMax: 1,
+        shareReelSources: [], shareReelProcessedLinks: [],
         dismissDirection: "auto" as const,
       };
       const saved = cfg[serial]?.slotAutomation?.[slotAutomationKey(serial, slotIdx, requestedSlotId)]
@@ -5200,6 +5227,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     pickLocalFolderImage, prepareMakePostImage, recordPostedLocalFile, recordPostedProfileMedia,
     auditDeviceMediaCopy, effectiveTypingProfile,
     HikerApiClient, getCompiledMalesOnlyNames, findLiveMalesOnlyMatch,
+    persistShareReelLink: (serial: string, slotIdx: number, url: string) => {
+      const cfg = loadInstanceConfigs();
+      const slotId = cfg[serial]?.account?.slots?.[slotIdx]?.slotId;
+      const key = slotAutomationKey(serial, slotIdx, slotId);
+      const existing = cfg[serial]?.slotAutomation?.[key]
+        ?? cfg[serial]?.slotAutomation?.[String(slotIdx)]
+        ?? {};
+      const links = Array.isArray(existing.shareReelProcessedLinks)
+        ? existing.shareReelProcessedLinks
+        : [];
+      cfg[serial] = {
+        ...cfg[serial],
+        slotAutomation: {
+          ...cfg[serial]?.slotAutomation,
+          [key]: {
+            ...existing,
+            shareReelProcessedLinks: [...new Set([...links, url])],
+          },
+        },
+      };
+      saveInstanceConfigs(cfg);
+    },
     runUpdateProfilePicture: (s: string, f: string, l: any, o: any) => runUpdateProfilePictureOperation(s, f, l, o, hstOperationContext),
     runUpdateBio: (s: string, b: string, l: any) => runUpdateBioOperation(s, b, l, hstOperationContext),
   };
@@ -5209,6 +5258,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const runViewReelsLoop = (s: string, p: any) => runViewReelsLoopOperation(s, p, hstOperationContext);
   const runMakePostStep = (s: string, p: any) => runMakePostStepOperation(s, p, hstOperationContext);
   const runMakePostStoryStep = (s: string, p: any) => runMakePostStoryStepOperation(s, p, { ...hstOperationContext, slotIdx: p.slotIdx ?? 0 });
+  const runShareReel = (s: string, p: any) => runShareReelOperation(s, p, {
+    ...hstOperationContext,
+    slotIdx: p.slotIdx ?? 0,
+    onProcessed: (serial: string, slotIdx: number, url: string) =>
+      hstOperationContext.persistShareReelLink(serial, slotIdx, url),
+  });
   const runUpdateProfilePicture = (s: string, f: string, l: any, o: any) => runUpdateProfilePictureOperation(s, f, l, o, hstOperationContext);
   const runUpdateBio = (s: string, b: string, l: any) => runUpdateBioOperation(s, b, l, hstOperationContext);
 
@@ -6341,6 +6396,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         postStoryLocalFolderPath, postStoryLocalFolderNoRepeat, postStoryLocalFolderRandom,
         postStoryAlterationEnabled, postStoryAlterationLevel, postStoryImageSettingsEnabled,
         postStoryImageSettings, postStoryFixAiSlop,
+         shareReelEnabled, shareReelActivatePctMin, shareReelActivatePctMax,
+         shareReelProcessMin, shareReelProcessMax, shareReelSources, shareReelProcessedLinks,
         slotUsername, slotIdx,
         shuffleToolOrder,
         dismissDirection,
@@ -6620,6 +6677,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         follow: _activateTool("follow", "followEnabled", followActivatePctMin, followActivatePctMax),
         post: _activateTool("post", "makePostEnabled", makePostActivatePctMin, makePostActivatePctMax),
         postStory: _activateTool("postStory", "postStoryEnabled", postStoryActivatePctMin, postStoryActivatePctMax),
+         shareReel: _activateTool("shareReel", "shareReelEnabled", shareReelActivatePctMin ?? 100, shareReelActivatePctMax ?? 100),
         // The master checkbox is a hard dispatch gate. Without this check,
         // the default 100% activation range could still enqueue Random
         // Actions while the UI showed the feature as disabled, resulting in
@@ -6634,10 +6692,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       })}`);
       const _toolOrderLabels: Record<string, string> = {
         feed: "VIEW FEED", stories: "VIEW STORIES", explore: "VIEW EXPLORE",
-        reels: "VIEW REELS", checkDm: "CHECK INBOX", follow: "FOLLOW USERS",
-        post: "MAKE A POST", postStory: "POST A STORY", "Random Actions": "RANDOM ACTIONS",
+         reels: "VIEW REELS", checkDm: "CHECK INBOX", follow: "FOLLOW USERS",
+         post: "MAKE A POST", postStory: "POST A STORY", shareReel: "SHARE REEL",
+         "Random Actions": "RANDOM ACTIONS",
       };
-      const _toolSeq = ["feed", "stories", "explore", "reels", "checkDm", "follow", "post", "postStory", "Random Actions"]
+      const _toolSeq = ["feed", "stories", "explore", "reels", "checkDm", "follow", "post", "postStory", "shareReel", "Random Actions"]
         .filter(t => _toolActivated[t]);
       if (shuffleToolOrder) {
         for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
@@ -6676,7 +6735,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             feedScrolled: 0,
             exploreScrolled: 0,
           };
-          const preSwitchToolSeq = _toolSeq.filter(tool => tool !== "follow" && !String(tool).startsWith("follow_spread:"));
+          // Share Reel uses URLs and history owned by the target slot. Do not
+          // run it while the previous Instagram account is still active.
+          const preSwitchToolSeq = _toolSeq.filter(
+            tool => tool !== "follow" && tool !== "shareReel" && !String(tool).startsWith("follow_spread:"),
+          );
           // Pre-switch percentage is a quota for the combined pre-switch
           // workload, not merely a multiplier for counts inside every tool.
           // The old behavior ran every activated tool and only reduced its
@@ -7795,6 +7858,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           } else if (postStoryEnabled) {
             steps.push("post-a-story(skipped — Activate Percentage roll missed this execution)");
             tLog("▶ Post a Story Activate Percentage roll missed — skipping this execution");
+          }
+
+        // ── Share Reel — standalone deep-link tool ───────────────────────
+        } else if (_tool === 'shareReel') {
+          if (_toolActivated[_tool] && shareReelEnabled) {
+            tLog("▶ Share Reel — opening configured Reel links directly");
+            try {
+              const result = await runShareReel(serial, {
+                sources: shareReelSources ?? [],
+                processedLinks: shareReelProcessedLinks ?? [],
+                processMin: shareReelProcessMin ?? 1,
+                processMax: shareReelProcessMax ?? 1,
+                slotIdx,
+                onLog: (msg: string) => tLog(`  ${msg}`),
+              });
+              sharesFeed += result.processed;
+              steps.push(`share-reel(${result.processed} shared, ${result.skipped} skipped)`);
+              tLog(`▶ Share Reel done — ${result.processed} shared, ${result.skipped} skipped`);
+            } catch (e: any) {
+              if (e?.message === "cycle-aborted") throw e;
+              steps.push("share-reel(failed)");
+              tLog(`▶ Share Reel error — ${e?.message ?? "unknown error"}`);
+            }
+          } else if (shareReelEnabled) {
+            steps.push("share-reel(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ Share Reel Activate Percentage roll missed — skipping this execution");
           }
 
         // ── Random Jitter ───────────────────────────────────────────────
