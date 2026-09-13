@@ -5927,22 +5927,24 @@ export function AutomationSettingsPanel({
   const addShareReelSource = () => {
     const value = newShareReelSourceValue.trim();
     if (!value) return;
+    const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
     let parsed: URL;
     try {
-      parsed = new URL(value);
+      parsed = new URL(candidate);
     } catch {
-      setShareReelSourceError("Paste a full Instagram Reel link.");
+      setShareReelSourceError("Enter a valid link.");
       return;
     }
-    const isInstagramHost = /^(?:www\.)?instagram\.com$/i.test(parsed.hostname);
-    const isReelPath = /^\/reels?\/[^/]+/i.test(parsed.pathname);
-    if (parsed.protocol !== "https:" || !isInstagramHost || !isReelPath) {
-      setShareReelSourceError("Use a full https://www.instagram.com/reel/... link.");
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      !parsed.hostname
+    ) {
+      setShareReelSourceError("Enter a valid http:// or https:// link.");
       return;
     }
     setSettings(s => ({
       ...s,
-      shareReelSources: [...s.shareReelSources, { type: "link", value }],
+      shareReelSources: [...s.shareReelSources, { type: "link", value: parsed.toString() }],
     }));
     setNewShareReelSourceValue("");
     setShareReelSourceError("");
@@ -8345,7 +8347,7 @@ export function AutomationSettingsPanel({
           {settings.shareReelEnabled && showShareReelSources && (
             <div className="ml-1 border border-border/60 rounded-lg p-3 space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold text-foreground">Reel links</p>
+                <p className="text-xs font-semibold text-foreground">Links</p>
                 <span className="text-xs text-muted-foreground">
                   {settings.shareReelSources.length} source{settings.shareReelSources.length === 1 ? "" : "s"}
                 </span>
@@ -8363,19 +8365,19 @@ export function AutomationSettingsPanel({
                           shareReelSources: s.shareReelSources.filter((_, sourceIndex) => sourceIndex !== index),
                         }))}
                         disabled={fieldDisabled("shareReelSources")}
-                        aria-label={`Remove Reel link ${index + 1}`}
+                        aria-label={`Remove link ${index + 1}`}
                       >✕</button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No Reel links added yet.</p>
+                <p className="text-xs text-muted-foreground">No links added yet.</p>
               )}
               <div className="flex items-center gap-2">
                 <Input
                   type="url"
                   className="flex-1 min-w-0 text-xs h-8"
-                   placeholder="https://www.instagram.com/reel/..."
+                  placeholder="https://example.com/..."
                   value={newShareReelSourceValue}
                    onChange={e => {
                      setNewShareReelSourceValue(e.target.value);

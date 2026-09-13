@@ -1170,7 +1170,7 @@ export async function openInstagramUrl(serial: string, url: string): Promise<voi
   try {
     parsed = new URL(url);
   } catch {
-    throw new Error("invalid Instagram URL");
+    throw new Error("invalid URL");
   }
   if (
     (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
