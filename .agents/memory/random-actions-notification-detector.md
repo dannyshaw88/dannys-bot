@@ -34,3 +34,18 @@ instead of an Instagram notification detail.
 
 **How to apply:** Apply the exclusion to the grouped row, not just the text
 node that wins scoring, because the marker may be exposed by a sibling node.
+
+Comment-related notification rows are a separate navigation case. If the
+selected row contains comment/reply semantics, the resulting Comments surface
+may have no Instagram Back/Close node, so return with Android BACK only for
+that classified row. If the keyboard consumes the first BACK, send one more
+Android BACK; keep the calibrated Back/Close path for all other rows.
+
+**Why:** The Comments surface shown by the affected Instagram build has no
+visible Instagram back control, while ordinary notification details do. Using
+the calibrated control there can miss the intended exit or hit an unrelated
+Home control.
+
+**How to apply:** Preserve the row-level `isComment` classification through
+the tap, verify Notifications after the Android BACK sequence, and never use
+this exception for non-comment notifications.
