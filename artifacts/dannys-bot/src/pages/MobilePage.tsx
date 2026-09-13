@@ -5798,8 +5798,8 @@ export function AutomationSettingsPanel({
   // These are the only settings a physical slot may change while its
   // effective values come from a TrustScore template.  Everything else in
   // the HST form is template-controlled and must stay visibly disabled.
-  const TRUST_SCORE_SLOT_EDITABLE_FIELDS = useMemo(
-    () => new Set([
+  const TRUST_SCORE_SLOT_EDITABLE_FIELDS = useMemo(() => {
+    const fields = new Set([
       "enabled",
       ...TRUST_SCORE_FEATURE_FIELDS,
       ...TRUST_SCORE_SLOT_OWNED_FIELDS,
@@ -5811,11 +5811,14 @@ export function AutomationSettingsPanel({
       "followFilterMaxFollowers25k",
       "followFilterMalesOnly",
       "followFilterMaleNames",
-    ]),
-    [],
-  );
+    ]);
+    // Share Reel execution settings are inherited from the TrustScore.
+    // Only the source list remains editable on the physical HST slot.
+    fields.delete("shareReelEnabled");
+    return fields;
+  }, []);
   const templateEditableFields = useMemo(
-    () => new Set(["shareReelSources"]),
+    () => new Set<string>(),
     [],
   );
   const lockedFields = useMemo(

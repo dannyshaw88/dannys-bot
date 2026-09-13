@@ -27,7 +27,7 @@ const COPY_TS_TARGETS_KEY  = "copyTrustScore_targets";
 const COPY_TS_SUBKEYS_KEY  = "copyTrustScore_subKeys";
 
 const isTrustScoreCopyableField = (field: string) =>
-  field === "shareReelSources" || !TRUST_SCORE_TEMPLATE_LOCKED_FIELDS.has(field);
+  !TRUST_SCORE_TEMPLATE_LOCKED_FIELDS.has(field);
 
 function CopyTrustScoreDialog({
   open,

@@ -2718,7 +2718,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "preSwitchEnabledMax",
     "preSwitchActionPercentMin",
     "preSwitchActionPercentMax",
-    "shareReelSources",
   ]);
   const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
     "followSources",
@@ -2853,10 +2852,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (const [field, value] of Object.entries(template)) {
       if (FOLLOW_FILTER_FIELDS.has(field)) continue;
       if (TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) continue;
+      // Share Reel is template-controlled; only its source list belongs to
+      // the physical HST slot.
+      if (field === "shareReelEnabled") {
+        effective[field] = Boolean(value);
+        continue;
+      }
       if (
         TRUST_SCORE_TOOL_FIELDS.has(field) &&
-        templateDisabledTools.includes(field) &&
-        field !== "shareReelEnabled"
+        templateDisabledTools.includes(field)
       ) {
         effective[field] = false;
         continue;
@@ -2866,7 +2870,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       effective[field] = value;
     }
     for (const field of TRUST_SCORE_TOOL_FIELDS) {
-      if (templateDisabledTools.includes(field) && field !== "shareReelEnabled") {
+      if (field === "shareReelEnabled") {
+        effective[field] = Boolean(template[field]);
+      } else if (templateDisabledTools.includes(field)) {
         effective[field] = false;
       } else if (Object.prototype.hasOwnProperty.call(toolOverrides, field)) {
         effective[field] = Boolean(toolOverrides[field]);
