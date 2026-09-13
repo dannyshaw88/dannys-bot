@@ -843,9 +843,9 @@ function isInstagramWhiteScreen(summary: InstagramLaunchFrameSummary | null): bo
 
 /**
  * Watches Instagram's rendered content for the first 20 seconds after launch.
- * If the persistent blank-white surface appears, Android Back is pressed once,
- * then the screen is rechecked after five seconds. Back/recheck repeats until
- * Instagram presents a non-white surface.
+ * A single near-white frame is not enough: Instagram can show a white
+ * skeleton/loading surface while the home feed is still rendering. Require
+ * consecutive white samples and a delayed confirmation before pressing Back.
  */
 export async function clearInstagramWhiteScreenAfterLaunch(
   serial: string,
@@ -854,6 +854,7 @@ export async function clearInstagramWhiteScreenAfterLaunch(
   const watchDeadline = Date.now() + 20_000;
   let whiteDetected = false;
   let lastSummary: InstagramLaunchFrameSummary | null = null;
+  let consecutiveWhiteSamples = 0;
 
   onLog?.("▶ Watching Instagram launch screen for up to 20 seconds…");
   while (Date.now() < watchDeadline) {
@@ -861,8 +862,15 @@ export async function clearInstagramWhiteScreenAfterLaunch(
     if (foreground && isInstagramForeground(foreground)) {
       lastSummary = summarizeInstagramLaunchFrame(await _captureScreenPixels(serial));
       if (isInstagramWhiteScreen(lastSummary)) {
-        whiteDetected = true;
-        break;
+        consecutiveWhiteSamples++;
+        // One frame can be the normal splash/skeleton transition. Require two
+        // samples 750ms apart before doing any recovery action.
+        if (consecutiveWhiteSamples >= 2) {
+          whiteDetected = true;
+          break;
+        }
+      } else {
+        consecutiveWhiteSamples = 0;
       }
     }
     await _sleep(750);
@@ -870,6 +878,22 @@ export async function clearInstagramWhiteScreenAfterLaunch(
 
   if (!whiteDetected) {
     onLog?.("  ✓ No persistent white Instagram screen detected");
+    return true;
+  }
+
+  // Give Instagram one more render interval before touching navigation. This
+  // catches the common case where the second sample is still the home-feed
+  // skeleton and the real content arrives shortly afterward.
+  onLog?.("⚠ Consecutive white Instagram frames detected — confirming after 1.5s before Back");
+  await _sleep(1_500);
+  const confirmationForeground = await getForegroundSnapshot(serial).catch(() => null);
+  const confirmationSummary = summarizeInstagramLaunchFrame(await _captureScreenPixels(serial));
+  if (
+    !confirmationForeground ||
+    !isInstagramForeground(confirmationForeground) ||
+    !isInstagramWhiteScreen(confirmationSummary)
+  ) {
+    onLog?.("  ✓ Instagram rendered during white-screen confirmation; no Back recovery needed");
     return true;
   }
 
