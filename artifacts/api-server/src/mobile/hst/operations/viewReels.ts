@@ -356,7 +356,7 @@ export async function runViewReelsLoop(serial: string, params: {
             onLog?.(`Reel ${i + 1}/${totalReels}: tapping freshly validated Save at (${savePoint.x},${savePoint.y})…`);
             await android.tap(serial, savePoint.x, savePoint.y);
             // Wait long enough for Instagram to show either the first-save
-            // collection sheet or an incorrectly targeted DM sheet.
+            // collection sheet or an incorrectly targeted action sheet.
             await sleepOrAbort(serial, 600);
             const _vrSaveXml = await android.dumpUi(serial).catch(() => "");
             if (android.isInstagramShareSheetXml(_vrSaveXml)) {
@@ -367,6 +367,36 @@ export async function runViewReelsLoop(serial: string, params: {
               onLog?.(`Reel ${i + 1}/${totalReels}: ✗ Save target opened the DM sheet — closed it and did not count a save`);
               await android.pressBack(serial).catch(() => {});
               await sleepOrAbort(serial, 300);
+            } else if (android.isInstagramMoreActionsSheetXml(_vrSaveXml)) {
+              logger.error(
+                { serial, reel: i + 1, savePoint },
+                "[view-reels] Save tap opened the Reel overflow sheet; recovering through its Save node",
+              );
+              onLog?.(`Reel ${i + 1}/${totalReels}: Save target opened the overflow sheet — resolving its live Save node`);
+              const overflowSave = await android.findInstagramMoreActionsSaveButton(serial, onLog).catch(() => null);
+              if (!overflowSave) {
+                onLog?.(`Reel ${i + 1}/${totalReels}: overflow-sheet Save node missing — closing without counting`);
+                await android.pressBack(serial).catch(() => {});
+                await sleepOrAbort(serial, 300);
+              } else {
+                await android.tap(serial, overflowSave.x, overflowSave.y);
+                await sleepOrAbort(serial, 600);
+                let afterOverflowSave = await android.dumpUi(serial).catch(() => "");
+                if (await dismissSaveCollectionPrompt(serial, afterOverflowSave, onLog, `Reel ${i + 1}/${totalReels}`)) {
+                  await sleepOrAbort(serial, 300);
+                  afterOverflowSave = await android.dumpUi(serial).catch(() => "");
+                }
+                const verifiedSaved = /(?:content-desc|text)="(?:Saved|Remove from Saved)"/i.test(afterOverflowSave) ||
+                  (await android.findReelActionIcons(serial).catch(() => null))?.alreadySaved === true;
+                if (verifiedSaved && !android.isInstagramMoreActionsSheetXml(afterOverflowSave)) {
+                  saves++;
+                  onLog?.(`Reel ${i + 1}/${totalReels}: ✓ saved through the overflow-sheet Save node at (${overflowSave.x},${overflowSave.y})`);
+                } else {
+                  onLog?.(`Reel ${i + 1}/${totalReels}: overflow-sheet Save result was not verified — closing without counting`);
+                  await android.pressBack(serial).catch(() => {});
+                  await sleepOrAbort(serial, 300);
+                }
+              }
             } else {
               saves++;
               onLog?.(`Reel ${i + 1}/${totalReels}: saved at (${savePoint.x},${savePoint.y})`);

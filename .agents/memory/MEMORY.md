@@ -75,7 +75,6 @@
 - [Follow search field lookup](follow-search-field-lookup.md) — live top search resource nodes first with retries; visual matching is fallback only
 - [Instagram Home tab icon detector](home-tab-icon-detector.md) — use the live house-icon screenshot with polarity-invariant matching; no Home accessibility or coordinate fallback
 - [Home icon packaging](home-icon-packaging.md) — packaged Windows builds must bundle a self-contained Home reference; never depend on workspace attached_assets
-- [Instagram Save button icon detector](save-button-icon-detector.md) — locate optional Save only from the live bookmark icon screenshot; skip when absent, never infer from accessibility or order
 - [GitHub PAT push fallback](github-pat-push-fallback.md) — project GITHUB_TOKEN secrets work with GIT_ASKPASS HTTPS pushes, but not the gitPush source-control helper
 - [Actions source validation](actions-source-validation.md) — CI checks must inspect active assignments, not raw text, because comments documenting disabled settings can trigger false failures
 - [Chrome manual search sequencing](chrome-manual-search-sequencing.md) — run optional Google history searches after normal Chrome feed work and target live EditText nodes, not toolbar coordinates

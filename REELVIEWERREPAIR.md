@@ -59,10 +59,10 @@ Before changing Reel Viewer behavior:
 ### `Save`
 
 - **Attempt:** Tap only when a fresh `icons.save` exists and the action is requested.
-- **Status:** **Retained with fresh scan and post-tap recovery; build-validated, real-device validation pending**.
+- **Status:** **Retained with fresh scan, node-only overflow recovery, and post-tap verification; build-validated, real-device validation pending**.
 - **Evidence:** The prior branch counted Save before checking the resulting surface, so the intermittent DM mis-target was logged as a successful save.
-- **Current behavior:** Re-scan immediately before Save; after tapping, inspect the resulting dump. If a DM share sheet opened, close it with Back and do not increment the Save metric.
-- **Rule:** If detector identity conflicts, fresh Save is missing, or the resulting surface is a DM sheet, skip/fail that Save without trying another coordinate.
+- **Current behavior:** Re-scan immediately before Save; after tapping, inspect the resulting dump. If a DM share sheet opens, close it and do not increment the Save metric. If the Reel overflow sheet opens, resolve and tap its live Save node, dismiss any first-save collection prompt, and count only a verified saved state.
+- **Rule:** If detector identity conflicts, fresh Save is missing, or the resulting surface cannot be verified, skip/fail that Save without guessing a coordinate or using image matching.
 
 ### `Share via DM`
 

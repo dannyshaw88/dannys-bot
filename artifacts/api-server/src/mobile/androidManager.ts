@@ -6299,93 +6299,6 @@ export async function findReelActionIcons(
     alreadyLiked: liveAlreadyLiked,
     alreadySaved: liveAlreadySaved,
   };
-
-  // Reels uses the same proven visual Like target as View Feed. The only
-  // layout difference is that the Reel heart is in the transparent,
-  // white-outlined vertical action column on the right side.
-  const like = await findFeedLikeIconByPixels(serial, screenH / 2, onLog, "reel-right");
-  const alreadyLiked = false;
-
-  if (!like) {
-    onLog?.("[reel-icons] Like visual match not found in Reel right action column");
-    return null;
-  }
-
-  // Collect every other clickable node in the same column (X tolerance),
-  // BELOW the Like icon — Comment/Repost/Send stack downward from Like in
-  // the Reels viewer, mirroring the left-to-right elimination-by-label
-  // approach findFeedActionIcons uses for the horizontal bar.
-  const colTolerance = 40;
-  type ColNode = { x: number; y: number; cd: string; rid: string; cls: string; txt: string };
-  const colNodes: ColNode[] = [];
-  const nodeRe2 = /<node\s([^>]+?)\s*\/?>/g;
-  let nm: RegExpExecArray | null;
-  while ((nm = nodeRe2.exec(xml)) !== null) {
-    const attrs = nm[1];
-    if (/class="android\.widget\.EditText"/.test(attrs)) continue;
-    const bm = attrs.match(/bounds="(\[(\d+),(\d+)\]\[(\d+),(\d+)\])"/);
-    if (!bm) continue;
-    const c = _parseCenter(bm[1]);
-    if (!c) continue;
-    if (Math.abs(c.x - like!.x) > colTolerance) continue;
-    if (c.y <= like!.y + 10) continue; // Like itself, or anything above it (e.g. profile avatar)
-    // The bottom Instagram navigation row can expose another paper-plane/
-    // share node with the same semantic label. It is not part of the Reel
-    // action column and opens DMs globally, so never include the bottom-nav
-    // band when resolving Reel actions.
-    if (c.y >= screenH * 0.86) continue;
-    const cdM = attrs.match(/content-desc="([^"]*)"/);
-    const cd = cdM ? cdM[1] : "";
-    const clsM = attrs.match(/class="([^"]*)"/);
-    const cls = clsM ? clsM[1] : "";
-    const txtM = attrs.match(/\btext="([^"]*)"/);
-    const txt = txtM ? txtM[1] : "";
-    // Instagram frequently exposes the visible Reels action icon as a
-    // non-clickable ImageView while its parent owns the tap. Keep icon-shaped
-    // nodes even when clickable="true" is absent; text/container rows are not
-    // action icons and must not enter the positional column mapping.
-    const iconClass = /(?:ImageView|Button|ViewGroup)$/.test(cls);
-    const nodeW = Number(bm[4]) - Number(bm[2]);
-    const nodeH = Number(bm[5]) - Number(bm[3]);
-    if (!iconClass || nodeW < 24 || nodeH < 24 || nodeW > 260 || nodeH > 260) continue;
-    const ridM = attrs.match(/resource-id="([^"]*)"/);
-    const rid = ridM ? ridM[1] : "";
-    colNodes.push({ x: c.x, y: c.y, cd, rid, cls, txt });
-  }
-  colNodes.sort((a, b) => a.y - b.y);
-
-  const fmt = (n: ColNode) => `y=${n.y} cd="${n.cd || ""}" rid="${n.rid || ""}" cls="${n.cls || ""}" txt="${n.txt || ""}"`;
-  onLog?.(`[reel-icons] column dump below Like: ${colNodes.map(fmt).join(" | ") || "(none)"}`);
-
-  const pos = (n: ColNode) => ({ x: n.x, y: n.y });
-
-  // Label matching — priority order matters:
-  //   repostNode: only "Repost" (feed repost). Do NOT claim "Share" here —
-  //     in the Reels viewer "Share" opens the DM share sheet, not the feed
-  //     repost flow. Claiming it as shareFeed was the root cause of both
-  //     shareFeed and shareDm being silently null (shareFeed got the wrong
-  //     action, shareDm found nothing left).
-  //   sendNode: "Send", "Direct", "Message", OR "Share" (the standard Reels
-  //     DM-share label) — all open the share sheet leading to DM.
-  const commentNode  = colNodes.find(n => /^comment$/i.test(n.cd)) ?? null;
-  const repostNode   = colNodes.find(n => /\brepost\b/i.test(n.cd)) ?? null;
-  const sendNode     = colNodes.find(n => /\b(send|direct|message|share)\b/i.test(n.cd) && n !== repostNode) ?? null;
-  const hasExplicitShareDmNode = !!sendNode;
-  let comment:   { x: number; y: number } | null = commentNode ? pos(commentNode) : null;
-  let shareFeed: { x: number; y: number } | null = repostNode  ? pos(repostNode)  : null;
-  let shareDm:   { x: number; y: number } | null = sendNode    ? pos(sendNode)    : null;
-  const save = await findSaveIconByPixels(serial, like.y, "reel", onLog);
-  const alreadySaved = false;
-
-  // Never infer the paper-plane/DM action from vertical position. A visually
-  // identical unlabeled node can be Comment or Repost on another Instagram
-  // build, and tapping that inferred coordinate opens the wrong surface.
-  if (!hasExplicitShareDmNode) {
-    shareDm = null;
-  }
-
-  onLog?.(`[reel-icons] result — like:(${like.x},${like.y}) comment:${comment ? `(${comment.x},${comment.y})` : "null"} shareFeed:${shareFeed ? `(${shareFeed.x},${shareFeed.y})` : "null"} shareDm:${shareDm ? `(${shareDm.x},${shareDm.y})` : "null"} save:${save ? `(${save.x},${save.y})${alreadySaved ? " (already saved)" : ""}` : "null"}`);
-  return { like, comment, shareFeed, shareDm, save, alreadyLiked, alreadySaved };
 }
 
 /**
@@ -8201,111 +8114,6 @@ async function findFeedLikeIconByPixels(
 }
 
 /**
- * Finds Instagram's Save/bookmark ribbon from the live screenshot.
- *
- * The ribbon is optional: ads, embedded videos, and some Reel surfaces do not
- * render it at all. This function therefore returns null unless the supplied
- * reference has a strong visual match. Normalized correlation is deliberately
- * polarity-invariant so black-on-white and white-on-dark themes both work.
- */
-async function findSaveIconByPixels(
-  serial: string,
-  anchorY: number | null,
-  surface: "feed" | "reel",
-  onLog?: (msg: string) => void,
-): Promise<{ x: number; y: number } | null> {
-  const screen = await _captureScreenPixels(serial);
-  if (!screen || screen.channels < 3) return null;
-  try {
-    const referenceRoots = [
-      path.resolve(process.cwd(), "attached_assets"),
-      // The development API workflow runs with artifacts/api-server as its
-      // cwd, while uploaded references live at the workspace root.
-      path.resolve(process.cwd(), "../../attached_assets"),
-      path.resolve(__dirname, "../../../attached_assets"),
-      // The Electron build places this reference beside the bundled server.
-      path.resolve(__dirname, "../../electron/assets"),
-      path.resolve(path.dirname(path.resolve(process.argv[1] ?? __filename)), "save-icon-refs"),
-      path.resolve(__dirname, "save-icon-refs"),
-      path.resolve(__dirname, "../save-icon-refs"),
-    ];
-    let reference: { data: Buffer; width: number; height: number } | null = null;
-    for (const root of referenceRoots) {
-      try {
-        const { data, info } = await sharp(path.join(root, "save_1787133131184.jpg"))
-          .greyscale().raw().toBuffer({ resolveWithObject: true });
-        reference = { data, width: info.width, height: info.height };
-        break;
-      } catch {
-        // Try the next runtime asset root.
-      }
-    }
-    if (!reference) {
-      onLog?.(`[${surface}-icons] Save visual reference unavailable — skipping Save`);
-      return null;
-    }
-
-    const sample = (x: number, y: number): number => {
-      const i = (y * screen.width + x) * screen.channels;
-      return (screen.pixels[i] + screen.pixels[i + 1] + screen.pixels[i + 2]) / 3;
-    };
-    const xMin = Math.round(screen.width * (surface === "feed" ? 0.78 : 0.70));
-    const xMaxRatio = 0.995;
-    const yMin = surface === "feed"
-      ? Math.max(0, Math.round((anchorY ?? screen.height * 0.50) - screen.height * 0.22))
-      : Math.round(screen.height * 0.16);
-    const yMax = surface === "feed"
-      ? Math.min(screen.height, Math.round((anchorY ?? screen.height * 0.50) + screen.height * 0.22))
-      : Math.round(screen.height * 0.86);
-    let best: { x: number; y: number; score: number } | null = null;
-
-    for (const scale of [0.5, 0.65, 0.8, 1, 1.25, 1.5, 1.8, 2.2, 2.7, 3.2, 3.7]) {
-      const tw = Math.max(10, Math.round(reference.width * scale));
-      const th = Math.max(10, Math.round(reference.height * scale));
-      if (tw >= screen.width * 0.30 || th >= screen.height * 0.12) continue;
-      for (let y = yMin; y <= yMax - th; y += 2) {
-        for (let x = xMin; x <= Math.round(screen.width * xMaxRatio) - tw; x += 2) {
-          let screenSum = 0, screenSum2 = 0, refSum = 0, refSum2 = 0, cross = 0, count = 0;
-          for (let ty = 0; ty < reference.height; ty += 2) {
-            for (let tx = 0; tx < reference.width; tx += 2) {
-              const sx = x + Math.min(tw - 1, Math.round(tx * scale));
-              const sy = y + Math.min(th - 1, Math.round(ty * scale));
-              const screenValue = sample(sx, sy);
-              const refValue = reference.data[ty * reference.width + tx];
-              screenSum += screenValue;
-              screenSum2 += screenValue * screenValue;
-              refSum += refValue;
-              refSum2 += refValue * refValue;
-              cross += screenValue * refValue;
-              count++;
-            }
-          }
-          if (count < 100) continue;
-          const screenMean = screenSum / count;
-          const refMean = refSum / count;
-          const screenVariance = Math.max(1, screenSum2 / count - screenMean * screenMean);
-          const refVariance = Math.max(1, refSum2 / count - refMean * refMean);
-          const covariance = cross / count - screenMean * refMean;
-          const score = 0.5 + Math.abs(covariance / Math.sqrt(screenVariance * refVariance)) * 0.5;
-          if (score > (best?.score ?? 0.86)) {
-            best = { x: Math.round(x + tw / 2), y: Math.round(y + th / 2), score };
-          }
-        }
-      }
-    }
-    if (!best || best.score < 0.86) {
-      onLog?.(`[${surface}-icons] Save visual reference not matched — skipping Save`);
-      return null;
-    }
-    onLog?.(`[${surface}-icons] Save visual icon matched at (${best.x},${best.y}) score=${best.score.toFixed(3)}`);
-    return { x: best.x, y: best.y };
-  } catch {
-    onLog?.(`[${surface}-icons] Save visual matcher failed — skipping Save`);
-    return null;
-  }
-}
-
-/**
  * Finds the visible Instagram top-left back arrow from the supplied reference
  * image. This intentionally follows the same normalized, polarity-invariant
  * pixel correlation as the Feed Like matcher: no accessibility label, node
@@ -8809,6 +8617,63 @@ export function isInstagramShareSheetXml(xml: string): boolean {
     xml.includes("Add to story") ||
     xml.includes("android.widget.EditText")
   );
+}
+
+/**
+ * Instagram's Reel overflow sheet is a different surface from the DM share
+ * sheet.  Its live node tree contains these feedback/action labels while the
+ * Reel action column remains behind the sheet.  Keep this detection semantic
+ * so a mis-targeted Save tap can be recovered through the sheet's own Save
+ * node instead of being counted as a successful save.
+ */
+export function isInstagramMoreActionsSheetXml(xml: string): boolean {
+  if (!xml) return false;
+  const hasFeedbackRow =
+    xml.includes("Why you're seeing this post") ||
+    xml.includes("Why you’re seeing this post");
+  const hasDismissiveActions =
+    xml.includes('text="Not interested"') ||
+    xml.includes('content-desc="Not interested"') ||
+    xml.includes('text="Report"') ||
+    xml.includes('content-desc="Report"');
+  return hasFeedbackRow && hasDismissiveActions;
+}
+
+/**
+ * Resolve the Save action from the already-open Reel overflow sheet.
+ *
+ * This is intentionally node-only.  It is a recovery path for builds where
+ * the underlying Reel action node reports a stale coordinate.  The exact
+ * "Save" node in the sheet is outside the right-side Reel action column and
+ * must have a live click owner.
+ */
+export async function findInstagramMoreActionsSaveButton(
+  serial: string,
+  onLog?: (message: string) => void,
+): Promise<{ x: number; y: number } | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = await _uiDump(adb, serial).catch(() => "");
+  if (!isInstagramMoreActionsSheetXml(xml)) return null;
+
+  const { w } = getScreenSize(serial);
+  const candidates = _liveActionNodes(xml)
+    .filter(node => {
+      const label = `${node.contentDesc} ${node.text}`.trim();
+      return /^save$/i.test(label) &&
+        node.x < w * 0.80 &&
+        node.width <= w * 0.55 &&
+        node.height <= 240 &&
+        node.actionOwnerIndex != null;
+    })
+    .sort((a, b) => a.y - b.y);
+  const candidate = candidates[0];
+  if (!candidate) {
+    onLog?.("[reel-save] overflow sheet is open but its Save node was not resolved");
+    return null;
+  }
+  onLog?.(`[reel-save] overflow-sheet Save node resolved at (${candidate.x},${candidate.y})`);
+  return { x: candidate.x, y: candidate.y };
 }
 
 export async function confirmAndScanShareSheet(
