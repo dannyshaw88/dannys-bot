@@ -492,7 +492,6 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "makePostPostToStoryPctMax",
   "postStoryAddLink",
   "postStoryLinkUrl",
-  "shareReelSources",
   "shareReelProcessedLinks",
 ]);
 
@@ -539,7 +538,6 @@ export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
   "makePostLocalFolderPath",
   "makePostAddLocation",
   "postStoryLinkUrl",
-  "shareReelSources",
 ]);
 
 export const COPY_SECTIONS: CopySection[] = [

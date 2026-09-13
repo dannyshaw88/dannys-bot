@@ -2685,7 +2685,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostFrequencyDisruption",
     "postStoryAddLink",
     "postStoryLinkUrl",
-    "shareReelSources",
     "shareReelProcessedLinks",
     // Follow Filters are owned by the Human Session Tool slot, not inherited
     // from the assigned TrustScore template.
@@ -2750,7 +2749,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostImageSettingsEnabled",
     "makePostImageSettings",
     "postStoryLinkUrl",
-    "shareReelSources",
      "makePostFixAiSlop",
      "makePostMetadataCleanup",
      "makePostFrequencyDisruption",
