@@ -103,7 +103,20 @@ export async function runViewReelsLoop(serial: string, params: {
     const reelsModeLabel = rsv.mode === "superSkim" ? "super skim" : rsv.mode;
     onLog?.(`${reelLabel}: advance swipe [${reelsModeLabel}]`);
     logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
-    const actualPath = await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as any);
+    // The shared device profile can be calibrated low on the screen (the
+    // affected Redmi profile starts at y=1703 on a 1080x2460 display). Reel
+    // ads place full-width CTA buttons in that same lower band, so a slow
+    // focused swipe can be interpreted as a CTA press before the drag is
+    // recognized. Keep the calibrated end point and pacing, but cap only the
+    // Reels swipe start inside the video body.
+    const reelsSafeStartY = Math.round(h * 0.58);
+    const actualPath = await deviceProfileSwipe(
+      serial,
+      { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration },
+      "reels-advance",
+      rsv.mode as any,
+      { maxFromY: reelsSafeStartY },
+    );
     const afterXml = await android.dumpUi(serial).catch(() => "");
     await android.getForegroundSnapshot(serial);
     onLog?.(
