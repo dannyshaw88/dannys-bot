@@ -77,14 +77,3 @@ would have led to the wrong fix.
 
 **How to apply:** When diagnosing a silent scan, compare the action plan,
 available icons, tap/verification lines, and swipe timestamp in that order.
-
-Reels advance swipes must not inherit a low calibrated start point blindly:
-ad CTAs can occupy the lower full-width band, and a slow drag beginning on
-that button can be interpreted as a click before the swipe is recognized.
-
-**Why:** A Redmi profile started a focused Reel swipe inside a visible
-“Contact us” ad CTA, which opened the advertiser page instead of advancing.
-
-**How to apply:** Keep the calibrated direction, endpoint, jitter, and pacing,
-but cap only the Reels swipe start inside the video body; do not change the
-shared calibration used by other tools.
