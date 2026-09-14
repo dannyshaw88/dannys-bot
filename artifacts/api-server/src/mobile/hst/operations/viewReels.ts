@@ -70,8 +70,34 @@ export async function runViewReelsLoop(serial: string, params: {
   // Reels snap fully to the next clip on a swipe — unlike the feed's
   // partial scroll (runCheckFeedLoop), a single full-height swipe here
   // always lands on exactly the next reel.
-  const summarizeReelsSwipeScreen = (xml: string): string => {
-    if (!xml) return "empty-ui-dump";
+  const hashReelsUi = (xml: string): string => {
+    let hash = 2166136261;
+    for (let i = 0; i < xml.length; i++) {
+      hash ^= xml.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  };
+  const summarizeReelsSwipeScreen = (xml: string): {
+    text: string;
+    bytes: number;
+    hash: string;
+    markers: string[];
+    labels: string[];
+    viewerSignal: boolean;
+    composerSignal: boolean;
+  } => {
+    if (!xml) {
+      return {
+        text: "empty-ui-dump",
+        bytes: 0,
+        hash: "empty",
+        markers: [],
+        labels: [],
+        viewerSignal: false,
+        composerSignal: false,
+      };
+    }
     const markers = [
       "reel_viewer", "reels_feed_media_view", "clips_tab", "clips_author_username",
       "Friends", "Popular profiles", "Suggested profiles", "People you may know",
@@ -83,7 +109,20 @@ export async function runViewReelsLoop(serial: string, params: {
       .map(match => match[1])
       .filter(value => value.length > 1)
       .slice(0, 16);
-    return `bytes=${xml.length} markers=[${found.join(",") || "none"}] labels=[${texts.join(" | ")}]`;
+    const viewerSignal = found.some(marker =>
+      ["reel_viewer", "reels_feed_media_view", "clips_tab", "clips_author_username"].includes(marker),
+    );
+    const composerSignal = /message_composer|send message|reply/i.test(xml);
+    const text = `bytes=${xml.length} hash=${hashReelsUi(xml)} markers=[${found.join(",") || "none"}] labels=[${texts.join(" | ")}]`;
+    return {
+      text,
+      bytes: xml.length,
+      hash: hashReelsUi(xml),
+      markers: found,
+      labels: texts,
+      viewerSignal,
+      composerSignal,
+    };
   };
 
   const swipeToNextReel = async (reelLabel: string) => {
@@ -98,16 +137,41 @@ export async function runViewReelsLoop(serial: string, params: {
     reelsPersonalityHistory.streak = reelsPersonalityHistory.lastMode === rsv.mode ? reelsPersonalityHistory.streak + 1 : 1;
     reelsPersonalityHistory.lastMode = rsv.mode;
     const beforeXml = await android.dumpUi(serial).catch(() => "");
-    onLog?.(`${reelLabel}: swipe screen BEFORE — ${summarizeReelsSwipeScreen(beforeXml)}`);
-    await android.getForegroundSnapshot(serial);
+    const beforeUi = summarizeReelsSwipeScreen(beforeXml);
+    const beforeForeground = await android.getForegroundSnapshot(serial);
+    logger.info({
+      serial,
+      reelLabel,
+      phase: "before",
+      mode: rsv.mode,
+      requestedPath: { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY },
+      ui: beforeUi,
+      foreground: beforeForeground,
+    }, "[view-reels-debug] swipe boundary");
+    onLog?.(`${reelLabel}: swipe screen BEFORE — ${beforeUi.text}`);
     const reelsModeLabel = rsv.mode === "superSkim" ? "super skim" : rsv.mode;
     onLog?.(`${reelLabel}: advance swipe [${reelsModeLabel}]`);
     logger.info({ serial, source: "reels-advance", mode: rsv.mode, from: [rx, rsv.fromY], to: [rx, rsv.toY], durationMs: rsv.duration }, "[mobile-input] swipe");
     const actualPath = await deviceProfileSwipe(serial, { x1: rx, y1: rsv.fromY, x2: rx, y2: rsv.toY, durationMs: rsv.duration }, "reels-advance", rsv.mode as any);
     const afterXml = await android.dumpUi(serial).catch(() => "");
-    await android.getForegroundSnapshot(serial);
+    const afterUi = summarizeReelsSwipeScreen(afterXml);
+    const afterForeground = await android.getForegroundSnapshot(serial);
+    logger.info({
+      serial,
+      reelLabel,
+      phase: "after",
+      mode: rsv.mode,
+      actualPath,
+      ui: afterUi,
+      foreground: afterForeground,
+      uiHashChanged: beforeUi.hash !== afterUi.hash,
+      viewerSignalBefore: beforeUi.viewerSignal,
+      viewerSignalAfter: afterUi.viewerSignal,
+      composerSignalBefore: beforeUi.composerSignal,
+      composerSignalAfter: afterUi.composerSignal,
+    }, "[view-reels-debug] swipe outcome");
     onLog?.(
-      `${reelLabel}: swipe screen AFTER — ${summarizeReelsSwipeScreen(afterXml)}` +
+      `${reelLabel}: swipe screen AFTER — ${afterUi.text}` +
       `; completed=${actualPath.x1},${actualPath.y1}->${actualPath.x2},${actualPath.y2}`,
     );
   };

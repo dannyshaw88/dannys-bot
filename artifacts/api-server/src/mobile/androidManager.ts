@@ -4716,6 +4716,53 @@ export function getScreenSize(serial: string): { w: number; h: number } {
 }
 
 /**
+ * Return the complete display-size picture used when diagnosing coordinate
+ * mismatches. The swipe profile editor historically used Physical size while
+ * runtime input prefers Override size, so logging only the selected WxH hides
+ * the distinction that matters.
+ */
+export async function getScreenSizeDiagnostics(serial: string): Promise<{
+  raw: string;
+  physical: { w: number; h: number } | null;
+  override: { w: number; h: number } | null;
+  selected: { w: number; h: number } | null;
+  selectedSource: "override" | "physical" | "first-match" | "unavailable";
+}> {
+  const unavailable = {
+    raw: "",
+    physical: null,
+    override: null,
+    selected: null,
+    selectedSource: "unavailable" as const,
+  };
+  try {
+    const tools = await detectToolsetAsync();
+    const adb = tools.adb.path;
+    if (!adb) return unavailable;
+    const result = await execFileP(adb, ["-s", serial, "shell", "wm", "size"], {
+      encoding: "utf8",
+      timeout: 3000,
+    } as any);
+    const raw = String(result.stdout ?? "").trim();
+    const physicalMatch = raw.match(/Physical\s+size:\s*(\d+)x(\d+)/i);
+    const overrideMatch = raw.match(/Override\s+size:\s*(\d+)x(\d+)/i);
+    const firstMatch = raw.match(/(\d+)x(\d+)/);
+    const physical = physicalMatch ? { w: Number(physicalMatch[1]), h: Number(physicalMatch[2]) } : null;
+    const override = overrideMatch ? { w: Number(overrideMatch[1]), h: Number(overrideMatch[2]) } : null;
+    const selected = override ?? physical ?? (firstMatch ? { w: Number(firstMatch[1]), h: Number(firstMatch[2]) } : null);
+    return {
+      raw,
+      physical,
+      override,
+      selected,
+      selectedSource: override ? "override" : physical ? "physical" : firstMatch ? "first-match" : "unavailable",
+    };
+  } catch {
+    return unavailable;
+  }
+}
+
+/**
  * Async counterpart for the hot gesture path. A synchronous `wm size` probe
  * before every swipe can pause the API process while ADB is busy on Windows.
  * Display dimensions are stable during a session, so cache them briefly and

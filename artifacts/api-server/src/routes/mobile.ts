@@ -5064,6 +5064,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let configured: DevicePrefs["swipeGesture"] | undefined;
     try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
     const size = getScreenSize(serial);
+    const coordinateDiagnostics = source === "reels-advance"
+      ? await android.getScreenSizeDiagnostics(serial)
+      : null;
+    const inputSize = source === "reels-advance"
+      ? await android.getScreenSizeAsync(serial).catch(() => null)
+      : null;
     const clamp = (value: number, max: number) => Math.max(0, Math.min(max - 1, Math.round(value)));
     if (!configured) throw new Error(`Swipe Gesture Profile is required for ${source}`);
     const jitterX = Number.isFinite(configured.jitterX) ? configured.jitterX : 0;
@@ -5109,6 +5115,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       y2: clamp((reversed ? configured.y1 : configured.y2) + (reversed ? startDy : endDy) + mother.yBias, size.h),
       durationMs,
     };
+    const unclampedProfilePath = { ...path };
     if (opts?.maxFromY !== undefined && !reversed) path.y1 = Math.min(path.y1, opts.maxFromY);
     if (source === "explore-scroll" && !reversed && path.y1 - path.y2 < Math.round(size.h * .22)) {
       path.y2 = Math.max(0, path.y1 - Math.round(size.h * .22));
@@ -5141,6 +5148,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       pauseMs,
       settleMs,
       profile: true,
+      ...(coordinateDiagnostics ? {
+        coordinateSpace: {
+          profileClampSize: size,
+          inputRuntimeSize: inputSize,
+          wmRaw: coordinateDiagnostics.raw,
+          wmPhysical: coordinateDiagnostics.physical,
+          wmOverride: coordinateDiagnostics.override,
+          wmSelected: coordinateDiagnostics.selected,
+          wmSelectedSource: coordinateDiagnostics.selectedSource,
+          physicalOverrideMismatch: Boolean(
+            coordinateDiagnostics.physical &&
+            coordinateDiagnostics.override &&
+            (coordinateDiagnostics.physical.w !== coordinateDiagnostics.override.w ||
+              coordinateDiagnostics.physical.h !== coordinateDiagnostics.override.h),
+          ),
+        },
+        profilePathBeforeOptionalGuards: unclampedProfilePath,
+        profilePathAfterOptionalGuards: path,
+      } : {}),
     }, "[mobile-input] device-profile swipe resolved");
     await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs, false);
     if (settleMs > 0) await new Promise(resolve => setTimeout(resolve, settleMs));
