@@ -4076,10 +4076,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // pass it to the server-side abort endpoint (prevents stale abort POSTs
   // from killing the *next* cycle after a rapid toggle-off / toggle-on).
   const cycleIdRef = useRef<string | null>(null);
-  // The coordinator returns a lease token, not just a slot index. This keeps a
-  // late completion from an older cycle from releasing a newer lease for the
-  // same account slot.
-  const collisionLeaseRef = useRef<CollisionLease | null>(null);
   // Snapshot of what's actually persisted server-side — lets autosave skip
   // firing a no-op POST right after hydration (when `settings` merely
   // mirrors what was just loaded) and only save on real user edits.
@@ -4741,7 +4737,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       setNextRunAt(null);
       // Collision preventer: wait for device to be free before running.
       // Hoisted so post-cycle scheduling can use it as a CP-active fallback.
-      collisionLeaseRef.current = null;
+      // Keep the lease local to this cycle. A React remount or an overlapping
+      // stale callback must never be able to clear/replace the lease that this
+      // cycle owns before its finally block releases it. Losing that token
+      // leaves the device coordinator permanently busy and strands every
+      // queued account behind it.
+      let cycleCollisionLease: CollisionLease | null = null;
       // Read this at fire-time so Statistics' direct reschedule path and the
       // normal React effect path both mark the same immediate user request.
       const manualCollisionOverride = manualCollisionOverrideRef.current;
@@ -4771,13 +4772,13 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           srvLog(`${_dbgTag} — collision-preventer threw (name=${error?.name ?? "Error"}, message=${error?.message ?? String(error)})`);
           throw error;
         }
-        collisionLeaseRef.current = lease;
+        cycleCollisionLease = lease;
         collisionPrevented = lease.collisionPrevented;
         srvLog(`${_dbgTag} — collision-preventer request resolved (collisionPrevented=${collisionPrevented})`);
         if (_hstStop.has(key)) {
           onLog?.(`[HST-DBG] ${_dbgTag} — stopped while waiting for collision-preventer; releasing slot`);
           releaseSlot?.(lease, true);
-          collisionLeaseRef.current = null;
+          cycleCollisionLease = null;
           return;
         }
         onLog?.(`[HST-DBG] ${_dbgTag} — slot acquired (collisionPrevented=${collisionPrevented}, manualOverride=${manualCollisionOverride})`);
@@ -5067,9 +5068,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         cycleAbortRef.current = null;
         cycleIdRef.current = null;
         // Release the collision scheduler slot regardless of outcome.
-        if (releaseSlot && collisionLeaseRef.current) {
-          releaseSlot(collisionLeaseRef.current);
-          collisionLeaseRef.current = null;
+        if (releaseSlot && cycleCollisionLease) {
+          releaseSlot(cycleCollisionLease);
+          cycleCollisionLease = null;
         }
       }
 
