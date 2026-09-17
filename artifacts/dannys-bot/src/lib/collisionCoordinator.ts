@@ -45,6 +45,10 @@ type CollisionState = {
   configVersion: number;
   configLoading: Promise<CollisionConfig> | null;
   queue: CollisionQueueEntry[];
+  // A slot remains pending from the moment it requests a collision lease
+  // until that lease is released. This survives React runtime remounts while
+  // the request is waiting in the device cooldown queue.
+  pendingSlotCounts: Map<number, number>;
   busy: boolean;
   activeLeaseId: string | null;
   activeSlot: number | null;
@@ -71,6 +75,7 @@ function getCollisionState(serial: string): CollisionState {
     configVersion: 0,
     configLoading: null,
     queue: [],
+    pendingSlotCounts: new Map(),
     busy: false,
     activeLeaseId: null,
     activeSlot: null,
@@ -101,6 +106,21 @@ function normalizeConfig(raw: unknown): CollisionConfig | null {
 
 function describe(source: CollisionSource, owner: string, slotIdx: number): string {
   return `${source}/${owner}/slot${slotIdx}`;
+}
+
+function markPending(state: CollisionState, slotIdx: number): void {
+  state.pendingSlotCounts.set(slotIdx, (state.pendingSlotCounts.get(slotIdx) ?? 0) + 1);
+}
+
+function unmarkPending(state: CollisionState, slotIdx: number): void {
+  const count = state.pendingSlotCounts.get(slotIdx) ?? 0;
+  if (count <= 1) state.pendingSlotCounts.delete(slotIdx);
+  else state.pendingSlotCounts.set(slotIdx, count - 1);
+}
+
+/** True while a slot owns or is waiting for a collision lease. */
+export function hasPendingCollisionSlot(serial: string, slotIdx: number): boolean {
+  return (getCollisionState(serial).pendingSlotCounts.get(slotIdx) ?? 0) > 0;
 }
 
 function resolveCancelled(entry: CollisionQueueEntry): void {
@@ -199,6 +219,8 @@ export async function requestCollisionSlot(
   readyAt: number,
   options: CollisionRequestOptions,
 ): Promise<CollisionLease> {
+  const pendingState = getCollisionState(serial);
+  markPending(pendingState, slotIdx);
   await loadCollisionConfig(serial);
   const state = getCollisionState(serial);
   const id = nextLeaseId(serial);
@@ -273,10 +295,12 @@ export function releaseCollisionSlot(
     state.activeOwner ?? "unknown",
     state.activeSlot ?? -1,
   );
+  const releasedSlot = state.activeSlot;
   state.activeLeaseId = null;
   state.activeSlot = null;
   state.activeSource = null;
   state.activeOwner = null;
+  if (releasedSlot !== null) unmarkPending(state, releasedSlot);
 
   const manualQueued = state.queue.some(entry => entry.manualOverride);
   if (skipRest || lease.manualOverride || !state.config.enabled || manualQueued) {
@@ -314,6 +338,7 @@ export function cancelCollisionSlot(
     `slot=${slotIdx}${source ? ` source=${source}` : ""}`,
   );
   for (const entry of cancelled) resolveCancelled(entry);
+  for (const entry of cancelled) unmarkPending(state, entry.slotIdx);
 }
 
 export function resetCollision(serial: string): void {
@@ -321,6 +346,7 @@ export function resetCollision(serial: string): void {
   if (state.restTimer !== null) clearTimeout(state.restTimer);
   for (const entry of state.queue) resolveCancelled(entry);
   state.queue = [];
+  state.pendingSlotCounts.clear();
   state.restTimer = null;
   state.busy = false;
   state.activeLeaseId = null;

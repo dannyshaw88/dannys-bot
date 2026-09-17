@@ -10,6 +10,7 @@ import {
   requestCollisionSlot,
   releaseCollisionSlot,
   cancelCollisionSlot,
+  hasPendingCollisionSlot,
   resetCollision,
   setCollisionConfig,
   type CollisionLease,
@@ -4649,6 +4650,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // fresh mount rescheduleFnRef.current is null (cleanup nulled it).
     let recoveredFireAt: number | null = null;
     const forceImmediateToggle = forceImmediateToggleRef.current;
+    const collisionTurnPending = slotIdx !== undefined && hasPendingCollisionSlot(serial, slotIdx);
     if (_hstTimers.has(key)) {
       if (
         rescheduleFnRef.current !== null &&
@@ -4674,6 +4676,17 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       }
       // Fall through — the rest of the effect sets up fresh closures and
       // reschedules with the remaining time (or a fresh delay if expired).
+    }
+
+    // A collision-prevented turn is already waiting in the device coordinator.
+    // Its original HST timer was consumed when runCycle entered the queue. A
+    // React remount during the 15–20 minute device rest must not interpret the
+    // missing timer as a fresh startup and schedule another 175–250 minute HST
+    // interval. The queued cycle itself owns the next execution.
+    if (collisionTurnPending && !forceImmediateToggle && !manualToggleOnRef.current) {
+      srvLog(`${hstDebugTag} — collision turn already pending; preserving coordinator wait instead of starting HST interval`);
+      setRunning(false);
+      return;
     }
 
     // Clear any stale stop flag left from a previous disable cycle.
