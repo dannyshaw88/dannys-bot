@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Clock3 } from "lucide-react";
 import { getTrustLevels } from "./TrustScoreBadge";
 import {
@@ -14,34 +14,6 @@ type TimerResponse = {
   remainingMs?: number | null;
   expiresAt?: number | null;
 };
-
-type TimerCheckpoint = { scoreId: string; remainingMs: number };
-
-function checkpointKey(serial: string, slotIdx: number, slotId?: string): string {
-  return `mobile_ts_timer_${serial}_${slotId || `index-${slotIdx}`}`;
-}
-
-function readCheckpoint(serial: string, slotIdx: number, scoreId: string, slotId?: string): number | null {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(checkpointKey(serial, slotIdx, slotId)) ?? "null") as Partial<TimerCheckpoint> | null;
-    return parsed?.scoreId === scoreId && typeof parsed.remainingMs === "number" && parsed.remainingMs > 0
-      ? parsed.remainingMs
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCheckpoint(serial: string, slotIdx: number, scoreId: string, remainingMs: number, slotId?: string): void {
-  try {
-    localStorage.setItem(
-      checkpointKey(serial, slotIdx, slotId),
-      JSON.stringify({ scoreId, remainingMs: Math.max(0, Math.round(remainingMs)) }),
-    );
-  } catch {
-    // The server remains authoritative when browser storage is unavailable.
-  }
-}
 
 function formatRemaining(ms: number): string {
   const totalMinutes = Math.max(0, Math.ceil(ms / 60_000));
@@ -71,11 +43,14 @@ export function TrustScoreCountdown({
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [advancing, setAdvancing] = useState(false);
+  const loadRequestRef = useRef(0);
 
   const currentIndex = levels.findIndex(level => level.id === scoreId);
   const nextScore = currentIndex >= 0 ? levels[currentIndex + 1] : null;
 
   const load = useCallback(async () => {
+    const requestId = ++loadRequestRef.current;
+    const isCurrentRequest = () => requestId === loadRequestRef.current;
     if (!serial) {
       setRemainingMs(null);
       setExpiresAt(null);
@@ -91,6 +66,7 @@ export function TrustScoreCountdown({
       const assigned = assignment.ok
         ? await assignment.json() as { scoreId?: string | null }
         : null;
+      if (!isCurrentRequest()) return;
       const liveScoreId = assigned?.scoreId ?? null;
       setScoreId(liveScoreId);
       const liveIndex = levels.findIndex(level => level.id === liveScoreId);
@@ -106,30 +82,29 @@ export function TrustScoreCountdown({
       );
       if (!response.ok) throw new Error("Timer request failed");
       const data = await response.json() as TimerResponse;
+      if (!isCurrentRequest()) return;
       if (data.scoreId !== liveScoreId || data.paused) {
         setRemainingMs(null);
         setExpiresAt(null);
         return;
       }
-      // A device can disappear from the Accounts list and later reappear.
-      // Preserve the last displayed value across that unmount/remount instead
-      // of allowing the server's wall-clock expiry to consume the timer while
-      // the phone is disconnected.
-      const checkpoint = readCheckpoint(serial, slotIdx, liveScoreId, slotId);
+      // The server owns the wall-clock expiry. Never replace an expired server
+      // timer with an older browser checkpoint: doing that makes the countdown
+      // recycle its previous value and delays promotion to the next label.
       const serverRemaining = typeof data.remainingMs === "number" ? data.remainingMs : 0;
-      const effectiveRemaining = Math.max(serverRemaining, checkpoint ?? 0);
-      if (!effectiveRemaining) {
-        setRemainingMs(null);
-        setExpiresAt(null);
+      if (serverRemaining <= 0) {
+        // Keep a zero-valued state long enough for the interval effect to call
+        // advance(). This also promotes an already-expired timer after a page
+        // remount instead of waiting for another manual assignment.
+        setRemainingMs(0);
+        setExpiresAt(Date.now() - 1);
         return;
       }
-      setRemainingMs(effectiveRemaining);
+      setRemainingMs(serverRemaining);
       setExpiresAt(
-        checkpoint && checkpoint > serverRemaining
-          ? Date.now() + effectiveRemaining
-          : typeof data.expiresAt === "number" && Number.isFinite(data.expiresAt)
+        typeof data.expiresAt === "number" && Number.isFinite(data.expiresAt)
           ? data.expiresAt
-          : Date.now() + effectiveRemaining,
+          : Date.now() + serverRemaining,
       );
       writeUiSpeedLog("trust-score-countdown-ready", {
         serial,
@@ -165,6 +140,9 @@ export function TrustScoreCountdown({
   const advance = useCallback(async () => {
     if (advancing || !scoreId || !nextScore) return;
     setAdvancing(true);
+    // Invalidate an assignment/timer read that began before this promotion.
+    // Its response must not restore the old score after the advance succeeds.
+    loadRequestRef.current++;
     try {
       const response = await fetch(
         `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/trust-score-timer/advance`,
@@ -212,12 +190,7 @@ export function TrustScoreCountdown({
       if (left === 0) void advance();
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [advance, expiresAt, remainingMs]);
-
-  useEffect(() => {
-    if (remainingMs === null || !scoreId) return;
-    writeCheckpoint(serial, slotIdx, scoreId, remainingMs, slotId);
-  }, [remainingMs, scoreId, serial, slotIdx, slotId]);
+  }, [advance, expiresAt]);
 
   if (remainingMs === null || !scoreId || !nextScore) return null;
 

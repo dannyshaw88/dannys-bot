@@ -52,10 +52,11 @@ logical_id = "f0d7caf3-d8f9-47b7-91a4-57bba2530b46"
 [[outputs]]
 id = "_z86nWfhRgPGSPL8QzX9I"
 uri = "file://attached_assets/spy-icon-options.html"
-type = "text"
+type = "html"
 title = "Ghost Browser icon options"
 description = "Visual comparison sheet for five spy-themed sidebar icon directions."
 logical_id = "92f01516-1acd-4197-9512-4c63c71899d5"
+content_type = "text/html"
 
 [[outputs]]
 id = "xleXsZnfLpD3HoARbXqS3"
@@ -84,3 +85,31 @@ mtime_ms = 1787817854131
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/463920d8-f954-4731-9cca-9f2d68d21c51/e645e014-dad9-4cdc-a3ef-66e3391bb064"
 storage_version_token = "1787838059654412"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "cLEkXg3yItDmeg_uWnfHl"
+uri = "file://OLD_EQUINOX/OLD_EQUINOX_snapshot.tar.gz.enc"
+type = "unspecified"
+title = "Legacy Equinox API and Browser Engine"
+description = "Encrypted OLD_EQUINOX snapshot containing the legacy API and embedded-browser automation project."
+logical_id = "df91990a-8d8c-4a09-b15a-acd8966c4dd3"
+content_hash = "sha256:62cd0dae0037bce534546bd89d3a163c69d5eead8e0db39f6b8e7a550ac33aaf"
+size = 89428400
+mtime_ms = 1789732972170
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/df91990a-8d8c-4a09-b15a-acd8966c4dd3/1c0bdfe3-0d53-439f-97f3-5a1046ad9a1c"
+storage_version_token = "1789732980238423"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "duUZaStpaMjs2FtcRAia_"
+uri = "file://EQUINOX-legacy-project.zip"
+type = "unspecified"
+title = "Equinox Legacy Project — Ready for Replit Import"
+description = "Decrypted and repackaged full legacy Equinox project with 886 files, including source, configuration, scripts, and the archived runtime database."
+logical_id = "a3d6cad2-8e26-47ca-9d51-85be9306e49d"
+content_hash = "sha256:60de0a9ec70da6b58b0c401be486220f067b7993d19a960e6b0da180bbb93ca9"
+size = 89814281
+mtime_ms = 1789733463583
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/a3d6cad2-8e26-47ca-9d51-85be9306e49d/61d1e657-5b5d-4acc-8a4c-63500321e470"
+storage_version_token = "1789733470682420"
+content_type = "application/octet-stream"
