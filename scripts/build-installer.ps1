@@ -27,31 +27,47 @@ function Get-GitRemote {
 }
 
 $GitRemote = Get-GitRemote
-$GitStatus = @(git status --porcelain | Where-Object {
-  # Electron Builder creates this output locally; it is never source input
-  # and must not make an otherwise clean checkout fail the sync guard.
-  $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+release(?:[\\/]|$)' -and
-  $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+package-lock\.json$'
-})
-if ($GitStatus.Count -gt 0) {
-  Write-Host "The checkout contains local changes or untracked files:" -ForegroundColor Yellow
-  $GitStatus | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
-  throw "Refusing to pull/build from a dirty checkout. Commit, stash, or remove these files first."
-}
-
 if (@(git diff --name-only --diff-filter=U).Count -gt 0) {
   throw "Unresolved merge conflicts detected. Resolve them and verify 'git status' is clean before building."
 }
+
+$AutomaticStashRef = $null
 
 Invoke-Step "Pull latest GitHub changes" {
   git fetch $GitRemote main
   if ($LASTEXITCODE -ne 0) {
     throw "Fetching latest GitHub changes failed."
   }
+
+  $GitStatus = @(git status --porcelain | Where-Object {
+    # Electron Builder creates this output locally; it is never source input
+    # and must not make an otherwise clean checkout fail the sync guard.
+    $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+release(?:[\\/]|$)' -and
+    $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+package-lock\.json$'
+  })
+  if ($GitStatus.Count -gt 0) {
+    $StashMessage = "build-installer automatic backup $(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    Write-Host "The checkout contains local changes. Preserving them in Git stash before syncing:" -ForegroundColor Yellow
+    $GitStatus | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
+    git stash push --include-untracked --message $StashMessage
+    if ($LASTEXITCODE -ne 0) {
+      throw "Could not preserve the local checkout in Git stash."
+    }
+    $AutomaticStashRef = @(git stash list -1 --format="%gd")[0]
+    if ([string]::IsNullOrWhiteSpace($AutomaticStashRef)) {
+      throw "Git stash completed but its backup reference could not be identified."
+    }
+    Write-Host "Preserved local changes as $AutomaticStashRef. They were not reapplied to the release checkout." -ForegroundColor Yellow
+  }
+
   git merge --ff-only "$GitRemote/main"
   if ($LASTEXITCODE -ne 0) {
-    throw "Local branch cannot be fast-forwarded from $GitRemote/main. Resolve the divergence manually; no merge was created."
+    throw "Local branch cannot be fast-forwarded from $GitRemote/main. The local changes remain preserved in $AutomaticStashRef."
   }
+}
+
+if ($null -ne $AutomaticStashRef) {
+  Write-Host "Building from the clean synced checkout. Restore the preserved work later with: git stash apply $AutomaticStashRef" -ForegroundColor Yellow
 }
 
 Invoke-Step "Install workspace dependencies" {
