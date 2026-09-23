@@ -71,6 +71,8 @@ export async function persistHstToggle(input: {
   slotId?: string;
   enabled: boolean;
   source: HstToggleSource;
+  /** Called after persistence succeeds and immediately before the event is broadcast. */
+  onAccepted?: (event: HstToggleEvent) => void;
 }): Promise<HstToggleEvent> {
   const event = nextEvent(
     input.serial,
@@ -101,6 +103,11 @@ export async function persistHstToggle(input: {
     if (!response.ok || !body?.ok) {
       throw new Error(body?.error ?? `Toggle save failed (${response.status})`);
     }
+    // Give the originating runtime a chance to mark its own request before the
+    // same-window CustomEvent is delivered back through App.tsx. This prevents
+    // a local Phone Farm toggle from being applied a second time by the direct
+    // mounted-runtime handoff.
+    input.onAccepted?.(event);
     broadcast(event);
     return event;
   });

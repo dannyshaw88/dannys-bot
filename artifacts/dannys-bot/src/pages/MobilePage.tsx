@@ -4167,6 +4167,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // component unmount (user navigating to another page).  This prevents the
   // running cycle from being killed just because the user switched tabs.
   const explicitToggleOffRef = useRef(false);
+  // The Phone Farm runtime applies its own local state change before the
+  // accepted toggle event is broadcast. Remember those request IDs so the
+  // same mounted runtime does not apply the event again and schedule a second
+  // immediate timer after the first one has already fired.
+  const locallyIssuedToggleIdsRef = useRef(new Set<string>());
 
   // When the slot runtime is mounted, it is the authoritative owner of the
   // HST loop. This prevents the always-mounted app listener from also starting
@@ -4259,6 +4264,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       slotId,
       enabled,
       source: "phone-farm",
+      onAccepted: event => {
+        locallyIssuedToggleIdsRef.current.add(event.requestId);
+      },
     })
       .then(event => {
         onLog?.(`[HST-TOGGLE] source=phone-farm serial=${serial} slot=${slotIdx} ` +
@@ -4278,6 +4286,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   }, [phone?.serial, slotIdx, slotId, invalidHstSlot, onLog]);
 
   const applyEnabledFromCoordinator = useCallback((event: HstToggleEvent) => {
+    if (locallyIssuedToggleIdsRef.current.delete(event.requestId)) {
+      onLog?.(`[HST-TOGGLE] source=${event.source} serial=${event.serial} slot=${event.slotIdx} ` +
+        `slotId=${event.slotId ?? "none"} enabled=${event.enabled} revision=${event.revision} ` +
+        `requestId=${event.requestId} applied=local-state-already-owned`);
+      return;
+    }
     // Coordinator revisions are scoped to the originating browser context.
     // They are diagnostic ordering values, not a cross-tab Lamport clock, so
     // never compare them with this component's local edit counter.
