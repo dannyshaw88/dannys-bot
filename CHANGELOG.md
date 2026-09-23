@@ -1,3 +1,10 @@
+## [1.2.556] — 2026-09-23
+
+### Fixed — Prevent Duplicate Human Session Tool Runs
+
+- Turning an account slot off and back on now runs one immediate Human Session Tool cycle instead of replaying the same toggle and starting a duplicate cycle.
+- The configured Run-every interval remains in control of the next scheduled cycle.
+
 ## [1.2.555] — 2026-09-23
 
 ### Fixed — TrustScore Countdown Promotion
