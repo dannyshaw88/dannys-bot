@@ -373,10 +373,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const demuxerRef   = useRef<AnnexBDemuxer | null>(null);
   const decoderRef   = useRef<VideoDecoder | null>(null);
   const configuredRef = useRef(false);
-  // The server intentionally terminates the transport when the decoder asks
-  // for a fresh keyframe. That is an unclean WebSocket close (1006) by
-  // design, so keep it out of the user-facing error log.
-  const resyncCloseExpectedRef = useRef(false);
   // Kept in a ref (not state) so the pointer-event handlers always see the
   // latest value without needing to be recreated on every toggle.
   const inspectModeRef = useRef(false);
@@ -546,27 +542,39 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       }
     };
 
-    // A decoder reset invalidates its reference frame. Ask the server for a
-    // fresh transport so the next decoder starts at a new IDR/keyframe instead
-    // of receiving delta frames from the old stream.
+    // A decoder reset invalidates its reference frame. Reset the decoder in
+    // place and wait for the next IDR/keyframe. The WebSocket stays open so a
+    // temporary decode backlog cannot turn into a visible disconnect cycle.
     const requestVideoResync = (reason: string) => {
       if (!active || !useVideoRef.current) return;
       const now = Date.now();
       if (now - lastVideoResyncAt < 3_000) return;
       lastVideoResyncAt = now;
       decodeQueueHighSince = 0;
-      resyncCloseExpectedRef.current = true;
       waitingForKeyFrame = true;
-      closeDecoder(true);
-      addLog(`Mirror resync requested — ${reason}`);
+      const decoder = decoderRef.current;
+      if (decoder) {
+        try {
+          // reset() drops queued frames without closing the transport or
+          // clearing the last good canvas frame.
+          decoder.reset();
+          configuredRef.current = false;
+        } catch {
+          // A decoder that has already entered the closed/error state needs a
+          // new instance, but the incoming WebSocket can still be reused.
+          closeDecoder();
+        }
+      } else {
+        closeDecoder();
+      }
+      // Ask the server for a fresh SPS/IDR without asking it to tear down the
+      // transport. This also keeps older server/client combinations from
+      // waiting on the encoder's next periodic keyframe.
       const socket = wsRef.current;
       if (socket?.readyState === WebSocket.OPEN) {
-        try {
-          socket.send(JSON.stringify({ clientLag: true }));
-        } catch {
-          // The close handler will reconnect if the transport is already gone.
-        }
+        try { socket.send(JSON.stringify({ clientLag: true })); } catch { /* reconnect path handles a dead socket */ }
       }
+      addLog(`Mirror decoder resync — waiting for a fresh keyframe (${reason})`);
     };
 
     const getCtx = (): CanvasRenderingContext2D | null => {
@@ -700,7 +708,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       lastDecodedAtRef.current = 0;
       phoneSizeRef.current = null;
       decodeQueueHighSince = 0;
-      resyncCloseExpectedRef.current = false;
       lastVideoResyncAt = 0;
       waitingForKeyFrame = true;
       closeDecoder();
@@ -743,13 +750,9 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       };
 
       ws.onclose = (ev) => {
-        const expectedResync = resyncCloseExpectedRef.current && ev.code === 1006;
-        resyncCloseExpectedRef.current = false;
-        addLog(expectedResync
-          ? "Mirror transport reset for decoder resync — reconnecting"
-          : ev.code === 1006
-            ? "Mirror transport interrupted — reconnecting"
-            : `WS closed — code=${ev.code} reason="${ev.reason || "none"}"`);
+        addLog(ev.code === 1006
+          ? "Mirror transport interrupted — reconnecting"
+          : `WS closed — code=${ev.code} reason="${ev.reason || "none"}"`);
         if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
         closeDecoder();
         if (!active) return;
@@ -843,16 +846,16 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           if (typeof decoder.decodeQueueSize === "number") {
             const queueSize = decoder.decodeQueueSize;
             // A queue of a few frames is normal while the software decoder
-            // catches up. Only resync when the backlog stays materially high;
-            // a one-sample spike was causing a needless terminate()/1006
-            // cycle every few seconds on slower Electron machines.
-            if (queueSize > 12) {
+            // catches up. Only reset the decoder when the backlog stays
+            // materially high; a one-sample spike must never interrupt the
+            // live transport.
+            if (queueSize > 24) {
               if (!decodeQueueHighSince) decodeQueueHighSince = performance.now();
-              if (performance.now() - decodeQueueHighSince > 1_200) {
+              if (performance.now() - decodeQueueHighSince > 2_000) {
                 requestVideoResync(`decoder queue stayed at ${queueSize}+ frames`);
                 return;
               }
-            } else if (queueSize < 4) {
+            } else if (queueSize < 8) {
               decodeQueueHighSince = 0;
             }
           }

@@ -1647,19 +1647,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       ws.on("close", () => cleanup("close"));
       ws.on("error", (err) => { logger.error({ serial, err }, "[mobile-video] WebSocket error"); cleanup("error"); });
 
-      // ── Client-triggered resync ───────────────────────────────────────────
-      // The client sends { clientLag: true } when its WebCodecs decode queue
-      // has backed up. The server must terminate this WebSocket, not only
-      // restart screenrecord: bytes already queued in the old socket would
-      // otherwise remain ahead of the fresh keyframe and preserve the lag.
+      // ── Client-triggered encoder resync ───────────────────────────────────
+      // Older clients send { clientLag: true } when their WebCodecs decode
+      // queue backs up. Restart the encoder to produce a fresh SPS/IDR, but
+      // keep this WebSocket alive. Terminating the transport here created a
+      // visible disconnect/reconnect loop every time the browser briefly fell
+      // behind. The client waits for the fresh keyframe and skips stale
+      // delta frames on the existing stream.
       ws.on("message", (raw: Buffer | string) => {
         try {
           const msg = JSON.parse(raw.toString());
           if (msg.clientLag && running) {
-            logger.warn({ serial }, "[mobile-video] client reported decode lag — reconnecting video transport");
+            if (Date.now() - lastLagRestart < 4_000) return;
+            logger.warn({ serial }, "[mobile-video] client reported decode lag — restarting encoder without dropping transport");
             lastLagRestart = Date.now();
             try { currentChild?.kill(); } catch { /* ignore — close handler restarts */ }
-            if (ws.readyState === 1) ws.terminate();
           }
         } catch { /* ignore non-JSON control frames */ }
       });

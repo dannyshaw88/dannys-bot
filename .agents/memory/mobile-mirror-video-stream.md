@@ -12,6 +12,6 @@ The Mobile Farm phone mirror streams via `adb exec-out screenrecord --output-for
 - `screenrecord` hard-caps each invocation at ~180s; the backend must auto-respawn on exit or the stream silently stops.
 - An explicitly opened mirror owns a reference-counted screen-timeout lease and a periodic `KEYCODE_WAKEUP` keepalive; reconnect cleanup must not restore the OEM timeout while another mirror WebSocket is still live.
 - The Power button must derive its label/action from recent decoded-frame status, not only the requested manual-live flag; a black timed-out mirror must offer WAKEUP, not SLEEP.
-- After any WebCodecs reset, discard delta access units until a keyframe; when lag is detected, reconnect the WebSocket rather than only restarting screenrecord because queued bytes survive on the old transport.
-- Intentional lag recovery uses `ws.terminate()`, so the browser reports close code 1006; classify that as an expected mirror resync, debounce sustained decoder backlog, and keep the resync cooldown across reconnects to prevent reset loops.
+- After any WebCodecs reset, discard delta access units until a keyframe; lag recovery must keep the WebSocket alive and restart only `screenrecord`, otherwise normal decoder backlog becomes a visible disconnect loop.
+- Decoder lag recovery should be debounced and request a fresh SPS/IDR over the existing transport; reserve WebSocket termination and close-code handling for genuine transport failure.
 - Do not regress to screenshot polling as the primary path — it's now the fallback only.
