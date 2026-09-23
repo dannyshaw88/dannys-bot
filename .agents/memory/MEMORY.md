@@ -106,6 +106,7 @@
 - [TrustScore expiry promotion](trustscore-expiry-promotion.md) — publish the committed next score directly; never double-write the assignment at timer expiry
 - [Windows installer CI assertions](windows-installer-ci-assertions.md) — keep text-based workflow checks aligned with the current UI, especially after copy changes
 - [Uploaded attachment auto-commit](uploaded-attachment-auto-commit.md) — an uploaded asset may be committed automatically during a later push even when it was not manually staged
+- [Windows LFS pointer line endings](windows-lfs-pointer-line-endings.md) — GitHub-written CRLF LFS pointers make Windows checkouts appear dirty; normalize pointers to LF before installer builds
 - [Males Only allowlist filter](males-only-allowlist-filter.md) — explicit comma-separated names match HikerAPI username, full name, or bio; never infer gender
 - [Mobile offline HST gate](mobile-offline-hst-gate.md) — pause all slot cycles on non-ready ADB state while preserving the saved toggle for reconnect resume
 - [Follow exact-target gate](follow-exact-target-gate.md) — never select a search result by row order; require an exact username node or abort and clear before the next target
