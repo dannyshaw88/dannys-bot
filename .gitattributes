@@ -1,3 +1,5 @@
 OLD_EQUINOX/OLD_EQUINOX_snapshot.tar.gz.enc filter=lfs diff=lfs merge=lfs -text
 EQUINOX-legacy-project.zip filter=lfs diff=lfs merge=lfs -text
 *.zip filter=lfs diff=lfs merge=lfs -text
+attached_assets/New_folder_1787418386887.zip -filter -diff -merge
+attached_assets/Redmi_12_5G_1786439058233.zip -filter -diff -merge
