@@ -49,20 +49,31 @@ Invoke-Step "Pull latest GitHub changes" {
     $StashMessage = "build-installer automatic backup $(Get-Date -Format 'yyyyMMdd-HHmmss')"
     Write-Host "The checkout contains local changes. Preserving them in Git stash before syncing:" -ForegroundColor Yellow
     $GitStatus | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }
-    git stash push --include-untracked --message $StashMessage
+    # Older Windows checkouts can contain large ZIP files whose LFS filters
+    # are already broken. Exclude ZIPs from the stash operation so Git does
+    # not block on those stale binary filters; the remote checkout below
+    # replaces the tracked copies with the verified release versions.
+    $StashBefore = @(git stash list -1 --format="%gd")
+    git stash push --include-untracked --message $StashMessage -- . ':(exclude)*.zip' ':(exclude)**/*.zip'
     if ($LASTEXITCODE -ne 0) {
       throw "Could not preserve the local checkout in Git stash."
     }
-    $AutomaticStashRef = @(git stash list -1 --format="%gd")[0]
-    if ([string]::IsNullOrWhiteSpace($AutomaticStashRef)) {
+    $StashAfter = @(git stash list -1 --format="%gd")
+    if ($StashAfter.Count -gt 0 -and ($StashBefore.Count -eq 0 -or $StashAfter[0] -ne $StashBefore[0])) {
+      $AutomaticStashRef = $StashAfter[0]
+      Write-Host "Preserved non-ZIP local changes as $AutomaticStashRef. They were not reapplied to the release checkout." -ForegroundColor Yellow
+    } elseif (@($GitStatus | Where-Object { $_ -notmatch '\.zip$' }).Count -gt 0) {
       throw "Git stash completed but its backup reference could not be identified."
     }
-    Write-Host "Preserved local changes as $AutomaticStashRef. They were not reapplied to the release checkout." -ForegroundColor Yellow
   }
 
-  git merge --ff-only "$GitRemote/main"
+  git merge-base --is-ancestor HEAD "$GitRemote/main"
   if ($LASTEXITCODE -ne 0) {
-    throw "Local branch cannot be fast-forwarded from $GitRemote/main. The local changes remain preserved in $AutomaticStashRef."
+    throw "Local branch has commits that are not in $GitRemote/main. No local commits were overwritten."
+  }
+  git reset --hard "$GitRemote/main"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Could not sync the checkout to $GitRemote/main."
   }
 }
 
