@@ -347,9 +347,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   // (= CSS-pixel) coords. Set by drawFrame() on every frame so mapToPhone()
   // reads from the exact same numbers used to paint — no CSS inference at all.
   const drawRectRef  = useRef<{ dx: number; dy: number; dw: number; dh: number } | null>(null);
-  // Re-render coordinate overlays when a new frame establishes or changes the
-  // phone-to-canvas geometry. Refs alone do not trigger React rendering.
-  const [, setGeometryRevision] = useState(0);
   // Tap indicator: shows where the mouse clicked (red) vs where the system
   // sent the tap (blue). In Click Test mode a second click adds a yellow dot
   // (user marking where the tap *should* have landed). All in canvas-CSS-pixel space.
@@ -515,6 +512,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let noFrameTimer:   ReturnType<typeof setTimeout> | null = null;
     let attemptCount = 0;
+    let lastVideoResyncAt = 0;
+    let waitingForKeyFrame = true;
     // Reset per mount (i.e. per device serial — LiveCanvas is keyed by
     // serial in the parent) so a fallback on one phone never sticks around
     // and silently skips the video path for a different phone reusing this
@@ -539,6 +538,27 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         const canvas = canvasRef.current;
         const ctx = ctxRef.current;
         if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    };
+
+    // A decoder reset invalidates its reference frame. Ask the server for a
+    // fresh transport so the next decoder starts at a new IDR/keyframe instead
+    // of receiving delta frames from the old stream.
+    const requestVideoResync = (reason: string) => {
+      if (!active || !useVideoRef.current) return;
+      const now = Date.now();
+      if (now - lastVideoResyncAt < 3_000) return;
+      lastVideoResyncAt = now;
+      waitingForKeyFrame = true;
+      closeDecoder(true);
+      addLog(`Mirror resync requested — ${reason}`);
+      const socket = wsRef.current;
+      if (socket?.readyState === WebSocket.OPEN) {
+        try {
+          socket.send(JSON.stringify({ clientLag: true }));
+        } catch {
+          // The close handler will reconnect if the transport is already gone.
+        }
       }
     };
 
@@ -637,7 +657,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           dw = cw; dh = Math.round(dw / phoneRatio); dx = 0; dy = Math.round((ch - dh) / 2);
         }
         drawRectRef.current = { dx, dy, dw, dh };
-        setGeometryRevision(value => value + 1);
         const ctx = getCtx();
         if (ctx) {
           ctx.fillStyle = "#000";
@@ -657,7 +676,12 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       demuxerRef.current = new AnnexBDemuxer();
       const decoder = new VideoDecoder({
         output: drawFrame,
-        error: (e) => { addLog(`Decoder error: ${e.message} — falling back to screenshot stream`); useVideoRef.current = false; if (active) { closeDecoder(); wsRef.current?.close(); } },
+        error: (e) => {
+          // WebCodecs permanently errors a decoder after a bad reference-frame
+          // sequence. Keep H.264 and request a fresh stream instead of hiding
+          // the problem behind the much slower PNG polling fallback.
+          requestVideoResync(e.message);
+        },
       });
       decoderRef.current = decoder;
       return decoder;
@@ -668,6 +692,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       frameSeenRef.current = false;
       lastDecodedAtRef.current = 0;
       phoneSizeRef.current = null;
+      lastVideoResyncAt = 0;
+      waitingForKeyFrame = true;
       closeDecoder();
       attemptCount++;
       const url = useVideoRef.current ? makeVideoWsUrl(serial) : makeWsUrl(serial);
@@ -730,10 +756,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
               setStatus(/screen is off|locked/i.test(j.error) ? "asleep" : "error");
             } else if (j.info) {
               addLog(j.info);
-              // Server restarted screenrecord (either its own watchdog or in
-              // response to our clientLag signal). Flush decoder + clear canvas
-              // immediately so we don't keep playing back the old queued frames.
+              // If the server reports a stream restart, flush the decoder and
+              // clear the canvas so we don't keep playing old queued frames.
               if (/resync|fell behind/i.test(j.info)) {
+                waitingForKeyFrame = true;
                 closeDecoder(true /* clearCanvas */);
               }
             }
@@ -793,14 +819,16 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         }
 
         // Real H.264 stream: demux Annex-B bytes into access units and feed
-        // WebCodecs. Decode every frame — no client-side dropping or lag
-        // signals. The server-side bufferedAmount watchdog handles genuine
-        // TCP backlog; letting WebCodecs drain its own queue at GPU speed is
-        // always faster than dropping frames and triggering restarts.
+        // WebCodecs. Keep the decoder queue short so the canvas stays close to
+        // the live phone instead of faithfully playing seconds-old frames.
         const decoder = ensureDecoder();
         const demuxer = demuxerRef.current!;
         const units = demuxer.push(new Uint8Array(ev.data as ArrayBuffer));
         for (const unit of units) {
+          if (typeof decoder.decodeQueueSize === "number" && decoder.decodeQueueSize > 6) {
+            requestVideoResync(`decoder queue reached ${decoder.decodeQueueSize} frames`);
+            return;
+          }
           if (!configuredRef.current) {
             const sps = demuxer.getSps();
             if (!sps) continue; // wait for an SPS before configuring
@@ -816,6 +844,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             }
           }
           if (!configuredRef.current) continue;
+          // A stream/decoder reset may expose delta frames before the next
+          // IDR. They cannot be decoded without the previous reference frame.
+          if (waitingForKeyFrame && !unit.keyFrame) continue;
+          if (unit.keyFrame) waitingForKeyFrame = false;
           try {
             decoder.decode(new EncodedVideoChunk({
               type: unit.keyFrame ? "key" : "delta",

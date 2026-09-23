@@ -1649,19 +1649,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       // ── Client-triggered resync ───────────────────────────────────────────
       // The client sends { clientLag: true } when its WebCodecs decode queue
-      // has been backed up for >800ms. The server-side ws.bufferedAmount check
-      // only catches TCP send-buffer backlog (i.e. client can't receive fast
-      // enough) — it misses the case where TCP delivers data quickly but the
-      // client's GPU decoder falls behind. This bidirectional signal is the
-      // only reliable way to catch that second scenario.
+      // has backed up. The server must terminate this WebSocket, not only
+      // restart screenrecord: bytes already queued in the old socket would
+      // otherwise remain ahead of the fresh keyframe and preserve the lag.
       ws.on("message", (raw: Buffer | string) => {
         try {
           const msg = JSON.parse(raw.toString());
           if (msg.clientLag && running) {
-            logger.warn({ serial }, "[mobile-video] client reported decode lag — restarting screenrecord");
-            if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Mirror fell behind — resyncing…" }));
+            logger.warn({ serial }, "[mobile-video] client reported decode lag — reconnecting video transport");
             lastLagRestart = Date.now();
             try { currentChild?.kill(); } catch { /* ignore — close handler restarts */ }
+            if (ws.readyState === 1) ws.terminate();
           }
         } catch { /* ignore non-JSON control frames */ }
       });
@@ -1677,11 +1675,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // it. The stream doesn't visibly break, it just falls further and
       // further behind real time, which looks exactly like "stopped being
       // 30fps" / "awful lag" to the user, and — critically — never recovers
-      // on its own; only a full reconnect used to clear it. Poll the queued
-      // byte count and force a fresh screenrecord (which restarts from a
-      // clean IDR frame with an empty send queue) whenever it backs up past
-      // ~2 seconds of video at the stream's own bit rate, so lag is bounded
-      // and self-healing instead of compounding for the rest of the session.
+      // on its own. Poll the queued byte count and terminate the transport
+      // whenever it backs up past the threshold. The client then reconnects
+      // with a new socket, which is what actually clears the stale bytes.
       // Threshold lowered from 2 MB to 800 KB so the watchdog fires much
       // sooner — at 8 Mbps, 800 KB is only ~0.8 s of buffered video, which
       // keeps the observed lag tight. The watchdog also runs every 500 ms
@@ -1693,9 +1689,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const buffered = ws.bufferedAmount;
         if (buffered > LAG_BYTES_THRESHOLD && Date.now() - lastLagRestart > 4000) {
           lastLagRestart = Date.now();
-          logger.warn({ serial, buffered }, "[mobile-video] send buffer backed up — forcing screenrecord restart to clear lag");
-          if (ws.readyState === 1) ws.send(JSON.stringify({ info: "Mirror fell behind — resyncing…" }));
+          logger.warn({ serial, buffered }, "[mobile-video] send buffer backed up — reconnecting video transport to clear lag");
           try { currentChild?.kill(); } catch { /* ignore — close handler restarts */ }
+          if (ws.readyState === 1) ws.terminate();
         }
       }, 500);
 
