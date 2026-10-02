@@ -590,7 +590,12 @@ if (!shareConfirmed) {
 recordPostedLocalFile(serial, slotIdx, fileName);
 recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName);
 if (deleteAfterUpload) {
-  try { await fsPromises.unlink(localFilePath); } catch { /* best effort */ }
+  try {
+    await fsPromises.unlink(localFilePath);
+    onLog?.(`Make a Post: deleted original PC image "${fileName}" after confirmed upload.`);
+  } catch (error: any) {
+    onLog?.(`Make a Post: upload confirmed, but could not delete original PC image "${fileName}": ${error?.message ?? "unknown error"}`);
+  }
 }
 // Always remove the temp copy pushed to the device — it is only needed
 // for the picker/upload. Leaving it behind fills up the camera roll.
