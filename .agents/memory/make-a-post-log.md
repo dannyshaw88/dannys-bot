@@ -137,6 +137,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 - **How to apply:** preserve this range unless the user changes it. Physical-device confirmation is still required.
 - Status: API package build passed and the API Server workflow restarted; physical-device confirmation is still required.
 
+### 2026-10-02 — Second Next dispatch is confirmed; reason for no transition is not
+- The supplied device log shows Filters skipped, a 2.3-second dwell, and the second Next requested and dispatched at exactly `(962,2212)` on a `1080x2408` display. The following screen still shows the editor's Next button, and the caption/Share screen was not detected.
+- The current path uses manual exact input with no jitter or mirror-video rescaling. Its post-tap log means the ADB input command returned; it does not prove Android or Instagram handled the touch.
+- **Conclusion:** the evidence does not identify a coordinate, calibration, or dwell defect, so do not change those values speculatively. The exact reason the UI ignored or did not receive the tap remains unconfirmed without a device input/event trace.
+- Status: diagnosis only; no code change; physical-device confirmation remains necessary.
+
 ### 2026-08-04 — Broad Add lookup tapped Add audio on final post screen
 - The optional Map preview confirmation was checked with a substring matcher
   for `Add`. On a run where the popup was absent, that matched the final
