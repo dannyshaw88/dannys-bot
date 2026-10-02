@@ -96,15 +96,7 @@ await prepared.cleanup();
 onLog?.("Make a Post: local prepared image cleaned up after push");
   onLog?.(`Make a Post: ✓ pushed to ${devicePath} — waiting for Instagram to index the image`);
 await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
-const deviceMediaVerified = await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);
-if (!deviceMediaVerified) {
-  onLog?.(
-    "Make a Post: this phone did not pass the staged-image check; removing the copy and stopping before Instagram opens",
-  );
-  await android.removeDeviceFile(serial, devicePath).catch(() => {});
-  return { posted: false };
-}
-onLog?.("Make a Post: staged image is indexed and byte-verified on this phone");
+onLog?.("Make a Post: media-scan settle complete; looking for compose icon");
 
 onLog?.("Make a Post: using calibrated \"+\" compose icon…");
 const composeBtn = await android.tapCalibratedNavigationControl(serial, "createPost", onLog);

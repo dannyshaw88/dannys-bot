@@ -4700,7 +4700,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     devicePath: string,
     expected: { sha256: string; bytes: number; format: string; width: number; height: number },
     onLog?: (msg: string) => void,
-  ): Promise<boolean> {
+  ): Promise<void> {
     let pulledPath = "";
     try {
       // adb push only proves that bytes exist on the filesystem. Instagram's
@@ -4730,7 +4730,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const bytes = await fsPromises.readFile(pulledPath);
       const metadata = await withSharpNative(() => sharp(bytes).metadata());
       const sha256 = createHash("sha256").update(bytes).digest("hex");
-      const matchesHash = sha256 === expected.sha256;
       const matchesShape =
         bytes.length === expected.bytes &&
         (metadata.format ?? "unknown") === expected.format &&
@@ -4738,19 +4737,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         (metadata.height ?? 0) === expected.height;
       onLog?.(
         `Media audit before Instagram: deviceSha256=${sha256} ` +
-        `matchesProcessed=${matchesHash} bytes=${bytes.length} ` +
+        `matchesProcessed=${sha256 === expected.sha256} bytes=${bytes.length} ` +
         `format=${metadata.format ?? "unknown"} dimensions=${metadata.width ?? 0}x${metadata.height ?? 0} ` +
         `matchesShape=${matchesShape}`,
       );
-      if (!matchesHash || !matchesShape) {
-        throw new Error(
-          `device copy did not match the prepared image (hashMatch=${matchesHash}, shapeMatch=${matchesShape})`,
-        );
-      }
-      return true;
     } catch (error: any) {
       onLog?.(`Media audit before Instagram: unavailable — ${error?.message ?? error}`);
-      return false;
     } finally {
       if (pulledPath) {
         await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});

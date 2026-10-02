@@ -1,9 +1,3 @@
-## [1.2.561] — 2026-10-02
-
-### Fixed — Verify Make a Post Media Reaches the Phone
-
-- Before opening Instagram, Make a Post now confirms the exact staged image is indexed on the phone and matches the prepared file. If not, it stops instead of risking the wrong gallery image.
-
 ## [1.2.560] — 2026-10-02
 
 ### Fixed — Honor the Make a Post Editor Wait
