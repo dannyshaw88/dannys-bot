@@ -1,3 +1,9 @@
+## [1.2.560] — 2026-10-02
+
+### Fixed — Honor the Make a Post Editor Wait
+
+- The pause before the calibrated second Next now always lasts the selected 2.0–3.5 seconds, even when device dwell overrides are configured.
+
 ## [1.2.559] — 2026-10-02
 
 ### Fixed — Wait Longer for the Make a Post Editor
