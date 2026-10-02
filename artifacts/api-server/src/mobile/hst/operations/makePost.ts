@@ -386,9 +386,9 @@ await sleepOrAbort(serial, 700);
 // Resolve the editor's second Next from its own device-specific mirror
 // calibration. It is deliberately separate from the picker header Next above:
 // both controls are calibrated independently because they occupy different
-// positions on the phone. Give Instagram a randomized 1–2.5 second editor
+// positions on the phone. Give Instagram a randomized 2–3.5 second editor
 // transition dwell before dispatching the fixed calibrated point.
-const secondNextDwellMs = 1000 + Math.floor(Math.random() * 1501);
+const secondNextDwellMs = 2000 + Math.floor(Math.random() * 1501);
 onLog?.(
   `Make a Post: waiting ${(secondNextDwellMs / 1000).toFixed(1)}s before calibrated second Next…`,
 );

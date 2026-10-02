@@ -94,9 +94,9 @@ description: Chronological record of every attempt to get Make a Post working vi
 ## MANDATORY before any Make a Post fix attempt
 
 1. Read this file top-to-bottom.
-2. Read the README-REPLIT amber log block in `HumanSessionPanel.tsx` — it is rendered in the UI directly below the "Delete from PC after upload" checkbox inside the Make a Post / Source 2 (Local Folder) section.
+2. The former README-REPLIT amber log panel was intentionally removed from the UI; do not recreate it. There is no UI block to update.
 3. Do NOT attempt any approach already listed below without a fundamentally different root cause.
-4. After your attempt (win or fail), add a new dated entry to BOTH this file AND the README-REPLIT block in the UI.
+4. After your attempt (win or fail), add a new dated entry to this file only.
 
 ## User constraint: NO terminal/command-prompt steps, ever
 
@@ -130,6 +130,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 4. Checking whether `mobileBootstrapFromWebCookies()` succeeds immediately before attempting to publish (not just at session init).
 
 ## Chronological entries (newest first)
+
+### 2026-10-02 — Longer transition dwell before calibrated second Next
+- The user suspects Instagram needs more time to render the editor and requested a longer pause before the calibrated second Next.
+- **Decision:** use a randomized 2.0–3.5 second dwell immediately before that tap; keep the saved coordinate exact with no tap jitter.
+- **How to apply:** preserve this range unless the user changes it. Physical-device confirmation is still required.
+- Status: API package build passed and the API Server workflow restarted; physical-device confirmation is still required.
 
 ### 2026-08-04 — Broad Add lookup tapped Add audio on final post screen
 - The optional Map preview confirmation was checked with a substring matcher
