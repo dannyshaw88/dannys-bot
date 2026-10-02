@@ -143,6 +143,11 @@ Additionally: the mobile API client session may be expired by the time the post 
 - **Conclusion:** the evidence does not identify a coordinate, calibration, or dwell defect, so do not change those values speculatively. The exact reason the UI ignored or did not receive the tap remains unconfirmed without a device input/event trace.
 - Status: diagnosis only; no code change; physical-device confirmation remains necessary.
 
+### 2026-10-02 — Windows server export adds ADB timing, not touch confirmation
+- The uploaded Windows API log shows the automation-cycle request completed with HTTP 200 and generic `adb input begin/end` events during the likely matching run window. Those entries omit per-input device/coordinate/exit status, and the export contains no Android touch-event trace, so an individual input cannot be conclusively matched to the second Next tap.
+- The screenshot's operation log still establishes the requested exact point `(962,2212)` and successful return from the tap helper; the follow-up capture still shows the editor. No code-level cause is identified.
+- Status: additional evidence reviewed; no code change; physical-device confirmation remains necessary.
+
 ### 2026-08-04 — Broad Add lookup tapped Add audio on final post screen
 - The optional Map preview confirmation was checked with a substring matcher
   for `Add`. On a run where the popup was absent, that matched the final
