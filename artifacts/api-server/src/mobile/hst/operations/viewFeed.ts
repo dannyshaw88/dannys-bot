@@ -179,6 +179,7 @@ export async function runCheckFeedLoop(serial: string, params: {
       alreadyLiked: boolean;
       comment: { x: number; y: number } | null;
       shareFeed: { x: number; y: number } | null;
+      shareFeedLabel: string;
       shareDm: { x: number; y: number } | null;
       save: { x: number; y: number } | null;
       saveLabel: string;
@@ -318,6 +319,7 @@ export async function runCheckFeedLoop(serial: string, params: {
         alreadyLiked: actionIcons.alreadyLiked ?? false,
         comment: commentNode ? { x: commentNode.x, y: commentNode.y } : null,
         shareFeed: shareFeedNode ? { x: shareFeedNode.x, y: shareFeedNode.y } : null,
+        shareFeedLabel: shareFeedNode?.desc || shareFeedNode?.text || "",
         shareDm: shareDmNode ? { x: shareDmNode.x, y: shareDmNode.y } : null,
         save: saveNode ? { x: saveNode.x, y: saveNode.y } : null,
         saveLabel: saveNode?.desc || saveNode?.text || "",
@@ -469,16 +471,10 @@ export async function runCheckFeedLoop(serial: string, params: {
               onLog?.(`View Feed ${i + 1}/${count}: like roll missed (chance ${Math.round(likeChance * 100)}%) — scrolling without like`);
             }
 
-            // Share to Feed (repost): tap the circular-arrows icon, find
-            // "Repost" in the sheet via accessibility tree, tap it, then
-            // dismiss the "You reposted…" confirmation popup by tapping its
-            // "Close" button. Using pressBack to cancel (not a swipe) avoids
-            // any chance of the gesture crossing the bottom nav bar and
-            // triggering the Reels tab. `icons.shareFeed` is this post's
-            // real, freshly-measured icon position — null means this post's
-            // icon layout couldn't be told apart with confidence (see
-            // findFeedActionIcons), so the action is skipped rather than
-            // risking a tap on the wrong control (e.g. Comment).
+            // Share to Feed is a single tap on the live circular-arrows icon.
+            // Never infer a repost-confirmation sheet from a screen-wide
+            // "Repost" label search: it can match an unrelated visible node
+            // and send a second tap into the post media/Reel viewer.
             if (wantShareFeed) {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
@@ -488,73 +484,36 @@ export async function runCheckFeedLoop(serial: string, params: {
                 logger.info({ serial }, "[check-feed] skipped share-to-feed — current repost node not confirmed");
                 onLog?.(`View Feed ${i + 1}/${count}: skipped repost — current share-to-feed node not confirmed`);
               } else {
-              const shareFeedIconX = shareFeedNode.x, rowY = shareFeedNode.y;
-              if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-              try {
-                // Capture the icon's own label before tapping — see the
-                // same-name guard in runProfileBrowsingSequence for why:
-                // some accounts' Instagram build reposts instantly on a
-                // single tap with NO confirmation sheet, relabelling the
-                // SAME icon in place (e.g. "Repost" -> "Remove
-                // repost"/"Reposted") instead of showing a separate sheet
-                // button. Without this check, findButtonByLabel("Repost")
-                // matches that same relabelled icon via substring and this
-                // code taps it AGAIN — undoing the repost it just made.
-                const beforeCd = await android.getContentDescNear(serial, shareFeedIconX, rowY).catch(() => null);
-                onLog?.(`View Feed ${i + 1}/${count}: tapping share-to-feed icon at (${shareFeedIconX},${rowY})…`);
-                await android.tap(serial, shareFeedIconX, rowY);
-                logger.info({ serial, x: shareFeedIconX, y: rowY, beforeCd }, "[check-feed] tapped share-to-feed icon");
-                await sleepOrAbort(serial, 400); // wait for repost sheet
-
-                const repostBtn = await android.findButtonByLabel(serial, "Repost").catch(() => null);
-                // Use a 60 px tolerance (not 15). The action-bar icon's a11y
-                // bounds-centre can shift by ~30 px between measurements due
-                // to layout timing, so 15 px was too tight and caused a
-                // second tap on the original icon (unsharing what was just
-                // shared). A genuine sheet "Repost" button always appears at
-                // screen centre (x ≈ 540+), well beyond 60 px from the icon.
-                const _rDx = repostBtn ? Math.abs(repostBtn.x - shareFeedIconX) : 0;
-                const _rDy = repostBtn ? Math.abs(repostBtn.y - rowY) : 0;
-                const sameCoords = !!repostBtn && _rDx < 60 && _rDy < 60;
-                if (sameCoords) logger.info({ serial, repostBtn, shareFeedIconX, rowY, dx: _rDx, dy: _rDy }, "[check-feed] 'Repost' node within 60 px of icon — treated as same icon (single-tap path)");
-                if (repostBtn && !sameCoords) {
-                  onLog?.(`View Feed ${i + 1}/${count}: Repost sheet opened — tapping Repost at (${repostBtn.x},${repostBtn.y})…`);
-                  await android.tap(serial, repostBtn.x, repostBtn.y);
-                  logger.info({ serial }, "[check-feed] tapped Repost in sheet");
-           await sleepOrAbort(serial, 300 + Math.floor(Math.random() * 4701));
-                  // "You reposted X's post" popup appears after the first
-                  // repost — find its blue "Close" button via accessibility
-                  // tree and tap it.
-                  const closeBtn = await android.findButtonByLabel(serial, "Close").catch(() => null);
-                  if (closeBtn) {
-                    await android.tap(serial, closeBtn.x, closeBtn.y);
-                    logger.info({ serial }, "[check-feed] dismissed repost confirmation popup (Close)");
-                    onLog?.(`View Feed ${i + 1}/${count}: dismissed "You reposted" popup`);
-                    await sleepOrAbort(serial, 150);
+                const shareFeedIconX = shareFeedNode.x, rowY = shareFeedNode.y;
+                if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+                try {
+                  const beforeCd = shareFeedScan?.shareFeedLabel ?? "";
+                  if (beforeCd && /remove\s+repost|reposted|undo\s+repost/i.test(beforeCd)) {
+                    onLog?.(`View Feed ${i + 1}/${count}: already reposted — skipping to avoid undoing it`);
+                  } else {
+                    onLog?.(`View Feed ${i + 1}/${count}: tapping share-to-feed icon at (${shareFeedIconX},${rowY})…`);
+                    await android.tap(serial, shareFeedIconX, rowY);
+                    logger.info({ serial, x: shareFeedIconX, y: rowY, beforeCd }, "[check-feed] tapped share-to-feed icon once");
+                    await sleepOrAbort(serial, 400);
+                    const afterShareScan = await scanViewFeedA11y().catch(() => null);
+                    const repostToastVisible = (afterShareScan?.xml ?? "").split("<node ").some(segment => {
+                      const text = segment.match(/\btext="([^"]*)"/)?.[1] ?? "";
+                      const desc = segment.match(/\bcontent-desc="([^"]*)"/)?.[1] ?? "";
+                      return [text, desc].some(label => /^(?:reposted|you reposted\b)/i.test(label.trim()));
+                    });
+                    const repostConfirmed =
+                      /remove\s+repost|reposted|undo\s+repost/i.test(afterShareScan?.shareFeedLabel ?? "") ||
+                      repostToastVisible;
+                    if (repostConfirmed) {
+                      sharesFeed++;
+                      onLog?.(`View Feed ${i + 1}/${count}: ✓ reposted to feed (single tap; total reposts: ${sharesFeed})`);
+                    } else {
+                      logger.info({ serial, x: shareFeedIconX, y: rowY }, "[check-feed] single repost tap sent; result not confirmed");
+                      onLog?.(`View Feed ${i + 1}/${count}: repost tap sent once; completion not confirmed, so not counted`);
+                    }
                   }
-                  sharesFeed++;
-                  onLog?.(`View Feed ${i + 1}/${count}: ✓ reposted to feed (total reposts: ${sharesFeed})`);
-                } else if (sameCoords) {
-                  // The a11y tree returned a "Repost"-labelled node at the same
-                  // position as the icon we just tapped (single-tap repost path
-                  // — no confirmation sheet). Don't re-check whether the label
-                  // changed: the tree dump is unreliable (~90% false-negatives
-                  // reported), so we accept the tap as-is regardless of what the
-                  // dump says happened afterward. Do NOT press Back — that
-                  // navigates away from the feed.
-                  logger.info({ serial, beforeCd }, "[check-feed] sameCoords repost tap accepted without label re-check");
-                  onLog?.(`View Feed ${i + 1}/${count}: repost tapped (single-tap path, no sheet check)`);
-                  sharesFeed++;
-                } else {
-                  // No Repost button found in the dump after the tap. The dump is
-                  // unreliable; the repost sheet may have opened and been dismissed
-                  // before the dump ran, or the button may be outside the capture
-                  // window. Accept the tap and continue — do NOT press Back.
-                  logger.info({ serial }, "[check-feed] no Repost-labelled node found after tap — accepting tap, not pressing Back");
-                  onLog?.(`View Feed ${i + 1}/${count}: repost tap sent (sheet not confirmed in dump — continuing)`);
-                }
-                await verifyStillInInstagram();
-              } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
+                  await verifyStillInInstagram();
+                } catch (e: any) { if (e?.message === "cycle-aborted") throw e; /* else non-fatal */ }
               }
             }
 

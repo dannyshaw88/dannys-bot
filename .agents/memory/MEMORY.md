@@ -64,6 +64,7 @@
 - [Imported workspace verification](imported-workspace-verification.md) — use package-level build commands for this imported repo; root build/typecheck scripts include stale legacy paths and unrelated errors
 - [View Feed ad-action safety](view-feed-ad-action-safety.md) — sponsored cards and unconfirmed media bounds must never receive guessed double-taps; use confirmed action nodes or skip
 - [View Feed fresh-node action validation](view-feed-fresh-node-validation.md) — rescan the current post before each action and confirm state changes before counting success
+- [View Feed Repost single-tap guard](view-feed-fresh-node-validation.md) — don't infer a repost sheet from a global label match; tap the live feed action icon once
 - [Feed swipe tap guard](feed-swipe-tap-guard.md) — calibrated slow/focused feed paths need a minimum upward travel or Android can interpret them as profile taps
 - [Scroll personality first-turn guard](scroll-personality-first-turn.md) — backward scrolling is disabled on the first Feed/Explore scroll because there is no prior content to revisit
 - [View Feed re-run freshness](feed-rerun-fresh-session.md) — every re-run independently rolls count, feature percentages, per-post decisions, delays, and personality paths
