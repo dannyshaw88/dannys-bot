@@ -118,6 +118,7 @@ import {
   requestCollisionSlot,
   releaseCollisionSlot,
   cancelCollisionSlot,
+  hasPendingCollisionSlot,
 } from "./collisionCoordinator";
 
 // ── Background loop ───────────────────────────────────────────────────────────
@@ -170,7 +171,7 @@ export function startHstLoop(
   });
   _hstStop.delete(key);
   if (options.immediate !== false) {
-    scheduleNextBg(serial, slotIdx, key, 0); // manual toggle-on
+    scheduleNextBg(serial, slotIdx, key, 0, true); // manual toggle-on
     return;
   }
 
@@ -197,10 +198,32 @@ export function stopHstLoop(serial: string, slotIdx: number): void {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-function scheduleNextBg(serial: string, slotIdx: number, key: string, delayMs: number): void {
+function scheduleNextBg(
+  serial: string,
+  slotIdx: number,
+  key: string,
+  delayMs: number,
+  manualOverride = false,
+): void {
   const roundedDelayMs = Math.round(delayMs);
   const fireAt = Date.now() + roundedDelayMs;
   const t = setTimeout(() => {
+    // A second recovery/stray timer must not create another turn while this
+    // slot already owns or awaits its collision lease. The queued turn owns
+    // the next execution; it will schedule the normal HST interval on finish.
+    // Explicit manual toggles remain eligible and enter the coordinator's
+    // manual-priority lane instead.
+    if (!manualOverride && hasPendingCollisionSlot(serial, slotIdx)) {
+      if (_hstTimers.get(key) === t) {
+        _hstTimers.delete(key);
+        if (_hstNextRunAt.get(key) === fireAt) _hstNextRunAt.delete(key);
+      }
+      logBackgroundHst("timer-skipped-collision-pending", serial, slotIdx, {
+        key,
+        fireAt,
+      });
+      return;
+    }
     logBackgroundHst("timer-callback-entered", serial, slotIdx, {
       key,
       scheduledFireAt: _hstNextRunAt.get(key) ?? fireAt,
@@ -208,7 +231,7 @@ function scheduleNextBg(serial: string, slotIdx: number, key: string, delayMs: n
       stopFlag: _hstStop.has(key),
       uiOwner: _hstUiMounted.has(key),
     });
-    void runCycleBg(serial, slotIdx, key).catch((error: any) => {
+    void runCycleBg(serial, slotIdx, key, manualOverride).catch((error: any) => {
       logBackgroundHst("unexpected-run-rejection", serial, slotIdx, {
         key,
         name: error?.name ?? "Error",
@@ -237,6 +260,12 @@ function scheduleNextBg(serial: string, slotIdx: number, key: string, delayMs: n
 }
 
 async function scheduleRestartRecovery(serial: string, slotIdx: number, key: string): Promise<void> {
+  if (hasPendingCollisionSlot(serial, slotIdx)) {
+    _hstStarting.delete(key);
+    logBackgroundHst("recovery-skipped-collision-pending", serial, slotIdx, { key });
+    return;
+  }
+
   let settings: Record<string, unknown> | null = null;
   logBackgroundHst("recovery-settings-fetch-start", serial, slotIdx, { key });
   try {
@@ -262,10 +291,13 @@ async function scheduleRestartRecovery(serial: string, slotIdx: number, key: str
   }
 
   _hstStarting.delete(key);
-  if (_hstTimers.has(key) || _hstStop.has(key) || _hstUiMounted.has(key)) {
+  const collisionTurnPending = hasPendingCollisionSlot(serial, slotIdx);
+  if (_hstTimers.has(key) || _hstStop.has(key) || _hstUiMounted.has(key) || collisionTurnPending) {
     logBackgroundHst("recovery-exit-after-settings", serial, slotIdx, {
       key,
-      reason: _hstTimers.has(key) ? "timer-already-owned" : _hstStop.has(key) ? "stop-flag" : "ui-owner",
+      reason: collisionTurnPending
+        ? "collision-pending"
+        : _hstTimers.has(key) ? "timer-already-owned" : _hstStop.has(key) ? "stop-flag" : "ui-owner",
     });
     return;
   }
@@ -290,7 +322,12 @@ async function scheduleRestartRecovery(serial: string, slotIdx: number, key: str
   scheduleNextBg(serial, slotIdx, key, delayMs);
 }
 
-async function runCycleBg(serial: string, slotIdx: number, key: string): Promise<void> {
+async function runCycleBg(
+  serial: string,
+  slotIdx: number,
+  key: string,
+  manualOverride = false,
+): Promise<void> {
   _hstTimers.delete(key);
   const hstTurnAt = _hstNextRunAt.get(key) ?? Date.now();
   _hstNextRunAt.delete(key);
@@ -298,6 +335,7 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
   logBackgroundHst("run-entered", serial, slotIdx, {
     key,
     hstTurnAt,
+    manualOverride,
     stopFlag: _hstStop.has(key),
     uiOwner: _hstUiMounted.has(key),
   });
@@ -372,6 +410,7 @@ async function runCycleBg(serial: string, slotIdx: number, key: string): Promise
     collisionLease = await requestCollisionSlot(serial, slotIdx, hstTurnAt, {
       source: "hst-background",
       owner: key,
+      manualOverride,
     });
     logBackgroundHst("collision-request-resolved", serial, slotIdx, {
       key,
