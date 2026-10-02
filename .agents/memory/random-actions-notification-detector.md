@@ -49,3 +49,11 @@ Home control.
 **How to apply:** Preserve the row-level `isComment` classification through
 the tap, verify Notifications after the Android BACK sequence, and never use
 this exception for non-comment notifications.
+
+## Unrecognized-device security alerts
+
+Random Actions must exclude unrecognized/unrecognised-device login alerts from the selectable notification rows; never tap them.
+
+**Why:** the user asked that these account-security notifications be ignored by the notification-click feature.
+
+**How to apply:** Match both text and content-description labels across the grouped row before random selection, log that the row was excluded, and skip the click if no safe row remains.

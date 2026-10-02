@@ -12827,6 +12827,9 @@ export async function findRandomNotificationItem(
     /you['’]re\s+all\s+caught\s+up/i,
     /your\s+weekly\s+recap\s+is\s+ready/i,
   ];
+  // Login-security alerts describe unfamiliar devices and must never be
+  // opened by Random Actions. Instagram uses both US and UK spellings.
+  const excludedUnrecognizedDeviceRows = /\bunrecogn(?:ized|ised)\b/i;
   // Instagram can show a Threads cross-promotion inside Notifications.
   // Tapping that row launches the separate Threads app, not an Instagram
   // notification detail. Reject the whole grouped row, including when only
@@ -12951,12 +12954,15 @@ export async function findRandomNotificationItem(
       rows.push([candidate]);
     }
   }
+  const rowMatchesPattern = (row: typeof candidates, pattern: RegExp) =>
+    row.some(candidate => pattern.test(`${candidate.text} ${candidate.contentDesc}`));
   const commentNotificationPattern = /\b(?:comment(?:ed|s?)?|repl(?:ied|y|ies))\b/i;
   const rowCandidates = rows
-    .filter(row => !row.some(candidate =>
-      excludedInformationalRows.some(pattern => pattern.test(candidate.text)) ||
-      excludedThreadsRows.test(candidate.text),
-    ))
+    .filter(row =>
+      !excludedInformationalRows.some(pattern => rowMatchesPattern(row, pattern)) &&
+      !rowMatchesPattern(row, excludedThreadsRows) &&
+      !rowMatchesPattern(row, excludedUnrecognizedDeviceRows),
+    )
     .map(row => {
       const selected = row.sort((a, b) => b.score - a.score || (b.x2 - b.x1) - (a.x2 - a.x1))[0];
       return {
@@ -12968,10 +12974,16 @@ export async function findRandomNotificationItem(
     })
     .filter(Boolean);
   const excludedThreadsCount = rows.filter(row =>
-    row.some(candidate => excludedThreadsRows.test(candidate.text)),
+    rowMatchesPattern(row, excludedThreadsRows),
   ).length;
   if (excludedThreadsCount > 0) {
     onLog?.(`[notifications] excluded ${excludedThreadsCount} row(s) containing Thread/Threads`);
+  }
+  const excludedUnrecognizedDeviceCount = rows.filter(row =>
+    rowMatchesPattern(row, excludedUnrecognizedDeviceRows),
+  ).length;
+  if (excludedUnrecognizedDeviceCount > 0) {
+    onLog?.(`[notifications] excluded ${excludedUnrecognizedDeviceCount} unrecognized-device login alert row(s)`);
   }
   if (!rowCandidates.length) return null;
 
