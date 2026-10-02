@@ -1,3 +1,11 @@
+## [1.2.558] — 2026-10-02
+
+### Fixed — Preserve Queued Collision Turns
+
+- Background HST recovery and stale timers now respect accounts already waiting in the Collision Preventer queue.
+- A queued account no longer falls back to its normal HST interval instead of running after the configured collision rest.
+- Explicit manual runs keep their priority.
+
 ## [1.2.557] — 2026-09-23
 
 ### Fixed — Stop Phone Mirror Disconnect Loops
