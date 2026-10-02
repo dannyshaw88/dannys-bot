@@ -5,7 +5,7 @@ description: Chronological record of every attempt to get Make a Post working vi
 
 # Make a Post — Attempt Log
 
-**Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file and the in-UI README-REPLIT block are the stop-gap.
+**Why this file exists:** The Make a Post feature has been attempted ~20 times via the mobile API and has never worked. Every new session the agent repeats the same fixes. This file is the chronological fix log; the former in-UI README-REPLIT block was intentionally removed and must not be recreated.
 
 ### 2026-09-13 — HST Make a Post checkbox must be an absolute execution gate
 - A cycle could still include Make a Post while the HST checkbox was unchecked because the cycle request merged parsed UI settings over persisted slot settings, and the dispatcher relied on the activation percentage roll without a final `makePostEnabled` check.

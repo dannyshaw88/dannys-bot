@@ -1,3 +1,9 @@
+## [1.2.559] — 2026-10-02
+
+### Fixed — Wait Longer for the Make a Post Editor
+
+- The randomized pause before the calibrated second Next now ranges from 2.0 to 3.5 seconds, giving Instagram more time to finish the editor transition.
+
 ## [1.2.558] — 2026-10-02
 
 ### Fixed — Preserve Queued Collision Turns
