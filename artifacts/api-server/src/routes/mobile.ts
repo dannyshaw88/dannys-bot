@@ -4963,11 +4963,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     serial: string,
     ms: number,
     category: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" | "airplaneMode" = "actionPacing",
-    timingMode: "static" | "computed" = "static",
+    timingMode: "static" | "computed" | "exact" = "static",
   ) => {
     const dwellMs = timingMode === "computed"
       ? randomizedDwellMs(serial, ms, category)
-      : jitterStaticDwell(ms);
+      : timingMode === "exact"
+        ? (Number.isFinite(ms) ? Math.max(0, Math.round(ms)) : 0)
+        : jitterStaticDwell(ms);
     const startedAt = performance.now();
     return new Promise<void>((resolve, reject) => {
       const finish = () => {

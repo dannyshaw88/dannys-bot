@@ -7,7 +7,7 @@ export interface MakePostOperationContext {
     serial: string,
     ms: number,
     category?: "globalDwell" | "accountSwitching" | "navigation" | "actionPacing" | "airplaneMode",
-    timingMode?: "static" | "computed",
+    timingMode?: "static" | "computed" | "exact",
   ) => Promise<void>;
   logger?: any;
   pickLocalFolderImage: (serial: string, opts: any) => Promise<string | null>;
@@ -392,7 +392,8 @@ const secondNextDwellMs = 2000 + Math.floor(Math.random() * 1501);
 onLog?.(
   `Make a Post: waiting ${(secondNextDwellMs / 1000).toFixed(1)}s before calibrated second Next…`,
 );
-await sleepOrAbort(serial, secondNextDwellMs, "navigation", "computed");
+// This editor transition must honor the full chosen delay, not a device dwell override.
+await sleepOrAbort(serial, secondNextDwellMs, "navigation", "exact");
 const editorNext = resolveCalibratedControl("makePostSecondNext");
 if (!editorNext) {
   onLog?.("Make a Post: calibrated second Next is unavailable — aborting this attempt");

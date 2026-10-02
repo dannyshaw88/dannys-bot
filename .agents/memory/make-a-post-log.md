@@ -134,7 +134,9 @@ Additionally: the mobile API client session may be expired by the time the post 
 ### 2026-10-02 — Longer transition dwell before calibrated second Next
 - The user suspects Instagram needs more time to render the editor and requested a longer pause before the calibrated second Next.
 - **Decision:** use a randomized 2.0–3.5 second dwell immediately before that tap; keep the saved coordinate exact with no tap jitter.
-- **How to apply:** preserve this range unless the user changes it. Physical-device confirmation is still required.
+- A pre-sleep “waiting Ns” log reports the requested value, not necessarily the scheduled wait: computed timing can substitute a Mother Code navigation/global override. This transition must use exact timing so the explicit 2.0–3.5 second range is honored.
+- **Why:** the reported 0.2-second log gap conflicts with a 2.3-second requested wait; the override path can shorten computed sleeps, but the historical run’s saved override was not available to prove it was active.
+- **How to apply:** preserve this range unless the user changes it; do not attribute that historical tap to an override without its `mobile-execution` scheduled/elapsed record. Confirm on a real phone.
 - Status: API package build passed and the API Server workflow restarted; physical-device confirmation is still required.
 
 ### 2026-10-02 — Second Next dispatch is confirmed; reason for no transition is not
