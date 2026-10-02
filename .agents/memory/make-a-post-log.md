@@ -131,6 +131,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-02 — Regular Make a Post did not verify the staged phone image
+- The standard feed-post operation treated a successful `adb push` plus a 1.2-second scanner wait as proof the image was ready. The existing MediaStore/byte audit was available in the operation context but was not called on this path.
+- The operation now requires the exact generated image to appear in MediaStore and match the prepared bytes and dimensions before opening Instagram. If verification fails, it removes that staged copy and aborts before the picker can select an older gallery image.
+- The affected physical phone is not connected to this workspace, so its precise failure stage remains unconfirmed until the updated Windows build runs there.
+- Status: targeted code fix applied; API build and runtime verification pending; physical-device confirmation still required.
+
 ### 2026-10-02 — Longer transition dwell before calibrated second Next
 - The user suspects Instagram needs more time to render the editor and requested a longer pause before the calibrated second Next.
 - **Decision:** use a randomized 2.0–3.5 second dwell immediately before that tap; keep the saved coordinate exact with no tap jitter.
