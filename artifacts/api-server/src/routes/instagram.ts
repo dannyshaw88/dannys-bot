@@ -6951,6 +6951,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
             proxyStr = `http://${auth}${ja.proxyHost}:${ja.proxyPort}`;
           }
 
+          const jarveeEmbeddedUA = ja.userAgentWeb?.trim() || undefined;
           const profileData: any = {
             username:                ja.username,
             password:                ja.password,
@@ -6962,7 +6963,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
             accountStatus:           "pending",
             // Jarvee's web UA is a Chrome mobile UA — use it for the embedded browser.
             // The mobile API UA is a separate Instagram-app UA that auto-assign handles.
-            userAgentEmbedded:       ja.userAgentWeb ?? autoUA.embedded,
+            userAgentEmbedded:       jarveeEmbeddedUA ?? autoUA.embedded,
             userAgentApi:            autoUA.api,
             igDeviceState:           igDeviceState,
             twoFASecretKey:          ja.twoFASecret ?? null,
@@ -6974,7 +6975,11 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           if (proxyStr) profileData.proxy = proxyStr;
 
           const created = await storage.createProfile(profileData);
-          await storage.updateProfile(created.id, { accountStatus: "pending", credentialsDirty: false });
+          await storage.updateProfile(created.id, {
+            accountStatus: "pending",
+            credentialsDirty: false,
+            userAgentEmbedded: jarveeEmbeddedUA ?? created.userAgentEmbedded,
+          });
 
           // ── Restore follow tool sources ──────────────────────────────────
           if (ja.followSources.length > 0) {
