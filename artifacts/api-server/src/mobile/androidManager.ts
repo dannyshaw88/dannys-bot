@@ -9781,7 +9781,13 @@ export async function captureDebugScreenshot(serial: string, ts: number, label: 
  *
  * Returns the on-device path so the caller can log it / clean it up later.
  */
-export async function pushFileToDevice(serial: string, localPath: string, fileName: string, scan = true): Promise<string> {
+export async function pushFileToDevice(
+  serial: string,
+  localPath: string,
+  fileName: string,
+  scan = true,
+  cleanupPartialOnFailure = false,
+): Promise<string> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const requestedExt = path.extname(fileName).toLowerCase();
@@ -9794,9 +9800,31 @@ export async function pushFileToDevice(serial: string, localPath: string, fileNa
   // only so Android can identify the media type.
   const deviceFileName = `IMG_${randomBytes(12).toString("hex")}${safeExt}`;
   const devicePath = `/sdcard/DCIM/Camera/${deviceFileName}`;
-  await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
-  if (scan) await scanMediaFile(serial, devicePath);
-  return devicePath;
+  try {
+    await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
+    if (scan) await scanMediaFile(serial, devicePath);
+    return devicePath;
+  } catch (error) {
+    if (!cleanupPartialOnFailure) throw error;
+    // Make a Post must not leave a partial phone copy if adb fails after
+    // creating the generated destination. Other upload flows retain their
+    // existing cleanup ownership unless they opt in explicitly.
+    let cleanupError: unknown;
+    try {
+      await removeDeviceFileStrict(serial, devicePath);
+    } catch (error) {
+      cleanupError = error;
+    }
+    const pushError = new Error(error instanceof Error ? error.message : String(error));
+    (pushError as any).cause = error;
+    (pushError as any).partialDevicePath = devicePath;
+    if (cleanupError) {
+      (pushError as any).deviceCleanupError = cleanupError instanceof Error
+        ? cleanupError.message
+        : String(cleanupError);
+    }
+    throw pushError;
+  }
 }
 
 /** Pulls a device media copy to a temporary host path for byte-level diagnostics. */
@@ -9904,6 +9932,14 @@ export async function removeDeviceFile(serial: string, devicePath: string): Prom
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   await runAdb(adb, ["-s", serial, "shell", "rm", "-f", devicePath], 6000).catch(() => {});
+  await scanMediaFile(serial, devicePath).catch(() => {});
+}
+
+/** Removes a staged file and reports an ADB removal failure to the caller. */
+export async function removeDeviceFileStrict(serial: string, devicePath: string): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  await runAdbStrict(adb, ["-s", serial, "shell", "rm", "-f", devicePath], 6000);
   await scanMediaFile(serial, devicePath).catch(() => {});
 }
 

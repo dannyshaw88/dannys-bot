@@ -65,7 +65,10 @@ const fileName = await pickLocalFolderImage(serial, {
 });
 if (!fileName) return { posted: false };
 const localFilePath = path.join(localFolderPath, fileName);
+let devicePath: string | undefined;
+let uploadConfirmed = false;
 
+try {
 onLog?.(`Make a Post: preparing processed image "${fileName}"…`);
 const prepared = await prepareMakePostImage(localFilePath, fileName, {
   doFixAiSlop,
@@ -83,12 +86,15 @@ onLog?.(
 );
 
 onLog?.(`Make a Post: pushing "${fileName}" to device…`);
-let devicePath: string;
 try {
-  devicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName);
+  devicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName, true, true);
 } catch (e: any) {
+  devicePath = typeof e?.partialDevicePath === "string" ? e.partialDevicePath : undefined;
   await prepared.cleanup();
-  onLog?.(`Make a Post: adb push failed — ${e?.message ?? "unknown error"}`);
+  onLog?.(
+    `Make a Post: adb push failed — ${e?.message ?? "unknown error"}` +
+    `${e?.deviceCleanupError ? `; partial phone copy cleanup also failed — ${e.deviceCleanupError}` : ""}`,
+  );
   return { posted: false };
 }
 onLog?.(`Make a Post: adb push complete — devicePath=${devicePath}`);
@@ -595,6 +601,7 @@ if (!shareConfirmed) {
   return { posted: false };
 }
 
+uploadConfirmed = true;
 recordPostedLocalFile(serial, slotIdx, fileName);
 recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName);
 if (deleteAfterUpload) {
@@ -605,9 +612,31 @@ if (deleteAfterUpload) {
     onLog?.(`Make a Post: upload confirmed, but could not delete original PC image "${fileName}": ${error?.message ?? "unknown error"}`);
   }
 }
-// Always remove the temp copy pushed to the device — it is only needed
-// for the picker/upload. Leaving it behind fills up the camera roll.
-await android.removeDeviceFile(serial, devicePath).catch(() => {});
 onLog?.(`Make a Post: ✓ posted "${fileName}"`);
 return { posted: true, fileName };
+} finally {
+  const logCleanup = (message: string) => {
+    try { onLog?.(message); } catch {}
+  };
+  if (devicePath) {
+    try {
+      await android.removeDeviceFileStrict(serial, devicePath);
+      logCleanup(`Make a Post: removed staged phone image after ${uploadConfirmed ? "confirmed upload" : "failed attempt"}.`);
+    } catch (error: any) {
+      logCleanup(`Make a Post: could not clean up staged phone image "${path.basename(devicePath)}": ${error?.message ?? "unknown error"}`);
+    }
+  }
+  if (!uploadConfirmed) {
+    try {
+      await fsPromises.unlink(localFilePath);
+      logCleanup(`Make a Post: deleted source image "${fileName}" after failed attempt.`);
+    } catch (error: any) {
+      if (error?.code === "ENOENT") {
+        logCleanup(`Make a Post: source image "${fileName}" was already absent after failed attempt.`);
+      } else {
+        logCleanup(`Make a Post: failed to delete source image "${fileName}" after failed attempt: ${error?.message ?? "unknown error"}`);
+      }
+    }
+  }
+}
   }

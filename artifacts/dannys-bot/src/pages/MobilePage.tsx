@@ -8267,7 +8267,7 @@ export function AutomationSettingsPanel({
                           onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
                           disabled={fieldDisabled("makePostLocalFolderDeleteAfterUpload")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor={`make-a-post-local-delete-after-use-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete after use</label>
+                        <label htmlFor={`make-a-post-local-delete-after-use-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete after successful upload</label>
                       </div>
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-add-location-${slotIdx ?? 0}`}
@@ -8278,6 +8278,9 @@ export function AutomationSettingsPanel({
                         <label htmlFor={`make-a-post-add-location-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Add location</label>
                       </div>
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Failed Make a Post attempts always delete the selected image from this folder and the phone.
+                    </p>
 
                 </div>
               </div>

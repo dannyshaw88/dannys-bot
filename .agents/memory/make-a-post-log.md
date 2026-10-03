@@ -131,6 +131,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-03 — Failed automated Make a Post attempts consume both image copies
+- Once a local-folder image is selected, every unsuccessful return and thrown error now runs shared cleanup: remove the original from its source directory and remove the staged phone copy when its path is known.
+- Make a Post opts into cleanup of the generated phone path when ADB push/scan fails, then retries strict removal in the operation finalizer. The success-only setting still controls deletion of the original after a confirmed upload; the temporary phone copy is still removed after success.
+- The Mobile HST setting text now distinguishes automatic deletion on failures from the existing success-only checkbox. Manual PC-to-phone posting remains on its separate user-controlled deletion flow.
+- Verification: API and web builds passed; mocked operation checks covered failed upload, both success-setting states, preparation/navigation exceptions, and a partial-push cleanup retry. API typecheck remains blocked by the existing project-wide baseline errors. Physical-device confirmation is still required.
+
 ### 2026-10-02 — Longer transition dwell before calibrated second Next
 - The user suspects Instagram needs more time to render the editor and requested a longer pause before the calibrated second Next.
 - **Decision:** use a randomized 2.0–3.5 second dwell immediately before that tap; keep the saved coordinate exact with no tap jitter.
