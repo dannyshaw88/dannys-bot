@@ -1,10 +1,9 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2, Clipboard, Download, FileSearch, FileText, Upload, Loader2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
+import { useJarveeImportSession } from "@/contexts/JarveeImportSessionContext";
 import { useToast } from "@/hooks/use-toast";
-
-type JarveeProfile = Record<string, string | string[] | undefined>;
 
 const FIELDS: Array<[string, string]> = [
   ["username", "Username"], ["password", "Password"], ["email", "Email address"], ["emailPassword", "Email password"],
@@ -28,10 +27,10 @@ function encodeBase64(bytes: Uint8Array) {
 export function JarveeBinaryViewerContent() {
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const [fileName, setFileName] = useState("");
-  const [profiles, setProfiles] = useState<JarveeProfile[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const {
+    fileName, setFileName, profiles, setProfiles,
+    loading, setLoading, error, setError, clearImport,
+  } = useJarveeImportSession();
 
   const readFile = async (file?: File) => {
     if (!file) return;
@@ -119,16 +118,20 @@ export function JarveeBinaryViewerContent() {
             <div className="p-2 rounded-lg bg-primary/10 text-primary"><Upload className="w-4 h-4" /></div>
             <div className="flex-1">
               <h2 className="text-sm font-semibold">Choose a Jarvee binary file</h2>
-              <p className="text-xs text-muted-foreground mt-1">Details remain available while you move between Settings tabs. The source file is not stored or added to Accounts.</p>
+              <p className="text-xs text-muted-foreground mt-1">Parsed details stay available as you navigate this app until it is reloaded or closed. The source file is not stored or added to Accounts.</p>
               <input ref={inputRef} type="file" className="hidden" onChange={e => void readFile(e.target.files?.[0])} />
               <div className="flex items-center gap-3 mt-4">
                 <Button onClick={() => inputRef.current?.click()}><Upload className="w-4 h-4 mr-2" />Browse</Button>
                 {fileName && <span className="text-sm text-foreground truncate">{fileName}</span>}
+                {fileName && <Button variant="outline" size="sm" disabled={loading} onClick={() => {
+                  clearImport();
+                  if (inputRef.current) inputRef.current.value = "";
+                }}>Clear loaded data</Button>}
               </div>
             </div>
           </div>
           {error && <div className="mt-4 flex items-center gap-2 text-sm text-destructive"><AlertCircle className="w-4 h-4" />{error}</div>}
-          {fileName && !error && !loading && <div className="mt-4 flex items-center gap-2 text-xs text-emerald-600"><CheckCircle2 className="w-4 h-4" />Account data extracted — retained for this Settings session; no account import occurred.</div>}
+          {fileName && !error && !loading && <div className="mt-4 flex items-center gap-2 text-xs text-emerald-600"><CheckCircle2 className="w-4 h-4" />Account data extracted — retained while this app session stays open; no account import occurred.</div>}
         </div>
 
         <div className="desktop-card overflow-hidden">

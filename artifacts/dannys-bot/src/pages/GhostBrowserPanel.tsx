@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { UaPickerDropdown, type UaEntry } from "@/components/ui/ua-picker";
+import { EmbeddedBrowserAgentPicker } from "@/components/ui/embedded-browser-agent-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { userAgents as UA_POOL } from "@/shared/userAgents";
-import { embeddedBrowserAgentPresets } from "@/shared/embeddedBrowserAgents";
 import {
   Ghost, ShieldCheck, Globe, Cpu,
   Loader2, ChevronDown, ChevronUp, Wifi, WifiOff, Plus,
@@ -453,7 +453,8 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   // Device
   const [selectedUA, setSelectedUA] = useState<UaEntry>(() => randomUA());
   const [activeUA, setActiveUA]     = useState<UaEntry>(selectedUA);
-  const [embeddedUA, setEmbeddedUA] = useState(() => selectedUA.embedded);
+  const [embeddedUAOverride, setEmbeddedUAOverride] = useState<string | null>(null);
+  const effectiveEmbeddedUA = embeddedUAOverride ?? selectedUA.embedded;
 
   // Browser
   const [browserState, setBrowserState]         = useState<BrowserState>("closed");
@@ -712,7 +713,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
   const handleOpen = async () => {
     if (!manualValid) return;
     setBrowserState("opening");
-    const effectiveEmbeddedUA = embeddedUA.trim() || selectedUA.embedded;
     setActiveUA({ ...selectedUA, embedded: effectiveEmbeddedUA });
     setActiveProxyLabel(resolvedProxy ? `${resolvedProxy.host}:${resolvedProxy.port}` : "Direct (no proxy)");
     await fetch("/api/signup/browser/open", {
@@ -844,7 +844,6 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
       }
       setBrowserState("opening");
       setSignupStatus("Opening browser…");
-      const effectiveEmbeddedUA = embeddedUA.trim() || selectedUA.embedded;
       setActiveUA({ ...selectedUA, embedded: effectiveEmbeddedUA });
       setActiveProxyLabel(resolvedProxy ? `${resolvedProxy.host}:${resolvedProxy.port}` : "Direct (no proxy)");
       try {
@@ -1045,10 +1044,7 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
               </div>
               <UaPickerDropdown
                 value={selectedUA.api}
-                onSelect={(ua) => {
-                  setSelectedUA(ua);
-                  setEmbeddedUA(ua.embedded);
-                }}
+                onSelect={setSelectedUA}
                 fullWidth
               />
             </div>
@@ -1057,29 +1053,13 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
             <div className="desktop-card p-2.5 space-y-1.5" style={{ width: 247 }}>
               <div className="flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Embedded Browser User-Agent</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Embedded Browser Agent</p>
               </div>
-              <select
-                aria-label="Select embedded browser agent preset"
-                data-testid="embedded-browser-agent-select"
-                value={embeddedBrowserAgentPresets.find(preset => preset.userAgent === embeddedUA)?.userAgent ?? ""}
-                onChange={e => {
-                  const preset = embeddedBrowserAgentPresets.find(item => item.userAgent === e.target.value);
-                  if (preset) setEmbeddedUA(preset.userAgent);
-                }}
-                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground"
-              >
-                <option value="">Choose embedded browser agent…</option>
-                {embeddedBrowserAgentPresets.map(preset => (
-                  <option key={preset.userAgent} value={preset.userAgent}>{preset.label}</option>
-                ))}
-              </select>
-              <Input
-                value={embeddedUA}
-                onChange={e => setEmbeddedUA(e.target.value)}
-                placeholder="Embedded browser User-Agent"
-                className="h-9 text-[10px] font-mono"
-                aria-label="Embedded browser User-Agent"
+              <EmbeddedBrowserAgentPicker
+                overrideUserAgent={embeddedUAOverride}
+                pairedUserAgent={selectedUA.embedded}
+                onSelect={setEmbeddedUAOverride}
+                fullWidth
               />
             </div>
 

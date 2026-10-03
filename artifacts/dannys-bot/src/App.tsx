@@ -27,6 +27,7 @@ import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
 import { SelectedProfilesProvider } from "@/contexts/SelectedProfilesContext";
 import { DeviceLogProvider } from "@/contexts/DeviceLogContext";
+import { JarveeImportSessionProvider } from "@/contexts/JarveeImportSessionContext";
 import { BrowserWindow } from "@/components/BrowserWindow";
 import { BrowserTaskbar } from "@/components/BrowserTaskbar";
 import { AuraFarmingBot } from "@/components/EquinoxBot";
@@ -425,7 +426,9 @@ function App() {
                 <SelectedProfilesProvider>
                   <DeviceLogProvider>
                     <LicenseGate>
-                      <AppInner />
+                      <JarveeImportSessionProvider>
+                        <AppInner />
+                      </JarveeImportSessionProvider>
                     </LicenseGate>
                   </DeviceLogProvider>
                 </SelectedProfilesProvider>

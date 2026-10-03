@@ -48,15 +48,60 @@ const jarveeEmbeddedBrowserUserAgents = [
   "Mozilla/5.0 (Linux; Android 10; SM-G970U1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36",
 ] as const;
 
-function agentLabel(userAgent: string): string {
+function parsedAgent(userAgent: string) {
   const chromeVersion = userAgent.match(/Chrome\/([\d.]+)/)?.[1]?.split(".")[0] ?? "unknown";
   const android = userAgent.match(/Android ([^;]+); ([^)]+)\)/);
-  if (android) return `${android[2]} · Android ${android[1]} · Chrome ${chromeVersion}`;
-  if (userAgent.includes("Windows NT 10.0")) return `Windows 10 · Chrome ${chromeVersion}`;
-  return `Chrome ${chromeVersion}`;
+  if (android) {
+    const model = android[2];
+    return {
+      brand: agentBrand(model),
+      model,
+      detail: `Android ${android[1]} · Chrome ${chromeVersion}`,
+    };
+  }
+  if (userAgent.includes("Windows NT 10.0")) {
+    return { brand: "Windows", model: "Windows 10", detail: `Chrome ${chromeVersion}` };
+  }
+  return { brand: "Other", model: "Unknown device", detail: `Chrome ${chromeVersion}` };
 }
 
-export const embeddedBrowserAgentPresets = [...new Set(jarveeEmbeddedBrowserUserAgents)].map(userAgent => ({
-  label: agentLabel(userAgent),
-  userAgent,
-}));
+function agentBrand(model: string): string {
+  if (/^(SM-|GT-|SCH-|SGH-)/i.test(model)) return "Samsung";
+  if (/^(pixel|crosshatch|panther|shiba|caiman|tokay|komodo|comet|lynx|akita|sargo|sunfish)/i.test(model)) return "Google";
+  if (/^oneplus/i.test(model)) return "OnePlus";
+  if (/^(violet|redmi|poco)/i.test(model)) return "Xiaomi";
+  if (/^(potter|moto)/i.test(model)) return "Motorola";
+  if (/^asus_/i.test(model)) return "ASUS";
+  if (/^bbb/i.test(model)) return "BlackBerry";
+  if (/^lm-/i.test(model)) return "LG";
+  if (/^(mar|vog|hma|stk|aqm|hry|jsn)-/i.test(model)) return "Huawei / Honor";
+  return "Other Android";
+}
+
+const agentBrandOrder = [
+  "Google", "Samsung", "OnePlus", "Xiaomi", "Motorola", "OPPO", "vivo",
+  "realme", "ASUS", "BlackBerry", "Huawei / Honor", "LG", "Windows", "Other Android", "Other",
+];
+
+export function describeEmbeddedBrowserAgent(userAgent: string): string {
+  const { model, detail } = parsedAgent(userAgent);
+  return `${model} · ${detail}`;
+}
+
+export const embeddedBrowserAgentPresets = [...new Set(jarveeEmbeddedBrowserUserAgents)]
+  .map(userAgent => {
+    const { brand, model, detail } = parsedAgent(userAgent);
+    return {
+      brand,
+      label: `${model} · ${detail}`,
+      model,
+      detail,
+      userAgent,
+      searchText: `${brand} ${model} ${detail} ${userAgent}`,
+    };
+  })
+  .sort((a, b) => {
+    const aOrder = agentBrandOrder.indexOf(a.brand);
+    const bOrder = agentBrandOrder.indexOf(b.brand);
+    return (aOrder - bOrder) || a.model.localeCompare(b.model) || a.detail.localeCompare(b.detail);
+  });
