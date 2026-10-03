@@ -1,17 +1,17 @@
 ---
 name: Collision Preventer turn priority
-description: How device-level collision scheduling must preserve Human Session due times while enforcing a post-cycle rest window.
+description: Per-device FIFO scheduling, preserved HST due timestamps, post-cycle rest, and the manual override lane.
 ---
 
-Collision Preventer queue priority must be based on each slot's original Human Session scheduled turn, not on the time its collision request executes or the time the previous slot finishes. A queued slot runs immediately after the configured collision rest; only after that cycle completes does it receive a new Human Session interval.
+Scheduled Collision Preventer entries run in per-device collision-request arrival order (FIFO), not by their original Human Session due timestamp. Let the active cycle finish, apply the configured device rest, then run the oldest queued request. Keep each slot's original HST due timestamp for its timer lifecycle; after its queued cycle completes, it receives a new HST interval.
 
-**Why:** Resetting the interval when a collision is prevented makes overdue accounts wait another full Human Session window and lets scheduling drift away from account priority.
+**Why:** The user expects the first account that collided to receive the next turn after the active account and rest period; due-time sorting can let a later-arriving account overtake it.
 
-**How to apply:** Capture the HST due timestamp before clearing timer UI state, keep it immutable in the queue, sort by due time with a stable slot tie-breaker, and never release queued turns by creating a second HST timer. Any background/recovery runner that can own an HST timer must pass through the same device-level collision gate; direct cycle POSTs bypass the UI hook.
+**How to apply:** Capture collision arrival order before asynchronous configuration loads, sort scheduled queue entries FIFO per device, and retain the original HST due timestamp only for timer bookkeeping. Do not release queued turns by creating a second HST timer. Any background/recovery runner that can own an HST timer must pass through the same device-level collision gate; direct cycle POSTs bypass the UI hook.
 
 While a slot owns or awaits a collision lease, a React/runtime remount must not create a replacement normal HST interval. The collision coordinator's pending state is authoritative until the queued cycle releases its lease.
 
-**Why:** The consumed HST timer is intentionally absent while the slot waits for the device cooldown. Treating that absence as startup recovery schedules the account 175–250 minutes later instead of at the 15–20 minute collision turn.
+**Why:** The consumed HST timer is intentionally absent while the slot waits for the device cooldown. Treating that absence as startup recovery schedules the account another full HST interval later instead of at the next configured collision turn.
 
 **How to apply:** Preserve a durable pending marker keyed by device and slot across UI remounts; clear it only on queued cancellation or lease release, then let the completed queued cycle schedule the next normal interval.
 

@@ -4756,7 +4756,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 
     // A collision-prevented turn is already waiting in the device coordinator.
     // Its original HST timer was consumed when runCycle entered the queue. A
-    // React remount during the 15–20 minute device rest must not interpret the
+    // React remount during the configured device rest must not interpret the
     // missing timer as a fresh startup and schedule another 175–250 minute HST
     // interval. The queued cycle itself owns the next execution.
     if (collisionTurnPending && !forceImmediateToggle && !manualToggleOnRef.current) {

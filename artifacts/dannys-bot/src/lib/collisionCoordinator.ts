@@ -33,6 +33,8 @@ type CollisionQueueEntry = {
   id: string;
   slotIdx: number;
   readyAt: number;
+  queuedAt: number;
+  requestOrder: number;
   source: CollisionSource;
   owner: string;
   manualOverride: boolean;
@@ -65,6 +67,7 @@ export const DEFAULT_COLLISION_CONFIG: CollisionConfig = {
 
 const collisionStates = new Map<string, CollisionState>();
 let leaseSequence = 0;
+let collisionRequestSequence = 0;
 
 function getCollisionState(serial: string): CollisionState {
   const existing = collisionStates.get(serial);
@@ -139,14 +142,12 @@ function processCollisionQueue(serial: string): void {
     return;
   }
 
-  // An explicit user toggle has priority over scheduled turns. Among scheduled
-  // turns, retain the original due-time ordering; among manual turns, retain
-  // arrival order through the lease id.
+  // Explicit manual toggles retain their priority lane. Within each lane,
+  // serve requests in collision-arrival order rather than letting an older
+  // scheduled timestamp overtake an account that has already been waiting.
   state.queue.sort((a, b) =>
     Number(b.manualOverride) - Number(a.manualOverride) ||
-    a.readyAt - b.readyAt ||
-    a.slotIdx - b.slotIdx ||
-    a.id.localeCompare(b.id),
+    a.requestOrder - b.requestOrder,
   );
   const next = state.queue.shift()!;
   state.busy = true;
@@ -154,10 +155,11 @@ function processCollisionQueue(serial: string): void {
   state.activeSlot = next.slotIdx;
   state.activeSource = next.source;
   state.activeOwner = next.owner;
-  const waitMs = Math.max(0, Date.now() - next.readyAt);
+  const waitMs = Math.max(0, Date.now() - next.queuedAt);
   console.info(
     `[COLLISION] ${serial} acquired queued ${describe(next.source, next.owner, next.slotIdx)} ` +
-    `lease=${next.id} due=${new Date(next.readyAt).toISOString()} waitedMs=${waitMs}`,
+    `lease=${next.id} queueOrder=${next.requestOrder} ` +
+    `due=${new Date(next.readyAt).toISOString()} waitedMs=${waitMs}`,
   );
   next.resolve({
     id: next.id,
@@ -219,6 +221,11 @@ export async function requestCollisionSlot(
   readyAt: number,
   options: CollisionRequestOptions,
 ): Promise<CollisionLease> {
+  // Capture arrival before awaiting configuration so concurrent requests are
+  // ordered by when the collision happened, not by network response timing.
+  const queuedAt = Date.now();
+  collisionRequestSequence += 1;
+  const requestOrder = collisionRequestSequence;
   const pendingState = getCollisionState(serial);
   markPending(pendingState, slotIdx);
   await loadCollisionConfig(serial);
@@ -248,6 +255,8 @@ export async function requestCollisionSlot(
       id,
       slotIdx,
       readyAt,
+      queuedAt,
+      requestOrder,
       source: options.source,
       owner: options.owner,
       manualOverride: options.manualOverride === true,
@@ -256,7 +265,7 @@ export async function requestCollisionSlot(
     console.info(
       `[COLLISION] ${serial} queued ${describe(options.source, options.owner, slotIdx)} ` +
       `${options.manualOverride ? "manual-override " : ""}` +
-      `lease=${id} due=${new Date(readyAt).toISOString()} ` +
+      `lease=${id} queueOrder=${requestOrder} due=${new Date(readyAt).toISOString()} ` +
       `active=${state.activeSource}/${state.activeOwner}/slot${state.activeSlot ?? "none"} ` +
       `queueLength=${state.queue.length}`,
     );
