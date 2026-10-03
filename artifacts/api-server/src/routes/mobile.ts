@@ -7649,39 +7649,45 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 _sfSurplusIds.delete(candidate.toLowerCase());
                 tLog(`  Spread Follows: consumed Surplus @${candidate} after dispatch`);
               }
-              return runFollowUsersStep(serial, {
-              usersMin: 1, usersMax: 1,
-              sources: followSources,
-              preloadedCandidates: {
-                targets: [candidate],
-                candidateSource: _spreadCandidateSource ?? new Map(),
-                candidateMeta:   _spreadCandidateMeta   ?? new Map(),
-              },
-              onLog: (msg) => tLog(`  ${msg}`),
-              recordFollow: (u, src) => recordMobileFollow(serial, slotIdx, u, src),
-              onLike: () => { injectBrowsingLikes++; },
-              skipFollowedUsernames: _ssSkipFollowed,
-              skipSkippedUsernames:  _ssSkipSkipped,
-              writeSkippedUsers:     globalSkipSkipped,
-              browsing: _ssBrowsing,
-              filters:  _ssFilters,
-              profileId: mobileProfileId ?? undefined,
-              phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
-               searchAlreadyReady,
-               // The spread owns cleanup across its entire candidate and
-               // backup sequence. Never press Back between candidates.
-               keepSearchOpenAfterStep: true,
+              let searchReadyForReuse = false;
+              const followed = await runFollowUsersStep(serial, {
+                usersMin: 1, usersMax: 1,
+                sources: followSources,
+                preloadedCandidates: {
+                  targets: [candidate],
+                  candidateSource: _spreadCandidateSource ?? new Map(),
+                  candidateMeta:   _spreadCandidateMeta   ?? new Map(),
+                },
+                onLog: (msg) => tLog(`  ${msg}`),
+                recordFollow: (u, src) => recordMobileFollow(serial, slotIdx, u, src),
+                onLike: () => { injectBrowsingLikes++; },
+                skipFollowedUsernames: _ssSkipFollowed,
+                skipSkippedUsernames:  _ssSkipSkipped,
+                writeSkippedUsers:     globalSkipSkipped,
+                browsing: _ssBrowsing,
+                filters:  _ssFilters,
+                profileId: mobileProfileId ?? undefined,
+                phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
+                searchAlreadyReady,
+                onSearchReadyForReuse: (ready) => { searchReadyForReuse = ready; },
+                // The spread owns cleanup across its entire candidate and
+                // backup sequence. Never press Back between candidates.
+                keepSearchOpenAfterStep: true,
               }, hstOperationContext);
-
+              return { followed, searchReadyForReuse };
             };
 
-            let _sfCount = await _runOneSpreadSlot(_spreadUsername);
+            let _spreadResult = await _runOneSpreadSlot(_spreadUsername);
+            let _sfCount = _spreadResult.followed;
+            let _sfSearchAlreadyReady = _spreadResult.searchReadyForReuse;
 
             // If filtered/skipped at follow-time, try backup candidates first.
             while (_sfCount === 0 && _sfBackupQueue.length > 0) {
               const _nextUser = _sfBackupQueue.shift()!;
               tLog(`  Spread Follow: @${_spreadUsername} filtered — trying backup @${_nextUser}`);
-              _sfCount = await _runOneSpreadSlot(_nextUser, true);
+              _spreadResult = await _runOneSpreadSlot(_nextUser, _sfSearchAlreadyReady);
+              _sfCount = _spreadResult.followed;
+              _sfSearchAlreadyReady = _spreadResult.searchReadyForReuse;
             }
 
             // Backup queue exhausted — do one HikerAPI re-scrape round.
@@ -7719,7 +7725,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   while (_sfCount === 0 && _sfBackupQueue.length > 0) {
                     const _nextUser = _sfBackupQueue.shift()!;
                     tLog(`  Spread Follow: trying re-scraped @${_nextUser}`);
-                    _sfCount = await _runOneSpreadSlot(_nextUser, true);
+                    _spreadResult = await _runOneSpreadSlot(_nextUser, _sfSearchAlreadyReady);
+                    _sfCount = _spreadResult.followed;
+                    _sfSearchAlreadyReady = _spreadResult.searchReadyForReuse;
                   }
                 } else {
                   tLog(`  Spread Follow: re-scrape found no viable candidates — slot unfulfilled`);

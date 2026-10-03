@@ -100,6 +100,13 @@ function generateGhostFingerprint(): GhostFingerprint {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+const EMBEDDED_BROWSER_AGENT_PRESETS = [
+  {
+    label: "OnePlus 7T Pro NR · Android 10 · Chrome 134",
+    userAgent: "Mozilla/5.0 (Linux; Android 10; OnePlus7TProNR) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36",
+  },
+];
+
 function randomUA(): UaEntry {
   const eligible = UA_POOL.filter(e => parseInt(e.api.split("/")[0], 10) >= 34);
   const pool = eligible.length > 0 ? eligible : UA_POOL;
@@ -1058,6 +1065,21 @@ export function GhostBrowserPanel({ slot, proxies }: GhostBrowserPanelProps) {
                 <Globe className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Embedded Browser User-Agent</p>
               </div>
+              <select
+                aria-label="Select embedded browser agent preset"
+                data-testid="embedded-browser-agent-select"
+                value={EMBEDDED_BROWSER_AGENT_PRESETS.find(preset => preset.userAgent === embeddedUA)?.userAgent ?? ""}
+                onChange={e => {
+                  const preset = EMBEDDED_BROWSER_AGENT_PRESETS.find(item => item.userAgent === e.target.value);
+                  if (preset) setEmbeddedUA(preset.userAgent);
+                }}
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground"
+              >
+                <option value="">Choose embedded browser agent…</option>
+                {EMBEDDED_BROWSER_AGENT_PRESETS.map(preset => (
+                  <option key={preset.userAgent} value={preset.userAgent}>{preset.label}</option>
+                ))}
+              </select>
               <Input
                 value={embeddedUA}
                 onChange={e => setEmbeddedUA(e.target.value)}

@@ -13468,9 +13468,16 @@ export async function isInstagramSearchBarFocused(
   const { h: screenH } = getScreenSize(serial);
   const topLimit = Math.round(screenH * 0.30);
   const xml = await _uiDump(adb, serial).catch(() => "");
-  if (!xml) return false;
+  if (!xml) {
+    onLog?.(
+      `Follow: search focus unconfirmed — UI tree was empty ` +
+      `(keyboard=${keyboardShown}, foreground=${foregroundPackage ?? "unknown"})`,
+    );
+    return false;
+  }
   let hasTopFocusedEditText = false;
   let hasTopSearchEditText = false;
+  let hasTopInstagramSearchEditText = false;
   for (const match of xml.matchAll(/<node\b[^>]*>/gi)) {
     const node = match[0];
     const bounds = node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
@@ -13478,6 +13485,10 @@ export async function isInstagramSearchBarFocused(
     const centerY = (Number(bounds[2]) + Number(bounds[4])) / 2;
     if (centerY > topLimit) continue;
     const resourceId = node.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+    const nodePackage = node.match(/\bpackage="([^"]*)"/i)?.[1] ?? "";
+    const instagramNode =
+      nodePackage === "com.instagram.android" ||
+      resourceId.startsWith("com.instagram.android:");
     const label = [
       node.match(/\btext="([^"]*)"/i)?.[1] ?? "",
       node.match(/\bcontent-desc="([^"]*)"/i)?.[1] ?? "",
@@ -13486,9 +13497,21 @@ export async function isInstagramSearchBarFocused(
     if (!/edittext/i.test(node)) continue;
     const focused = /focused="true"/i.test(node);
     const searchIdentified = /search/i.test(`${resourceId} ${label}`);
+    const instagramSearchIdentified =
+      searchIdentified && (instagramNode || foregroundPackage === "com.instagram.android");
     hasTopFocusedEditText ||= focused;
     hasTopSearchEditText ||= searchIdentified;
-    if (focused && searchIdentified) return true;
+    hasTopInstagramSearchEditText ||= instagramSearchIdentified;
+    if (focused && instagramSearchIdentified) return true;
+  }
+
+  // UIAutomator can take several seconds on an open keyboard. Re-sample the
+  // IME after the tree arrives so a keyboard that opened during that wait is
+  // not rejected based on the earlier snapshot.
+  const keyboardVisible = keyboardShown || await isKeyboardShown(serial).catch(() => false);
+  if (foregroundPackage && foregroundPackage !== "com.instagram.android") {
+    onLog?.(`Follow: search focus unconfirmed — foreground is ${foregroundPackage}, not Instagram`);
+    return false;
   }
 
   // Instagram/MIUI intermittently omits either focused=true or the Search
@@ -13498,14 +13521,30 @@ export async function isInstagramSearchBarFocused(
   // composer can never be mistaken for Follow's search field. The stronger
   // keyboard-only path above is opt-in and only valid after Follow's calibrated
   // Search-field interaction.
-  if (!hasTopFocusedEditText && !hasTopSearchEditText) return false;
-  if (keyboardShown && foregroundPackage === "com.instagram.android") {
+  if (keyboardVisible && !foregroundPackage && hasTopInstagramSearchEditText) {
+    onLog?.("Follow: search focus confirmed by live Instagram Search EditText + visible keyboard; foreground package was unavailable");
+    return true;
+  }
+  if (!hasTopFocusedEditText && !hasTopSearchEditText) {
+    onLog?.(
+      `Follow: search focus unconfirmed — keyboard=${keyboardVisible}, ` +
+      `foreground=${foregroundPackage ?? "unknown"}, no top Search/focused EditText`,
+    );
+    return false;
+  }
+  if (keyboardVisible && foregroundPackage === "com.instagram.android") {
     onLog?.(
       `Follow: search focus confirmed by visible keyboard + top ` +
       `${hasTopSearchEditText ? "Search EditText" : "focused EditText"} fallback`,
     );
     return true;
   }
+  onLog?.(
+    `Follow: search focus unconfirmed — keyboard=${keyboardVisible}, ` +
+    `foreground=${foregroundPackage ?? "unknown"}, ` +
+    `topFocusedEditText=${hasTopFocusedEditText}, topSearchEditText=${hasTopSearchEditText}, ` +
+    `instagramSearchEditText=${hasTopInstagramSearchEditText}`,
+  );
   return false;
 }
 

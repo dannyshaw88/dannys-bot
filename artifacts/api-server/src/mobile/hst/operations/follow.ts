@@ -738,6 +738,8 @@ export async function runFollowUsersStep(
      /** The caller has already left Instagram on a confirmed, focused,
       * cleared Search field (used for spread backup candidates). */
      searchAlreadyReady?: boolean;
+     /** Reports whether cleanup left a confirmed, cleared Search field. */
+     onSearchReadyForReuse?: (ready: boolean) => void;
      /** Keep the Search surface only when another spread slot follows
       *  immediately. The final slot must restore the normal Instagram UI. */
      keepSearchOpenAfterStep?: boolean;
@@ -1105,9 +1107,16 @@ export async function runFollowUsersStep(
   let _fi = 0;              // manual index into `targets` (grows as re-scrapes inject new entries)
   let scrapeRound = 0;
 
-  // Navigate to Search only for the first candidate in a spread. Backup
-  // candidates reuse the confirmed cleared/focused Search field left by the
-  // previous rejected candidate.
+  const dismissFollowInterstitial = async (reason: string) => {
+    const dismissed = await android.dismissInstagramInterstitials(serial).catch(() => null);
+    if (dismissed) {
+      onLog?.(`Follow: dismissed Instagram interstitial before ${reason} ("${dismissed}")`);
+      await sleepOrAbort(serial, 400);
+    }
+  };
+
+  // Navigate to Search when no prior step has explicitly confirmed that the
+  // cleared/focused field is still ready for this candidate.
   if (!params.searchAlreadyReady) {
     onLog?.("[TRACE] follow: prepare-search");
     // Returning from Explore can leave the Search surface visually present
@@ -1142,6 +1151,7 @@ export async function runFollowUsersStep(
     await sleepOrAbort(serial, 3000);
   }
 
+    await dismissFollowInterstitial("Search navigation");
     const searchTab = await android.tapCalibratedNavigationControl(serial, "search", onLog);
     onLog?.("[TRACE] follow: tap-search-tab");
     await sleepOrAbort(serial, 2500);
@@ -1225,36 +1235,37 @@ export async function runFollowUsersStep(
     const username = targets[_fi++];
     try {
       onLog?.(`Follow: → @${username} (candidate ${_fi}/${targets.length})`);
-      // A result tap opens a profile. The previous candidate's confirmed
-      // Search state must never survive that navigation.
-      searchReadyForReuse = false;
-
-      // Tap the search bar and allow only a short keyboard/focus settle.
-      // The live focus check below is authoritative; a multi-second random
-      // delay here made every already-cleared search unnecessarily slow.
-      // After a profile navigation, never assume the previous Search
-      // surface survived. Re-enter Search from the live semantic tab node
-      // before looking for the input bar.
-      if (_fi > 1 && !searchReadyForReuse) {
-        onLog?.("[TRACE] follow: re-enter-search-after-profile");
-        await android.tapCalibratedNavigationControl(serial, "search", onLog);
-        await sleepOrAbort(serial, 2500);
+      // Preserve Search readiness only when this operation or its caller
+      // explicitly confirmed the cleared, focused field. A failed-focus
+      // candidate must not leak a "ready" assumption into its backup.
+      if (searchReadyForReuse) {
+        onLog?.("[TRACE] follow: reuse-confirmed-cleared-search");
+        searchFocusUnconfirmed = false;
+      } else {
+        // A result tap opens a profile. If cleanup did not confirm Search,
+        // re-enter from the live Search tab before touching the calibrated
+        // user-search point.
+        if (_fi > 1) {
+          onLog?.("[TRACE] follow: re-enter-search-after-profile");
+          await dismissFollowInterstitial("returning to Search after the previous candidate");
+          await android.tapCalibratedNavigationControl(serial, "search", onLog);
+          await sleepOrAbort(serial, 2500);
+        }
+        const searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
+        lastKnownSearchBar = searchBar;
+        onLog?.("[TRACE] follow: tap-search-field");
+        await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));
+        const searchFocused = await android.isInstagramSearchBarFocused(serial, onLog, {
+          allowCalibratedSearchKeyboardFallback: true,
+        }).catch(() => false);
+        if (!searchFocused) {
+          onLog?.("Follow: search bar tap was not confirmed focused — stopping without pressing Back");
+          searchFocusUnconfirmed = true;
+          searchReadyForReuse = false;
+          break;
+        }
+        searchFocusUnconfirmed = false;
       }
-      const searchBar: { x: number; y: number } = searchReadyForReuse
-        ? (lastKnownSearchBar ?? await android.tapCalibratedNavigationControl(serial, "userSearch", onLog))
-        : await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
-      lastKnownSearchBar = searchBar;
-      onLog?.(searchReadyForReuse ? "[TRACE] follow: reuse-focused-search-field" : "[TRACE] follow: tap-search-field");
-      if (!searchReadyForReuse) await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));
-      const searchFocused = await android.isInstagramSearchBarFocused(serial, onLog, {
-        allowCalibratedSearchKeyboardFallback: true,
-      }).catch(() => false);
-      if (!searchFocused) {
-        onLog?.("Follow: search bar tap was not confirmed focused — stopping without pressing Back");
-        searchFocusUnconfirmed = true;
-        break;
-      }
-      searchFocusUnconfirmed = false;
 
       // Clear any leftover text from the previous search, then type the
       // new username.  KEYCODE_CTRL_A cannot send modifier+key chords via
@@ -1692,5 +1703,6 @@ export async function runFollowUsersStep(
   } else {
     await finishFollowNavigation();
   }
+  params.onSearchReadyForReuse?.(searchReadyForReuse && !searchFocusUnconfirmed);
   return followed;
 }

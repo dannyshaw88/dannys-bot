@@ -1,3 +1,9 @@
+## [1.2.564] — 2026-10-03
+
+### Added — Ghost Browser Embedded Agent Preset
+
+- Added a selectable OnePlus 7T Pro NR · Android 10 · Chrome 134 embedded browser user-agent preset.
+
 ## [1.2.563] — 2026-10-03
 
 ### Release
