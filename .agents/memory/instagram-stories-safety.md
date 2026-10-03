@@ -6,6 +6,7 @@ description: Navigation to the detailed safeguards for Instagram Story automatio
 Consult the topic most relevant to the current change:
 
 - [Viewer exit race](story-share-viewer-exit-race.md)
+- [Exit confirmation before the next tool](stories-exit-before-next-tool.md)
 - [Action timing starvation](story-action-timing-starvation.md)
 - [Viewer check cost](story-viewer-check-cost.md)
 - [Fast-check calibration](story-viewer-fast-check-calibration.md)

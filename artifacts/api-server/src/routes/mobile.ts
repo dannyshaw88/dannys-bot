@@ -6897,7 +6897,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 clickAuthorPercentMax: viewStoriesClickAuthorPercentMax,
                 onLog: (msg) => tLog(`  ${msg}`),
               }).catch((e: any) => {
-                if (e?.message === "cycle-aborted") throw e;
+                if (e?.message === "cycle-aborted" || e?.message === "instagram-screen-state-unconfirmed") throw e;
                 tLog(`  ⚠ Pre-switch Stories skipped: ${e?.message ?? "unknown error"}`);
                 return null;
               });
@@ -7461,9 +7461,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               storyEntry,
               onLog: (msg) => tLog(`  ${msg}`),
             });
-            // runViewStoriesFromFeedLoop exits the viewer internally (ad-
-            // deviation recovery + swipe-down). Control returns here only
-            // once the phone is back on the home feed — no extra exit step.
+            // runViewStoriesFromFeedLoop exits and verifies the viewer before
+            // control returns, so the next tool never inherits a Story screen.
             storiesWatched = result.storiesWatched;
             storyLikes = result.storyLikes;
             steps.push(`stories(${result.storiesWatched} watched)`);
@@ -7681,7 +7680,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             let _sfSearchAlreadyReady = _spreadResult.searchReadyForReuse;
 
             // If filtered/skipped at follow-time, try backup candidates first.
-            while (_sfCount === 0 && _sfBackupQueue.length > 0) {
+            while (_sfCount === 0 && _sfSearchAlreadyReady && _sfBackupQueue.length > 0) {
               const _nextUser = _sfBackupQueue.shift()!;
               tLog(`  Spread Follow: @${_spreadUsername} filtered — trying backup @${_nextUser}`);
               _spreadResult = await _runOneSpreadSlot(_nextUser, _sfSearchAlreadyReady);
@@ -7690,7 +7689,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
 
             // Backup queue exhausted — do one HikerAPI re-scrape round.
-            if (_sfCount === 0 && _sfHikerToken && followSources.length) {
+            if (_sfCount === 0 && _sfSearchAlreadyReady && _sfHikerToken && followSources.length) {
               tLog(`  Spread Follow: backup queue empty — re-scraping HikerAPI for replacement…`);
               try {
                 const _rsHiker = new HikerApiClient(_sfHikerToken);
@@ -7721,7 +7720,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 }
                 if (_sfBackupQueue.length) {
                   tLog(`  Spread Follow: re-scrape found ${_sfBackupQueue.length} new candidate(s)`);
-                  while (_sfCount === 0 && _sfBackupQueue.length > 0) {
+                  while (_sfCount === 0 && _sfSearchAlreadyReady && _sfBackupQueue.length > 0) {
                     const _nextUser = _sfBackupQueue.shift()!;
                     tLog(`  Spread Follow: trying re-scraped @${_nextUser}`);
                     _spreadResult = await _runOneSpreadSlot(_nextUser, _sfSearchAlreadyReady);
@@ -7737,18 +7736,31 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               }
             }
 
+            if (_sfCount === 0 && !_sfSearchAlreadyReady) {
+              tLog("▶ Spread Follow stopped — Search focus/clear was not confirmed; remaining tools will not send taps");
+              steps.push(`follow_spread(@${_spreadUsername},screen-state-unconfirmed)`);
+              break;
+            }
+
             // The complete spread is now finished: the Follow operation owns
             // restoring the search surface for the next dispatcher entry.
-            await finishSpreadFollowSearch(serial, {
-              android,
-              sleepOrAbort,
-              onLog: (msg) => tLog(`  ${msg}`),
-            });
+            if (_sfCount > 0 || _sfSearchAlreadyReady) {
+              await finishSpreadFollowSearch(serial, {
+                android,
+                sleepOrAbort,
+                onLog: (msg) => tLog(`  ${msg}`),
+              });
+            }
 
             followedCount += _sfCount;
             steps.push(`follow_spread(@${_spreadUsername}${_sfCount > 0 ? '' : ',skipped'})`);
           } catch (e: any) {
             if (e?.message === "cycle-aborted") throw e;
+            if (e?.message === "instagram-screen-state-unconfirmed") {
+              tLog("▶ Spread Follow stopped — Instagram screen state is unconfirmed; remaining tools will not send taps");
+              steps.push(`follow_spread(@${_spreadUsername},screen-state-unconfirmed)`);
+              break;
+            }
             tLog(`▶ Spread Follow @${_spreadUsername} error — ${e?.message}`);
             steps.push(`follow_spread(@${_spreadUsername},error)`);
           }
@@ -7810,6 +7822,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               tLog(`▶ Follow done — ${followCount} users followed`);
             } catch (e: any) {
               if (e?.message === "cycle-aborted") throw e;
+              if (e?.message === "instagram-screen-state-unconfirmed") {
+                tLog("▶ Follow stopped — Instagram screen state is unconfirmed; remaining tools will not send taps");
+                steps.push("follow(screen-state-unconfirmed)");
+                break;
+              }
               tLog(`▶ Follow step error — ${e?.message}`);
               steps.push("follow(error)");
             }

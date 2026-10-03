@@ -898,10 +898,8 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
       }
     }
 
-    // End the story tool with one downward swipe. Do not inspect foreground
-    // package, validate the viewer, press Back, or perform Home-tab recovery.
-    // If the story viewer is open, this exits it; otherwise Instagram simply
-    // refreshes/scrolls the feed, which is acceptable.
+    // End the story tool with one downward swipe, then verify that Instagram
+    // actually left the viewer before the dispatcher starts another tool.
     const { w: _storyExitW, h: _storyExitH } = getScreenSize(serial);
     onLog?.("Story exit: swiping down to leave the story viewer");
     await deviceProfileSwipe(
@@ -917,5 +915,22 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
       "back",
     );
     await sleepOrAbort(serial, 800);
+    let storyViewerExitUnconfirmed = await android.isInStoryViewerSlow(serial).catch(() => true);
+    if (storyViewerExitUnconfirmed) {
+      onLog?.("Story exit: viewer dismissal is not confirmed after the swipe — pressing Android Back once");
+      try {
+        await android.pressBack(serial);
+      } catch (error: any) {
+        if (error?.message === "cycle-aborted") throw error;
+        onLog?.(`Story exit: Android Back fallback failed — ${error?.message ?? "unknown error"}`);
+      }
+      await sleepOrAbort(serial, 800);
+      storyViewerExitUnconfirmed = await android.isInStoryViewerSlow(serial).catch(() => true);
+    }
+    if (storyViewerExitUnconfirmed) {
+      onLog?.("Story exit: viewer dismissal remains unconfirmed — stopping the tool sequence before further phone input");
+      throw new Error("instagram-screen-state-unconfirmed");
+    }
+    onLog?.("Story exit: viewer dismissal confirmed");
     return { storiesWatched, storyLikes };
   }

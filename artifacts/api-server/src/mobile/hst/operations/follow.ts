@@ -1115,6 +1115,18 @@ export async function runFollowUsersStep(
     }
   };
 
+  // Do not begin Follow from an unexpected or ambiguous story-viewer surface.
+  // Its coordinates overlap controls in the viewer, so the Search taps would
+  // otherwise repeat against the wrong screen while backups are consumed.
+  if (!params.searchAlreadyReady) {
+    const storyViewerOrUnknown = await android.isInStoryViewerSlow(serial).catch(() => true);
+    if (storyViewerOrUnknown) {
+      onLog?.("Follow: Story viewer or unverified Instagram screen remains open — aborting before Search navigation");
+      params.onSearchReadyForReuse?.(false);
+      throw new Error("instagram-screen-state-unconfirmed");
+    }
+  }
+
   // Navigate to Search when no prior step has explicitly confirmed that the
   // cleared/focused field is still ready for this candidate.
   if (!params.searchAlreadyReady) {
@@ -1159,7 +1171,7 @@ export async function runFollowUsersStep(
     onLog?.("Follow: reusing confirmed cleared Search field for next spread candidate");
   }
 
-  while (followed < targetCount) {
+  while (followed < targetCount && !searchFocusUnconfirmed) {
     // Pool exhausted — fetch a fresh batch from HikerAPI rather than giving up
     if (_fi >= targets.length) {
       if (scrapeRound >= MAX_SCRAPE_ROUNDS) {
@@ -1704,5 +1716,8 @@ export async function runFollowUsersStep(
     await finishFollowNavigation();
   }
   params.onSearchReadyForReuse?.(searchReadyForReuse && !searchFocusUnconfirmed);
+  if (searchFocusUnconfirmed) {
+    throw new Error("instagram-screen-state-unconfirmed");
+  }
   return followed;
 }
