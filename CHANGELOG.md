@@ -1,3 +1,11 @@
+## [1.2.561] — 2026-10-03
+
+### Fixed — Keep HST Device Logs to the Active Run
+
+- Each device's live Debugging Log now resets when a new HST account acquires the device, so previous accounts' run logs do not carry over.
+- Accounts waiting for a device do not clear the active account's log; Action Log history and durable API diagnostics are preserved.
+- Scheduled collision requests run in first-collision-first order after the active cycle and configured rest.
+
 ## [1.2.560] — 2026-10-02
 
 ### Fixed — Honor the Make a Post Editor Wait
