@@ -13383,7 +13383,25 @@ export async function findInstagramSearchBar(
 export async function isInstagramSearchBarFocused(
   serial: string,
   onLog?: (msg: string) => void,
+  options: { allowCalibratedSearchKeyboardFallback?: boolean } = {},
 ): Promise<boolean> {
+  // Follow calls this only after tapping the per-device calibrated Search
+  // field (or reusing a field whose focus was already confirmed). Check the
+  // IME first: Android can omit the focused EditText from a live tree dump,
+  // and dumping the search results plus keyboard can block for several seconds.
+  const keyboardShown = await isKeyboardShown(serial).catch(() => false);
+  let foregroundPackage: string | null = null;
+  if (keyboardShown) {
+    foregroundPackage = await getForegroundPackage(serial).catch(() => null);
+    if (
+      options.allowCalibratedSearchKeyboardFallback &&
+      foregroundPackage === "com.instagram.android"
+    ) {
+      onLog?.("Follow: search focus confirmed by visible keyboard + Instagram foreground after calibrated Search-field interaction");
+      return true;
+    }
+  }
+
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const { h: screenH } = getScreenSize(serial);
@@ -13416,13 +13434,10 @@ export async function isInstagramSearchBarFocused(
   // label/resource-id from the otherwise-live EditText node. The visible IME
   // is the authoritative focus signal in that state. Keep this fallback
   // tightly scoped to Instagram and to a top-region EditText so a comment/DM
-  // composer or another foreground app can never be mistaken for Follow's
-  // search field.
+  // composer can never be mistaken for Follow's search field. The stronger
+  // keyboard-only path above is opt-in and only valid after Follow's calibrated
+  // Search-field interaction.
   if (!hasTopFocusedEditText && !hasTopSearchEditText) return false;
-  const [keyboardShown, foregroundPackage] = await Promise.all([
-    isKeyboardShown(serial).catch(() => false),
-    getForegroundPackage(serial).catch(() => null),
-  ]);
   if (keyboardShown && foregroundPackage === "com.instagram.android") {
     onLog?.(
       `Follow: search focus confirmed by visible keyboard + top ` +

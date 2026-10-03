@@ -752,6 +752,7 @@ export async function runFollowUsersStep(
   const _injectBrowsingLastDmRecipient = context._injectBrowsingLastDmRecipient as Map<string, { x: number; y: number }>;
   const { usersMin, usersMax, sources, onLog, onLike, recordFollow, browsing, skipFollowedUsernames, skipSkippedUsernames, filters } = params;
   let searchReadyForReuse = !!params.searchAlreadyReady;
+  let searchFocusUnconfirmed = false;
   // The Search field stays in the same top-bar position while returning from
   // a rejected profile to Search results. Keep the last live visual match so
   // recovery does not repeat the expensive multi-template scan immediately.
@@ -837,12 +838,16 @@ export async function runFollowUsersStep(
     const searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
     lastKnownSearchBar = searchBar;
     await sleepOrAbort(serial, 500);
-    const focused = await android.isInstagramSearchBarFocused(serial, onLog).catch(() => false);
+    const focused = await android.isInstagramSearchBarFocused(serial, onLog, {
+      allowCalibratedSearchKeyboardFallback: true,
+    }).catch(() => false);
     if (!focused) {
       onLog?.(`Follow: ${reason} — clean Explore search field was not confirmed focused`);
+      searchFocusUnconfirmed = true;
       searchReadyForReuse = false;
       return false;
     }
+    searchFocusUnconfirmed = false;
     searchReadyForReuse = true;
     onLog?.(`Follow: ${reason} — two calibrated Backs complete; clean Explore search field focused`);
     return true;
@@ -863,12 +868,16 @@ export async function runFollowUsersStep(
     }
     lastKnownSearchBar = searchBar;
     await sleepOrAbort(serial, 500);
-    const focused = await android.isInstagramSearchBarFocused(serial, onLog).catch(() => false);
+    const focused = await android.isInstagramSearchBarFocused(serial, onLog, {
+      allowCalibratedSearchKeyboardFallback: true,
+    }).catch(() => false);
     if (!focused) {
       onLog?.(`Follow: ${reason} — search bar focus not confirmed; refusing keyboard input`);
+      searchFocusUnconfirmed = true;
       searchReadyForReuse = false;
       return false;
     }
+    searchFocusUnconfirmed = false;
     await android.clearInstagramSearchBar(
       serial,
       (msg: string) => onLog?.(`Follow: ${reason} — ${msg}`),
@@ -903,11 +912,15 @@ export async function runFollowUsersStep(
       const searchBar = await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
       lastKnownSearchBar = searchBar;
       await sleepOrAbort(serial, 500);
-      const focusedAfterRecovery = await android.isInstagramSearchBarFocused(serial, onLog).catch(() => false);
+      const focusedAfterRecovery = await android.isInstagramSearchBarFocused(serial, onLog, {
+        allowCalibratedSearchKeyboardFallback: true,
+      }).catch(() => false);
       if (!focusedAfterRecovery) {
         onLog?.("Follow: skipped-user cleanup — search field was not confirmed after second Back; refusing keyboard input");
+        searchFocusUnconfirmed = true;
         return false;
       }
+      searchFocusUnconfirmed = false;
       searchReadyForReuse = true;
       onLog?.("Follow: skipped-user cleanup — second calibrated Back recovered clean Explore search");
       return true;
@@ -1227,17 +1240,21 @@ export async function runFollowUsersStep(
         await android.tapCalibratedNavigationControl(serial, "search", onLog);
         await sleepOrAbort(serial, 2500);
       }
-      const searchBar = searchReadyForReuse
+      const searchBar: { x: number; y: number } = searchReadyForReuse
         ? (lastKnownSearchBar ?? await android.tapCalibratedNavigationControl(serial, "userSearch", onLog))
         : await android.tapCalibratedNavigationControl(serial, "userSearch", onLog);
       lastKnownSearchBar = searchBar;
       onLog?.(searchReadyForReuse ? "[TRACE] follow: reuse-focused-search-field" : "[TRACE] follow: tap-search-field");
       if (!searchReadyForReuse) await sleepOrAbort(serial, 500 + Math.floor(Math.random() * 500));
-      const searchFocused = await android.isInstagramSearchBarFocused(serial, onLog).catch(() => false);
+      const searchFocused = await android.isInstagramSearchBarFocused(serial, onLog, {
+        allowCalibratedSearchKeyboardFallback: true,
+      }).catch(() => false);
       if (!searchFocused) {
         onLog?.("Follow: search bar tap was not confirmed focused — stopping without pressing Back");
+        searchFocusUnconfirmed = true;
         break;
       }
+      searchFocusUnconfirmed = false;
 
       // Clear any leftover text from the previous search, then type the
       // new username.  KEYCODE_CTRL_A cannot send modifier+key chords via
@@ -1652,7 +1669,9 @@ export async function runFollowUsersStep(
     onLog?.(`Follow: saved ${surplusEntries.length} unused candidate${surplusEntries.length !== 1 ? "s" : ""} to Surplus for next cycle`);
   }
 
-  if (_usePreloaded && params.keepSearchOpenAfterStep) {
+  if (searchFocusUnconfirmed) {
+    onLog?.("Follow: cleanup skipped clear and Back because Search-field focus was not confirmed");
+  } else if (_usePreloaded && params.keepSearchOpenAfterStep) {
     // Spread Follows invokes this step once per assigned candidate/backup.
     // Do not leave Search with the normal two-Back final cleanup between
     // segments: the next Spread Follow segment is about to reuse the same

@@ -1,3 +1,11 @@
+## [1.2.562] — 2026-10-03
+
+### Fixed — Confirm Follow Search Focus from the Live Keyboard
+
+- After Follow taps the calibrated Search field, a visible Android keyboard with Instagram in the foreground now confirms focus even when UIAutomator omits the EditText.
+- The focus check no longer waits for a slow UI dump before using that signal.
+- If focus still cannot be confirmed, cleanup skips delete-key sweeps and Back navigation.
+
 ## [1.2.561] — 2026-10-03
 
 ### Fixed — Keep HST Device Logs to the Active Run
