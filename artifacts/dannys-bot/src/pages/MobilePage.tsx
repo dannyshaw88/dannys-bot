@@ -20,7 +20,7 @@ import { BrowserPanel } from "@/components/BrowserPanel";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { Sidebar, FilledFarmIcon } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
-import { useDeviceLog } from "@/contexts/DeviceLogContext";
+import { requestDeviceDebugLogClear, useDeviceLog } from "@/contexts/DeviceLogContext";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 import { Label } from "@/components/ui/label";
 import { Input as BaseInput } from "@/components/ui/input";
@@ -4870,22 +4870,21 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           cycleCollisionLease = null;
           return;
         }
+      }
+      // Reset only this device's live debug buffer once this account owns the
+      // device. A queued account must not erase the active account's log.
+      try {
+        requestDeviceDebugLogClear(serial);
+      } catch {
+        // Log presentation must never prevent an automation cycle.
+      }
+      if (requestSlot && slotIdx !== undefined) {
         onLog?.(`[HST-DBG] ${_dbgTag} — slot acquired (collisionPrevented=${collisionPrevented}, manualOverride=${manualCollisionOverride})`);
       }
       const s = settingsRef.current;
       const min = Math.max(1, Math.min(s.feedScrollMin, s.feedScrollMax));
       const max = Math.max(s.feedScrollMin, s.feedScrollMax);
       const count = Math.floor(Math.random() * (max - min + 1)) + min;
-      // Do not make the automation request depend on UI log cleanup. These
-      // context callbacks are presentation-only and can be stale during a
-      // remount; a throw here used to abort the cycle after the collision lock
-      // was acquired but before /automation-cycle was sent.
-      try {
-        clearLogLines();
-        clearActionLogLines();
-      } catch {
-        // The device cycle must continue even if the log panel is unavailable.
-      }
       setRunning(true);
       onLog?.(`Cycle starting → power on, open Instagram, ${count} downward scrolls`);
       // Generate a unique ID for this cycle.  Both the cycle POST and the abort

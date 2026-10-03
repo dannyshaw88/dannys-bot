@@ -18,6 +18,13 @@ import {
 } from "react";
 
 const ACTION_LOG_RE = /Cycle\s+(complete|failed|aborted)/i; // "Cycle failed" added to catch-block tLog
+const DEVICE_DEBUG_LOG_CLEAR_EVENT = "aura:clear-device-debug-log";
+
+/** Request a per-device live debug-log reset from non-React HST owners. */
+export function requestDeviceDebugLogClear(serial: string): void {
+  if (!serial || typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(DEVICE_DEBUG_LOG_CLEAR_EVENT, { detail: { serial } }));
+}
 
 interface SerialLogs {
   logLines:       string[];
@@ -66,6 +73,15 @@ export function DeviceLogProvider({ children }: { children: ReactNode }) {
       [serial]: { ...(prev[serial] ?? { logLines: [], actionLogLines: [] }), logLines: [] },
     }));
   }, []);
+
+  useEffect(() => {
+    const onClearDeviceDebugLog = (event: Event) => {
+      const serial = (event as CustomEvent<{ serial?: unknown }>).detail?.serial;
+      if (typeof serial === "string" && serial.length > 0) clearLogLines(serial);
+    };
+    window.addEventListener(DEVICE_DEBUG_LOG_CLEAR_EVENT, onClearDeviceDebugLog);
+    return () => window.removeEventListener(DEVICE_DEBUG_LOG_CLEAR_EVENT, onClearDeviceDebugLog);
+  }, [clearLogLines]);
 
   const clearActionLogLines = useCallback((serial: string) => {
     setStore(prev => ({

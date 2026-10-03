@@ -20,3 +20,9 @@ The server's rolling screenshot buffer must store the resolved context alongside
 **Why:** The screenshot buffer can begin in the middle of a tool block, where content-only inference changed nested Reel text to red even though the active tool was Follow.
 
 **How to apply:** Resolve context at log-ingest time, persist it by device, reset it at cycle boundaries, and leave unknown/system lines white until an explicit tool header establishes ownership.
+
+The in-memory Debugging Log is per-device and per-active HST run, not a cross-account run history. Clear only that device's live debug lines when a run actually acquires the device, after any collision wait; preserve the separate Action Log and durable API diagnostics.
+
+**Why:** Keeping previous accounts' lines in the live device buffer makes the current account's activity ambiguous.
+
+**How to apply:** Route both UI-owned and background HST starts through the same per-serial clear signal after lease acquisition and before the new run's first log line. Never clear a device's active log while another account still owns the device.

@@ -7,6 +7,7 @@
  * loop even when MobilePage is not in the route tree.
  */
 import type { HstToggleEvent } from "./hstToggleCoordinator";
+import { requestDeviceDebugLogClear } from "../contexts/DeviceLogContext";
 
 // ── Shared maps (imported by MobilePage so they use the same instances) ──────
 export const _hstTimers   = new Map<string, ReturnType<typeof setTimeout>>();
@@ -432,6 +433,12 @@ async function runCycleBg(
     _hstStop.delete(key);
     releaseCollisionSlot(serial, collisionLease, true);
     return;
+  }
+
+  try {
+    requestDeviceDebugLogClear(serial);
+  } catch {
+    // Log presentation must never prevent a background automation cycle.
   }
 
   try {
