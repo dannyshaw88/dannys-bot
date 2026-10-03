@@ -673,7 +673,6 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },
     { key: 'postLocalFolder',   label: 'My Computer directory',          fields: ['makePostLocalFolderPath'] },
     { key: 'postLocalOpts',     label: 'My Computer options',            fields: ['makePostLocalFolderNoRepeat','makePostLocalFolderRandom'] },
-    { key: 'postDeleteAfterUse',label: 'Delete after use',                fields: ['makePostLocalFolderDeleteAfterUpload'] },
     { key: 'postAddLocation',   label: 'Add location',                   fields: ['makePostAddLocation'] },
     { key: 'postDisableAt',     label: 'Disable when no more posts are found', fields: ['makePostDisableWhenExhausted'] },
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },

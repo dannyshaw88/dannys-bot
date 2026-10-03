@@ -20,7 +20,7 @@ export interface MakePostOperationContext {
 
 export async function runMakePostStep(serial: string, opts: {
   localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
-  deleteAfterUpload: boolean; captionText: string; addLocation?: boolean;
+  captionText: string; addLocation?: boolean;
   accountUsername?: string; slotIdx?: number; homeTapCount?: number;
   filterChanceMin?: number; filterChanceMax?: number;
   doFixAiSlop?: boolean; alterationEnabled?: boolean; alterationLevel?: any;
@@ -32,7 +32,7 @@ export async function runMakePostStep(serial: string, opts: {
     auditDeviceMediaCopy, effectiveTypingProfile,
     } = context;
   const {
-    localFolderPath, localFolderRandom, localFolderNoRepeat, deleteAfterUpload,
+    localFolderPath, localFolderRandom, localFolderNoRepeat,
     captionText, doFixAiSlop, alterationEnabled, alterationLevel,
     imageSettingsEnabled, imageSettings, frequencyDisruption, addLocation, accountUsername, slotIdx, onLog,
     filterChanceMin = 0, filterChanceMax = 100,
@@ -604,14 +604,6 @@ if (!shareConfirmed) {
 uploadConfirmed = true;
 recordPostedLocalFile(serial, slotIdx, fileName);
 recordPostedProfileMedia(serial, opts.slotIdx ?? 0, opts.accountUsername ?? "", fileName);
-if (deleteAfterUpload) {
-  try {
-    await fsPromises.unlink(localFilePath);
-    onLog?.(`Make a Post: deleted original PC image "${fileName}" after confirmed upload.`);
-  } catch (error: any) {
-    onLog?.(`Make a Post: upload confirmed, but could not delete original PC image "${fileName}": ${error?.message ?? "unknown error"}`);
-  }
-}
 onLog?.(`Make a Post: ✓ posted "${fileName}"`);
 return { posted: true, fileName };
 } finally {
@@ -626,16 +618,14 @@ return { posted: true, fileName };
       logCleanup(`Make a Post: could not clean up staged phone image "${path.basename(devicePath)}": ${error?.message ?? "unknown error"}`);
     }
   }
-  if (!uploadConfirmed) {
-    try {
-      await fsPromises.unlink(localFilePath);
-      logCleanup(`Make a Post: deleted source image "${fileName}" after failed attempt.`);
-    } catch (error: any) {
-      if (error?.code === "ENOENT") {
-        logCleanup(`Make a Post: source image "${fileName}" was already absent after failed attempt.`);
-      } else {
-        logCleanup(`Make a Post: failed to delete source image "${fileName}" after failed attempt: ${error?.message ?? "unknown error"}`);
-      }
+  try {
+    await fsPromises.unlink(localFilePath);
+    logCleanup(`Make a Post: deleted source image "${fileName}" after ${uploadConfirmed ? "confirmed upload" : "failed attempt"}.`);
+  } catch (error: any) {
+    if (error?.code === "ENOENT") {
+      logCleanup(`Make a Post: source image "${fileName}" was already absent after ${uploadConfirmed ? "confirmed upload" : "failed attempt"}.`);
+    } else {
+      logCleanup(`Make a Post: failed to delete source image "${fileName}" after ${uploadConfirmed ? "confirmed upload" : "failed attempt"}: ${error?.message ?? "unknown error"}`);
     }
   }
 }

@@ -8262,14 +8262,6 @@ export function AutomationSettingsPanel({
                         <label htmlFor={`make-a-post-disable-exhausted-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Stop if folders empty</label>
                       </div>
                       <div className="flex items-center gap-2">
-                        <input type="checkbox" id={`make-a-post-local-delete-after-use-${slotIdx ?? 0}`}
-                          checked={settings.makePostLocalFolderDeleteAfterUpload}
-                          onChange={e => setSettings(s => ({ ...s, makePostLocalFolderDeleteAfterUpload: e.target.checked }))}
-                          disabled={fieldDisabled("makePostLocalFolderDeleteAfterUpload")}
-                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
-                        <label htmlFor={`make-a-post-local-delete-after-use-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Delete after successful upload</label>
-                      </div>
-                      <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-add-location-${slotIdx ?? 0}`}
                           checked={settings.makePostAddLocation}
                           onChange={e => setSettings(s => ({ ...s, makePostAddLocation: e.target.checked }))}
@@ -8279,7 +8271,7 @@ export function AutomationSettingsPanel({
                       </div>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      Failed Make a Post attempts always delete the selected image from this folder and the phone.
+                      Every Make a Post attempt deletes the selected image from this PC folder and removes its phone copy, whether it succeeds or fails.
                     </p>
 
                 </div>

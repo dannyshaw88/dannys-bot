@@ -131,6 +131,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-03 — Every automated Make a Post attempt consumes both copies
+- Clarified the required behavior: once Make a Post selects a source image, it must delete that PC file and remove the staged phone copy after either a confirmed upload or a failed/exceptional attempt.
+- Removed the success-only deletion option from the Make a Post controls and dispatcher. The legacy persisted setting remains for compatibility but no longer controls this operation; the separate manual PC-to-phone flow stays user-controlled.
+- The shared finalizer now removes the source file on success and failure, while strict phone cleanup still runs whenever a staged device path is known. Make a Post's partial-push cleanup remains opt-in and does not change other callers.
+- Verification: API and web builds passed; mocked runtime checks covered confirmed upload, unconfirmed Share, partial phone push, and a preparation exception, with source and staged phone cleanup asserted where applicable. `git diff --check` passed. A physical phone was not available for deletion verification.
+
 ### 2026-10-03 — Failed automated Make a Post attempts consume both image copies
 - Once a local-folder image is selected, every unsuccessful return and thrown error now runs shared cleanup: remove the original from its source directory and remove the staged phone copy when its path is known.
 - Make a Post opts into cleanup of the generated phone path when ADB push/scan fails, then retries strict removal in the operation finalizer. The success-only setting still controls deletion of the original after a confirmed upload; the temporary phone copy is still removed after success.
