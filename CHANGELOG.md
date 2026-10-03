@@ -1,3 +1,14 @@
+## [1.2.568] — 2026-10-03
+
+### Fixed — Stop Follow When the Story Viewer Hasn’t Closed
+
+- Stories now verifies the viewer closed after its exit swipe, tries Android Back once if needed, and stops the tool sequence if dismissal remains unconfirmed.
+- Follow no longer retries backup accounts, re-scrapes, or sends cleanup taps when Search focus is unconfirmed.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.568`.
+
 ## [1.2.567] — 2026-10-03
 
 ### Fixed — Always Clean Up Automated Make a Post Media
