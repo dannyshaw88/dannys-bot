@@ -4259,14 +4259,15 @@ function escapeForAdbInput(s: string): string {
 // otherwise the client sees "200 OK" for a tap that did nothing on-device,
 // which is exactly the "clicks do nothing, no error anywhere" symptom this
 // is fixing.
-async function runInputShell(serial: string, args: string[], label: string): Promise<void> {
+async function runInputShell(serial: string, args: string[], label: string, tapId?: string): Promise<void> {
   return runWithDeviceInputGate(serial, async () => {
     const tools = detectToolset();
     const adb = requireTool(tools.adb, "adb");
     const inputStartedAt = Date.now();
+    const tapIdSuffix = tapId ? ` tapId=${tapId}` : "";
     logger.info(
-      { serial, label, args, startedAt: inputStartedAt },
-      "[mobile-input] adb input begin",
+      { serial, label, args, tapId, startedAt: inputStartedAt },
+      `[mobile-input] adb input begin${tapIdSuffix}`,
     );
     try {
       const { stdout, stderr } = await execFileP(
@@ -4279,15 +4280,27 @@ async function runInputShell(serial: string, args: string[], label: string): Pro
         throw new Error(out);
       }
       logger.info(
-        { serial, label, args, elapsedMs: Date.now() - inputStartedAt },
-        "[mobile-input] adb input end",
+        { serial, label, args, tapId, elapsedMs: Date.now() - inputStartedAt },
+        `[mobile-input] adb input end${tapIdSuffix}`,
       );
     } catch (e: any) {
       const out = `${e.stderr ?? ""}${e.stdout ?? ""}`.trim();
       if (isAndroidDeviceUnavailableError(e)) {
+        if (tapId) {
+          logger.error(
+            { serial, label, tapId, elapsedMs: Date.now() - inputStartedAt },
+            `[mobile-input] tap failed id=${tapId} device-unavailable`,
+          );
+        }
         throw new AndroidDeviceUnavailableError(serial, `input ${label}`);
       }
       const detail = out || (e.killed || e.signal ? "adb timed out" : e.message) || "unknown error";
+      if (tapId) {
+        logger.error(
+          { serial, label, tapId, elapsedMs: Date.now() - inputStartedAt, error: detail },
+          `[mobile-input] tap failed id=${tapId} error=${JSON.stringify(detail)}`,
+        );
+      }
       throw new Error(
         `adb shell input ${label} failed${detail ? `: ${detail}` : ""}`,
       );
@@ -4441,23 +4454,71 @@ function applySmallTapOffset(x: number, y: number): { x: number; y: number; jitt
   };
 }
 
-export async function tap(serial: string, x: number, y: number, source?: "manual" | "bot"): Promise<void> {
+let tapTraceSequence = 0;
+
+function getTapCaller(): string {
+  const frames = new Error().stack?.split("\n").slice(1) ?? [];
+  const frame = frames.find(line =>
+    !/androidManager\.(?:ts|js|mjs)/.test(line) &&
+    !line.includes("node:internal"),
+  );
+  return (frame ?? "unknown caller").trim().replace(/^at\s+/, "").replace(/\s+/g, " ").slice(0, 240);
+}
+
+function normalizeTapTraceText(value: string): string {
+  return value.replace(/[\r\n\t]+/g, " ").trim().slice(0, 240);
+}
+
+export async function tap(
+  serial: string,
+  x: number,
+  y: number,
+  source?: "manual" | "bot",
+  reason?: string,
+  origin?: "operator" | "automation",
+): Promise<void> {
   const tapSource = source ?? "bot";
-  const dispatched = tapSource === "bot" ? applySmallTapOffset(x, y) : { x: Math.round(x), y: Math.round(y), jitterPx: 0 };
+  const tapOrigin = origin ?? (tapSource === "manual" ? "operator" : "automation");
+  const tapMode = tapSource === "bot" ? "jittered" : "exact";
+  const requestedX = Math.round(x);
+  const requestedY = Math.round(y);
+  const dispatched = tapSource === "bot" ? applySmallTapOffset(x, y) : { x: requestedX, y: requestedY, jitterPx: 0 };
+  const tapId = `${process.pid.toString(36)}-${Date.now().toString(36)}-${(++tapTraceSequence).toString(36)}`;
+  const tapReason = normalizeTapTraceText(
+    reason ?? (tapOrigin === "operator" ? "operator input" : "reason not supplied by caller"),
+  );
+  const caller = getTapCaller();
+  const logMessage =
+    `[mobile-input] tap dispatched id=${tapId} origin=${tapOrigin} mode=${tapMode} ` +
+    `requested=(${requestedX},${requestedY}) actual=(${dispatched.x},${dispatched.y}) ` +
+    `jitterPx=${dispatched.jitterPx} reason=${JSON.stringify(tapReason)} caller=${JSON.stringify(caller)}`;
   logger.info(
     {
       serial,
-      requestedX: Math.round(x),
-      requestedY: Math.round(y),
+      tapId,
+      requestedX,
+      requestedY,
       x: dispatched.x,
       y: dispatched.y,
       jitterPx: dispatched.jitterPx,
       source: tapSource,
+      origin: tapOrigin,
+      mode: tapMode,
+      reason: tapReason,
+      caller,
     },
-    "[mobile-input] tap dispatched",
+    logMessage,
   );
-  recorder.addTap(serial, dispatched.x, dispatched.y, undefined, tapSource);
-  await runInputShell(serial, ["tap", String(dispatched.x), String(dispatched.y)], "tap");
+  recorder.addTap(serial, dispatched.x, dispatched.y, undefined, tapSource, {
+    tapId,
+    origin: tapOrigin,
+    mode: tapMode,
+    requestedX,
+    requestedY,
+    reason: tapReason,
+    caller,
+  });
+  await runInputShell(serial, ["tap", String(dispatched.x), String(dispatched.y)], "tap", tapId);
 }
 
 /**
@@ -13901,6 +13962,7 @@ export async function tapCalibratedNavigationControl(
   serial: string,
   control: NavigationControlId,
   onLog?: (msg: string) => void,
+  reason?: string,
 ): Promise<NavigationPoint> {
   const point = getCalibratedNavigationControl(serial, control);
   const x = Math.round(point.x);
@@ -13910,7 +13972,14 @@ export async function tapCalibratedNavigationControl(
   // Calibration tests must exercise the saved point exactly. The bot tap
   // path adds humanisation jitter, which makes a correct calibration appear
   // wrong (especially on small controls) and makes diagnosis impossible.
-  await tap(serial, x, y, "manual");
+  await tap(
+    serial,
+    x,
+    y,
+    "manual",
+    reason ?? `Calibrated navigation: tap ${control}`,
+    "automation",
+  );
   return { x, y };
 }
 

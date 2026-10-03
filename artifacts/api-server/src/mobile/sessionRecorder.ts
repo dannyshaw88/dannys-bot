@@ -24,7 +24,19 @@ export interface RecEvent {
   data:    TapData | KeyData | SwipeData | LogData | DumpData;
 }
 
-export interface TapData    { x: number; y: number; label?: string; source?: "manual" | "bot" }
+export interface TapData    {
+  x: number;
+  y: number;
+  label?: string;
+  source?: "manual" | "bot";
+  tapId?: string;
+  origin?: "operator" | "automation";
+  mode?: "exact" | "jittered";
+  requestedX?: number;
+  requestedY?: number;
+  reason?: string;
+  caller?: string;
+}
 export interface KeyData    { code: number; label?: string }
 export interface SwipeData  { x1: number; y1: number; x2: number; y2: number; durationMs?: number }
 export interface LogData    { text: string }
@@ -87,8 +99,15 @@ function push(serial: string, ev: RecEvent): void {
   s.events.push(ev);
 }
 
-export function addTap(serial: string, x: number, y: number, label?: string, source?: "manual" | "bot"): void {
-  push(serial, { ts: Date.now(), type: "tap", data: { x, y, label, source } });
+export function addTap(
+  serial: string,
+  x: number,
+  y: number,
+  label?: string,
+  source?: "manual" | "bot",
+  trace?: Omit<TapData, "x" | "y" | "label" | "source">,
+): void {
+  push(serial, { ts: Date.now(), type: "tap", data: { x, y, label, source, ...trace } });
 }
 
 export function addKey(serial: string, code: number, label?: string): void {

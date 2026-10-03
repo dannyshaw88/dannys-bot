@@ -162,7 +162,14 @@ await android.dismissInstagramInterstitials(serial).catch(() => null);
     // Calibration coordinates are already device-space coordinates. Use the
     // exact/manual tap path so the bot's humanisation jitter cannot move a
     // small Next button outside its hit target.
-    await android.tap(serial, point.x, point.y, "manual");
+    await android.tap(
+      serial,
+      point.x,
+      point.y,
+      "manual",
+      `Make a Post: ${label} calibration control`,
+      "automation",
+    );
     onLog?.(`Make a Post: ${label} tap dispatched at exact=(${point.x},${point.y})`);
   };
 

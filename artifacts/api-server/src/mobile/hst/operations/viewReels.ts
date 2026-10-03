@@ -46,7 +46,12 @@ export async function runViewReelsLoop(serial: string, params: {
   const { w, h } = getScreenSize(serial);
   onLog?.(`Reels loop: device resolution ${w}×${h}`);
 
-  const reelsTab = await android.tapCalibratedNavigationControl(serial, "reels", onLog);
+  const reelsTab = await android.tapCalibratedNavigationControl(
+    serial,
+    "reels",
+    onLog,
+    "View Reels: open the Reels tab",
+  );
   onLog?.(`Tapped Reels tab at (${reelsTab.x},${reelsTab.y}) — waiting for Reels to load`);
   await sleepOrAbort(serial, 1500);
 
@@ -364,7 +369,13 @@ export async function runViewReelsLoop(serial: string, params: {
             return true;
           }
           onLog?.(`Reel ${i + 1}/${totalReels}: tapping validated Like node at (${icons.like.x},${icons.like.y})…`);
-          await android.tap(serial, icons.like.x, icons.like.y);
+          await android.tap(
+            serial,
+            icons.like.x,
+            icons.like.y,
+            "bot",
+            `View Reels ${i + 1}/${totalReels}: like current reel`,
+          );
           likes++;
           onLog?.(`Reel ${i + 1}/${totalReels}: ✓ liked`);
           await sleepOrAbort(serial, 250);
@@ -381,7 +392,13 @@ export async function runViewReelsLoop(serial: string, params: {
           if (!icons.shareFeed) {
             onLog?.(`Reel ${i + 1}/${totalReels}: Share to Feed icon not found — skipping`);
           } else {
-            await android.tap(serial, icons.shareFeed.x, icons.shareFeed.y);
+            await android.tap(
+              serial,
+              icons.shareFeed.x,
+              icons.shareFeed.y,
+              "bot",
+              `View Reels ${i + 1}/${totalReels}: share current reel to feed`,
+            );
             sharesFeed++;
             onLog?.(`Reel ${i + 1}/${totalReels}: shared to feed at (${icons.shareFeed.x},${icons.shareFeed.y})`);
             await sleepOrAbort(serial, 400);
@@ -392,7 +409,13 @@ export async function runViewReelsLoop(serial: string, params: {
             if (_vrRepostXml.includes('content-desc="Close"') || _vrRepostXml.includes('text="Close"')) {
               const _vrRepostClose = await android.findButtonByLabel(serial, "Close").catch(() => null);
               if (_vrRepostClose) {
-                await android.tap(serial, _vrRepostClose.x, _vrRepostClose.y);
+                await android.tap(
+                  serial,
+                  _vrRepostClose.x,
+                  _vrRepostClose.y,
+                  "bot",
+                  `View Reels ${i + 1}/${totalReels}: dismiss repost confirmation`,
+                );
                 onLog?.(`View Reels ${i + 1}/${totalReels}: dismissed repost confirmation dialog (Close)`);
                 await sleepOrAbort(serial, 250);
               } else {
@@ -418,7 +441,13 @@ export async function runViewReelsLoop(serial: string, params: {
           } else {
             const savePoint = freshSaveIcons.save;
             onLog?.(`Reel ${i + 1}/${totalReels}: tapping freshly validated Save at (${savePoint.x},${savePoint.y})…`);
-            await android.tap(serial, savePoint.x, savePoint.y);
+            await android.tap(
+              serial,
+              savePoint.x,
+              savePoint.y,
+              "bot",
+              `View Reels ${i + 1}/${totalReels}: save current reel`,
+            );
             // Wait long enough for Instagram to show either the first-save
             // collection sheet or an incorrectly targeted action sheet.
             await sleepOrAbort(serial, 600);
@@ -443,7 +472,13 @@ export async function runViewReelsLoop(serial: string, params: {
                 await android.pressBack(serial).catch(() => {});
                 await sleepOrAbort(serial, 300);
               } else {
-                await android.tap(serial, overflowSave.x, overflowSave.y);
+                await android.tap(
+                  serial,
+                  overflowSave.x,
+                  overflowSave.y,
+                  "bot",
+                  `View Reels ${i + 1}/${totalReels}: save from overflow menu`,
+                );
                 await sleepOrAbort(serial, 600);
                 let afterOverflowSave = await android.dumpUi(serial).catch(() => "");
                 if (await dismissSaveCollectionPrompt(serial, afterOverflowSave, onLog, `Reel ${i + 1}/${totalReels}`)) {
@@ -479,7 +514,13 @@ export async function runViewReelsLoop(serial: string, params: {
               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               await sleepOrAbort(serial, 300 + Math.round(Math.random() * 300));
               onLog?.(`${_vrPfx}: tapping share-via-DM icon at (${icons.shareDm.x},${icons.shareDm.y})…`);
-              await android.tap(serial, icons.shareDm.x, icons.shareDm.y);
+              await android.tap(
+                serial,
+                icons.shareDm.x,
+                icons.shareDm.y,
+                "bot",
+                `View Reels ${i + 1}/${totalReels}: open DM share sheet`,
+              );
               await sleepOrAbort(serial, 1500);
               onLog?.(`${_vrPfx}: confirming share sheet opened and picking DM recipient…`);
               const _vrShareScanOptions = { strictContactParents: true };
@@ -500,7 +541,13 @@ export async function runViewReelsLoop(serial: string, params: {
                   onLog?.(`${_vrPfx}: deselecting ${_vrScan.preSelectedRecipients.length} pre-selected recipient(s) from prior run…`);
                   for (const _r of _vrScan.preSelectedRecipients) {
                     onLog?.(`${_vrPfx}: deselecting${(_r as any).name ? ` (${(_r as any).name})` : ""} at (${_r.x},${_r.y})`);
-                    await android.tap(serial, _r.x, _r.y);
+                    await android.tap(
+                      serial,
+                      _r.x,
+                      _r.y,
+                      "bot",
+                      `View Reels ${i + 1}/${totalReels}: deselect previous DM recipient`,
+                    );
                     await sleepOrAbort(serial, 400);
                   }
                   // Deselecting a prior contact can reflow the grid. Never
@@ -534,7 +581,13 @@ export async function runViewReelsLoop(serial: string, params: {
                     `parent-desc="${String((_vrPick as any).name ?? "")}"`,
                   );
                   onLog?.(`${_vrPfx}: tapping recipient at (${_vrPick.x},${_vrPick.y})${(_vrPick as any).name ? ` (${(_vrPick as any).name})` : ""}`);
-                  await android.tap(serial, _vrPick.x, _vrPick.y);
+                  await android.tap(
+                    serial,
+                    _vrPick.x,
+                    _vrPick.y,
+                    "bot",
+                    `View Reels ${i + 1}/${totalReels}: select validated DM recipient`,
+                  );
                   await sleepOrAbort(serial, 800);
                   // A disappeared sheet is NOT proof that a DM was sent:
                   // tapping the reused avatar resource can launch WhatsApp
@@ -559,7 +612,13 @@ export async function runViewReelsLoop(serial: string, params: {
                     // label fallback.
                     const _vrSb = await android.findDmSendButton(serial).catch(() => null);
                     if (_vrSb) {
-                      await android.tap(serial, _vrSb.x, _vrSb.y);
+                      await android.tap(
+                        serial,
+                        _vrSb.x,
+                        _vrSb.y,
+                        "bot",
+                        `View Reels ${i + 1}/${totalReels}: send reel by DM`,
+                      );
                       await sleepOrAbort(serial, 1000);
                       const _vrAfterSend = await android.confirmAndScanShareSheet(serial, onLog, _vrShareScanOptions).catch(() => null);
                       if (!_vrAfterSend?.sheetOpen) {
@@ -647,7 +706,13 @@ export async function runViewReelsLoop(serial: string, params: {
           onLog?.(`${_vrCaPfx}: author node not found in dump — skipping click author`);
         } else {
           onLog?.(`${_vrCaPfx}: tapping author at (${_vrCaNode.x},${_vrCaNode.y})…`);
-          await android.tap(serial, _vrCaNode.x, _vrCaNode.y);
+          await android.tap(
+            serial,
+            _vrCaNode.x,
+            _vrCaNode.y,
+            "bot",
+            `View Reels ${i + 1}/${totalReels}: open reel author profile`,
+          );
           await sleepOrAbort(serial, 1800);
           const _vrCaScrolls = Math.floor(rollRange(1, 10));
           onLog?.(`${_vrCaPfx}: on author profile — scrolling ${_vrCaScrolls} time(s)…`);
@@ -701,7 +766,12 @@ export async function finishViewReels(
 ): Promise<void> {
   const { android, sleepOrAbort, onLog } = context;
   onLog?.("View Reels: tapping calibrated Home control to leave the full-screen viewer…");
-  const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
+  const homeTab = await android.tapCalibratedNavigationControl(
+    serial,
+    "home",
+    onLog,
+    "View Reels: exit to Home after the reel loop",
+  );
   onLog?.(`View Reels: tapped calibrated Home control at (${homeTab.x},${homeTab.y})`);
   await sleepOrAbort(serial, 700);
 }

@@ -2,69 +2,61 @@
 - [Browser flag emoji fallback](browser-flag-emoji-fallback.md) — regional flag emoji may render as country-letter abbreviations; use deterministic inline flag artwork
 - [Human Session Tool scroll owner](hst-scroll-owner.md) — preserve scroll on the nested AutomationSettingsPanel, not its outer slot wrapper
 - [Device profile system — dismiss direction](device-profile-system.md) — DEVICE_PROFILES lookup table + dismissDirection field wired through all 3 schema layers + UI dropdown
-- [switchToInstagramAccount already-active fix](account-switcher-already-active.md) — active account lacks text/content-desc in switcher XML; use xml.includes() fallback + post-tap dump to dismiss cleanly
+- [Already-active account switch](account-switcher-already-active.md) — detect the unlabeled active account in XML, then verify the post-tap state
 - [Account-switch handoff safety](account-switch-handoff-safety.md) — an unverified post-row surface must stop the remaining tool dispatcher, never trigger a second account tap
-- [Edit tool regex/template-literal corruption](edit-tool-regex-corruption.md) — Edit tool can corrupt template literals containing regex with backslashes; use xml.includes() instead of new RegExp() in such cases
-- [Mobile mirror shell pillarbox root cause](mobile-mirror-shell-pillarbox.md) — aspect-ratio applied to header+screen box (not just screen) caused canvas pillarbox; fix scope, don't distort tap coordinate space
+- [Edit tool regex safety](edit-tool-regex-corruption.md) — avoid regex backslash corruption in templates; use xml.includes() instead of new RegExp()
+- [Mobile mirror pillarboxing](mobile-mirror-shell-pillarbox.md) — constrain aspect-ratio to the screen box so tap coordinates stay aligned
 - [Ban dataset interpretation rules](ban-analysis-corrections.md) — timestamp clustering = Danny manually marking, SLOW = user label, re-added = prior ban history, not server sweeps
 - [Verify bootstrap timing & call-order bugs](verify-bootstrap-bugs.md) — Phase 0 anonymous calls REMOVED (EB always provides cookies); sequence now starts at Phase 1 (load cookies)
 - [tlsRequest CycleTLS header stripping](tls-request-header-fix.md) — tlsRequest must strip Host, Connection, Content-Length before passing to CycleTLS or Instagram returns "something went wrong"
-- [Make a Post fix log](make-a-post-log.md) — chronological history of EB-driven posting flow bugs (clicks, visibility, Escape-key, recycling); read before touching that flow
+- [Make a Post flow safety](make-a-post-log.md) — use the repair history, verify processed media before navigation, and keep action names aligned at dispatch boundaries
 - [Activate Percentage gate levels](activate-percentage-gate-levels.md) — per-execution tool-level gate (View Feed/Stories/Follow/Jitter) vs per-user Inject Browsing gate are distinct; don't conflate
-- [Mobile settings save/load schema drift](mobile-settings-schema-drift.md) — persistence-time zod schema is separate from execution-time schema; a field missing from the former silently never saves, looks like "settings reset on restart"
+- [Mobile settings save/load schema drift](mobile-settings-schema-drift.md) — add fields to the persistence schema or settings can silently reset on restart
 - [leaksPage.ts client script must be plain JS](leaks-page-ts-syntax.md) — TS syntax in the embedded `<script>` string is a silent SyntaxError that freezes every Leak Check card in "pending" forever
 - [Fingerprint noise entropy floor](fingerprint-noise-entropy.md) — canvas/audio noise must be full 32-bit ints, not modulo/rounded-float derived, or accounts collide at scale
-- [Artifact auto-creation duplicate-engine hazard](artifact-duplicate-engine-hazard.md) — Replit can auto-create artifact-managed workflows that run a second live copy of a stateful backend; must gate with a cross-process lock, not assume one instance
-- [mobileSessionGet error contract drift](mobile-session-get-error-contract.md) — thrown-Error classification code must be re-verified whenever the function it classifies changes its throw/return contract, or "network error" fallbacks silently swallow real session kills
-- [DM inbox host fix](dm-warmup-sequence.md) — direct_v2/inbox must use webGet (www.instagram.com + EB cookies), NOT mobileSessionGet (i.instagram.com) — same root cause as follow/repost host mismatch; warm-up sequence does NOT fix 4415001
+- [Artifact duplicate-engine hazard](artifact-duplicate-engine-hazard.md) — artifact workflows can start a second stateful backend; guard ownership with a cross-process lock
+- [mobileSessionGet error contract drift](mobile-session-get-error-contract.md) — recheck thrown-error handling whenever the function's throw/return contract changes
+- [DM inbox host fix](dm-warmup-sequence.md) — direct_v2/inbox needs webGet on www.instagram.com with EB cookies, not mobileSessionGet on i.instagram.com
 - [Check Inbox row targeting](check-inbox-row-targeting.md) — select any geometry-qualified inbox row; do not require sender/text/resource semantics before tapping and backing out
 - [API Leak Check socks5 geo](api-leak-check-socks5.md) — resolveProxyGeo uses raw TCP HTTP CONNECT (HTTP proxies only); for socks5 fall back to fetching ip-api.com through SocksProxyAgent directly
 - [Mobile mirror video stream](mobile-mirror-video-stream.md) — phone mirror uses WebCodecs H.264 decode (client side); PNG polling is fallback-only; AU cuts need first_mb_in_slice==0
 - [Mirror wake and stale status](mirror-wake-and-stale-status.md) — keep the 10-second Farm-page wake as one initial retry; never periodically wake during automation, and tolerate longer decoder gaps
-- [Scrcpy mirror wire protocol](scrcpy-mirror-protocol.md) — mirror now uses real scrcpy-server (not adb screenrecord); ALWAYS verify control-message byte layout against the server's own decompiled ControlMessageReader, not memory
-- [Manual vs automated input parity](mobile-manual-vs-automated-input-parity.md) — a gesture-timing fix in one input path (automated) doesn't fix the same bug in another (manual UI); check all call sites
+- [Scrcpy mirror wire protocol](scrcpy-mirror-protocol.md) — verify control-message layout against the server's decompiled ControlMessageReader
+- [Manual vs automated input parity](mobile-manual-vs-automated-input-parity.md) — check manual and automated callsites separately; a timing fix in one path doesn't fix its sibling
+- [Mobile tap trace diagnostics](tap-trace-diagnostics.md) — put tap ID, target, actor, caller, and reason in text; exact-input mode does not prove an operator tap
 - [Mobile tab explicit power-on](mobile-tab-explicit-power-on.md) — phone mirror stream must only start on Power button press or automation toggle, never on tab mount alone
 - [Farm mirror-live cleanup](farm-mirror-live-cleanup.md) — clear the server thumbnail flag when the detail mirror unmounts, or Farm SVG stays black polling stale screencaps
-- [Automation-cycle real-phone lifecycle](automation-cycle-lifecycle.md) — master toggle runs power-on→open IG→run tools→close IG→airplane-mode recycle→lock each tick; use WAKEUP/SLEEP keycodes not toggle POWER, verify app close via pidof
-- [GitHub Actions Windows installer duplication](github-actions-windows-installer-duplication.md) — `build-windows-installer.yml` is the ONLY canonical workflow; never add another, deprecated stubs are inert on purpose
-- [Git remote history and runtime-state cleanup](git-remote-runtime-state.md) — preserve unrelated remote history with a merge; never force-push over it or reintroduce tracked cookies, databases, or device tooling
-- [Story share viewer-exit race](story-share-viewer-exit-race.md) — re-verify story viewer still open before EVERY tap (esp. DM-share); stories auto-advance mid multi-step sequence, blind taps then hit the home feed
-- [Floating-windows recents close gesture](floating-windows-recents-close.md) — this farm's app-switcher needs a LEFT-drag of the left-most card, not swipe-up; repeat per remaining app; poll pidof, don't check once too soon.
-- [Story action timing starvation](story-action-timing-starvation.md) — never insert a "watch first" delay before a scheduled like/share; fire immediately or the multi-step DM-share sequence runs out of the story's fixed timer.
-- [Story-viewer check cost](story-viewer-check-cost.md) — the "still in story viewer?" gate itself must be fast (pixel scan, ~200ms), not just infrequent; a slow uiautomator-based check ate the whole slide timer even after the watch-delay fix.
-- [Story-viewer fast-check calibration](story-viewer-fast-check-calibration.md) — a pixel heuristic tuned against one capture can silently never match in the field; widen/relax on first pass and instrument both failure modes.
+- [Automation-cycle real-phone lifecycle](automation-cycle-lifecycle.md) — cycle power, IG, tools, close, airplane recycle, and lock; use WAKEUP/SLEEP and verify close with pidof
+- [GitHub Actions Windows installer duplication](github-actions-windows-installer-duplication.md) — build-windows-installer.yml is canonical; keep deprecated stubs inert
+- [Git remote history and runtime-state cleanup](git-remote-runtime-state.md) — merge unrelated history; never force-push or track cookies, databases, or device tools
+- [Instagram Stories safety pointers](instagram-stories-safety.md) — consult the detailed notes for viewer timing/exits, action identity, dialog handling, tray markers, and composers
+- [Floating-windows recents close gesture](floating-windows-recents-close.md) — use a left-drag on the left-most card; repeat per app and poll pidof
 - [HST toggle self-echo](hst-toggle-self-echo.md) — mark locally accepted toggles before same-window broadcast so the originating runtime does not replay its own immediate ON
-- [Story shared-Facebook dialog variants](story-shared-facebook-dialog.md) — detect the education dialog by its dialog container plus shared-Facebook title variants, then tap the live OK node
-- [DM share sheet blind-tap risk](dm-share-sheet-blind-tap.md) — never fire a coordinate tap meant for a modal sheet (e.g. recipient avatar) without positively confirming the sheet rendered; absence-of-side-effect checks aren't the same as presence confirmation.
-- [Share-sheet label-scan exclusions](share-sheet-label-scan-exclusions.md) — recurring leak class: underlying feed-post nodes (hashtags, counts, abbreviated counts) keep slipping through Strategy 2 as fake recipients; each fix is one more shape, not a new bug.
-- [Reel share-sheet resource-id alias](share-sheet-resource-id-alias.md) — grid_view_pog_avatar_view is reused by WhatsApp/Share shortcuts; strict Reel scans need real ancestor Chat evidence, not XML lookback.
-- [Story icon row selection](story-icon-row-selection.md) — rank pixel-scan candidate rows by proximity to a known screen anchor (e.g. bottom edge), not by match strength; content overlays can out-match the real control on strength alone.
-- [Story Like identity guard](story-like-semantic-identity.md) — prefer live Like labels; accept toolbar_like_button only after proving it does not overlap Comment
+- [DM share sheet blind-tap risk](dm-share-sheet-blind-tap.md) — confirm a modal sheet before coordinate-tapping; absence of a side effect does not prove it opened
+- [Share-sheet label-scan exclusions](share-sheet-label-scan-exclusions.md) — exclude feed hashtags and counts so underlying nodes cannot pass as recipients
+- [Reel share-sheet resource-id alias](share-sheet-resource-id-alias.md) — require ancestor Chat evidence; the avatar ID is reused by WhatsApp/Share shortcuts
 - [Reel Viewer repair log](../../REELVIEWERREPAIR.md) — read the dedicated filename → tool → sub-setting ledger before another Reel action fix
-- Any per-device "slow confirm" call (e.g. findHomeTab after a tray tap) must be swapped for the fast check individually — fixing one call site in a shared helper does not fix sibling call sites that inline their own slow check.
-- [License auth is a single global session, not per-cookie](license-global-session.md) — /api/license/login writes one global "license_session" row; any curl login logs in every browser tab/window against that server.
-- [Make a Post UI: image alteration is source-agnostic](make-a-post-image-alteration-scope.md) — Alteration level + Image settings button live in the shared caption section, not inside the Instagram-account source block, so they apply to local-computer-sourced images too.
+- [Per-device fast confirmation](per-device-fast-confirmation.md) — replace each slow confirmation callsite individually; fixing a shared helper does not fix inline sibling checks
+- [License auth is a single global session](license-global-session.md) — /api/license/login affects every browser tab using that server
+- [Make a Post image alteration scope](make-a-post-image-alteration-scope.md) — keep alteration controls in the shared caption section for every image source
 - [Ghost Browser UA handoff](ghost-browser-ua-handoff.md) — pass the full embedded browser UA to Electron, never the compact Instagram API device UA
-- [Make a Post preparation ordering](make-a-post-log.md) — prepare and verify the processed image before Home/Plus navigation; keep doFixAiSlop naming aligned at dispatch boundaries
-- [Instagram media-picker default selection (real device)](instagram-media-picker-default-selection.md) — IG auto-selects the newest photo on picker open; re-tapping the selected tile DESELECTS it (grey/white); use expand-toggle presence as the "already selected" signal and only tap if it's absent.
-- [Mirror tap rescale must not skip on aspect-ratio mismatch](mobile-mirror-tap-rescale-ar-guard.md) — screenrecord's video AR never has to match wm-size's AR by design; skipping rescale on AR mismatch broke every manual mirror tap.
-- [Mirror video letterbox tap-scale fix](mobile-mirror-video-letterbox-tap-scale.md) — Android capture letterboxes/pillarboxes instead of stretching; naive full-buffer tap rescale is only accurate at center, drifts near edges — rescale through the real content sub-rect instead.
-- [Reels action-icon column detection](reels-action-icon-detection.md) — Reels' Like/Comment/Share/Send render as a vertical right-edge column, not the feed's horizontal bar; unvalidated on real device, read its diagnostic log before "fixing" labels.
-- [Share-sheet confirm+recipient-scan dump timing](share-sheet-dump-timing.md) — two sequential ~9s uiautomator dumps left the DM share sheet idle long enough to close before recipient pick; combine confirm+scan into one dump.
-- [Your Story same resource-id as DM contacts](share-sheet-your-story-rid.md) — grid_view_pog_avatar_view is used for BOTH Your Story/Close Friends AND real DM contact avatars; must XML-lookback-filter parent content-desc before picking.
-- [Collision Preventer turn priority](collision-preventer-turn-priority.md) — preserve each HST due time through collision rest; queued slots run next, then receive a fresh interval only after completion.
+- [Instagram media-picker default selection](instagram-media-picker-default-selection.md) — newest photo is preselected; detect it and don't retap or it will be deselected
+- [Mirror tap aspect-ratio handling](mobile-mirror-tap-rescale-ar-guard.md) — always rescale taps when video and device aspect ratios differ
+- [Mirror video letterbox tap scaling](mobile-mirror-video-letterbox-tap-scale.md) — map taps through the actual content rectangle to avoid edge drift
+- [Reels action-icon column detection](reels-action-icon-detection.md) — Reels actions form a right-edge column; check diagnostics before changing unverified labels
+- [Share-sheet confirm and scan timing](share-sheet-dump-timing.md) — combine confirmation and recipient scan so the sheet stays open
+- [Your Story vs DM contact resource ID](share-sheet-your-story-rid.md) — filter the parent description because story and DM avatars share an ID
+- [Collision Preventer turn priority](collision-preventer-turn-priority.md) — preserve due times through collision rest; queued slots run before fresh intervals
 - [Trust Score mobile settings](trust-score-mobile-settings.md) — Trust Score tiers use the mobile-engine Human Session Tool surface, not browser-tool settings, and must not start live device cycles.
-- [Story comment composer detection](story-comment-composer-detection.md) — use message_composer_container resource-id as the reply signal; labels vary by Instagram build and dump format
 - [Account switcher render settling](account-switcher-render-settle.md) — profile-tab accessibility can precede visible Instagram navigation; wait briefly before the long-press
 - [Electron debug log fresh session](electron-debug-log-fresh-session.md) — truncate the Windows server debug log at process startup, then append normally within that session
 - [Keyboard calibration layer navigation](keyboard-calibration-layer-navigation.md) — calibrated typing must switch through ABC, ?123, and extended symbols in order; emoji opener is terminal
 - [Keyboard named-key bind execution](keyboard-named-key-bind-execution.md) — named controls need an explicit per-device calibration lookup; character typing alone does not press Emoji/Emoticon binds
-- [Keyboard calibration UX](keyboard-calibration-ux.md) — dialog has 3 modes (intro/wizard/editMap); caches warm on open; editMap saves immediately per-key so no data is lost; wizard merges into existing map
+- [Keyboard calibration UX](keyboard-calibration-ux.md) — warm caches on open, save edits per key, and merge wizard results into the existing map
 - [Fixed navigation calibration](mobile-navigation-calibration.md) — fixed Instagram controls use a serial+screen-size map separate from keyboard calibration; missing/stale points fail closed
-- [Imported workspace verification](imported-workspace-verification.md) — use package-level build commands for this imported repo; root build/typecheck scripts include stale legacy paths and unrelated errors
+- [Imported workspace verification](imported-workspace-verification.md) — use package-level commands; root scripts include stale paths and unrelated errors
 - [View Feed ad-action safety](view-feed-ad-action-safety.md) — sponsored cards and unconfirmed media bounds must never receive guessed double-taps; use confirmed action nodes or skip
-- [View Feed fresh-node action validation](view-feed-fresh-node-validation.md) — rescan the current post before each action and confirm state changes before counting success
-- [View Feed Repost single-tap guard](view-feed-fresh-node-validation.md) — don't infer a repost sheet from a global label match; tap the live feed action icon once
+- [View Feed fresh-node action validation](view-feed-fresh-node-validation.md) — rescan before each action, verify state changes, and never infer a repost sheet from a global label
 - [Feed swipe tap guard](feed-swipe-tap-guard.md) — calibrated slow/focused feed paths need a minimum upward travel or Android can interpret them as profile taps
 - [Scroll personality first-turn guard](scroll-personality-first-turn.md) — backward scrolling is disabled on the first Feed/Explore scroll because there is no prior content to revisit
 - [View Feed re-run freshness](feed-rerun-fresh-session.md) — every re-run independently rolls count, feature percentages, per-post decisions, delays, and personality paths
@@ -92,9 +84,8 @@
 - [Dashboard cycle summary icons](dashboard-cycle-summary-icons.md) — use Statistics action icons in cycle activity details, but keep eye-based metrics text-only
 - [Mobile cycle cross-tool metrics](mobile-cycle-all-likes.md) — aggregate likes, shares, DMs, and saves across every tool; keep pre-switch metrics with the previous account
 - [Accounts Trust Score interaction isolation](accounts-trustscore-no-row-drag.md) — Trust Score badge clicks must not trigger Accounts row drag-to-select or browser focus movement
-- [Story emoji composer gate](story-emoji-composer-gate.md) — don't require one Instagram composer resource-id before reaching the keyboard path
 - [TrustScore HST lock policy](trustscore-hst-lock-policy.md) — assigned slots need explicit field-level locks; keep Copy Settings visible independently of username count
-- [Merge regression verification](merge-regression-verification.md) — conflict-recovery merges can reintroduce removed UI; compare both parents and verify active render, payload, and runtime before pushing
+- [Merge regression verification](merge-regression-verification.md) — compare both merge parents and verify UI, payload, and runtime before pushing
 - [TrustScore ownership parity](trustscore-ownership-parity.md) — every slot-owned setting must be registered in both frontend and API ownership maps
 - [Mobile slot identity](mobile-slot-identity.md) — account-owned state must use persisted slotId, never the renumberable visible slot index
 - [Device removal state boundary](device-removal-state-boundary.md) — removing a farm device must purge account-owned state before serial reuse
@@ -143,17 +134,16 @@
 - [View Feed visual scan timing](view-feed-visual-scan-timing.md) — reuse the caller's complete UI dump; visual matching must stay coarse-to-fine and fail closed
 - [HST recovery and stable slot keys](hst-recovery-stable-slot-keys.md) — enumerate account slots and resolve persistent IDs before legacy numeric settings keys during startup recovery
 - [Debug screenshot slot folders](debug-screenshot-slot-folders.md) — name evidence folders by persisted Phone Farm slot plus model, never USB serial order
-- [Story tray feed-marker filter](story-tray-feed-marker-filter.md) — reject lower-feed “username’s story, Seen” markers before selecting tray bubbles
 - [Jarvee import session persistence](jarvee-import-session-persistence.md) — retain parsed details across Settings tabs, but never store raw exports or extracted secrets in browser storage
 - [ADB device-loss race handling](adb-device-loss-race.md) — reuse successful screen dimensions and classify mid-cycle ADB disappearance explicitly, never fall back to guessed gesture coordinates
 - [Mobile metric write parity](mobile-metric-write-parity.md) — every new HST counter must cover normal, pre-switch, and aborted writes, with legacy read aliases when history used another key
-- [Feed action detector independence](feed-action-detector-independence.md) — Like visual failure must not suppress independently validated Share/DM/Save; bundle references in both dev and packaged roots
+- [Feed action detector independence](feed-action-detector-independence.md) — Like failure must not suppress validated Share/DM/Save; package references in both roots
 - [Feed action input transactions](feed-action-input-transaction.md) — serialize final live-node scan, action, recovery, and verification per device to prevent interleaved ADB input
 - [USB phone-data consent](usb-phone-data-consent.md) — image uploads require accepting Android’s live phone-data dialog; repeated prompts can indicate USB re-enumeration
 - [Mobile collision coordinator](mobile-collision-coordinator.md) — every device automation owner must acquire and release a lease token through one shared per-device coordinator
 - [Notification Back surface guard](notification-back-surface-guard.md) — calibrated upper-left Back is Home's Create button when the notification surface disappears; confirm the live surface first
 - [Debug screenshot capture timing](debug-screenshot-capture-timing.md) — filename time orders the phone frame; embedded log labels can be stale behind the per-device capture queue
 - [WhatsApp contact automation safety](whatsapp-contact-automation-safety.md) — resolve contacts and Send from the live picker/composer; fail closed when WhatsApp’s layout or labels change
-- [Manual Instagram launch diagnostics](manual-instagram-launch-probe.md) — physical/mirror opens bypass launchInstagram; arm a watcher and judge brief Splash Screen/starting_reveal frames by delayed samples
+- [Manual Instagram launch diagnostics](manual-instagram-launch-probe.md) — physical/mirror opens bypass launchInstagram; use delayed samples to filter transient splash frames
 - [Windows packaged diagnostic parity](windows-packaged-diagnostic-parity.md) — source diagnostics require rebuilding the embedded API, frontend, and Electron dist before Windows logs contain them
 - [Instagram ChallengeActivity white surface](instagram-challenge-white-surface.md) — paired ADB/H.264 evidence can identify a real full-screen Instagram challenge, not a mirror freeze
