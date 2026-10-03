@@ -1,3 +1,14 @@
+## [1.2.566] — 2026-10-03
+
+### Added — Jarvee Ghost Browser Agent Choices
+
+- Added 34 distinct API device identities and all 42 unique embedded-browser user agents from the Jarvee exports to their respective Ghost Browser dropdowns; 39 embedded agents were new.
+- Each device choice uses a model-matched embedded agent as its default when available, while alternate agents remain selectable as overrides.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.566`.
+
 ## [1.2.565] — 2026-10-03
 
 ### Added — Jarvee Ghost Browser Agents
