@@ -1,3 +1,9 @@
+## [1.2.563] — 2026-10-03
+
+### Release
+
+- Version bump; carries forward the Follow search-focus fix from 1.2.562.
+
 ## [1.2.562] — 2026-10-03
 
 ### Fixed — Confirm Follow Search Focus from the Live Keyboard
