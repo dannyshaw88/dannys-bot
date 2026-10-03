@@ -1,3 +1,9 @@
+## [1.2.565] — 2026-10-03
+
+### Added — Jarvee Ghost Browser Agents
+
+- Added imported embedded-browser user agents to the Ghost Browser preset dropdown and preserved them on Jarvee-imported profiles.
+
 ## [1.2.564] — 2026-10-03
 
 ### Added — Ghost Browser Embedded Agent Preset
