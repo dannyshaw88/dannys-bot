@@ -366,6 +366,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const frameSeenRef = useRef(false);
   const lastDecodedAtRef = useRef(0);
   const lastMirrorEvidenceAtRef = useRef(0);
+  const darkFrameSinceRef = useRef(0);
   // Video mode: true H.264 stream decoded with WebCodecs (near-instant).
   // Falls back to the legacy PNG-polling endpoint if screenrecord/WebCodecs
   // isn't available on this machine/device.
@@ -592,19 +593,20 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       return ctxRef.current;
     };
 
-    const reportMirrorFrameEvidence = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, videoW: number, videoH: number) => {
+    const reportMirrorFrameEvidence = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, videoW: number, videoH: number): boolean | null => {
       const now = Date.now();
-      if (now - lastMirrorEvidenceAtRef.current < 1000) return;
+      if (now - lastMirrorEvidenceAtRef.current < 1000) return null;
       lastMirrorEvidenceAtRef.current = now;
       try {
         const rect = drawRectRef.current;
-        if (!rect || canvas.width < 1 || canvas.height < 1) return;
+        if (!rect || canvas.width < 1 || canvas.height < 1) return null;
         const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const stepX = Math.max(1, Math.floor(rect.dw / 48));
         const stepY = Math.max(1, Math.floor(rect.dh / 96));
         let sampled = 0;
         let nearWhite = 0;
         let nearBlack = 0;
+        let visiblePixels = 0;
         let lumaSum = 0;
         let lumaSquaredSum = 0;
         const xEnd = Math.min(canvas.width, Math.ceil(rect.dx + rect.dw));
@@ -619,12 +621,14 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             sampled++;
             if (r >= 245 && g >= 245 && b >= 245) nearWhite++;
             if (r <= 10 && g <= 10 && b <= 10) nearBlack++;
+            if (Math.max(r, g, b) > 12) visiblePixels++;
             lumaSum += luma;
             lumaSquaredSum += luma * luma;
           }
         }
-        if (!sampled) return;
+        if (!sampled) return null;
         const meanLuma = lumaSum / sampled;
+        const nearBlackPct = (nearBlack / sampled) * 100;
         void fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/mirror-frame-evidence`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -635,7 +639,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             canvasW: canvas.width,
             canvasH: canvas.height,
             nearWhitePct: (nearWhite / sampled) * 100,
-            nearBlackPct: (nearBlack / sampled) * 100,
+            nearBlackPct,
             meanLuma,
             lumaVariance: Math.max(0, lumaSquaredSum / sampled - meanLuma * meanLuma),
             decodedAgeMs: Math.max(0, now - lastDecodedAtRef.current),
@@ -643,14 +647,38 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             automationActive: automationActiveRef.current,
           }),
         }).catch(() => {});
+        // Some devices continue returning decoded all-black frames after the
+        // display times out. Frame freshness alone then says "live" forever.
+        // Only classify a screen-off frame when the phone image (excluding
+        // letterbox padding) is effectively pure black.
+        return visiblePixels > 0;
       } catch {
         // Canvas readback can be unavailable during teardown or decoder reset.
+        return null;
+      }
+    };
+
+    const updateStatusFromScreenVisibility = (screenVisible: boolean | null) => {
+      const now = Date.now();
+      if (screenVisible === true) {
+        darkFrameSinceRef.current = 0;
+        setStatus("live");
+        return;
+      }
+      if (screenVisible === false && !darkFrameSinceRef.current) {
+        darkFrameSinceRef.current = now;
+      }
+      if (darkFrameSinceRef.current && now - darkFrameSinceRef.current >= 2_000) {
+        setStatus("asleep");
+      } else {
+        setStatus("live");
       }
     };
 
     const drawFrame = (frame: VideoFrame) => {
       const canvas = canvasRef.current;
       if (!canvas) { frame.close(); return; }
+      let screenVisible: boolean | null = null;
       // Track phone dimensions (used by mapToPhone for the final scale step).
       if (!phoneSizeRef.current || phoneSizeRef.current.w !== frame.displayWidth || phoneSizeRef.current.h !== frame.displayHeight) {
         const sz = { w: frame.displayWidth, h: frame.displayHeight };
@@ -677,13 +705,13 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           ctx.fillStyle = "#000";
           ctx.fillRect(0, 0, cw, ch);
           ctx.drawImage(frame, dx, dy, dw, dh);
-          reportMirrorFrameEvidence(canvas, ctx, frame.displayWidth, frame.displayHeight);
+          screenVisible = reportMirrorFrameEvidence(canvas, ctx, frame.displayWidth, frame.displayHeight);
         }
       }
       frame.close();
       fpsCountRef.current++;
       lastDecodedAtRef.current = Date.now();
-      setStatus("live");
+      updateStatusFromScreenVisibility(screenVisible);
     };
 
     const ensureDecoder = () => {
@@ -706,6 +734,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       if (!active) return;
       frameSeenRef.current = false;
       lastDecodedAtRef.current = 0;
+      lastMirrorEvidenceAtRef.current = 0;
+      darkFrameSinceRef.current = 0;
       phoneSizeRef.current = null;
       decodeQueueHighSince = 0;
       lastVideoResyncAt = 0;
@@ -793,7 +823,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         if (!useVideoRef.current) {
           // Legacy PNG-per-frame path.
           fpsCountRef.current++;
-          setStatus("live");
           const canvas = canvasRef.current;
           if (!canvas) return;
           const blob = new Blob([ev.data as ArrayBuffer], { type: "image/png" });
@@ -811,6 +840,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             // identically regardless of which stream mode is active.
             const cw = canvas.width;
             const ch = canvas.height;
+            let screenVisible: boolean | null = null;
             if (cw > 0 && ch > 0 && phoneSizeRef.current) {
               const { w: phoneW, h: phoneH } = phoneSizeRef.current;
               const phoneRatio  = phoneW / phoneH;
@@ -827,8 +857,11 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
                 ctx.fillStyle = "#000";
                 ctx.fillRect(0, 0, cw, ch);
                 ctx.drawImage(img, dx, dy, dw, dh);
+                screenVisible = reportMirrorFrameEvidence(canvas, ctx, img.naturalWidth, img.naturalHeight);
               }
             }
+            lastDecodedAtRef.current = Date.now();
+            updateStatusFromScreenVisibility(screenVisible);
             revoke();
           };
           img.onerror = revoke;
