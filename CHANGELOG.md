@@ -1,3 +1,14 @@
+## [1.2.567] — 2026-10-03
+
+### Fixed — Always Clean Up Automated Make a Post Media
+
+- Automated Make a Post now deletes the selected source image and removes its staged phone copy after every attempt, whether the post succeeds or fails.
+- Removed the success-only deletion toggle; the separate manual PC-to-phone posting flow remains user-controlled.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.567`.
+
 ## [1.2.566] — 2026-10-03
 
 ### Added — Jarvee Ghost Browser Agent Choices
