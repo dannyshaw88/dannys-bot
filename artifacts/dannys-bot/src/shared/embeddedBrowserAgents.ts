@@ -1,3 +1,5 @@
+import { jarveeProfileAgentPairs, jarveeSupplementalEmbeddedAgents } from "./jarveeProfileAgents";
+
 const jarveeEmbeddedBrowserUserAgents = [
   "Mozilla/5.0 (Linux; Android 9; SM-N950F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
@@ -46,35 +48,47 @@ const jarveeEmbeddedBrowserUserAgents = [
   "Mozilla/5.0 (Linux; Android 10; HRY-LX1T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
   "Mozilla/5.0 (Linux; Android 9; SM-G965N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36",
   "Mozilla/5.0 (Linux; Android 10; SM-G970U1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36",
+  ...jarveeProfileAgentPairs.map(pair => pair.embedded),
+  ...jarveeSupplementalEmbeddedAgents,
 ] as const;
 
 function parsedAgent(userAgent: string) {
-  const chromeVersion = userAgent.match(/Chrome\/([\d.]+)/)?.[1]?.split(".")[0] ?? "unknown";
+  const edgeVersion = userAgent.match(/Edg(?:A|iOS)?\/([\d.]+)/)?.[1]?.split(".")[0];
+  const firefoxVersion = userAgent.match(/(?:Firefox|FxiOS)\/([\d.]+)/)?.[1]?.split(".")[0];
+  const chromeVersion = userAgent.match(/(?:Chrome|CriOS)\/([\d.]+)/)?.[1]?.split(".")[0];
+  const browser = edgeVersion
+    ? `Edge ${edgeVersion}`
+    : firefoxVersion
+      ? `Firefox ${firefoxVersion}`
+      : chromeVersion
+        ? `Chrome ${chromeVersion}`
+        : "Browser";
   const android = userAgent.match(/Android ([^;]+); ([^)]+)\)/);
   if (android) {
     const model = android[2];
     return {
       brand: agentBrand(model),
       model,
-      detail: `Android ${android[1]} · Chrome ${chromeVersion}`,
+      detail: `Android ${android[1]} · ${browser}`,
     };
   }
   if (userAgent.includes("Windows NT 10.0")) {
-    return { brand: "Windows", model: "Windows 10", detail: `Chrome ${chromeVersion}` };
+    return { brand: "Windows", model: "Windows 10", detail: browser };
   }
-  return { brand: "Other", model: "Unknown device", detail: `Chrome ${chromeVersion}` };
+  return { brand: "Other", model: "Unknown device", detail: browser };
 }
 
 function agentBrand(model: string): string {
-  if (/^(SM-|GT-|SCH-|SGH-)/i.test(model)) return "Samsung";
-  if (/^(pixel|crosshatch|panther|shiba|caiman|tokay|komodo|comet|lynx|akita|sargo|sunfish)/i.test(model)) return "Google";
+  if (/^(SM-|GT-|SCH-|SGH-|SHW-)/i.test(model)) return "Samsung";
+  if (/^(pixel|crosshatch|panther|shiba|caiman|tokay|komodo|comet|lynx|akita|sargo|sunfish|walleye)/i.test(model)) return "Google";
   if (/^oneplus/i.test(model)) return "OnePlus";
-  if (/^(violet|redmi|poco)/i.test(model)) return "Xiaomi";
-  if (/^(potter|moto)/i.test(model)) return "Motorola";
+  if (/^(violet|redmi|poco|joyeuse|merlinnfc|curtana)/i.test(model)) return "Xiaomi";
+  if (/^(potter|moto|doha_n)/i.test(model)) return "Motorola";
   if (/^asus_/i.test(model)) return "ASUS";
   if (/^bbb/i.test(model)) return "BlackBerry";
   if (/^lm-/i.test(model)) return "LG";
-  if (/^(mar|vog|hma|stk|aqm|hry|jsn)-/i.test(model)) return "Huawei / Honor";
+  if (/^rmx/i.test(model)) return "realme";
+  if (/^(mar|vog|hma|stk|aqm|hry|jsn|pot|ele|aln|yal|sne)-/i.test(model)) return "Huawei / Honor";
   return "Other Android";
 }
 

@@ -12,8 +12,18 @@ interface Props {
 function parseParts(api: string) {
   const p = api.split("; ");
   const androidVer = (p[0] ?? "").split("/")[1] ?? "";
+  const rawBrand = p[3] ?? "Unknown";
+  const brandKey = rawBrand.toLowerCase();
+  const brand = brandKey.includes("samsung") ? "Samsung"
+    : brandKey.includes("google") ? "Google"
+    : brandKey.includes("motorola") ? "Motorola"
+    : brandKey.includes("oneplus") ? "OnePlus"
+    : brandKey.includes("xiaomi") || brandKey.includes("redmi") ? "Xiaomi"
+    : brandKey.includes("huawei") || brandKey.includes("honor") ? "Huawei / Honor"
+    : brandKey.includes("realme") ? "realme"
+    : rawBrand;
   return {
-    brand:   p[3] ?? "Unknown",
+    brand,
     model:   p[4] ?? api,
     dpi:     p[1] ?? "",
     android: androidVer ? `Android ${androidVer}` : "",

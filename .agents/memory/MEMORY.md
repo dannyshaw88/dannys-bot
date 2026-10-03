@@ -135,7 +135,7 @@
 - [View Feed visual scan timing](view-feed-visual-scan-timing.md) — reuse the caller's complete UI dump; visual matching must stay coarse-to-fine and fail closed
 - [HST recovery and stable slot keys](hst-recovery-stable-slot-keys.md) — enumerate account slots and resolve persistent IDs before legacy numeric settings keys during startup recovery
 - [Debug screenshot slot folders](debug-screenshot-slot-folders.md) — name evidence folders by persisted Phone Farm slot plus model, never USB serial order
-- [Jarvee import handling](jarvee-import-session-persistence.md) — retain parsed data across app routes in memory only; never persist extracted secrets to browser storage; preserve imported embedded UA
+- [Jarvee import and picker handling](jarvee-import-session-persistence.md) — keep import data memory-only; preserve source UAs and pair unique device rows with model-matched defaults plus all override variants
 - [ADB device-loss race handling](adb-device-loss-race.md) — reuse successful screen dimensions and classify mid-cycle ADB disappearance explicitly, never fall back to guessed gesture coordinates
 - [Mobile metric write parity](mobile-metric-write-parity.md) — every new HST counter must cover normal, pre-switch, and aborted writes, with legacy read aliases when history used another key
 - [Feed action detector independence](feed-action-detector-independence.md) — Like failure must not suppress validated Share/DM/Save; package references in both roots

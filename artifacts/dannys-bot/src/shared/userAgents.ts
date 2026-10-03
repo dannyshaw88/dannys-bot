@@ -1,3 +1,5 @@
+import { jarveeProfileAgentPairs } from "./jarveeProfileAgents";
+
 export const userAgents = [
   // ── Google Pixel ──────────────────────────────────────────────────────────────
   {
@@ -494,4 +496,5 @@ export const userAgents = [
     api: "33/13; 450dpi; 1080x2412; Nothing; A065; Pacman; Snapdragon8PlusGen1; en_GB",
     embedded: "Mozilla/5.0 (Linux; Android 13; A065) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
   },
+  ...jarveeProfileAgentPairs,
 ];

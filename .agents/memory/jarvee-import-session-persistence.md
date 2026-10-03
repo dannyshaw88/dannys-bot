@@ -14,3 +14,9 @@ Jarvee imports must preserve the source embedded-browser UA on the imported prof
 **Why:** Imported browser identity should match the export while standard profile creation continues to use its server-assigned UA.
 
 **How to apply:** Keep source `userAgentWeb` separate from the Instagram API UA and restore only the embedded UA for Jarvee-imported profiles.
+
+When adding profile-export agents to the Ghost Browser pickers, expose one API row per distinct device string. If one API device has multiple embedded UAs, prefer the UA whose model token matches that device as the paired default, while keeping every distinct embedded UA selectable in the override picker.
+
+**Why:** This avoids duplicate device choices and mismatched defaults without hiding any exported browser identity.
+
+**How to apply:** Use this pairing rule when extending the bundled agent catalogs from Jarvee profile exports.
