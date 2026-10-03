@@ -6253,7 +6253,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Dashboard COMPLETE rows are intentionally metrics-only. The detailed
     // tool lifecycle remains in the live device log; persisting `steps` here
     // made the Activity Log show implementation internals such as
-    // power-on/unlock/launch/airplane-mode instead of what the cycle actually
+    // power-on/unlock/launch instead of what the cycle actually
     // accomplished.
     const dashboardMetricSummary = () => {
       const totalLikes = likes + storyLikes + exploreLikes + reelsLikes + injectBrowsingLikes;
@@ -6360,7 +6360,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const effectiveSettings: any = applyDevicePersonality(serial, effectiveCycle.settings);
       const {
         count, delayMinSec, delayMaxSec, likePercentMin, likePercentMax,
-        airplaneWaitMinSec, airplaneWaitMaxSec,
         feedEnabled, storiesEnabled,
         shareFeedPercentMin, shareFeedPercentMax,
         shareDmPercentMin, shareDmPercentMax,
@@ -8109,28 +8108,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.keyevent(serial, 3 /* KEYCODE_HOME */);
       await new Promise(r => setTimeout(r, 600)); // let launcher animate in
 
-      // 6. Cycle airplane mode on, wait, then off — forces a fresh network
-      // session on the next run.
-      tLog("▶ Airplane mode ON — recycling network…");
-      await android.setAirplaneMode(serial, true);
-      tLog("  ✓ Airplane mode on — waiting…");
-      steps.push("airplane-mode-on");
-      const waitLoSec = Math.min(airplaneWaitMinSec, airplaneWaitMaxSec);
-      const waitHiSec = Math.max(airplaneWaitMinSec, airplaneWaitMaxSec);
-      const waitSec = waitLoSec + Math.random() * (waitHiSec - waitLoSec);
-      await sleepOrAbort(serial, Math.round(waitSec * 1000), "airplaneMode", "computed");
-      tLog("▶ Airplane mode OFF — restoring network…");
-      await android.setAirplaneMode(serial, false);
-      tLog("  ✓ Airplane mode off — network reconnecting");
-      steps.push("airplane-mode-off");
-
-      // 7. Finalise the cycle: close Instagram, recycle the network, then
-      // lock the phone ready for the next cycle.
+      // 6. Finalise the cycle by locking the phone after closing Instagram.
       automationCurrentTool.set(serial, "FINALISING");
-      tLog("▶ Finalising — closing Instagram and recycling network…");
-      // 7. Swipe up, then press power again to lock the phone — ready for
-      // the next cycle to start from a clean, screen-off state.
-      await sleepOrAbort(serial, 1500); // let the radios reconnect before touching the screen
+      tLog("▶ Finalising — locking the phone…");
+      // Swipe up, then lock the phone so the next cycle starts screen-off.
       await android.swipeUpFromBottom(serial);
       steps.push("swipe-up");
       {

@@ -485,8 +485,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   }), []);
 
   // Also clear the canvas automatically whenever the status transitions to
-  // "asleep" — this covers automation-triggered sleeps (airplane-mode cycle,
-  // etc.) where the Power button wasn't pressed by the user directly.
+  // "asleep" — this covers the Human Session Tool's automation-triggered
+  // end-of-cycle lock when the Power button wasn't pressed by the user directly.
   useEffect(() => {
     if (status !== "asleep") return;
     const canvas = canvasRef.current;
@@ -4706,7 +4706,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 
   // While the master toggle is on, repeatedly run the full automation
   // cycle (power on → open Instagram → scroll/like with the configured
-  // settings → close Instagram → recycle airplane mode → power off)
+  // settings → close Instagram → lock the phone)
   // back-to-back until the toggle is switched off or the phone disconnects.
   //
   // ── Architectural note ────────────────────────────────────────────────────
@@ -8858,7 +8858,7 @@ export function AutomationSettingsPanel({
       <div className="bg-card border border-border rounded-xl p-5 space-y-2">
         <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(FINAL STEP)</p>
         <p className="text-sm text-foreground">
-          Close the Instagram app and Airplane Mode will be activated for 10–15 seconds, then Airplane Mode will be turned off.
+          Close the Instagram app, then lock the phone ready for the next session.
         </p>
       </div>
 

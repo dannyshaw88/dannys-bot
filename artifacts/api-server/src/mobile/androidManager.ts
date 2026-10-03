@@ -4738,9 +4738,9 @@ export async function deleteOneCharacterForTyping(serial: string): Promise<void>
 
 // ── Automation-cycle lifecycle steps ────────────────────────────────────────
 // Real button/gesture actions used to bookend each automation cycle — the
-// phone should look like a person picked it up, used Instagram, put it down,
-// and (per user instruction) cycled airplane mode before locking it again,
-// not like a script silently force-stopping a process in the background.
+// phone should look like a person picked it up, used Instagram, closed the app,
+// and locked it again, not like a script silently force-stopping a process in
+// the background.
 
 export function getScreenSize(serial: string): { w: number; h: number } {
   let w = 1080, h = 2400;

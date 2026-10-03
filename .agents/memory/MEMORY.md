@@ -26,7 +26,7 @@
 - [Mobile tap trace diagnostics](tap-trace-diagnostics.md) — put tap ID, target, actor, caller, and reason in text; exact-input mode does not prove an operator tap
 - [Mobile tab explicit power-on](mobile-tab-explicit-power-on.md) — phone mirror stream must only start on Power button press or automation toggle, never on tab mount alone
 - [Farm mirror-live cleanup](farm-mirror-live-cleanup.md) — clear the server thumbnail flag when the detail mirror unmounts, or Farm SVG stays black polling stale screencaps
-- [Automation-cycle real-phone lifecycle](automation-cycle-lifecycle.md) — cycle power, IG, tools, close, airplane recycle, and lock; use WAKEUP/SLEEP and verify close with pidof
+- [Automation-cycle real-phone lifecycle](automation-cycle-lifecycle.md) — cycle power, Instagram, tools, close, and lock; do not toggle airplane mode during HST closing
 - [GitHub Actions Windows installer duplication](github-actions-windows-installer-duplication.md) — build-windows-installer.yml is canonical; keep deprecated stubs inert
 - [Git remote history and runtime-state cleanup](git-remote-runtime-state.md) — merge unrelated history; never force-push or track cookies, databases, or device tools
 - [Instagram Stories safety pointers](instagram-stories-safety.md) — consult the detailed notes for viewer timing/exits, action identity, dialog handling, tray markers, and composers

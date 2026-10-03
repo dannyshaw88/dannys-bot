@@ -1,19 +1,14 @@
 ---
 name: Automation-cycle real-phone lifecycle
-description: The master toggle runs a full power/open-app/run/close-app/airplane-recycle sequence each cycle, not just the scroll/like loop — and why certain steps use deterministic keycodes/verification instead of literal toggles/gestures.
+description: The master toggle runs a full power/open-app/run/close-app/lock sequence each cycle; closing no longer toggles airplane mode.
 ---
 
-Per explicit user instruction, each automation-cycle "tick" (while the
-Human Session Tool master toggle is on) must: wake the phone, open
-Instagram, run the scroll/like tools with configured settings, close
-Instagram, cycle airplane mode off→wait 15-20s→on, then lock the phone —
-recycling this whole sequence on every tick, not just running the
-scroll/like loop directly.
+Each Human Session Tool automation-cycle "tick" must wake the phone, open
+Instagram, run the configured tools, close Instagram, and lock the phone.
+Do not cycle airplane mode during the closing stage.
 
-**Why:** the user wants the device to behave like a person actually used it
-between sessions (open/close the real app, real airplane-mode network
-reset) rather than a script quietly driving gestures against whatever was
-already on screen, or force-stopping the process invisibly.
+**Why:** the user clarified that airplane mode is not needed at the end of the
+Human Session Tool cycle.
 
 **How to apply / pitfalls already hit:**
 - Don't use a raw `KEYCODE_POWER` toggle for "power on"/"power off" — it's
@@ -25,14 +20,9 @@ already on screen, or force-stopping the process invisibly.
   Android version. Verify via `pidof <package>` after the gesture and
   fall back to `am force-stop` only if the process is still alive, so the
   human-like gesture is tried first but closure is still guaranteed.
-- Toggle airplane mode via `cmd connectivity airplane-mode enable/disable`
-  (with a `settings put global airplane_mode_on` + broadcast fallback for
-  older builds) rather than tapping a quick-settings tile — tile position
-  is not consistent across devices/OEMs, so a coordinate tap is unreliable
-  at scale.
-- Treat a successful airplane-mode command exit as insufficient on OEM phones:
-  read back `airplane_mode_on`, use the settings+broadcast fallback when it
-  did not change, and fail explicitly if the requested state cannot be verified.
+- Keep the explicit manual airplane-cycle action separate from the HST closing
+  sequence; do not reintroduce an automatic airplane toggle at cycle end unless
+  the user asks for it.
 - Before the initial wake→unlock sequence, hold Android's screen timeout at a
   long value and restore it during cycle cleanup. Some OEMs can let a very
   short timeout expire while the unlock swipe is still waiting on ADB/display
