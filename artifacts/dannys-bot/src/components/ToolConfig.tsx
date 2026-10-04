@@ -135,7 +135,7 @@ export function ToolConfig({ profileId, type }: ToolConfigProps) {
 
         {/* Sources Panel */}
         <div className="lg:col-span-2">
-          <SourcesList toolId={tool.id} />
+          <SourcesList toolId={tool.id} toolType={tool.type} />
         </div>
       </div>
     </div>

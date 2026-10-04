@@ -41,7 +41,7 @@ function computePercentages(sources: Source[]): Record<number, number> {
   return result;
 }
 
-export function SourcesList({ toolId }: { toolId: number }) {
+export function SourcesList({ toolId, toolType }: { toolId: number; toolType?: string }) {
   const { data: sources, isLoading } = useSources(toolId);
   const createSource = useCreateSource();
   const deleteSource = useDeleteSource();
@@ -53,7 +53,7 @@ export function SourcesList({ toolId }: { toolId: number }) {
 
   const handleAdd = () => {
     if (!value.trim()) return;
-    createSource.mutate({ toolId, type, value: value.trim() }, {
+    createSource.mutate({ toolId, type, value: value.trim(), enabled: true }, {
       onSuccess: () => setValue(""),
     });
   };
@@ -132,6 +132,7 @@ export function SourcesList({ toolId }: { toolId: number }) {
             <SelectContent>
               <SelectItem value="hashtag">Hashtag</SelectItem>
               <SelectItem value="target_followers">Target Followers</SelectItem>
+              {toolType === "follow" && <SelectItem value="target_likers">Likers of Account Posts</SelectItem>}
             </SelectContent>
           </Select>
           <div className="flex-1 flex gap-2">
@@ -187,7 +188,7 @@ export function SourcesList({ toolId }: { toolId: number }) {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-foreground text-sm truncate">{source.value}</p>
                     <Badge variant="secondary" className="mt-0.5 font-normal text-xs bg-slate-100 text-slate-600">
-                      {source.type.replace('_', ' ')}
+                      {source.type === "target_likers" ? "post likers of account" : source.type.replace('_', ' ')}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">

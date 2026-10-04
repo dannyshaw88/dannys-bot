@@ -6043,7 +6043,7 @@ export function AutomationSettingsPanel({
   const [maleNamesEditorOpen, setMaleNamesEditorOpen] = useState(false);
   const [maleNamesDraft, setMaleNamesDraft] = useState("");
   const [spinPreview, setSpinPreview] = useState<string | null>(null);
-  const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers'>('hashtag');
+  const [newFollowSourceType, setNewFollowSourceType] = useState<'hashtag' | 'target_followers' | 'target_likers'>('hashtag');
   const [newFollowSourceValue, setNewFollowSourceValue] = useState('');
   const [newShareReelSourceValue, setNewShareReelSourceValue] = useState('');
   const [shareReelSourceError, setShareReelSourceError] = useState('');
@@ -6115,11 +6115,19 @@ export function AutomationSettingsPanel({
       try { text = new TextDecoder(encoding, { fatal: true }).decode(buf.slice(offset)); }
       catch { text = new TextDecoder('windows-1252').decode(buf.slice(offset)); }
       const lines = text.split(/\r?\n/).filter(l => l.trim());
-      // Skip header row; first column is the hashtag value
-      const newSources: { type: 'hashtag' | 'target_followers'; value: string }[] = lines.slice(1)
-        .map(line => line.split('\t')[0].trim().replace(/^#/, '').toLowerCase())
-        .filter(v => v && !/^\d+$/.test(v))
-        .map(value => ({ type: 'hashtag' as const, value }));
+      // Skip the header row. Exported files include the source type in column 2;
+      // one-column legacy files continue to import as hashtags.
+      const newSources = lines.slice(1)
+        .map(line => {
+          const [rawValue = '', rawType = ''] = line.split(/\t|,/, 2);
+          const type = rawType.trim().toLowerCase();
+          const normalizedType = ['hashtag', 'target_followers', 'target_likers'].includes(type)
+            ? type
+            : 'hashtag';
+          const value = rawValue.trim().replace(/^[@#]/, '').toLowerCase();
+          return { type: normalizedType, value };
+        })
+        .filter(source => source.value && !/^\d+$/.test(source.value));
       if (!newSources.length) return;
       setSettings(s => ({ ...s, followSources: [...s.followSources, ...newSources] }));
     } finally {
@@ -7568,7 +7576,7 @@ export function AutomationSettingsPanel({
                   {settings.followSources.map((src, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
                       <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono shrink-0">
-                        {src.type === 'hashtag' ? '#' : '@'}
+                        {src.type === 'hashtag' ? '#' : src.type === 'target_likers' ? '♥' : '@'}
                       </span>
                       <span className="flex-1 text-foreground truncate">{src.value}</span>
                       <button
@@ -7587,12 +7595,13 @@ export function AutomationSettingsPanel({
               <div className="flex items-center gap-2 flex-wrap">
                 <select
                   value={newFollowSourceType}
-                  onChange={e => setNewFollowSourceType(e.target.value as 'hashtag' | 'target_followers')}
+                  onChange={e => setNewFollowSourceType(e.target.value as 'hashtag' | 'target_followers' | 'target_likers')}
                   disabled={fieldDisabled("followSources")}
                   className="text-xs bg-muted border border-border rounded px-2 py-1 text-foreground cursor-pointer"
                 >
                   <option value="hashtag">Hashtag</option>
                   <option value="target_followers">Followers of Account</option>
+                  <option value="target_likers">Likers of Account Posts</option>
                 </select>
                 <Input
                   className="flex-1 min-w-0 text-xs h-8"

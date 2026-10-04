@@ -4363,6 +4363,14 @@ class AutomationEngine {
           const result = await hikerClient.getHashtagUsers(source.value, processCount * 3, cursor);
           candidates = result.users;
           if (result.nextCursor) await storage.setHashtagCursor(source.value, result.nextCursor).catch(() => {});
+        } else if (source.type === "target_likers") {
+          const targetPk = source.targetUserId
+            ?? (await hikerClient.getUserByUsername(source.value.replace(/^@/, "")))?.pk;
+          if (!targetPk) {
+            console.log(`[engine] @${profile.username}: [EB-only] follow — could not resolve post-liker source @${source.value}`);
+            return;
+          }
+          candidates = await hikerClient.getAccountPostLikers(targetPk, Math.max(processCount * 3, 20), 5);
         } else if (source.type === "account") {
           const result = await hikerClient.getFollowers(source.value, processCount * 3);
           candidates = result.users;
@@ -6216,6 +6224,48 @@ class AutomationEngine {
         } else {
           candidates = await client.getFollowers(targetPk, processCount + 5);
         }
+      } else if (source.type === "target_likers") {
+        if (!hikerClient) {
+          engineLog("WARN", `@${profile.username}: post-liker source @${source.value} requires HikerAPI`);
+          return zero;
+        }
+        const targetName = source.value.replace(/^@/, "");
+        let targetPk = source.targetUserId ?? "";
+        if (!targetPk) {
+          let resolved: { pk: string; username: string } | null = null;
+          if (useHikerFollowByUsername) {
+            const t0 = Date.now();
+            resolved = await hikerClient.getUserByUsername(targetName);
+            logHiker("GetUserByUsername", `Resolved @${targetName} for post-liker source via HikerAPI`, Date.now() - t0);
+          } else {
+            resolved = await client.searchUserByUsername(targetName);
+          }
+          if (!resolved) {
+            engineLog("WARN", `@${profile.username}: post-liker source @${targetName} could not be resolved`);
+            return zero;
+          }
+          targetPk = resolved.pk;
+          await storage.updateSourceTargetUserId(source.id, targetPk);
+        }
+
+        const t0 = Date.now();
+        try {
+          candidates = await hikerClient.getAccountPostLikers(targetPk, Math.max(processCount * 3, 20), 5);
+        } catch (error: any) {
+          if (error instanceof HikerCacheMissError) {
+            engineLog("WARN", `@${profile.username}: HikerAPI has no cached post-liker data for @${targetName}`);
+            return zero;
+          }
+          throw error;
+        }
+        if (globalSettings.skipScrapedUsers === "true" && candidates.length > 0) {
+          const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
+          const alreadyScraped = await storage.getScrapedUserIds(candidates.map(c => c.pk), ignoreDays);
+          const fresh = candidates.filter(c => !alreadyScraped.has(c.pk));
+          await storage.addScrapedUsers(fresh).catch(() => {});
+          candidates = fresh;
+        }
+        logHiker("PostLikersScrape", `Scraped likers from up to 5 recent posts of @${targetName} via HikerAPI (${candidates.length} users)`, Date.now() - t0);
       }
     } catch (err: any) {
       engineLog("ERROR", `@${profile.username}: scrape error: ${err?.message}`);
@@ -6774,7 +6824,10 @@ class AutomationEngine {
       // Follow
       let result: { ok: boolean; status?: string; reason?: string };
       try {
-        const sourceLabel = source.value ? (source.type === "hashtag" ? `#${source.value}` : source.value) : undefined;
+        const sourceLabel = !source.value ? undefined
+          : source.type === "hashtag" ? `#${source.value}`
+          : source.type === "target_likers" ? `Post likers of @${source.value.replace(/^@/, "")}`
+          : source.value;
         if ((profile as any).followViaBrowser) {
           result = await this.followUserViaBrowser(profile.id, user.username, {
             host: (profile as any).proxyHost, port: (profile as any).proxyPort,
@@ -6976,13 +7029,13 @@ class AutomationEngine {
     // Re-scrape additional pages to fill the quota when users were skipped by other profiles.
     // Rotates through ALL sources of the same type instead of hammering the same source
     // repeatedly. Each round picks the next available (non-exhausted) source.
-    // seenFollowerPksBySource tracks PKs per target-follower source so we can request
-    // progressively deeper slices without re-processing users we already saw.
+    // Track candidate PKs per account-based source so re-scrapes can request a
+    // larger slice without re-processing users already returned.
     const sameTypeSources = sources.filter(s => s.type === source.type);
     const initialSourceIdx = sameTypeSources.findIndex(s => s.id === source.id);
     const exhaustedSourceIds = new Set<string>();
-    const seenFollowerPksBySource = new Map<string, Set<string>>();
-    seenFollowerPksBySource.set(source.id, new Set(candidates.map(c => c.pk)));
+    const seenUserPksBySource = new Map<string, Set<string>>();
+    seenUserPksBySource.set(source.id, new Set(candidates.map(c => c.pk)));
     const sourceRoundCount = new Map<string, number>();
     if (!hitHardLimit && followed < processCount && !state.stop.stopped) {
       let extraRound = 0;
@@ -6995,9 +7048,9 @@ class AutomationEngine {
         const rescrapeSource = availableSources[(initialSourceIdx + extraRound) % availableSources.length];
         const needMore = processCount - followed;
         let moreCandidates: { pk: string; username: string; fullName: string }[] = [];
-        // rawApiCount: users returned by the API BEFORE dedup.  Declared here so the
-        // exhaustion check below can see it.  Non-hashtag branches leave it -1, which
-        // triggers the legacy "exhaust on empty" behaviour for those source types.
+        // rawApiCount: new API candidates before profile/global filters. Hashtag
+        // cursors can advance with already-seen users; account-liker endpoints
+        // have no cursor and exhaust when their expanded unique set stops growing.
         let rawApiCount = -1;
         try {
           if (rescrapeSource.type === "hashtag" && hikerClient) {
@@ -7024,10 +7077,10 @@ class AutomationEngine {
             }
             logHiker("HashtagScrape", `Re-scrape round ${extraRound} #${rescrapeSource.value} via HikerAPI (${moreCandidates.length} users, ${rawApiCount} raw)`, Date.now() - t0);
           } else if (rescrapeSource.type === "target_followers" && hikerClient && rescrapeSource.targetUserId) {
-            if (!seenFollowerPksBySource.has(rescrapeSource.id)) {
-              seenFollowerPksBySource.set(rescrapeSource.id, new Set());
+            if (!seenUserPksBySource.has(rescrapeSource.id)) {
+              seenUserPksBySource.set(rescrapeSource.id, new Set());
             }
-            const seenPks = seenFollowerPksBySource.get(rescrapeSource.id)!;
+            const seenPks = seenUserPksBySource.get(rescrapeSource.id)!;
             const roundsOnSource = (sourceRoundCount.get(rescrapeSource.id) ?? 0) + 1;
             sourceRoundCount.set(rescrapeSource.id, roundsOnSource);
             const t0 = Date.now();
@@ -7043,6 +7096,51 @@ class AutomationEngine {
               moreCandidates = fresh;
             }
             logHiker("FollowersScrape", `Re-scrape round ${extraRound} followers of @${rescrapeSource.value} via HikerAPI (${allFollowers.length} total, ${moreCandidates.length} new)`, Date.now() - t0);
+          } else if (rescrapeSource.type === "target_likers" && hikerClient) {
+            if (!seenUserPksBySource.has(rescrapeSource.id)) {
+              seenUserPksBySource.set(rescrapeSource.id, new Set());
+            }
+            const seenPks = seenUserPksBySource.get(rescrapeSource.id)!;
+            const roundsOnSource = (sourceRoundCount.get(rescrapeSource.id) ?? 0) + 1;
+            sourceRoundCount.set(rescrapeSource.id, roundsOnSource);
+            const targetName = rescrapeSource.value.replace(/^@/, "");
+            let targetPk = rescrapeSource.targetUserId ?? "";
+            if (!targetPk) {
+              const resolved = useHikerFollowByUsername
+                ? await hikerClient.getUserByUsername(targetName)
+                : await client.searchUserByUsername(targetName);
+              if (resolved?.pk) {
+                targetPk = resolved.pk;
+                await storage.updateSourceTargetUserId(rescrapeSource.id, targetPk);
+              }
+            }
+
+            if (!targetPk) {
+              rawApiCount = 0;
+            } else {
+              const t0 = Date.now();
+              const requestedTotal = Math.min(Math.max(processCount * 3, 20) * (roundsOnSource + 1), 200);
+              let allLikers: { pk: string; username: string; fullName: string }[] = [];
+              try {
+                allLikers = await hikerClient.getAccountPostLikers(targetPk, requestedTotal, 5);
+              } catch (error: any) {
+                if (!(error instanceof HikerCacheMissError)) throw error;
+                engineLog("WARN", `@${profile.username}: HikerAPI has no cached post-liker data for @${targetName}`);
+              }
+              moreCandidates = allLikers.filter(user => !seenPks.has(user.pk));
+              // This endpoint has no pagination cursor, so exhausted sources
+              // must be detected from the expanded unique set, not raw counts.
+              rawApiCount = moreCandidates.length;
+              moreCandidates.forEach(user => seenPks.add(user.pk));
+              if (globalSettings.skipScrapedUsers === "true" && moreCandidates.length > 0) {
+                const ignoreDays = parseInt(globalSettings.scrapedUserIgnoreDays ?? "365", 10);
+                const alreadyScraped = await storage.getScrapedUserIds(moreCandidates.map(user => user.pk), ignoreDays);
+                const fresh = moreCandidates.filter(user => !alreadyScraped.has(user.pk));
+                await storage.addScrapedUsers(fresh).catch(() => {});
+                moreCandidates = fresh;
+              }
+              logHiker("PostLikersScrape", `Re-scrape round ${extraRound} likers from up to 5 recent posts of @${targetName} (${allLikers.length} total, ${moreCandidates.length} new)`, Date.now() - t0);
+            }
           }
         } catch { break; }
         if (!moreCandidates.length) {
@@ -7050,8 +7148,8 @@ class AutomationEngine {
           // (rawApiCount === 0 → truly empty page at this cursor).
           // If the API DID return users but all were filtered by dedup (rawApiCount > 0),
           // the cursor was already advanced to the next page — don't exhaust it.
-          // For non-hashtag source types rawApiCount stays -1, so they use the old
-          // "exhaust on empty moreCandidates" behaviour unchanged.
+          // Followers use the legacy empty-candidate rule; post-liker sources set
+          // this to 0 when their non-paginated unique result stops growing.
           // rawApiCount > 0  → API returned users but ALL were filtered by dedup
           //                    → cursor already advanced, next round fetches next page
           //                    → do NOT exhaust the source
@@ -7063,7 +7161,12 @@ class AutomationEngine {
           }
           continue;
         }
-        engineLog("INFO", `@${profile.username}: re-scrape round ${extraRound} #${rescrapeSource.value} — ${moreCandidates.length} new candidates (need ${needMore} more)`);
+        const rescrapeLabel = rescrapeSource.type === "hashtag"
+          ? `#${rescrapeSource.value}`
+          : rescrapeSource.type === "target_likers"
+            ? `post likers of @${rescrapeSource.value.replace(/^@/, "")}`
+            : `@${rescrapeSource.value.replace(/^@/, "")}`;
+        engineLog("INFO", `@${profile.username}: re-scrape round ${extraRound} ${rescrapeLabel} — ${moreCandidates.length} new candidates (need ${needMore} more)`);
         for (const user of moreCandidates) {
           if (followed >= processCount || state.stop.stopped || hitHardLimit) break;
           if (maxPerDay > 0 && this.daily(state) >= maxPerDay) { hitHardLimit = true; break; }
@@ -7078,7 +7181,10 @@ class AutomationEngine {
           if (this.isActionSuspended(state, "follow")) { hitHardLimit = true; break; }
           let result: { ok: boolean; status?: string; reason?: string };
           try {
-            const sourceLabel = rescrapeSource.value ? (rescrapeSource.type === "hashtag" ? `#${rescrapeSource.value}` : rescrapeSource.value) : undefined;
+            const sourceLabel = !rescrapeSource.value ? undefined
+              : rescrapeSource.type === "hashtag" ? `#${rescrapeSource.value}`
+              : rescrapeSource.type === "target_likers" ? `Post likers of @${rescrapeSource.value.replace(/^@/, "")}`
+              : rescrapeSource.value;
             if ((profile as any).followViaBrowser) {
               result = await this.followUserViaBrowser(profile.id, user.username, {
                 host: (profile as any).proxyHost, port: (profile as any).proxyPort,

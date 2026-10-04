@@ -224,6 +224,8 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   const [newFollowerValue, setNewFollowerValue] = useState("");
   const [hashtagSectionOpen, setHashtagSectionOpen] = useState(true);
   const [followerSectionOpen, setFollowerSectionOpen] = useState(true);
+  const [likerSectionOpen, setLikerSectionOpen] = useState(true);
+  const [newLikerValue, setNewLikerValue] = useState("");
   const [showFollowedUsers, setShowFollowedUsers] = useState(false);
   const [showOverspill, setShowOverspill] = useState(false);
   const [, startSourcesTransition] = useTransition();
@@ -470,7 +472,8 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
     createSourceMutation.mutate({
       toolId: tool.id,
       type: newSourceType,
-      value: newSourceValue.trim()
+      value: newSourceValue.trim(),
+      enabled: true,
     }, {
       onSuccess: () => {
         setNewSourceValue("");
@@ -551,6 +554,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
   if (tool.type === 'follow' && showSources) {
     const hashtags = sources?.filter(s => s.type === 'hashtag') ?? [];
     const followers = sources?.filter(s => s.type === 'target_followers') ?? [];
+    const postLikers = sources?.filter(s => s.type === 'target_likers') ?? [];
 
     const SourceRow = ({ source }: { source: NonNullable<typeof sources>[number] }) => {
       const displayPriority = localPriorities[source.id] !== undefined
@@ -563,7 +567,11 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
               ? <Hash className="w-3.5 h-3.5 text-primary shrink-0" />
               : <Users className="w-3.5 h-3.5 text-primary shrink-0" />}
             <span className="text-sm font-medium truncate">
-              {source.type === 'hashtag' ? `#${source.value}` : `@${source.value.replace(/^@/, '')}`}
+              {source.type === 'hashtag'
+                ? `#${source.value}`
+                : source.type === 'target_likers'
+                  ? `@${source.value.replace(/^@/, '')} · post likers`
+                  : `@${source.value.replace(/^@/, '')}`}
             </span>
             {source.nrPosts != null && (
               <span className="text-[10px] text-muted-foreground shrink-0">
@@ -656,7 +664,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
             {hashtagSectionOpen && (
               <>
                 <form
-                  onSubmit={e => { e.preventDefault(); if (!newHashtagValue.trim()) return; createSourceMutation.mutate({ toolId: tool.id, type: 'hashtag', value: newHashtagValue.trim().replace(/^#/, '') }, { onSuccess: () => setNewHashtagValue('') }); }}
+                  onSubmit={e => { e.preventDefault(); if (!newHashtagValue.trim()) return; createSourceMutation.mutate({ toolId: tool.id, type: 'hashtag', value: newHashtagValue.trim().replace(/^#/, ''), enabled: true }, { onSuccess: () => setNewHashtagValue('') }); }}
                   className="flex gap-2 mb-3"
                 >
                   <Input
@@ -729,7 +737,7 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
             {followerSectionOpen && (
               <>
                 <form
-                  onSubmit={e => { e.preventDefault(); if (!newFollowerValue.trim()) return; createSourceMutation.mutate({ toolId: tool.id, type: 'target_followers', value: newFollowerValue.trim().replace(/^@/, '') }, { onSuccess: () => setNewFollowerValue('') }); }}
+                  onSubmit={e => { e.preventDefault(); if (!newFollowerValue.trim()) return; createSourceMutation.mutate({ toolId: tool.id, type: 'target_followers', value: newFollowerValue.trim().replace(/^@/, ''), enabled: true }, { onSuccess: () => setNewFollowerValue('') }); }}
                   className="flex gap-2 mb-3"
                 >
                   <Input
@@ -758,6 +766,74 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                     className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 h-8 max-w-[75px]"
                     disabled={clearSourcesByTypeMutation.isPending}
                     onClick={() => clearSourcesByTypeMutation.mutate({ toolId: tool.id, type: 'target_followers' })}>
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    {clearSourcesByTypeMutation.isPending ? '…' : 'Clear'}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="border-t border-border/60" />
+
+          {/* ── Likers of Account Posts Section ─────────────────────── */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                type="checkbox"
+                id="likerSection"
+                checked={likerSectionOpen}
+                onChange={e => setLikerSectionOpen(e.target.checked)}
+                className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
+              />
+              <label htmlFor="likerSection" className="text-sm font-bold cursor-pointer select-none flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-primary" /> Likers of Account Posts
+                <span className="text-xs text-muted-foreground font-normal">({postLikers.length})</span>
+              </label>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-3 ml-5">
+              Scans up to 5 recent posts and collects up to 200 unique likers per scrape.
+            </p>
+
+            {likerSectionOpen && (
+              <>
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    if (!newLikerValue.trim()) return;
+                    createSourceMutation.mutate(
+                      { toolId: tool.id, type: 'target_likers', value: newLikerValue.trim().replace(/^@/, ''), enabled: true },
+                      { onSuccess: () => setNewLikerValue('') },
+                    );
+                  }}
+                  className="flex gap-2 mb-3"
+                >
+                  <Input
+                    placeholder="@natgeo"
+                    value={newLikerValue}
+                    onChange={e => setNewLikerValue(e.target.value)}
+                    className="w-40 h-8 text-sm"
+                  />
+                  <Button type="submit" size="sm" className="h-8" disabled={!newLikerValue.trim() || createSourceMutation.isPending}>
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                  </Button>
+                </form>
+
+                {sourcesLoading ? (
+                  <div className="text-center py-6 text-muted-foreground text-sm">Loading…</div>
+                ) : postLikers.length === 0 ? (
+                  <div className="text-center py-5 border border-dashed border-border/60 rounded-lg text-muted-foreground text-xs">No accounts added yet</div>
+                ) : (
+                  <div className="space-y-1 max-h-[360px] overflow-y-auto pr-0.5 mb-3">
+                    {postLikers.map(s => <SourceRow key={s.id} source={s} />)}
+                  </div>
+                )}
+
+                {postLikers.length > 0 && (
+                  <Button type="button" variant="outline" size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 h-8 max-w-[75px]"
+                    disabled={clearSourcesByTypeMutation.isPending}
+                    onClick={() => clearSourcesByTypeMutation.mutate({ toolId: tool.id, type: 'target_likers' })}>
                     <Trash2 className="w-3.5 h-3.5 mr-1" />
                     {clearSourcesByTypeMutation.isPending ? '…' : 'Clear'}
                   </Button>
@@ -842,7 +918,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         {ou.sourceValue ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-medium">
                             {ou.sourceType === 'hashtag' ? <Hash className="w-3 h-3" /> : <Users className="w-3 h-3" />}
-                            {ou.sourceValue}
+                            {ou.sourceType === 'target_likers'
+                              ? `Post likers of @${ou.sourceValue.replace(/^@/, '')}`
+                              : ou.sourceType === 'hashtag' ? `#${ou.sourceValue}` : ou.sourceValue}
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-xs"> </span>
@@ -931,7 +1009,9 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                         {fu.sourceValue ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-medium">
                             {fu.sourceType === 'hashtag' ? <Hash className="w-3 h-3" /> : <Users className="w-3 h-3" />}
-                            {fu.sourceValue}
+                            {fu.sourceType === 'target_likers'
+                              ? `Post likers of @${fu.sourceValue.replace(/^@/, '')}`
+                              : fu.sourceType === 'hashtag' ? `#${fu.sourceValue}` : fu.sourceValue}
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-xs"> </span>
@@ -1801,7 +1881,13 @@ export function ToolConfigPanel({ tool, profile, copyOpen: copyOpenProp, onCopyO
                           {source.type === 'hashtag' ? <Hash className="w-4 h-4" /> : <Users className="w-4 h-4" />}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{source.type === 'hashtag' ? `#${source.value}` : source.value}</p>
+                          <p className="text-sm font-medium truncate">
+                            {source.type === 'hashtag'
+                              ? `#${source.value}`
+                              : source.type === 'target_likers'
+                                ? `Post likers of @${source.value.replace(/^@/, '')}`
+                                : source.value}
+                          </p>
                           <div className="flex items-center gap-2 flex-wrap">
                             {source.nrPosts != null && (
                               <span className="text-[10px] text-muted-foreground">

@@ -7214,7 +7214,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const _sfShuffledSrcs = [...followSources].sort(() => Math.random() - 0.5);
                 for (const src of _sfShuffledSrcs) {
                   if (_sfRaw.length >= _spreadTarget * 3) break;
-                  const srcLabel = src.type === "hashtag" ? `#${src.value.replace(/^#/, "")}` : `@${src.value.replace(/^@/, "")}`;
+                  const srcLabel = src.type === "hashtag"
+                    ? `#${src.value.replace(/^#/, "")}`
+                    : src.type === "target_likers"
+                      ? `Post likers of @${src.value.replace(/^@/, "")}`
+                      : `@${src.value.replace(/^@/, "")}`;
                   try {
                     if (src.type === "hashtag") {
                       const res = await _sfHiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
@@ -7236,6 +7240,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                         _sfRaw.push(u.username);
                       }
                       tLog(`  Spread Follows: ${srcLabel} followers → ${followers.length} users`);
+                    } else if (src.type === "target_likers") {
+                      const userInfo = await _sfHiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+                      if (!userInfo?.pk) continue;
+                      const likers = await _sfHiker.getAccountPostLikers(userInfo.pk, 50, 5);
+                      for (const u of likers) {
+                        if (!_sfSource.has(u.username)) _sfSource.set(u.username, srcLabel);
+                        if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+                          _sfMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+                        _sfRaw.push(u.username);
+                      }
+                      tLog(`  Spread Follows: ${srcLabel} → ${likers.length} users from up to 5 recent posts`);
                     }
                   } catch (e: any) {
                     if (e?.message === "cycle-aborted") throw e;
@@ -7697,7 +7712,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   try {
                     const srcLabel = src.type === "hashtag"
                       ? `#${src.value.replace(/^#/, "")}`
-                      : `@${src.value.replace(/^@/, "")}`;
+                      : src.type === "target_likers"
+                        ? `Post likers of @${src.value.replace(/^@/, "")}`
+                        : `@${src.value.replace(/^@/, "")}`;
                     const users: { username: string; isVerified?: boolean; isPrivate?: boolean; followerCount?: number }[] = [];
                     if (src.type === "hashtag") {
                       const res = await _rsHiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
@@ -7705,6 +7722,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     } else if (src.type === "target_followers") {
                       const ui = await _rsHiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
                       if (ui?.pk) users.push(...await _rsHiker.getFollowers(ui.pk, 50));
+                    } else if (src.type === "target_likers") {
+                      const ui = await _rsHiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+                      if (ui?.pk) users.push(...await _rsHiker.getAccountPostLikers(ui.pk, 200, 5));
                     }
                     for (const u of users) {
                       if (_ssSkipFollowed?.has(u.username.toLowerCase())) continue;

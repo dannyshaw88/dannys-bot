@@ -148,7 +148,9 @@ export function SessionLogPanel({ tool, profile }: SessionLogPanelProps) {
                         ) : sa.sourceValue ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary text-[11px] font-medium">
                             {sa.sourceType === 'hashtag' ? <Hash className="w-3 h-3" /> : <Users className="w-3 h-3" />}
-                            {sa.sourceValue}
+                            {sa.sourceType === 'target_likers'
+                              ? `Post likers of @${sa.sourceValue.replace(/^@/, '')}`
+                              : sa.sourceType === 'hashtag' ? `#${sa.sourceValue}` : sa.sourceValue}
                           </span>
                         ) : (
                           <span className="text-muted-foreground text-xs"> </span>

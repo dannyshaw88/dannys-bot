@@ -578,6 +578,103 @@ export class HikerApiClient {
     }
   }
 
+  // Fetches likers across a bounded number of the account's latest posts.
+  // HikerAPI's v2 endpoint accepts only a media id (no pagination parameters),
+  // so distribute the requested candidate cap across recent posts.
+  async getAccountPostLikers(
+    userId: string,
+    maxUsers = 50,
+    maxPosts = 5,
+  ): Promise<{ pk: string; username: string; fullName: string; isVerified?: boolean; isPrivate?: boolean; followerCount?: number }[]> {
+    const userLimit = Math.min(Math.max(Math.floor(maxUsers), 0), 200);
+    const postLimit = Math.min(Math.max(Math.floor(maxPosts), 0), 10);
+    if (!userLimit || !postLimit) return [];
+
+    const posts = await this.getUserFeedByUserId(userId, postLimit);
+    if (!posts.length) return [];
+
+    const users: { pk: string; username: string; fullName: string; isVerified?: boolean; isPrivate?: boolean; followerCount?: number }[] = [];
+    const seenPks = new Set<string>();
+    const seenUsernames = new Set<string>();
+    let cacheMissCount = 0;
+    let lastApiError = "";
+
+    for (let postIndex = 0; postIndex < posts.length && users.length < userLimit; postIndex++) {
+      const post = posts[postIndex];
+      const postBudget = Math.ceil((userLimit - users.length) / (posts.length - postIndex));
+      const query = new URLSearchParams({ id: post.mediaId, safe_int: "true" });
+
+      let response: any;
+      try {
+        response = await hikerGet(`/v2/media/likers?${query}`, this.token);
+      } catch (error: any) {
+        lastApiError = error?.message ?? String(error);
+        console.error(`[hikerApi] getAccountPostLikers userId=${userId} media=${post.mediaId} error: ${lastApiError}`);
+        continue;
+      }
+
+      const detail = response?.detail ?? response?.exc_type
+        ?? (response?.state === false ? response?.error : undefined)
+        ?? (typeof response?.error === "string" ? response.error : undefined);
+      if (detail) {
+        const message = String(detail);
+        if (/entries not found|not found/i.test(message)) {
+          cacheMissCount++;
+          console.warn(`[hikerApi] getAccountPostLikers userId=${userId} media=${post.mediaId}: cache miss (${message})`);
+        } else {
+          lastApiError = message;
+          console.error(`[hikerApi] getAccountPostLikers userId=${userId} media=${post.mediaId}: ${message}`);
+        }
+        continue;
+      }
+
+      const envelope = response?.response && typeof response.response === "object"
+        ? response.response
+        : response?.data && typeof response.data === "object"
+          ? response.data
+          : response;
+      const likers: any[] = Array.isArray(response) ? response
+        : Array.isArray(envelope?.users) ? envelope.users
+        : Array.isArray(envelope?.items) ? envelope.items
+        : [];
+      if (!Array.isArray(response) && !Array.isArray(envelope?.users) && !Array.isArray(envelope?.items)) {
+        lastApiError = `Unexpected /v2/media/likers response shape (keys: ${JSON.stringify(Object.keys(response ?? {}))})`;
+        console.warn(`[hikerApi] getAccountPostLikers userId=${userId} media=${post.mediaId}: ${lastApiError}`);
+        continue;
+      }
+
+      let addedFromPost = 0;
+      for (const liker of likers) {
+        if (users.length >= userLimit || addedFromPost >= postBudget) break;
+        const pk = String(liker?.pk ?? liker?.id ?? liker?.pk_id ?? "");
+        const username = String(liker?.username ?? "").trim();
+        const usernameKey = username.toLowerCase();
+        if (!pk || !username || pk === String(userId) || seenPks.has(pk) || seenUsernames.has(usernameKey)) continue;
+        seenPks.add(pk);
+        seenUsernames.add(usernameKey);
+        users.push({
+          pk,
+          username,
+          fullName: String(liker.full_name ?? ""),
+          ...(liker.is_verified !== undefined && { isVerified: Boolean(liker.is_verified) }),
+          ...(liker.is_private !== undefined && { isPrivate: Boolean(liker.is_private) }),
+          ...(liker.follower_count !== undefined && { followerCount: Number(liker.follower_count) }),
+        });
+        addedFromPost++;
+      }
+      console.log(`[hikerApi] getAccountPostLikers userId=${userId} media=${post.mediaId}: ${addedFromPost} users (${users.length}/${userLimit} total)`);
+    }
+
+    if (!users.length && cacheMissCount === posts.length) {
+      throw new HikerCacheMissError(`No cached liker data for ${posts.length} recent post(s) of user ${userId}`);
+    }
+    if (!users.length && lastApiError) {
+      throw new Error(`HikerAPI getAccountPostLikers failed: ${lastApiError}`);
+    }
+    console.log(`[hikerApi] getAccountPostLikers userId=${userId}: ${users.length} unique users from ${posts.length} recent post(s)`);
+    return users;
+  }
+
   async getHashtagUsers(
     hashtag: string,
     max = 50,

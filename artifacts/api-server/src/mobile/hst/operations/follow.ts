@@ -964,8 +964,8 @@ export async function runFollowUsersStep(
     onLog?.(`Follow: targeting ${targetCount} users from ${sources.length} source(s)`);
 
     hiker = new HikerApiClient(hikerApiToken);
-    // Track source per username so the Followed Users tab shows the hashtag
-    // or target account the user was discovered from, not "hikerapi".
+    // Track source per username so the Followed Users tab shows the hashtag,
+    // target account, or post-liker source the user came from.
     const candidates: string[] = [];
 
   // ── Surplus / Overspill candidates ──────────────────────────────────────
@@ -1028,7 +1028,9 @@ export async function runFollowUsersStep(
       if (candidates.length >= targetCount * 3) break;
       const sourceLabel = src.type === "hashtag"
         ? `#${src.value.replace(/^#/, "")}`
-        : `@${src.value.replace(/^@/, "")}`;
+        : src.type === "target_likers"
+          ? `Post likers of @${src.value.replace(/^@/, "")}`
+          : `@${src.value.replace(/^@/, "")}`;
       try {
         if (src.type === "hashtag") {
           const res = await hiker.getHashtagUsers(src.value.replace(/^#/, ""), 50);
@@ -1050,6 +1052,17 @@ export async function runFollowUsersStep(
             candidates.push(u.username);
           }
           onLog?.(`Follow: ${sourceLabel} followers → ${followers.length} users`);
+        } else if (src.type === "target_likers") {
+          const userInfo = await hiker.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+          if (!userInfo?.pk) { onLog?.(`Follow: could not resolve @${src.value} — skipping source`); continue; }
+          const likers = await hiker.getAccountPostLikers(userInfo.pk, 50, 5);
+          for (const u of likers) {
+            if (!candidateSource.has(u.username)) candidateSource.set(u.username, sourceLabel);
+            if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+              candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+            candidates.push(u.username);
+          }
+          onLog?.(`Follow: ${sourceLabel} → ${likers.length} users from up to 5 recent posts`);
         }
       } catch (e: any) {
         onLog?.(`Follow: HikerAPI error for source "${src.value}": ${e?.message}`);
@@ -1193,7 +1206,9 @@ export async function runFollowUsersStep(
         if (newRaw.length >= targetCount * 3) break;
         const srcLabel = src.type === "hashtag"
           ? `#${src.value.replace(/^#/, "")}`
-          : `@${src.value.replace(/^@/, "")}`;
+          : src.type === "target_likers"
+            ? `Post likers of @${src.value.replace(/^@/, "")}`
+            : `@${src.value.replace(/^@/, "")}`;
         try {
           if (src.type === "hashtag") {
             const res = await hiker!.getHashtagUsers(src.value.replace(/^#/, ""), 50);
@@ -1219,6 +1234,21 @@ export async function runFollowUsersStep(
                 attemptedSet.add(u.username.toLowerCase());
               }
               onLog?.(`Follow: re-scrape ${srcLabel} followers → ${followers.length} users`);
+            }
+          } else if (src.type === "target_likers") {
+            const userInfo = await hiker!.getUserByUsername(src.value.replace(/^@/, "")).catch(() => null);
+            if (userInfo?.pk) {
+              const maxUsers = Math.min((scrapeRound + 1) * 50, 200);
+              const likers = await hiker!.getAccountPostLikers(userInfo.pk, maxUsers, 5);
+              for (const u of likers) {
+                if (attemptedSet.has(u.username.toLowerCase())) continue;
+                if (!candidateSource.has(u.username)) candidateSource.set(u.username, srcLabel);
+                if (u.isVerified !== undefined || u.isPrivate !== undefined || u.followerCount !== undefined)
+                  candidateMeta.set(u.username, { isVerified: u.isVerified, isPrivate: u.isPrivate, followerCount: u.followerCount });
+                newRaw.push(u.username);
+                attemptedSet.add(u.username.toLowerCase());
+              }
+              onLog?.(`Follow: re-scrape ${srcLabel} → ${likers.length} users from up to 5 recent posts`);
             }
           }
         } catch (e: any) {
