@@ -39,27 +39,6 @@ export async function runMakePostStep(serial: string, opts: {
     homeTapCount = 1,
   } = opts;
 
-// Establish Instagram Home before doing any local-file selection or image
-// processing. This ordering is intentional: Home is the first Make a Post
-// action, before Fix AI Slop, alteration, custom image settings, media
-// preparation, or any other post feature.
-//
-// Home is a per-device calibrated fixed control. A missing, stale, or invalid
-// map throws explicitly before any image preparation or upload begins.
-const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
-const taps = Math.max(1, Math.round(homeTapCount));
-for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
-  onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
-  if (tapIndex > 0) await android.tap(serial, homeTab.x, homeTab.y);
-  if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
-}
-// Do not immediately continue after the tab tap. On slower phones the
-// Home surface remains in its transition state for several seconds; use
-// a natural randomized 3–5 second dwell before pushing/opening compose.
-const homeDwellMs = 3000 + Math.round(Math.random() * 2000);
-onLog?.(`Make a Post: waiting ${ (homeDwellMs / 1000).toFixed(1) }s for Instagram Home to finish loading…`);
-  await sleepOrAbort(serial, homeDwellMs, "actionPacing", "computed");
-
 const fileName = await pickLocalFolderImage(serial, {
   folderPath: localFolderPath, random: localFolderRandom, noRepeat: localFolderNoRepeat, slotIdx, onLog,
 });
@@ -100,9 +79,31 @@ try {
 onLog?.(`Make a Post: adb push complete — devicePath=${devicePath}`);
 await prepared.cleanup();
 onLog?.("Make a Post: local prepared image cleaned up after push");
-  onLog?.(`Make a Post: ✓ pushed to ${devicePath} — waiting for Instagram to index the image`);
+  const mediaVerified = await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);
+  if (!mediaVerified) {
+    onLog?.("Make a Post: staged image was not confirmed in MediaStore with matching bytes — refusing to open Instagram's picker");
+    return { posted: false };
+  }
+  onLog?.(`Make a Post: ✓ pushed and verified at ${devicePath} — waiting for Instagram to index the image`);
 await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
 onLog?.("Make a Post: media-scan settle complete; looking for compose icon");
+
+// Do not touch Instagram until the assigned local image has been selected,
+// processed, pushed, and verified against the exact MediaStore entry and bytes.
+// This keeps an empty/unreadable folder or a stale gallery from becoming a
+// phone-only image selection.
+const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
+const taps = Math.max(1, Math.round(homeTapCount));
+for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
+  onLog?.(`Make a Post: tapping Instagram Home button (${tapIndex + 1}/${taps})…`);
+  if (tapIndex > 0) await android.tap(serial, homeTab.x, homeTab.y);
+  if (tapIndex + 1 < taps) await sleepOrAbort(serial, 500);
+}
+// Do not immediately continue after the tab tap. On slower phones the
+// Home surface remains in its transition state for several seconds.
+const homeDwellMs = 3000 + Math.round(Math.random() * 2000);
+onLog?.(`Make a Post: waiting ${ (homeDwellMs / 1000).toFixed(1) }s for Instagram Home to finish loading…`);
+  await sleepOrAbort(serial, homeDwellMs, "actionPacing", "computed");
 
 onLog?.("Make a Post: using calibrated \"+\" compose icon…");
 const composeBtn = await android.tapCalibratedNavigationControl(serial, "createPost", onLog);

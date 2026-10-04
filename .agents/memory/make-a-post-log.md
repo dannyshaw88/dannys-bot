@@ -131,9 +131,16 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-04 — Make a Post must prove the staged image before opening Instagram
+- The user reported that the 15:36 attempt found no image in the assigned directory, then entered Instagram’s picker and was about to use existing phone media; the user interrupted it.
+- **Root cause in the current source:** Make a Post opened Home before checking the local folder, then relied on a 1.2-second scanner delay after ADB push without requiring proof that the exact staged file was indexed. The available media-audit helper also compared `sha256`/`bytes`, while image preparation supplies `processedSha256`/`processedBytes`, and its failures were swallowed.
+- **Fix:** select the local file before any phone input; after push, require the exact MediaStore row and matching pulled-file hash/shape before tapping Home or opening the composer. Empty-folder and failed-audit paths abort before phone navigation; normal source/staged-copy cleanup still runs.
+- **Verification:** API build and mocked empty-folder/failed-audit checks passed. API typecheck remains blocked by the existing project-wide errors; no diagnostics were reported in the edited Make a Post/audit code. Real-phone confirmation is still required.
+- **How to apply:** never allow the Instagram picker to open unless the selected assigned-folder image has been pushed, indexed at its exact path, and verified against the processed local image.
+
 ### 2026-10-03 — Every automated Make a Post attempt consumes both copies
 - Clarified the required behavior: once Make a Post selects a source image, it must delete that PC file and remove the staged phone copy after either a confirmed upload or a failed/exceptional attempt.
-- Removed the success-only deletion option from the Make a Post controls and dispatcher. The legacy persisted setting remains for compatibility but no longer controls this operation; the separate manual PC-to-phone flow stays user-controlled.
+- Removed the success-only deletion option from the Make a Post controls and dispatcher. The legacy persisted setting remains for compatibility; the separate manual PC-to-phone flow stays user-controlled.
 - The shared finalizer now removes the source file on success and failure, while strict phone cleanup still runs whenever a staged device path is known. Make a Post's partial-push cleanup remains opt-in and does not change other callers.
 - Verification: API and web builds passed; mocked runtime checks covered confirmed upload, unconfirmed Share, partial phone push, and a preparation exception, with source and staged phone cleanup asserted where applicable. `git diff --check` passed. A physical phone was not available for deletion verification.
 

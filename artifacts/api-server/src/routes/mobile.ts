@@ -4709,11 +4709,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   async function auditDeviceMediaCopy(
     serial: string,
     devicePath: string,
-    expected: { sha256: string; bytes: number; format: string; width: number; height: number },
+    expected: {
+      sha256?: string;
+      bytes?: number;
+      processedSha256?: string;
+      processedBytes?: number;
+      format: string;
+      width: number;
+      height: number;
+    },
     onLog?: (msg: string) => void,
-  ): Promise<void> {
+  ): Promise<boolean> {
     let pulledPath = "";
     try {
+      const expectedSha256 = expected.processedSha256 ?? expected.sha256;
+      const expectedBytes = expected.processedBytes ?? expected.bytes;
+      if (
+        typeof expectedSha256 !== "string" || !expectedSha256 ||
+        typeof expectedBytes !== "number" || !Number.isFinite(expectedBytes) || expectedBytes <= 0
+      ) {
+        onLog?.("Media audit before Instagram: processed image fingerprint is missing — aborting");
+        return false;
+      }
       // adb push only proves that bytes exist on the filesystem. Instagram's
       // picker reads MediaStore, so require the scanner to expose this exact
       // path before allowing the compose flow to continue.
@@ -4733,27 +4750,32 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           `Media audit before Instagram: MediaStore did not index ` +
           `${path.basename(devicePath)} on the single check — aborting`,
         );
-      }
-      if (!mediaRow?.found) {
-        throw new Error(`MediaStore did not index ${path.basename(devicePath)} on the first media check`);
+        return false;
       }
       pulledPath = await android.pullFileFromDevice(serial, devicePath);
       const bytes = await fsPromises.readFile(pulledPath);
       const metadata = await withSharpNative(() => sharp(bytes).metadata());
       const sha256 = createHash("sha256").update(bytes).digest("hex");
       const matchesShape =
-        bytes.length === expected.bytes &&
+        bytes.length === expectedBytes &&
         (metadata.format ?? "unknown") === expected.format &&
         (metadata.width ?? 0) === expected.width &&
         (metadata.height ?? 0) === expected.height;
+      const matchesProcessed = sha256 === expectedSha256;
       onLog?.(
         `Media audit before Instagram: deviceSha256=${sha256} ` +
-        `matchesProcessed=${sha256 === expected.sha256} bytes=${bytes.length} ` +
+        `matchesProcessed=${matchesProcessed} bytes=${bytes.length} ` +
         `format=${metadata.format ?? "unknown"} dimensions=${metadata.width ?? 0}x${metadata.height ?? 0} ` +
         `matchesShape=${matchesShape}`,
       );
+      if (!matchesProcessed || !matchesShape) {
+        onLog?.("Media audit before Instagram: staged phone image does not match the processed local image — aborting");
+        return false;
+      }
+      return true;
     } catch (error: any) {
       onLog?.(`Media audit before Instagram: unavailable — ${error?.message ?? error}`);
+      return false;
     } finally {
       if (pulledPath) {
         await fsPromises.rm(path.dirname(pulledPath), { recursive: true, force: true }).catch(() => {});
