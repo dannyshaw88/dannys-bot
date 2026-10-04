@@ -92,6 +92,7 @@
 - [TrustScore ownership parity](trustscore-ownership-parity.md) — every slot-owned setting must be registered in both frontend and API ownership maps
 - [Mobile slot identity](mobile-slot-identity.md) — account-owned state must use persisted slotId, never the renumberable visible slot index
 - [Device removal state boundary](device-removal-state-boundary.md) — removing a farm device must purge account-owned state before serial reuse
+- [Device restart error UX](device-restart-error-ux.md) — keep ADB restart errors nonmodal and logged; never treat an unconfirmed timeout as reboot success
 - [Account import state boundary](account-import-state-boundary.md) — additive imports preserve existing slot IDs, TrustScores, countdowns, and settings; only explicit deletion purges them
 - [TrustScore persistence and loading](trustscore-persistence-and-loading.md) — migrate legacy numeric timer keys and never block account-slot rendering on profile hydration
 - [TrustScore navigation save](trustscore-duration-navigation-save.md) — debounced TrustScore settings must flush pending writes when the editor unmounts
