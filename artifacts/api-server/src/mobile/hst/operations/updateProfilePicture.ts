@@ -184,7 +184,9 @@ export async function runUpdateProfilePicture(
       await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
       onLog?.("Update Profile Pic: tapped Finished");
     }
-    await sleepOrAbort(serial, 5000 + Math.round(Math.random() * 2000));
+    const postFinishedDwellMs = 7500 + Math.floor(Math.random() * 10) * 500;
+    onLog?.(`Update Profile Pic: dwelling ${postFinishedDwellMs / 1000}s after Finished before Back`);
+    await sleepOrAbort(serial, postFinishedDwellMs);
 
     // 10. Tap the calibrated Instagram Back control once to leave the
     // edit-profile view. This is the same upper-left control captured in
