@@ -194,7 +194,6 @@ export function DeviceQuickControls({ serial }: { serial: string | null | undefi
       const result = await response?.json().catch(() => null);
       const message = result?.error ?? "Device restart failed";
       console.error("[DeviceQuickControls] device restart failed", message);
-      window.alert(message);
       return;
     }
     setTimeout(() => { setRebooting(false); setScreenOn(true); }, 15000);

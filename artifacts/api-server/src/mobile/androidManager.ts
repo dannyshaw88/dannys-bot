@@ -9880,6 +9880,7 @@ export async function queryMediaStoreFile(serial: string, devicePath: string): P
 }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
+  const quoteShellArg = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
   // Keep to columns supported across older Android MediaStore providers.
   // relative_path is not available on pre-Android-10 devices and caused the
   // entire content query to fail even when the image row existed.
@@ -9908,15 +9909,27 @@ export async function queryMediaStoreFile(serial: string, devicePath: string): P
   query: for (const uri of candidates) {
     for (const where of wheres) {
       try {
-        const result = await runAdbStrict(adb, [
-          "-s", serial, "shell", "content", "query",
-          "--uri", uri,
-          "--projection", projection,
-          "--where", where,
-        ], 8000);
+        // `adb shell` forwards a command string to Android's remote shell.
+        // Quote each token there so the SQL selection—including its spaces
+        // and embedded quotes—arrives at `content query` as one --where value.
+        const remoteCommand = [
+          "content",
+          "query",
+          "--uri",
+          uri,
+          "--projection",
+          projection,
+          "--where",
+          where,
+        ].map(quoteShellArg).join(" ");
+        const result = await runAdbStrict(adb, ["-s", serial, "shell", remoteCommand], 8000);
         const text = result.trim();
         if (text) {
-          outputs.push({ uri, text });
+          if (/^usage:\s+adb shell content\b/im.test(text)) {
+            failures.push(`[${uri}; where=${where}] content query rejected the command: ${text.slice(-240)}`);
+          } else {
+            outputs.push({ uri, text });
+          }
         }
         const hasMatchingRow = text.split(/\r?\n/).some(line => {
           const row = line.trim();

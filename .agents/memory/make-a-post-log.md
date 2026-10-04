@@ -131,6 +131,13 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-04 — Quote Android MediaStore selections through adb shell
+- A later screenshot supersedes the earlier uncertainty for this cycle: Make a Post did run, the phone push and scanner request completed, then the strict audit aborted before opening Instagram after Android printed `content` usage text.
+- The avatar path awaits the same audit but ignores its `false` result, so it can continue while Make a Post correctly refuses to proceed. This points to the audit invocation, not a failed ADB transfer; it is not a reason to bypass exact-file validation.
+- Android's AOSP `content` parser expects `--where` to receive one argument and prints usage for unsupported extra tokens. The `_data LIKE '%/filename'` selection contains spaces, so the remote shell needs explicit quoting to preserve the whole selection and its SQL quotes as one argument.
+- **Fix:** quote every remote `content query` token before calling `adb shell`, and classify returned usage text as a query failure. Keep the exact MediaStore-row and pulled-image byte/hash/shape checks unchanged.
+- **Verification:** API build and remote-shell quoting check passed; `git diff --check` passed; both API workflows rebuilt/restarted and the primary API is listening. No physical phone was available to verify the MediaStore row on the Samsung device.
+
 ### 2026-10-04 — Avatar activity does not confirm Make a Post ran
 - The supplied Windows server log contains 17 successful automation-cycle HTTP responses, but no per-tool cycle messages, so it does not establish that Make a Post was selected or attempted.
 - The user clarified that Make a Post may not have been attempted; the repeated profile-picture updates came from the separate Random Actions avatar tool.
