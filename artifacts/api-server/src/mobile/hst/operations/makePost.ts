@@ -26,7 +26,7 @@ export async function runMakePostStep(serial: string, opts: {
   doFixAiSlop?: boolean; alterationEnabled?: boolean; alterationLevel?: any;
   imageSettingsEnabled?: boolean; imageSettings?: any; frequencyDisruption?: boolean;
   onLog?: (msg: string) => void;
-}, context: MakePostOperationContext): Promise<{ posted: boolean; fileName?: string }> {
+}, context: MakePostOperationContext): Promise<{ posted: boolean; fileName?: string; uploadPending?: boolean }> {
   const { android, path, fsPromises, sleepOrAbort, pickLocalFolderImage,
     prepareMakePostImage, recordPostedLocalFile, recordPostedProfileMedia,
     auditDeviceMediaCopy, effectiveTypingProfile,
@@ -46,6 +46,8 @@ if (!fileName) return { posted: false };
 const localFilePath = path.join(localFolderPath, fileName);
 let devicePath: string | undefined;
 let uploadConfirmed = false;
+let uploadInProgressSeen = false;
+let uploadFailureAfterProgress = false;
 
 try {
 onLog?.(`Make a Post: preparing processed image "${fileName}"…`);
@@ -552,21 +554,18 @@ if (!finalShareBtn) {
 onLog?.("Make a Post: tapping Share…");
 await android.tap(serial, finalShareBtn.x, finalShareBtn.y);
 
-// Poll for the caption screen to disappear — the definitive sign the post
-// was submitted and Instagram is uploading. A failed action is logged and
-// aborted; automation actions never retry a tap.
 // Poll for the post to be accepted. Each iteration does ONE UIAutomator
 // dump (checkMakeAPostUploadState) instead of two back-to-back calls
 // (findMakeAPostSuccessSignal + findShareFooterButton = ~8-10 s/round).
-// Three success states are detected from the single dump:
+// The single dump distinguishes terminal/transition states:
 //   1. successSignal — explicit "Posted!" overlay visible.
-//   2. shareGone     — share button disappeared entirely.
-//   3. shareDisabled — button present but clickable="false" (upload in
-//      progress, Instagram disables it the moment it accepts the upload —
-//      this fires ~8 s before the success overlay).
-// Retry tap ONLY fires when the button is still present AND still
-// clickable after 6 s — i.e. genuinely stuck, not just uploading.
+//   2. shareGone     — share button disappeared before an upload-in-progress
+//      state was observed.
+//   3. shareDisabled — upload is still in progress, not completion. Instagram
+//      disables it when it accepts the upload, ~8 s before the success overlay.
 let shareConfirmed = false;
+let uploadProgressLogged = false;
+let shareGoneAfterProgressLogged = false;
 for (let attempt = 0; attempt < 10; attempt++) {
   await sleepOrAbort(serial, 1500);
   const uploadState = await android.checkMakeAPostUploadState(serial).catch(() => null);
@@ -578,29 +577,48 @@ for (let attempt = 0; attempt < 10; attempt++) {
     break;
   }
   if (shareGone) {
+    if (uploadInProgressSeen) {
+      if (!shareGoneAfterProgressLogged) {
+        onLog?.("Make a Post: Share screen disappeared during upload — waiting for Instagram's final confirmation before cleanup…");
+        shareGoneAfterProgressLogged = true;
+      }
+      continue;
+    }
     onLog?.("Make a Post: Share button gone — post submitted ✓");
     shareConfirmed = true;
     break;
   }
   if (shareDisabled) {
-    onLog?.("Make a Post: Share button disabled — upload in progress, post submitted ✓");
-    shareConfirmed = true;
+    uploadInProgressSeen = true;
+    if (!uploadProgressLogged) {
+      onLog?.("Make a Post: Share button disabled — upload in progress; keeping the staged phone image until Instagram confirms completion…");
+      uploadProgressLogged = true;
+    }
+    continue;
+  }
+  if (uploadInProgressSeen) {
+    uploadFailureAfterProgress = true;
+    onLog?.("Make a Post: Share became enabled again before a success signal — treating the upload as failed.");
     break;
   }
   // Share button remains visible and clickable. Do not tap again; continue
   // polling once per cycle and fail closed if Instagram never accepts it.
 }
 
-// Dismiss any post-share interstitial ("OK", notifications prompt, etc.)
-// that can appear right after sharing and sit on top of the feed if left
-// unhandled.
-await android.dismissInstagramInterstitials(serial).catch(() => null);
-
 if (!shareConfirmed) {
-  onLog?.("Make a Post: Share button still present after ~15 s — post did not submit. Aborting.");
-  await android.removeDeviceFile(serial, devicePath).catch(() => {});
+  if (uploadInProgressSeen && !uploadFailureAfterProgress) {
+    onLog?.("Make a Post: Instagram entered upload state but gave no final confirmation after ~15 s; keeping the staged phone image and stopping this device cycle to avoid interrupting it.");
+    return { posted: false, uploadPending: true };
+  }
+  if (!uploadFailureAfterProgress) {
+    onLog?.("Make a Post: Share button still present after ~15 s — post did not submit. Aborting.");
+  }
   return { posted: false };
 }
+
+// Dismiss any post-share interstitial ("OK", notifications prompt, etc.)
+// only after the upload has reached a terminal success state.
+await android.dismissInstagramInterstitials(serial).catch(() => null);
 
 uploadConfirmed = true;
 recordPostedLocalFile(serial, slotIdx, fileName);
@@ -611,7 +629,9 @@ return { posted: true, fileName };
   const logCleanup = (message: string) => {
     try { onLog?.(message); } catch {}
   };
-  if (devicePath) {
+  if (devicePath && uploadInProgressSeen && !uploadConfirmed && !uploadFailureAfterProgress) {
+    logCleanup("Make a Post: kept staged phone image because Instagram's upload completion is still unconfirmed.");
+  } else if (devicePath) {
     try {
       await android.removeDeviceFileStrict(serial, devicePath);
       logCleanup(`Make a Post: removed staged phone image after ${uploadConfirmed ? "confirmed upload" : "failed attempt"}.`);

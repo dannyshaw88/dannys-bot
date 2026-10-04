@@ -7015,7 +7015,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 tLog(`  ⚠ Pre-switch Check Inbox skipped: ${e?.message ?? "unknown error"}`);
               });
             } else if (preTool === "post") {
-              await runMakePostStep(serial, {
+              const preSwitchPostResult = await runMakePostStep(serial, {
                 localFolderPath: makePostLocalFolderPath || getMakePostFolderPath(serial, slotIdx),
                 localFolderRandom: makePostLocalFolderRandom,
                 localFolderNoRepeat: makePostLocalFolderNoRepeat,
@@ -7032,8 +7032,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 onLog: (msg) => tLog(`  ${msg}`),
               }).catch((e: any) => {
                 if (e?.message === "cycle-aborted") throw e;
+                if (e?.message === "make-post-upload-pending") throw e;
                 tLog(`  ⚠ Pre-switch Make a Post skipped: ${e?.message ?? "unknown error"}`);
               });
+              if (preSwitchPostResult?.uploadPending) {
+                tLog("  Make a Post: upload still active; stopping this device cycle safely.");
+                throw new Error("make-post-upload-pending");
+              }
             } else if (preTool === "postStory") {
               await runMakePostStoryStep(serial, {
                 localFolderPath: postStoryLocalFolderPath,
@@ -7930,6 +7935,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     homeTapCount: _viewFeedExecuted ? 2 : 1,
                     onLog: (msg) => tLog(`  ${msg}`),
                   });
+                  if (result.uploadPending) {
+                    tLog("  Make a Post: upload still active; stopping this device cycle safely.");
+                    throw new Error("make-post-upload-pending");
+                  }
                   if (result.posted) {
                     posted++;
                     postsUploaded++;
@@ -7937,7 +7946,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     await sleepOrAbort(serial, 5000);
                   } else break;
                 } catch (e: any) {
-                  if (e?.message === "cycle-aborted") throw e;
+                  if (e?.message === "cycle-aborted" || e?.message === "make-post-upload-pending") throw e;
                   tLog(`▶ Make a Post attempt error — ${e?.message}`);
                   break;
                 }

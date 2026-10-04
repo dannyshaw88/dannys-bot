@@ -138,6 +138,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 - **Verification:** API build and mocked empty-folder/failed-audit checks passed. API typecheck remains blocked by the existing project-wide errors; no diagnostics were reported in the edited Make a Post/audit code. Real-phone confirmation is still required.
 - **How to apply:** never allow the Instagram picker to open unless the selected assigned-folder image has been pushed, indexed at its exact path, and verified against the processed local image.
 
+### 2026-10-04 — Do not clean the staged image while Instagram is uploading
+- The supplied 17:42 screenshot shows ADB completed the phone copy, then the pre-picker MediaStore audit found no indexed row and aborted before Instagram opened. The staged phone image and PC source were deleted after that failure, so cleanup did not cause this specific abort; the MediaStore gate did.
+- Separately, the Share poll treated `shareDisabled` (“upload in progress”) as completed and immediately entered cleanup. That could remove the phone file before Instagram displayed its later success state.
+- **Fix:** keep polling after Share becomes disabled; only treat that signal as in-progress. If the upload still has no terminal result after the bounded poll, preserve the phone copy and stop the device cycle rather than risk interrupting it. Confirmed success and definite failure still clean up both copies; the PC source is also removed on the pending path.
+- **Verification:** API workflow rebuilt and restarted; mocked checks passed for disabled-then-success, unresolved upload, re-enabled Share failure, and the existing Share-gone path. The MediaStore safety gate was left intact. Physical-device confirmation is still required.
+
 ### 2026-10-03 — Every automated Make a Post attempt consumes both copies
 - Clarified the required behavior: once Make a Post selects a source image, it must delete that PC file and remove the staged phone copy after either a confirmed upload or a failed/exceptional attempt.
 - Removed the success-only deletion option from the Make a Post controls and dispatcher. The legacy persisted setting remains for compatibility; the separate manual PC-to-phone flow stays user-controlled.
