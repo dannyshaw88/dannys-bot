@@ -7720,14 +7720,6 @@ export function AutomationSettingsPanel({
           </div>
           <div className="flex items-start flex-wrap gap-6 mt-[10px]">
             <div className="space-y-1.5">
-              <Label className="text-sm text-muted-foreground block text-center">Abandon Follow %</Label>
-              <div className="flex items-center gap-2">
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingAbandonFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingAbandonFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
-                <span className="text-muted-foreground text-sm">to</span>
-                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingAbandonFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingAbandonFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
               <Label className="text-sm text-muted-foreground block text-center">Save Post %</Label>
               <div className="flex items-center gap-2">
                 <Input
@@ -7761,6 +7753,14 @@ export function AutomationSettingsPanel({
                   })}
                   disabled={loading}
                 />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm text-muted-foreground block text-center">Abandon Follow %</Label>
+              <div className="flex items-center gap-2">
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingAbandonFollowPctMin} onChange={e => setSettings(s => ({ ...s, injectBrowsingAbandonFollowPctMin: clamp4(Number(e.target.value)) }))} disabled={loading} />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingAbandonFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingAbandonFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
           </div>
