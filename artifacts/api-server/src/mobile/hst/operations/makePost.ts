@@ -68,17 +68,24 @@ onLog?.(
 
 onLog?.(`Make a Post: pushing "${fileName}" to device…`);
 try {
-  devicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName, true, true);
+  devicePath = await android.pushFileToDevice(
+    serial,
+    prepared.pushFilePath,
+    prepared.pushFileName,
+    true,
+    true,
+    true,
+  );
 } catch (e: any) {
   devicePath = typeof e?.partialDevicePath === "string" ? e.partialDevicePath : undefined;
   await prepared.cleanup();
   onLog?.(
-    `Make a Post: adb push failed — ${e?.message ?? "unknown error"}` +
+    `Make a Post: phone staging failed (ADB push or MediaStore scan) — ${e?.message ?? "unknown error"}` +
     `${e?.deviceCleanupError ? `; partial phone copy cleanup also failed — ${e.deviceCleanupError}` : ""}`,
   );
   return { posted: false };
 }
-onLog?.(`Make a Post: adb push complete — devicePath=${devicePath}`);
+onLog?.(`Make a Post: ADB push and MediaStore scan request completed — devicePath=${devicePath}`);
 await prepared.cleanup();
 onLog?.("Make a Post: local prepared image cleaned up after push");
   const mediaVerified = await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);

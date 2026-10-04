@@ -9787,6 +9787,7 @@ export async function pushFileToDevice(
   fileName: string,
   scan = true,
   cleanupPartialOnFailure = false,
+  waitForMediaScan = false,
 ): Promise<string> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -9802,7 +9803,7 @@ export async function pushFileToDevice(
   const devicePath = `/sdcard/DCIM/Camera/${deviceFileName}`;
   try {
     await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
-    if (scan) await scanMediaFile(serial, devicePath);
+    if (scan) await scanMediaFile(serial, devicePath, waitForMediaScan);
     return devicePath;
   } catch (error) {
     if (!cleanupPartialOnFailure) throw error;
@@ -9848,14 +9849,28 @@ export async function pullFileFromDevice(serial: string, devicePath: string): Pr
  * to the filesystem — apps that read via MediaStore (Instagram's composer
  * included) won't see the file until the scanner indexes it.
  */
-export async function scanMediaFile(serial: string, devicePath: string): Promise<void> {
+export async function scanMediaFile(
+  serial: string,
+  devicePath: string,
+  waitForCompletion = false,
+): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  await runAdb(adb, [
+  const args = [
     "-s", serial, "shell", "am", "broadcast",
+    ...(waitForCompletion ? ["-W"] : []),
     "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
     "-d", `file://${devicePath}`,
-  ], 6000);
+  ];
+  if (waitForCompletion) {
+    // The default best-effort broadcast returns before Android has finished
+    // handling the scanner request, and the old runner silently swallowed
+    // ADB failures. Make a Post's exact MediaStore audit must run after the
+    // scan broadcast has completed, not race it.
+    await runAdbStrict(adb, args, 15000);
+  } else {
+    await runAdb(adb, args, 6000);
+  }
 }
 
 /** Reads the MediaStore row created by the media scanner for a device file. */
