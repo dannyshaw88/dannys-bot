@@ -131,6 +131,11 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-04 — Avatar activity does not confirm Make a Post ran
+- The supplied Windows server log contains 17 successful automation-cycle HTTP responses, but no per-tool cycle messages, so it does not establish that Make a Post was selected or attempted.
+- The user clarified that Make a Post may not have been attempted; the repeated profile-picture updates came from the separate Random Actions avatar tool.
+- **Conclusion:** no Make a Post transfer failure is established, and the strict scanner difference is not a confirmed cause. No code change made. Diagnose only after an explicit Make a Post attempt.
+
 ### 2026-10-04 — Make a Post must wait for and diagnose MediaStore indexing
 - The 17:42 screenshot confirms the phone copy was pushed, then Make a Post aborted before opening Instagram because its exact-file MediaStore audit found no row. Cleanup followed that abort.
 - The shared scan/query helpers used best-effort ADB calls that swallowed errors; the query projection also requested `relative_path`, which is unavailable on Android versions before 10. The screenshot does not establish which condition caused its missing row.
