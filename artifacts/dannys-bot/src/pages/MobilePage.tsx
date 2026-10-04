@@ -543,9 +543,11 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       }
     };
 
-    // A decoder reset invalidates its reference frame. Reset the decoder in
-    // place and wait for the next IDR/keyframe. The WebSocket stays open so a
-    // temporary decode backlog cannot turn into a visible disconnect cycle.
+    // A resync restarts the server's screenrecord process, so both sides of
+    // the decoder pipeline must start at the same stream boundary. Discard
+    // any partial Annex-B access unit from the old process as well as queued
+    // WebCodecs work, then wait for the new stream's SPS/IDR. Keep the
+    // WebSocket open so a temporary decode backlog is not a disconnect cycle.
     const requestVideoResync = (reason: string) => {
       if (!active || !useVideoRef.current) return;
       const now = Date.now();
@@ -553,21 +555,10 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       lastVideoResyncAt = now;
       decodeQueueHighSince = 0;
       waitingForKeyFrame = true;
-      const decoder = decoderRef.current;
-      if (decoder) {
-        try {
-          // reset() drops queued frames without closing the transport or
-          // clearing the last good canvas frame.
-          decoder.reset();
-          configuredRef.current = false;
-        } catch {
-          // A decoder that has already entered the closed/error state needs a
-          // new instance, but the incoming WebSocket can still be reused.
-          closeDecoder();
-        }
-      } else {
-        closeDecoder();
-      }
+      // closeDecoder also drops demuxerRef's buffered tail and cached SPS;
+      // ensureDecoder will create a fresh parser/decoder for the restarted
+      // screenrecord stream on its next binary chunk.
+      closeDecoder();
       // Ask the server for a fresh SPS/IDR without asking it to tear down the
       // transport. This also keeps older server/client combinations from
       // waiting on the encoder's next periodic keyframe.
