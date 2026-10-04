@@ -150,3 +150,4 @@
 - [Manual Instagram launch diagnostics](manual-instagram-launch-probe.md) — physical/mirror opens bypass launchInstagram; use delayed samples to filter transient splash frames
 - [Windows packaged diagnostic parity](windows-packaged-diagnostic-parity.md) — source diagnostics require rebuilding the embedded API, frontend, and Electron dist before Windows logs contain them
 - [Instagram ChallengeActivity white surface](instagram-challenge-white-surface.md) — paired ADB/H.264 evidence can identify a real full-screen Instagram challenge, not a mirror freeze
+- [Windows mirror diagnostics](windows-electron-mirror-diagnostics.md) — diagnose stalls using the packaged Windows Electron logs; Replit API workflow output is not evidence from the affected device

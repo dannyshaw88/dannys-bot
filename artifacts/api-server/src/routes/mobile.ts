@@ -1510,6 +1510,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   };
 
+  // Mirror diagnostics go to both the per-device Debugging Log and the
+  // Windows Electron aura-farming-debug.log. Log state changes, not frame data.
+  const mirrorDiagnostic = (
+    serial: string,
+    event: string,
+    details: Record<string, unknown> = {},
+  ): void => {
+    const summary = Object.entries(details)
+      .map(([key, value]) => `${key}=${JSON.stringify(value) ?? String(value)}`)
+      .join(" ");
+    sendVideoLog(serial, `[mirror] ${event}${summary ? ` — ${summary}` : ""}`);
+    logger.info({ ...details, serial, event }, "[mobile-video] diagnostic");
+  };
+
   httpServer.on("upgrade", (request, socket, head) => {
     const url = request.url ?? "";
     const m = url.match(/^\/api\/mobile\/video\/([^/?#]+)/);
@@ -1524,10 +1538,22 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // rather than another unverified theory.
       const t0 = Date.now();
       const elapsed = () => Date.now() - t0;
+      let sourceBytesTotal = 0;
+      let sourceChunksTotal = 0;
+      let lastSourceByteAt = 0;
+      let lastClientHealthAt = 0;
+      let sessionStderrInfoCount = 0;
+      let sessionStderrWarningCount = 0;
+      let clientHealthTimeoutReported = false;
+      let clientHealthWatchdog: ReturnType<typeof setInterval> | null = null;
+      const finiteNumber = (value: unknown): number | null =>
+        typeof value === "number" && Number.isFinite(value) ? value : null;
+      mirrorDiagnostic(serial, "video WebSocket accepted", { wsReadyState: ws.readyState });
 
       const tools = await android.detectToolsetAsync();
       const adbPath = tools.adb.path;
       if (!adbPath) {
+        mirrorDiagnostic(serial, "ADB unavailable; video session cannot start");
         ws.send(JSON.stringify({ error: "ADB not found on this machine" }));
         ws.close();
         return;
@@ -1541,6 +1567,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         } as any);
       } catch (error: any) {
         logger.error({ serial, error, elapsedMs: elapsed() }, "[mobile-video] adb devices check failed");
+        mirrorDiagnostic(serial, "ADB device query failed", {
+          elapsedMs: elapsed(),
+          error: error?.message ?? String(error),
+        });
         ws.send(JSON.stringify({ error: `Unable to query device state: ${error?.message ?? "adb failed"}` }));
         ws.close();
         return;
@@ -1548,6 +1578,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       logger.info({ serial, elapsedMs: elapsed() }, "[mobile-video] timing: adb devices check done");
       const deviceLine = (deviceCheck.stdout ?? "").split("\n").find(l => l.startsWith(serial));
       if (!deviceLine || deviceLine.split("\t")[1]?.trim() !== "device") {
+        mirrorDiagnostic(serial, "ADB reports device not ready", {
+          elapsedMs: elapsed(),
+          deviceState: deviceLine?.split("\t")[1]?.trim() ?? "missing from adb devices",
+        });
         ws.send(JSON.stringify({ error: `Device ${serial} not found or not ready` }));
         ws.close();
         return;
@@ -1581,7 +1615,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           } as any);
           const val = String(st.stdout ?? "").trim();
           if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
-        } catch { /* use the conservative fallback */ }
+        } catch (error: any) {
+          mirrorDiagnostic(serial, "could not read current screen timeout; using fallback", {
+            error: error?.message ?? String(error),
+            fallbackTimeoutMs: originalScreenTimeout,
+          });
+        }
 
         let changed = false;
         try {
@@ -1591,6 +1630,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           changed = true;
         } catch (error) {
           logger.warn({ serial, err: error }, "[mobile-video] could not extend screen timeout; using WAKEUP keepalive");
+          mirrorDiagnostic(serial, "could not extend screen timeout; relying on wake keepalive", {
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
         mirrorScreenTimeoutLeases.set(serial, {
           previousTimeoutMs: originalScreenTimeout,
@@ -1599,6 +1641,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         });
         screenTimeoutLeaseHeld = true;
       }
+      const activeTimeoutLease = mirrorScreenTimeoutLeases.get(serial);
+      mirrorDiagnostic(serial, "screen timeout lease acquired", {
+        sharedWithExistingMirror: Boolean(existingTimeoutLease),
+        leaseReferences: activeTimeoutLease?.refCount ?? 0,
+        timeoutChanged: activeTimeoutLease?.changed ?? false,
+        previousTimeoutMs: activeTimeoutLease?.previousTimeoutMs ?? null,
+      });
       // Do not auto-wake a phone merely because a background mirror connects:
       // the detail mirror is opened by an explicit user action. The keepalive
       // below only runs for that already-user-requested mirror session.
@@ -1617,10 +1666,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const cleanup = (reason: string) => {
         if (cleanedUp) return; // idempotent — close fires after error too
         cleanedUp = true;
+        mirrorDiagnostic(serial, "video session cleanup", {
+          reason,
+          sessionAgeMs: elapsed(),
+          restartCount,
+          sourceBytesTotal,
+          sourceChunksTotal,
+          lastSourceByteAgeMs: lastSourceByteAt ? Date.now() - lastSourceByteAt : null,
+          lastClientHealthAgeMs: lastClientHealthAt ? Date.now() - lastClientHealthAt : null,
+          wsReadyState: ws.readyState,
+          wsBufferedBytes: ws.bufferedAmount,
+          screenrecordPid: currentChild?.pid ?? null,
+        });
         running = false;
         videoSessionActive.delete(serial);
         videoSessionWS.delete(serial);
         if (lagWatchdog) clearInterval(lagWatchdog);
+        if (clientHealthWatchdog) clearInterval(clientHealthWatchdog);
         if (initialWakeRetryTimer) {
           clearTimeout(initialWakeRetryTimer);
           initialWakeRetryTimer = null;
@@ -1636,7 +1698,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 void execFileP(adbPath, [
                   "-s", serial, "shell", "settings", "put", "system",
                   "screen_off_timeout", timeoutLease.previousTimeoutMs,
-                ], { encoding: "utf8", timeout: 5000 } as any).catch(() => {});
+                ], { encoding: "utf8", timeout: 5000 } as any)
+                  .then(() => mirrorDiagnostic(serial, "screen timeout restored", {
+                    timeoutMs: timeoutLease.previousTimeoutMs,
+                  }))
+                  .catch((error: any) => mirrorDiagnostic(serial, "screen timeout restore failed", {
+                    error: error?.message ?? String(error),
+                  }));
               }
             }
           }
@@ -1644,8 +1712,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         logger.info({ serial, reason }, "[mobile-video] session cleaned up");
       };
-      ws.on("close", () => cleanup("close"));
-      ws.on("error", (err) => { logger.error({ serial, err }, "[mobile-video] WebSocket error"); cleanup("error"); });
+      ws.on("close", (code, reason) => cleanup(
+        `WebSocket close code=${code} reason=${reason.toString("utf8") || "none"}`,
+      ));
+      ws.on("error", (err) => {
+        logger.error({ serial, err }, "[mobile-video] WebSocket error");
+        mirrorDiagnostic(serial, "video WebSocket error", { error: err.message });
+        cleanup("WebSocket error");
+      });
 
       // ── Client-triggered encoder resync ───────────────────────────────────
       // Older clients send { clientLag: true } when their WebCodecs decode
@@ -1657,8 +1731,85 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       ws.on("message", (raw: Buffer | string) => {
         try {
           const msg = JSON.parse(raw.toString());
-          if (msg.clientLag && running) {
-            if (Date.now() - lastLagRestart < 4_000) return;
+          if (msg.type === "client-health" && running) {
+            const now = Date.now();
+            lastClientHealthAt = now;
+            mirrorDiagnostic(serial, "client health", {
+              clientStatus: typeof msg.status === "string" ? msg.status : "unknown",
+              transportMode: typeof msg.transportMode === "string" ? msg.transportMode : "unknown",
+              reportReason: typeof msg.reportReason === "string" ? msg.reportReason : "unspecified",
+              inboundBytes: finiteNumber(msg.inboundBytes),
+              binaryMessages: finiteNumber(msg.binaryMessages),
+              lastInboundAgeMs: finiteNumber(msg.lastInboundAgeMs),
+              accessUnits: finiteNumber(msg.accessUnits),
+              decodedFrames: finiteNumber(msg.decodedFrames),
+              canvasDrawnFrames: finiteNumber(msg.canvasDrawnFrames),
+              decodeErrors: finiteNumber(msg.decodeErrors),
+              decoderState: typeof msg.decoderState === "string" ? msg.decoderState : "unknown",
+              decodeQueueSize: finiteNumber(msg.decodeQueueSize),
+              lastDecodedAgeMs: finiteNumber(msg.lastDecodedAgeMs),
+              canvasSize: typeof msg.canvasSize === "string" ? msg.canvasSize : "unknown",
+              documentVisibility: typeof msg.documentVisibility === "string" ? msg.documentVisibility : "unknown",
+              automationActive: automationCycleInProgress.has(serial),
+              sessionAgeMs: elapsed(),
+              serverSourceBytes: sourceBytesTotal,
+              serverSourceChunks: sourceChunksTotal,
+              serverLastSourceAgeMs: lastSourceByteAt ? now - lastSourceByteAt : null,
+              serverRestartCount: restartCount,
+              screenrecordPid: currentChild?.pid ?? null,
+              wsReadyState: ws.readyState,
+              wsBufferedBytes: ws.bufferedAmount,
+            });
+            clientHealthTimeoutReported = false;
+            return;
+          }
+          if (msg.type === "client-status") {
+            const clientEvent = typeof msg.event === "string"
+              ? msg.event.slice(0, 80)
+              : "status-transition";
+            mirrorDiagnostic(serial, clientEvent === "status-transition"
+              ? "client status transition"
+              : "client mirror diagnostic", {
+              clientEvent,
+              from: typeof msg.from === "string" ? msg.from : "unknown",
+              to: typeof msg.to === "string" ? msg.to : "unknown",
+              reason: typeof msg.reason === "string" ? msg.reason : "unspecified",
+              inboundBytes: finiteNumber(msg.inboundBytes),
+              binaryMessages: finiteNumber(msg.binaryMessages),
+              lastInboundAgeMs: finiteNumber(msg.lastInboundAgeMs),
+              accessUnits: finiteNumber(msg.accessUnits),
+              decodedFrames: finiteNumber(msg.decodedFrames),
+              canvasDrawnFrames: finiteNumber(msg.canvasDrawnFrames),
+              decodeErrors: finiteNumber(msg.decodeErrors),
+              decoderState: typeof msg.decoderState === "string" ? msg.decoderState : "unknown",
+              decodeQueueSize: finiteNumber(msg.decodeQueueSize),
+              lastDecodedAgeMs: finiteNumber(msg.lastDecodedAgeMs),
+              transportMode: typeof msg.transportMode === "string" ? msg.transportMode : "unknown",
+              serverSourceBytes: sourceBytesTotal,
+              serverLastSourceAgeMs: lastSourceByteAt ? Date.now() - lastSourceByteAt : null,
+              serverRestartCount: restartCount,
+              wsBufferedBytes: ws.bufferedAmount,
+            });
+            return;
+          }
+          if ((msg.clientLag || msg.type === "client-lag") && running) {
+            if (Date.now() - lastLagRestart < 4_000) {
+              mirrorDiagnostic(serial, "client encoder resync suppressed by cooldown", {
+                reason: typeof msg.reason === "string" ? msg.reason : "client reported decode lag",
+                cooldownRemainingMs: Math.max(0, 4_000 - (Date.now() - lastLagRestart)),
+                decodeQueueSize: finiteNumber(msg.decodeQueueSize),
+                decodedFrames: finiteNumber(msg.decodedFrames),
+              });
+              return;
+            }
+            mirrorDiagnostic(serial, "client requested encoder resync", {
+              reason: typeof msg.reason === "string" ? msg.reason : "client reported decode lag",
+              decodeQueueSize: finiteNumber(msg.decodeQueueSize),
+              decodedFrames: finiteNumber(msg.decodedFrames),
+              lastDecodedAgeMs: finiteNumber(msg.lastDecodedAgeMs),
+              serverSourceBytes: sourceBytesTotal,
+              wsBufferedBytes: ws.bufferedAmount,
+            });
             logger.warn({ serial }, "[mobile-video] client reported decode lag — restarting encoder without dropping transport");
             lastLagRestart = Date.now();
             try { currentChild?.kill(); } catch { /* ignore — close handler restarts */ }
@@ -1691,11 +1842,34 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const buffered = ws.bufferedAmount;
         if (buffered > LAG_BYTES_THRESHOLD && Date.now() - lastLagRestart > 4000) {
           lastLagRestart = Date.now();
+          mirrorDiagnostic(serial, "video transport send buffer exceeded lag threshold", {
+            bufferedBytes: buffered,
+            thresholdBytes: LAG_BYTES_THRESHOLD,
+            serverSourceBytes: sourceBytesTotal,
+            serverLastSourceAgeMs: lastSourceByteAt ? Date.now() - lastSourceByteAt : null,
+            screenrecordPid: currentChild?.pid ?? null,
+            restartCount,
+          });
           logger.warn({ serial, buffered }, "[mobile-video] send buffer backed up — reconnecting video transport to clear lag");
           try { currentChild?.kill(); } catch { /* ignore — close handler restarts */ }
           if (ws.readyState === 1) ws.terminate();
         }
       }, 500);
+      clientHealthWatchdog = setInterval(() => {
+        if (!running || ws.readyState !== 1 || !lastClientHealthAt) return;
+        const ageMs = Date.now() - lastClientHealthAt;
+        if (ageMs <= 45_000 || clientHealthTimeoutReported) return;
+        clientHealthTimeoutReported = true;
+        mirrorDiagnostic(serial, "client health reports stopped while video WebSocket remains open", {
+          lastClientHealthAgeMs: ageMs,
+          serverSourceBytes: sourceBytesTotal,
+          serverLastSourceAgeMs: lastSourceByteAt ? Date.now() - lastSourceByteAt : null,
+          screenrecordPid: currentChild?.pid ?? null,
+          wsReadyState: ws.readyState,
+          wsBufferedBytes: ws.bufferedAmount,
+          restartCount,
+        });
+      }, 15_000);
 
       // Scoped to the whole WS session (not per screenrecord restart) so a
       // stall that persists across several internal restarts still only
@@ -1723,6 +1897,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         let sawAnyData = false;
         let bytesTotal = 0;
         let stderrOut = "";
+        const childStartedAt = Date.now();
+        mirrorDiagnostic(serial, "screenrecord process starting", {
+          restartCount,
+          automationActive: automationCycleInProgress.has(serial),
+          bitRate: 4_000_000,
+          timeLimitSeconds: 180,
+          adbPath,
+        });
 
         // screenrecord on some OEM builds (MIUI especially) will hand back
         // SPS/PPS and then go completely silent — no more stdout, no exit,
@@ -1771,6 +1953,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const armStall = (ms: number) => {
           if (stallTimer) clearTimeout(stallTimer);
           stallTimer = setTimeout(() => {
+            mirrorDiagnostic(serial, "screenrecord stdout stalled", {
+              stallThresholdMs: ms,
+              processAgeMs: Date.now() - childStartedAt,
+              processBytes: bytesTotal,
+              processProducedAnyBytes: sawAnyData,
+              processProducedLargeChunk: sawRealFrame,
+              sessionSourceBytes: sourceBytesTotal,
+              sessionSourceChunks: sourceChunksTotal,
+              automationActive: automationCycleInProgress.has(serial),
+              screenrecordPid: child.pid ?? null,
+              restartCount,
+              stderrTail: stderrOut.slice(-1200),
+            });
             logger.warn({ serial, bytesTotal, sawRealFrame }, `[mobile-video] stream stalled — no data for ${ms / 1000}s, forcing restart`);
             if (!stallNotified) {
               stallNotified = true;
@@ -1792,41 +1987,111 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
         child.stdout.on("data", (chunk: Buffer) => {
           if (!sawAnyData) {
-            logger.info({ serial, elapsedMs: elapsed(), restartCount }, "[mobile-video] timing: first stdout chunk from screenrecord");
+            mirrorDiagnostic(serial, "screenrecord emitted first stdout bytes", {
+              elapsedMs: elapsed(),
+              restartCount,
+              firstChunkBytes: chunk.length,
+              screenrecordPid: child.pid ?? null,
+            });
           }
           sawAnyData = true;
           bytesTotal += chunk.length;
+          sourceBytesTotal += chunk.length;
+          sourceChunksTotal++;
+          lastSourceByteAt = Date.now();
           if (!sawRealFrame && chunk.length > 512) {
             sawRealFrame = true;
-            logger.info({ serial, chunkBytes: chunk.length, elapsedMs: elapsed() }, "[mobile-video] first real IDR frame received");
+            mirrorDiagnostic(serial, "screenrecord emitted first large video chunk", {
+              chunkBytes: chunk.length,
+              elapsedMs: elapsed(),
+              processBytes: bytesTotal,
+              sessionSourceBytes: sourceBytesTotal,
+              note: "large-chunk heuristic; not a parsed IDR marker",
+            });
           }
           stallNotified = false;
           armStall(stallThresholdMs());
-          if (ws.readyState === 1) ws.send(chunk);
+          if (ws.readyState === 1) {
+            try {
+              ws.send(chunk, (error) => {
+                if (error) mirrorDiagnostic(serial, "video WebSocket send callback failed", {
+                  error: error.message,
+                  chunkBytes: chunk.length,
+                  wsBufferedBytes: ws.bufferedAmount,
+                  screenrecordPid: child.pid ?? null,
+                });
+              });
+            } catch (error: any) {
+              mirrorDiagnostic(serial, "video WebSocket send threw", {
+                error: error?.message ?? String(error),
+                chunkBytes: chunk.length,
+                wsReadyState: ws.readyState,
+              });
+            }
+          }
         });
         child.stderr?.on("data", (d: Buffer) => {
           const line = d.toString().trim();
-          stderrOut += line;
-          if (line && ws.readyState === 1) ws.send(JSON.stringify({ info: `[screenrecord] ${line}` }));
+          stderrOut = `${stderrOut}${line}\n`.slice(-4096);
+          let reportStderr = false;
+          if (line && sessionStderrInfoCount < 8) {
+            sessionStderrInfoCount++;
+            reportStderr = true;
+            logger.info({ serial, line, stderrLine: sessionStderrInfoCount }, "[mobile-video] screenrecord stderr");
+          } else if (
+            line &&
+            sessionStderrWarningCount < 4 &&
+            /(error|fail|denied|unsupported|timeout|codec)/i.test(line)
+          ) {
+            sessionStderrWarningCount++;
+            reportStderr = true;
+            logger.warn({ serial, line: line.slice(0, 1200) }, "[mobile-video] screenrecord stderr warning");
+          }
+          if (reportStderr && ws.readyState === 1) {
+            ws.send(JSON.stringify({ info: `[screenrecord] ${line.slice(0, 1200)}` }));
+          }
         });
         child.on("error", (err) => {
           if (stallTimer) clearTimeout(stallTimer);
           logger.error({ serial, err }, "[mobile-video] spawn error for screenrecord");
+          mirrorDiagnostic(serial, "screenrecord spawn error", {
+            error: err.message,
+            elapsedMs: elapsed(),
+            restartCount,
+            adbPath,
+          });
           if (ws.readyState === 1) {
             ws.send(JSON.stringify({ error: `Failed to start screenrecord: ${err.message}`, fatal: true }));
             ws.close();
           }
           cleanup("screenrecord spawn error");
         });
-        child.on("close", (code) => {
+        child.on("close", (code, signal) => {
           if (stallTimer) clearTimeout(stallTimer);
           currentChild = null;
+          mirrorDiagnostic(serial, "screenrecord process exited", {
+            exitCode: code,
+            signal,
+            processAgeMs: Date.now() - childStartedAt,
+            processBytes: bytesTotal,
+            sessionSourceBytes: sourceBytesTotal,
+            sessionSourceChunks: sourceChunksTotal,
+            wasSessionAlreadyStopping: !running,
+            stderrTail: stderrOut.slice(-1200),
+            restartCount,
+          });
           if (!running) return;
           if (!sawAnyData) {
             // screenrecord never produced a byte — likely unsupported on this
             // device/Android version. Tell the client so it can fall back to
             // the PNG polling stream instead of retrying forever.
             logger.warn({ serial, code, stderr: stderrOut.trim() }, "[mobile-video] screenrecord produced no data — unsupported?");
+            mirrorDiagnostic(serial, "screenrecord exited without any stdout; switching to screenshot fallback", {
+              exitCode: code,
+              signal,
+              processAgeMs: Date.now() - childStartedAt,
+              stderrTail: stderrOut.slice(-1200),
+            });
             if (ws.readyState === 1) {
               ws.send(JSON.stringify({ error: `screenrecord unavailable on this device (${stderrOut.trim() || `exit ${code}`})`, fatal: true }));
               ws.close();
@@ -1837,6 +2102,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           // Hit the --time-limit, was stalled, or was killed for some other
           // transient reason — restart immediately to keep the stream going.
           restartCount++;
+          mirrorDiagnostic(serial, "screenrecord exited after streaming; starting replacement", {
+            exitCode: code,
+            signal,
+            restartCount,
+            processAgeMs: Date.now() - childStartedAt,
+            processBytes: bytesTotal,
+            sessionSourceBytes: sourceBytesTotal,
+            sessionSourceChunks: sourceChunksTotal,
+            stderrTail: stderrOut.slice(-1200),
+          });
           logger.info({ serial, restartCount, code, bytesTotal }, "[mobile-video] screenrecord cycle ended — restarting");
           spawnStream();
         });
@@ -1857,10 +2132,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // second connection to the same device can never kill a sibling
       // session's own live screenrecord out from under it.
       if (!videoSessionActive.has(serial)) {
-        await execFileP(adbPath, ["-s", serial, "shell", "pkill", "-f", "screenrecord"], {
-          encoding: "utf8",
-          timeout: 3000,
-        } as any).catch(() => {});
+        mirrorDiagnostic(serial, "checking for stale screenrecord process", { elapsedMs: elapsed() });
+        try {
+          const staleCleanup = await execFileP(adbPath, ["-s", serial, "shell", "pkill", "-f", "screenrecord"], {
+            encoding: "utf8",
+            timeout: 3000,
+          } as any);
+          mirrorDiagnostic(serial, "stale screenrecord cleanup command completed", {
+            elapsedMs: elapsed(),
+            stdout: String(staleCleanup.stdout ?? "").trim().slice(0, 300),
+            stderr: String(staleCleanup.stderr ?? "").trim().slice(0, 300),
+          });
+        } catch (error: any) {
+          // pkill's non-zero exit is expected when no stale screenrecord exists.
+          mirrorDiagnostic(serial, "stale screenrecord cleanup command returned an error", {
+            elapsedMs: elapsed(),
+            error: error?.message ?? String(error),
+            stderr: String(error?.stderr ?? "").trim().slice(0, 300),
+          });
+        }
       }
       videoSessionActive.add(serial);
       videoSessionWS.set(serial, ws);
@@ -1873,7 +2163,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // but logging its own elapsed cost separately so it's not blamed for
       // time it didn't spend.
       const screenOnBefore = await android.isScreenOn(serial).catch(() => null);
-      await android.ensureScreenOn(serial).catch(() => { /* best effort */ });
+      let ensureScreenOnError: string | null = null;
+      try {
+        await android.ensureScreenOn(serial);
+      } catch (error: any) {
+        ensureScreenOnError = error?.message ?? String(error);
+      }
+      mirrorDiagnostic(serial, "display readiness check completed", {
+        elapsedMs: elapsed(),
+        screenOnBefore,
+        ensureScreenOnError,
+        automationActive: automationCycleInProgress.has(serial),
+      });
       logger.info({ serial, elapsedMs: elapsed(), screenWasAlreadyOn: screenOnBefore === true }, "[mobile-video] timing: ensureScreenOn done");
 
       // The explicit mirror open already called ensureScreenOn above. Keep
@@ -1886,8 +2187,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (!running || ws.readyState !== 1 || automationCycleInProgress.has(serial)) return;
           void execFileP(adbPath, [
             "-s", serial, "shell", "input", "keyevent", "224",
-          ], { encoding: "utf8", timeout: 3000 } as any).catch(() => {});
-          logger.info({ serial }, "[mobile-video] issued one-time initial wake retry");
+          ], { encoding: "utf8", timeout: 3000 } as any)
+            .then(() => {
+              mirrorDiagnostic(serial, "one-time initial WAKEUP keyevent succeeded");
+              logger.info({ serial }, "[mobile-video] issued one-time initial wake retry");
+            })
+            .catch((error: any) => mirrorDiagnostic(serial, "one-time initial WAKEUP keyevent failed", {
+              error: error?.message ?? String(error),
+              stderr: String(error?.stderr ?? "").trim().slice(0, 500),
+            }));
         }, 10_000);
       }
 

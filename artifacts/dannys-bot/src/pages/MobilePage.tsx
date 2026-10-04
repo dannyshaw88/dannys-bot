@@ -408,6 +408,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
   const forcedHighlightActiveRef = useRef(false);
 
   const [status, setStatus] = useState<MirrorStatus>("connecting");
+  const statusRef = useRef<MirrorStatus>("connecting");
   const [fps,    setFps]    = useState(0);
   const automationActiveRef = useRef(automationActive);
   useEffect(() => { automationActiveRef.current = automationActive; }, [automationActive]);
@@ -512,10 +513,72 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     let active = true;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let noFrameTimer:   ReturnType<typeof setTimeout> | null = null;
+    let noDecodedFrameTimer: ReturnType<typeof setTimeout> | null = null;
+    let clientHealthTimer: ReturnType<typeof setInterval> | null = null;
     let attemptCount = 0;
     let lastVideoResyncAt = 0;
     let waitingForKeyFrame = true;
     let decodeQueueHighSince = 0;
+    const sessionStartedAt = Date.now();
+    let socketOpenedAt = 0;
+    let inboundBytes = 0;
+    let binaryMessages = 0;
+    let lastInboundAt = 0;
+    let accessUnits = 0;
+    let decodedFrames = 0;
+    let canvasDrawnFrames = 0;
+    let decodeErrors = 0;
+    let lastDecodeChunkErrorAt = 0;
+    let firstDataLogged = false;
+    let firstDecodedFrameLogged = false;
+    let canvasUnavailableLogged = false;
+
+    const diagnosticSnapshot = () => ({
+      transportMode: useVideoRef.current ? "h264" : "png",
+      status: statusRef.current,
+      inboundBytes,
+      binaryMessages,
+      accessUnits,
+      decodedFrames,
+      canvasDrawnFrames,
+      decodeErrors,
+      lastInboundAgeMs: lastInboundAt
+        ? Math.max(0, Date.now() - lastInboundAt)
+        : null,
+      lastDecodedAgeMs: lastDecodedAtRef.current
+        ? Math.max(0, Date.now() - lastDecodedAtRef.current)
+        : null,
+      decoderState: decoderRef.current?.state ?? "not-created",
+      decodeQueueSize: decoderRef.current?.decodeQueueSize ?? null,
+    });
+
+    const sendClientReport = (type: "client-health" | "client-status", details: Record<string, unknown> = {}) => {
+      const socket = wsRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      try {
+        socket.send(JSON.stringify({
+          type,
+          ...diagnosticSnapshot(),
+          ...details,
+        }));
+      } catch { /* the socket close path records transport failures */ }
+    };
+
+    const setMirrorStatus = (next: MirrorStatus, reason: string) => {
+      const previous = statusRef.current;
+      if (previous === next) return;
+      statusRef.current = next;
+      setStatus(next);
+      addLog(`[mirror] status ${previous} → ${next}: ${reason}`);
+      sendClientReport("client-status", {
+        event: "status-transition",
+        from: previous,
+        to: next,
+        reason,
+        elapsedMs: Date.now() - sessionStartedAt,
+      });
+    };
+
     // Reset per mount (i.e. per device serial — LiveCanvas is keyed by
     // serial in the parent) so a fallback on one phone never sticks around
     // and silently skips the video path for a different phone reusing this
@@ -527,7 +590,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     // contend with the device while the user is only selecting it. The
     // explicit Power button and active automation are the only live triggers.
     if (!live) {
-      setStatus("waiting");
+      setMirrorStatus("waiting", "mirror was not requested (live=false)");
       return () => { active = false; };
     }
 
@@ -564,9 +627,15 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       // waiting on the encoder's next periodic keyframe.
       const socket = wsRef.current;
       if (socket?.readyState === WebSocket.OPEN) {
-        try { socket.send(JSON.stringify({ clientLag: true })); } catch { /* reconnect path handles a dead socket */ }
+        try {
+          socket.send(JSON.stringify({
+            type: "client-lag",
+            reason,
+            ...diagnosticSnapshot(),
+          }));
+        } catch { /* reconnect path handles a dead socket */ }
       }
-      addLog(`Mirror decoder resync — waiting for a fresh keyframe (${reason})`);
+      addLog(`[mirror] decoder resync requested — waiting for a fresh keyframe (${reason}); ${JSON.stringify(diagnosticSnapshot())}`);
     };
 
     const getCtx = (): CanvasRenderingContext2D | null => {
@@ -653,22 +722,40 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       const now = Date.now();
       if (screenVisible === true) {
         darkFrameSinceRef.current = 0;
-        setStatus("live");
+        setMirrorStatus("live", "decoded frame contains visible phone pixels");
         return;
       }
       if (screenVisible === false && !darkFrameSinceRef.current) {
         darkFrameSinceRef.current = now;
       }
       if (darkFrameSinceRef.current && now - darkFrameSinceRef.current >= 2_000) {
-        setStatus("asleep");
+        setMirrorStatus("asleep", "decoded frames stayed nearly black for at least 2 seconds");
       } else {
-        setStatus("live");
+        setMirrorStatus("live", "decoded frame available; screen visibility is not yet classified as asleep");
       }
     };
 
     const drawFrame = (frame: VideoFrame) => {
+      decodedFrames++;
+      fpsCountRef.current++;
+      lastDecodedAtRef.current = Date.now();
+      if (!firstDecodedFrameLogged) {
+        firstDecodedFrameLogged = true;
+        addLog(`[mirror] first H.264 frame decoded after ${socketOpenedAt ? Date.now() - socketOpenedAt : "unknown"}ms; ${frame.displayWidth}x${frame.displayHeight}`);
+        if (noDecodedFrameTimer) {
+          clearTimeout(noDecodedFrameTimer);
+          noDecodedFrameTimer = null;
+        }
+      }
       const canvas = canvasRef.current;
-      if (!canvas) { frame.close(); return; }
+      if (!canvas) {
+        if (!canvasUnavailableLogged) {
+          canvasUnavailableLogged = true;
+          addLog("[mirror] decoder produced frames, but the canvas element is unavailable; frames cannot be displayed");
+        }
+        frame.close();
+        return;
+      }
       let screenVisible: boolean | null = null;
       // Track phone dimensions (used by mapToPhone for the final scale step).
       if (!phoneSizeRef.current || phoneSizeRef.current.w !== frame.displayWidth || phoneSizeRef.current.h !== frame.displayHeight) {
@@ -695,13 +782,25 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         if (ctx) {
           ctx.fillStyle = "#000";
           ctx.fillRect(0, 0, cw, ch);
-          ctx.drawImage(frame, dx, dy, dw, dh);
+          try {
+            ctx.drawImage(frame, dx, dy, dw, dh);
+            canvasDrawnFrames++;
+          } catch (error: any) {
+            decodeErrors++;
+            addLog(`[mirror] decoded frame could not be painted to canvas: ${error?.message ?? String(error)}`);
+            frame.close();
+            return;
+          }
           screenVisible = reportMirrorFrameEvidence(canvas, ctx, frame.displayWidth, frame.displayHeight);
+        } else if (!canvasUnavailableLogged) {
+          canvasUnavailableLogged = true;
+          addLog("[mirror] decoder produced frames, but a 2D canvas context could not be created");
         }
+      } else if (!canvasUnavailableLogged) {
+        canvasUnavailableLogged = true;
+        addLog(`[mirror] decoder produced frames, but canvas has zero size (${cw}x${ch})`);
       }
       frame.close();
-      fpsCountRef.current++;
-      lastDecodedAtRef.current = Date.now();
       updateStatusFromScreenVisibility(screenVisible);
     };
 
@@ -711,13 +810,23 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       const decoder = new VideoDecoder({
         output: drawFrame,
         error: (e) => {
+          decodeErrors++;
+          const reason = e?.message ?? String(e);
+          addLog(`[mirror] WebCodecs decoder error #${decodeErrors}: ${reason}; state=${decoder.state}, queue=${decoder.decodeQueueSize}, inboundBytes=${inboundBytes}, decodedFrames=${decodedFrames}`);
+          sendClientReport("client-status", {
+            event: "decoder-error",
+            from: statusRef.current,
+            to: statusRef.current,
+            reason,
+          });
           // WebCodecs permanently errors a decoder after a bad reference-frame
           // sequence. Keep H.264 and request a fresh stream instead of hiding
           // the problem behind the much slower PNG polling fallback.
-          requestVideoResync(e.message);
+          requestVideoResync(reason);
         },
       });
       decoderRef.current = decoder;
+      addLog("[mirror] WebCodecs VideoDecoder created");
       return decoder;
     };
 
@@ -731,17 +840,32 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       decodeQueueHighSince = 0;
       lastVideoResyncAt = 0;
       waitingForKeyFrame = true;
+      inboundBytes = 0;
+      binaryMessages = 0;
+      lastInboundAt = 0;
+      accessUnits = 0;
+      decodedFrames = 0;
+      canvasDrawnFrames = 0;
+      decodeErrors = 0;
+      lastDecodeChunkErrorAt = 0;
+      firstDataLogged = false;
+      firstDecodedFrameLogged = false;
+      canvasUnavailableLogged = false;
+      socketOpenedAt = 0;
+      if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
+      if (noDecodedFrameTimer) { clearTimeout(noDecodedFrameTimer); noDecodedFrameTimer = null; }
+      if (clientHealthTimer) { clearInterval(clientHealthTimer); clientHealthTimer = null; }
       closeDecoder();
       attemptCount++;
       const url = useVideoRef.current ? makeVideoWsUrl(serial) : makeWsUrl(serial);
-      setStatus("connecting");
+      setMirrorStatus("connecting", `opening ${useVideoRef.current ? "H.264" : "PNG"} WebSocket attempt ${attemptCount}`);
 
       let ws: WebSocket;
       try {
         ws = new WebSocket(url);
       } catch (e: any) {
-        addLog(`ERROR creating WS: ${e?.message}`);
-        setStatus("error");
+        addLog(`[mirror] WebSocket constructor failed (attempt ${attemptCount}, mode=${useVideoRef.current ? "h264" : "png"}): ${e?.message ?? String(e)}`);
+        setMirrorStatus("error", `WebSocket constructor failed: ${e?.message ?? String(e)}`);
         if (active) reconnectTimer = setTimeout(connect, 3_000);
         return;
       }
@@ -751,33 +875,47 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
 
       ws.onopen = () => {
         if (!active) { ws.close(); return; }
-        setStatus("waiting");
+        socketOpenedAt = Date.now();
+        addLog(`[mirror] WebSocket open; mode=${useVideoRef.current ? "h264" : "png"}, attempt=${attemptCount}, waiting for first binary data`);
+        setMirrorStatus("waiting", `WebSocket open; waiting for first ${useVideoRef.current ? "H.264" : "PNG"} bytes`);
+        sendClientReport("client-health", {
+          reportReason: "socket-open",
+          documentVisibility: document.visibilityState,
+          canvasSize: `${canvasRef.current?.width ?? 0}x${canvasRef.current?.height ?? 0}`,
+        });
+        clientHealthTimer = setInterval(() => {
+          sendClientReport("client-health", {
+            reportReason: "30-second heartbeat",
+            documentVisibility: document.visibilityState,
+            canvasSize: `${canvasRef.current?.width ?? 0}x${canvasRef.current?.height ?? 0}`,
+          });
+        }, 30_000);
         noFrameTimer = setTimeout(() => {
           if (!frameSeenRef.current && active) {
-            addLog("10s timeout — no frames received. Reconnecting…");
-            setStatus("error");
+            addLog(`[mirror] WebSocket stayed open for 10s without any binary video bytes; mode=${useVideoRef.current ? "h264" : "png"}, wsState=${ws.readyState}, sessionAgeMs=${Date.now() - socketOpenedAt}`);
+            setMirrorStatus("error", "no binary video bytes arrived within 10 seconds");
             // Force a fresh connection — the WS is live but sending nothing
             // (phone screen off, scrcpy not ready, etc.).  Close it so the
             // onclose handler fires and schedules the normal 2 s reconnect.
-            ws.close();
+            ws.close(4000, "no binary video bytes within 10 seconds");
           }
         }, 10_000);
       };
 
       ws.onerror = () => {
-        addLog(`WS error (readyState=${ws.readyState})`);
+        addLog(`[mirror] WebSocket error: readyState=${ws.readyState}, mode=${useVideoRef.current ? "h264" : "png"}, inboundBytes=${inboundBytes}, binaryMessages=${binaryMessages}, decodedFrames=${decodedFrames}`);
         if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
-        setStatus("error");
+        setMirrorStatus("error", `WebSocket error (readyState=${ws.readyState})`);
       };
 
       ws.onclose = (ev) => {
-        addLog(ev.code === 1006
-          ? "Mirror transport interrupted — reconnecting"
-          : `WS closed — code=${ev.code} reason="${ev.reason || "none"}"`);
+        addLog(`[mirror] WebSocket closed; code=${ev.code}, reason="${ev.reason || "none"}", clean=${ev.wasClean}, mode=${useVideoRef.current ? "h264" : "png"}, openForMs=${socketOpenedAt ? Date.now() - socketOpenedAt : "not-opened"}, inboundBytes=${inboundBytes}, binaryMessages=${binaryMessages}, accessUnits=${accessUnits}, decodedFrames=${decodedFrames}, canvasDrawnFrames=${canvasDrawnFrames}`);
         if (noFrameTimer) { clearTimeout(noFrameTimer); noFrameTimer = null; }
+        if (noDecodedFrameTimer) { clearTimeout(noDecodedFrameTimer); noDecodedFrameTimer = null; }
+        if (clientHealthTimer) { clearInterval(clientHealthTimer); clientHealthTimer = null; }
         closeDecoder();
         if (!active) return;
-        setStatus("connecting");
+        setMirrorStatus("connecting", `WebSocket closed (${ev.code}${ev.reason ? `: ${ev.reason}` : ""}); reconnecting`);
         reconnectTimer = setTimeout(connect, 2_000);
       };
 
@@ -786,13 +924,16 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           try {
             const j = JSON.parse(ev.data as string);
             if (j.error) {
-              addLog(`SERVER ERROR: ${j.error}`);
+              addLog(`[mirror] server error: ${j.error}; fatal=${!!j.fatal}, elapsedMs=${Date.now() - sessionStartedAt}`);
               if (j.fatal && useVideoRef.current) {
                 // Video path unsupported on this device — drop to screenshot mode.
-                addLog("Video stream unavailable on this device — falling back to screenshot mirroring.");
+                addLog("[mirror] server marked H.264 unavailable; switching to PNG screenshot mirroring");
                 useVideoRef.current = false;
               }
-              setStatus(/screen is off|locked/i.test(j.error) ? "asleep" : "error");
+              setMirrorStatus(
+                /screen is off|locked/i.test(j.error) ? "asleep" : "error",
+                `server error: ${j.error}`,
+              );
             } else if (j.info) {
               addLog(j.info);
               // If the server reports a stream restart, flush the decoder and
@@ -802,8 +943,32 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
                 closeDecoder(true /* clearCanvas */);
               }
             }
-          } catch { /* ok */ }
+          } catch (error: any) {
+            addLog(`[mirror] unparseable server text message (${String(ev.data).slice(0, 180)}): ${error?.message ?? String(error)}`);
+          }
           return;
+        }
+
+        const messageBytes = ev.data instanceof ArrayBuffer
+          ? ev.data.byteLength
+          : ev.data instanceof Blob ? ev.data.size : 0;
+        inboundBytes += messageBytes;
+        binaryMessages++;
+        lastInboundAt = Date.now();
+        if (!firstDataLogged) {
+          firstDataLogged = true;
+          addLog(`[mirror] first binary data arrived ${socketOpenedAt ? Date.now() - socketOpenedAt : "unknown"}ms after WebSocket open; bytes=${messageBytes}, mode=${useVideoRef.current ? "h264" : "png"}`);
+          noDecodedFrameTimer = setTimeout(() => {
+            if (!active || decodedFrames > 0) return;
+            const reason = `binary data arrived (${inboundBytes} bytes, ${binaryMessages} messages) but no ${useVideoRef.current ? "H.264 frame" : "PNG image"} decoded within 10 seconds`;
+            addLog(`[mirror] ${reason}; mode=${useVideoRef.current ? "h264" : "png"}, decoderState=${decoderRef.current?.state ?? "not-created"}, queue=${decoderRef.current?.decodeQueueSize ?? "n/a"}, accessUnits=${accessUnits}`);
+            sendClientReport("client-status", {
+              event: "inbound-bytes-no-decoded-frame",
+              from: statusRef.current,
+              to: statusRef.current,
+              reason,
+            });
+          }, 10_000);
         }
 
         if (!frameSeenRef.current) {
@@ -815,13 +980,26 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           // Legacy PNG-per-frame path.
           fpsCountRef.current++;
           const canvas = canvasRef.current;
-          if (!canvas) return;
+          if (!canvas) {
+            if (!canvasUnavailableLogged) {
+              canvasUnavailableLogged = true;
+              addLog("[mirror] PNG bytes are arriving, but the canvas element is unavailable");
+              sendClientReport("client-status", {
+                event: "png-canvas-unavailable",
+                from: statusRef.current,
+                to: statusRef.current,
+                reason: "canvas element missing while PNG bytes arrived",
+              });
+            }
+            return;
+          }
           const blob = new Blob([ev.data as ArrayBuffer], { type: "image/png" });
           const url  = URL.createObjectURL(blob);
           const img  = new Image();
           const revoke = () => URL.revokeObjectURL(url);
           img.onload = () => {
             if (!active) { revoke(); return; }
+            decodedFrames++;
             if (!phoneSizeRef.current) {
               const sz = { w: img.naturalWidth, h: img.naturalHeight };
               phoneSizeRef.current = sz;
@@ -847,15 +1025,52 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
               if (ctx) {
                 ctx.fillStyle = "#000";
                 ctx.fillRect(0, 0, cw, ch);
-                ctx.drawImage(img, dx, dy, dw, dh);
-                screenVisible = reportMirrorFrameEvidence(canvas, ctx, img.naturalWidth, img.naturalHeight);
+                try {
+                  ctx.drawImage(img, dx, dy, dw, dh);
+                  canvasDrawnFrames++;
+                  screenVisible = reportMirrorFrameEvidence(canvas, ctx, img.naturalWidth, img.naturalHeight);
+                } catch (error: any) {
+                  decodeErrors++;
+                  addLog(`[mirror] decoded PNG image could not be painted to canvas: ${error?.message ?? String(error)}`);
+                  sendClientReport("client-status", {
+                    event: "png-canvas-draw-failed",
+                    from: statusRef.current,
+                    to: statusRef.current,
+                    reason: error?.message ?? String(error),
+                  });
+                }
+              } else if (!canvasUnavailableLogged) {
+                canvasUnavailableLogged = true;
+                addLog("[mirror] PNG image decoded, but a 2D canvas context could not be created");
               }
+            } else if (!canvasUnavailableLogged) {
+              canvasUnavailableLogged = true;
+              addLog(`[mirror] PNG image decoded, but canvas has zero size (${cw}x${ch})`);
             }
             lastDecodedAtRef.current = Date.now();
+            if (!firstDecodedFrameLogged) {
+              firstDecodedFrameLogged = true;
+              addLog(`[mirror] first PNG image decoded and painted ${socketOpenedAt ? Date.now() - socketOpenedAt : "unknown"}ms after WebSocket open; ${img.naturalWidth}x${img.naturalHeight}`);
+              if (noDecodedFrameTimer) {
+                clearTimeout(noDecodedFrameTimer);
+                noDecodedFrameTimer = null;
+              }
+            }
             updateStatusFromScreenVisibility(screenVisible);
             revoke();
           };
-          img.onerror = revoke;
+          img.onerror = () => {
+            decodeErrors++;
+            const reason = `Image.onerror while decoding ${messageBytes} PNG bytes`;
+            addLog(`[mirror] PNG image decode failed #${decodeErrors}; ${reason}`);
+            sendClientReport("client-status", {
+              event: "png-decode-failed",
+              from: statusRef.current,
+              to: statusRef.current,
+              reason,
+            });
+            revoke();
+          };
           img.src = url;
           return;
         }
@@ -866,6 +1081,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         const decoder = ensureDecoder();
         const demuxer = demuxerRef.current!;
         const units = demuxer.push(new Uint8Array(ev.data as ArrayBuffer));
+        accessUnits += units.length;
         for (const unit of units) {
           if (typeof decoder.decodeQueueSize === "number") {
             const queueSize = decoder.decodeQueueSize;
@@ -887,10 +1103,20 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             const sps = demuxer.getSps();
             if (!sps) continue; // wait for an SPS before configuring
             try {
-              decoder.configure({ codec: spsToCodecString(sps), optimizeForLatency: true });
+              const codec = spsToCodecString(sps);
+              decoder.configure({ codec, optimizeForLatency: true });
               configuredRef.current = true;
+              addLog(`[mirror] WebCodecs configured codec=${codec}, SPS-bytes=${sps.length}`);
             } catch (e: any) {
-              addLog(`Decoder configure failed: ${e?.message} — falling back to screenshot stream`);
+              decodeErrors++;
+              const reason = e?.message ?? String(e);
+              addLog(`[mirror] WebCodecs configure failed: ${reason}; SPS-bytes=${sps.length} — switching to PNG fallback`);
+              sendClientReport("client-status", {
+                event: "decoder-configure-failed",
+                from: statusRef.current,
+                to: statusRef.current,
+                reason,
+              });
               useVideoRef.current = false;
               closeDecoder();
               ws.close();
@@ -911,7 +1137,19 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
           } catch (e: any) {
             // A stray non-key chunk before the first keyframe, or a decoder
             // hiccup after a stream restart — safe to drop and keep going.
-            addLog(`Decode chunk dropped: ${e?.message}`);
+            decodeErrors++;
+            const now = Date.now();
+            if (decodeErrors === 1 || now - lastDecodeChunkErrorAt >= 5_000) {
+              lastDecodeChunkErrorAt = now;
+              const reason = e?.message ?? String(e);
+              addLog(`[mirror] EncodedVideoChunk rejected: ${reason}; accessUnits=${accessUnits}, decodedFrames=${decodedFrames}, queue=${decoder.decodeQueueSize}, keyFrame=${unit.keyFrame}`);
+              sendClientReport("client-status", {
+                event: "decode-chunk-rejected",
+                from: statusRef.current,
+                to: statusRef.current,
+                reason,
+              });
+            }
           }
         }
       };
@@ -924,20 +1162,26 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     // WAKEUP instead of incorrectly offering Power off.
     const streamHealthTimer = setInterval(() => {
       if (!active || !frameSeenRef.current || !lastDecodedAtRef.current) return;
-    // UIAutomator dumps and chained ADB actions can legitimately pause the
-    // decoder for several seconds while the phone remains awake. The server
-    // already allows a 30-second automation gap before restarting its
-    // screenrecord child; do not show the user a false "Screen is asleep"
-    // overlay after only 3 seconds.
-    const staleFrameThresholdMs = automationActiveRef.current ? 30_000 : 10_000;
-    if (Date.now() - lastDecodedAtRef.current > staleFrameThresholdMs) {
-        setStatus(previous => previous === "live" ? "asleep" : previous);
+      // UIAutomator dumps and chained ADB actions can legitimately pause the
+      // decoder for several seconds while the phone remains awake. Keep the
+      // existing automation-aware grace period and record the exact cause
+      // whenever the live display becomes stale.
+      const staleFrameThresholdMs = automationActiveRef.current ? 30_000 : 10_000;
+      const decodedGapMs = Date.now() - lastDecodedAtRef.current;
+      if (decodedGapMs > staleFrameThresholdMs && statusRef.current === "live") {
+        setMirrorStatus(
+          "asleep",
+          `no decoded frame for ${decodedGapMs}ms (threshold=${staleFrameThresholdMs}ms, mode=${useVideoRef.current ? "h264" : "png"}, inboundBytes=${inboundBytes}, binaryMessages=${binaryMessages}, accessUnits=${accessUnits}, decodedFrames=${decodedFrames}, queue=${decoderRef.current?.decodeQueueSize ?? "n/a"}, automationActive=${automationActiveRef.current})`,
+        );
       }
     }, 1_000);
     return () => {
+      addLog(`[mirror] LiveCanvas stream effect cleaned up; live=${live}, active=${active}, status=${statusRef.current}, mode=${useVideoRef.current ? "h264" : "png"}, wsState=${wsRef.current?.readyState ?? "none"}, inboundBytes=${inboundBytes}, binaryMessages=${binaryMessages}, accessUnits=${accessUnits}, decodedFrames=${decodedFrames}, canvasDrawnFrames=${canvasDrawnFrames}, decodeErrors=${decodeErrors}`);
       active = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (noFrameTimer)   clearTimeout(noFrameTimer);
+      if (noDecodedFrameTimer) clearTimeout(noDecodedFrameTimer);
+      if (clientHealthTimer) clearInterval(clientHealthTimer);
       clearInterval(streamHealthTimer);
       wsRef.current?.close();
       closeDecoder();
