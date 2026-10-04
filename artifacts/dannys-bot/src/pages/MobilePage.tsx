@@ -7727,6 +7727,42 @@ export function AutomationSettingsPanel({
                 <Input type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS} value={settings.injectBrowsingAbandonFollowPctMax} onChange={e => setSettings(s => ({ ...s, injectBrowsingAbandonFollowPctMax: clamp4(Number(e.target.value)) }))} disabled={loading} />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm text-muted-foreground block text-center">Save Post %</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  maxLength={4}
+                  aria-label="Minimum Save Post percentage"
+                  className={NUM_INPUT_CLASS}
+                  value={settings.injectBrowsingSavePostPctMin}
+                  onChange={e => setSettings(s => {
+                    const min = Math.min(100, clamp4(Number(e.target.value)));
+                    const max = Math.min(100, Math.max(min, s.injectBrowsingSavePostPctMax));
+                    return { ...s, injectBrowsingSavePostPctMin: min, injectBrowsingSavePostPctMax: max };
+                  })}
+                  disabled={loading}
+                />
+                <span className="text-muted-foreground text-sm">to</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  maxLength={4}
+                  aria-label="Maximum Save Post percentage"
+                  className={NUM_INPUT_CLASS}
+                  value={settings.injectBrowsingSavePostPctMax}
+                  onChange={e => setSettings(s => {
+                    const max = Math.min(100, clamp4(Number(e.target.value)));
+                    const min = Math.min(s.injectBrowsingSavePostPctMin, max);
+                    return { ...s, injectBrowsingSavePostPctMin: min, injectBrowsingSavePostPctMax: max };
+                  })}
+                  disabled={loading}
+                />
+              </div>
+            </div>
           </div>
           </>)}
 
