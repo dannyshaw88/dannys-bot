@@ -131,6 +131,12 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-04 — Make a Post must wait for and diagnose MediaStore indexing
+- The 17:42 screenshot confirms the phone copy was pushed, then Make a Post aborted before opening Instagram because its exact-file MediaStore audit found no row. Cleanup followed that abort.
+- The shared scan/query helpers used best-effort ADB calls that swallowed errors; the query projection also requested `relative_path`, which is unavailable on Android versions before 10. The screenshot does not establish which condition caused its missing row.
+- **Fix:** Make a Post now treats scanner-request errors/timeouts as staging failures, waits briefly before its one exact-file audit, and the query uses a compatible projection. Provider/query errors are recorded in the device log, and only an actual MediaStore `Row:` matching the generated filename/path can pass the gate. The gate still refuses to open the picker without that row and a matching pulled-file hash/shape.
+- **Verification:** API workflow rebuilt and restarted successfully; `git diff --check` passed. No physical phone was available, so the screenshot-specific MediaStore behavior is not hardware-verified.
+
 ### 2026-10-04 — Make a Post must prove the staged image before opening Instagram
 - The user reported that the 15:36 attempt found no image in the assigned directory, then entered Instagram’s picker and was about to use existing phone media; the user interrupted it.
 - **Root cause in the current source:** Make a Post opened Home before checking the local folder, then relied on a 1.2-second scanner delay after ADB push without requiring proof that the exact staged file was indexed. The available media-audit helper also compared `sha256`/`bytes`, while image preparation supplies `processedSha256`/`processedBytes`, and its failures were swallowed.

@@ -88,14 +88,14 @@ try {
 onLog?.(`Make a Post: ADB push and MediaStore scan request completed — devicePath=${devicePath}`);
 await prepared.cleanup();
 onLog?.("Make a Post: local prepared image cleaned up after push");
+onLog?.("Make a Post: allowing MediaStore indexing to settle before the exact-file check");
+await sleepOrAbort(serial, 1200);
   const mediaVerified = await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);
   if (!mediaVerified) {
     onLog?.("Make a Post: staged image was not confirmed in MediaStore with matching bytes — refusing to open Instagram's picker");
     return { posted: false };
   }
-  onLog?.(`Make a Post: ✓ pushed and verified at ${devicePath} — waiting for Instagram to index the image`);
-await sleepOrAbort(serial, 1200); // let the scanner index the file before we open the picker
-onLog?.("Make a Post: media-scan settle complete; looking for compose icon");
+onLog?.(`Make a Post: ✓ pushed and verified at ${devicePath}; looking for compose icon`);
 
 // Do not touch Instagram until the assigned local image has been selected,
 // processed, pushed, and verified against the exact MediaStore entry and bytes.

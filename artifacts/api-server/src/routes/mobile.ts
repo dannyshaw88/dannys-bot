@@ -4738,7 +4738,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // one bounded verification, not a retry loop: the caller asked for a
       // single media-store check and should fail immediately if Android has
       // not indexed this staged file yet.
-      const mediaRow = await android.queryMediaStoreFile(serial, devicePath).catch(() => null);
+      const mediaRow = await android.queryMediaStoreFile(serial, devicePath).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        onLog?.(`Media audit before Instagram: MediaStore query failed — ${message.slice(0, 500)}`);
+        return null;
+      });
       if (mediaRow?.found) {
         onLog?.(
           `Media audit before Instagram: MediaStore indexed ` +
@@ -4748,7 +4752,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       } else {
         onLog?.(
           `Media audit before Instagram: MediaStore did not index ` +
-          `${path.basename(devicePath)} on the single check — aborting`,
+          `${path.basename(devicePath)} on the single check — aborting` +
+          (mediaRow?.raw ? `; query diagnostics=${mediaRow.raw.slice(0, 1400)}` : ""),
         );
         return false;
       }

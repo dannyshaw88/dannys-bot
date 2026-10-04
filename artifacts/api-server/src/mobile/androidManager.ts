@@ -9787,7 +9787,7 @@ export async function pushFileToDevice(
   fileName: string,
   scan = true,
   cleanupPartialOnFailure = false,
-  waitForMediaScan = false,
+  strictMediaScan = false,
 ): Promise<string> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -9803,7 +9803,7 @@ export async function pushFileToDevice(
   const devicePath = `/sdcard/DCIM/Camera/${deviceFileName}`;
   try {
     await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
-    if (scan) await scanMediaFile(serial, devicePath, waitForMediaScan);
+    if (scan) await scanMediaFile(serial, devicePath, strictMediaScan);
     return devicePath;
   } catch (error) {
     if (!cleanupPartialOnFailure) throw error;
@@ -9852,21 +9852,20 @@ export async function pullFileFromDevice(serial: string, devicePath: string): Pr
 export async function scanMediaFile(
   serial: string,
   devicePath: string,
-  waitForCompletion = false,
+  strict = false,
 ): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const args = [
     "-s", serial, "shell", "am", "broadcast",
-    ...(waitForCompletion ? ["-W"] : []),
     "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
     "-d", `file://${devicePath}`,
   ];
-  if (waitForCompletion) {
-    // The default best-effort broadcast returns before Android has finished
-    // handling the scanner request, and the old runner silently swallowed
-    // ADB failures. Make a Post's exact MediaStore audit must run after the
-    // scan broadcast has completed, not race it.
+  if (strict) {
+    // Make a Post must know whether ADB accepted the scan request. The
+    // best-effort runner silently converts scanner errors/timeouts to empty
+    // output; the later exact MediaStore audit remains the authority on
+    // whether Android actually indexed the file.
     await runAdbStrict(adb, args, 15000);
   } else {
     await runAdb(adb, args, 6000);
@@ -9881,7 +9880,10 @@ export async function queryMediaStoreFile(serial: string, devicePath: string): P
 }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const projection = "_id:_data:_display_name:mime_type:size:width:height:date_taken:date_added:date_modified:orientation:relative_path";
+  // Keep to columns supported across older Android MediaStore providers.
+  // relative_path is not available on pre-Android-10 devices and caused the
+  // entire content query to fail even when the image row existed.
+  const projection = "_id:_data:_display_name:mime_type:size:width:height:date_taken:date_added:date_modified:orientation";
   const displayName = path.basename(devicePath);
   const escapedPath = devicePath.replace(/'/g, "''");
   const escapedDisplayName = displayName.replace(/'/g, "''");
@@ -9901,32 +9903,48 @@ export async function queryMediaStoreFile(serial: string, devicePath: string): P
     "content://media/external_primary/file",
     "content://media/external/file",
   ];
-  const outputs: string[] = [];
+  const outputs: Array<{ uri: string; text: string }> = [];
+  const failures: string[] = [];
   query: for (const uri of candidates) {
     for (const where of wheres) {
-      const result = await runAdb(adb, [
-        "-s", serial, "shell", "content", "query",
-        "--uri", uri,
-        "--projection", projection,
-        "--where", where,
-      ], 8000).catch(() => "");
-      if (result.trim()) {
-        outputs.push(`[${uri}] ${result.trim()}`);
-        if (
-          result.includes(`_display_name=${displayName}`) ||
-          result.includes(`/${displayName}`) ||
-          result.includes(`_data=${devicePath}`)
-        ) {
+      try {
+        const result = await runAdbStrict(adb, [
+          "-s", serial, "shell", "content", "query",
+          "--uri", uri,
+          "--projection", projection,
+          "--where", where,
+        ], 8000);
+        const text = result.trim();
+        if (text) {
+          outputs.push({ uri, text });
+        }
+        const hasMatchingRow = text.split(/\r?\n/).some(line => {
+          const row = line.trim();
+          return row.startsWith("Row:") && (
+            row.includes(`_display_name=${displayName}`) ||
+            row.includes(`/${displayName}`) ||
+            row.includes(`_data=${devicePath}`)
+          );
+        });
+        if (hasMatchingRow) {
           break query;
         }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push(`[${uri}; where=${where}] ${message.slice(0, 240)}`);
       }
     }
   }
-  const raw = outputs.join("\n");
-  const row = raw.split(/\r?\n/).find(line =>
-    line.includes(`_display_name=${displayName}`) ||
-    line.includes(`_data=${devicePath}`) ||
-    line.includes(`/${displayName}`),
+  const raw = [
+    ...outputs.map(({ uri, text }) => `[${uri}] ${text}`),
+    ...failures,
+  ].join("\n");
+  const row = outputs.flatMap(({ text }) => text.split(/\r?\n/)).find(line =>
+    line.trim().startsWith("Row:") && (
+      line.includes(`_display_name=${displayName}`) ||
+      line.includes(`_data=${devicePath}`) ||
+      line.includes(`/${displayName}`)
+    ),
   ) ?? "";
   const fields: Record<string, string> = {};
   for (const match of row.matchAll(/(\w+)=([^,\s]+(?:\s[^,]*?)?)(?=,\s+\w+=|$)/g)) {
