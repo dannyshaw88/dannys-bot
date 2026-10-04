@@ -10,6 +10,7 @@
 - [Verify bootstrap timing & call-order bugs](verify-bootstrap-bugs.md) — Phase 0 anonymous calls REMOVED (EB always provides cookies); sequence now starts at Phase 1 (load cookies)
 - [tlsRequest CycleTLS header stripping](tls-request-header-fix.md) — tlsRequest must strip Host, Connection, Content-Length before passing to CycleTLS or Instagram returns "something went wrong"
 - [Make a Post flow safety](make-a-post-log.md) — use the repair history, verify processed media before navigation, and keep action names aligned at dispatch boundaries
+- [Automation image consumption](automation-image-consumption.md) — Make a Post and Random Actions avatar updates must delete each selected source and staged copy on every attempt, without relying on a reuse history
 - [Activate Percentage gate levels](activate-percentage-gate-levels.md) — per-execution tool-level gate (View Feed/Stories/Follow/Jitter) vs per-user Inject Browsing gate are distinct; don't conflate
 - [Mobile settings save/load schema drift](mobile-settings-schema-drift.md) — add fields to the persistence schema or settings can silently reset on restart
 - [leaksPage.ts client script must be plain JS](leaks-page-ts-syntax.md) — TS syntax in the embedded `<script>` string is a silent SyntaxError that freezes every Leak Check card in "pending" forever

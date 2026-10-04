@@ -4565,6 +4565,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const tempFiles: string[] = [];
     const tempDirs: string[] = [];
     const prefix = fileName.includes("/") ? "Make a Post" : "Make a Post";
+    const cleanupTempArtifacts = async () => {
+      const targets = [
+        ...tempFiles.map(targetPath => ({ targetPath, recursive: false })),
+        ...tempDirs.map(targetPath => ({ targetPath, recursive: true })),
+      ];
+      for (const target of targets) {
+        await fsPromises.rm(target.targetPath, { recursive: target.recursive, force: true }).catch(() => {});
+      }
+      const leftovers: string[] = [];
+      for (const { targetPath } of targets) {
+        try {
+          await fsPromises.access(targetPath);
+          leftovers.push(path.basename(targetPath));
+        } catch (error: any) {
+          if (error?.code !== "ENOENT") {
+            leftovers.push(`${path.basename(targetPath)} (could not verify removal: ${error?.message ?? "unknown error"})`);
+          }
+        }
+      }
+      if (leftovers.length) {
+        const message = `${prefix}: temporary image cleanup incomplete — ${leftovers.join(", ")}`;
+        onLog?.(message);
+      }
+    };
     const verifyProcessedImage = async (
       candidatePath: string,
       inputBytes: Buffer,
@@ -4618,10 +4642,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           pushFileName = `${path.basename(fileName, path.extname(fileName))}.jpg`;
         }
       } catch (e: any) {
-        await Promise.all(tempFiles.map(file => fsPromises.unlink(file).catch(() => {})));
-        tempFiles.length = 0;
-        await Promise.all(tempDirs.map(dir => fsPromises.rm(dir, { recursive: true, force: true }).catch(() => {})));
-        tempDirs.length = 0;
+        await cleanupTempArtifacts().catch(() => {});
         throw new Error(`Fix AI Slop verification failed: ${e?.message ?? "unknown error"}`);
       }
     }
@@ -4659,10 +4680,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         onLog?.(`${prefix}: ${level} image alteration verified — pushing processed copy`);
         onLog?.(`${prefix}: ${level} alteration audit — sourceSha256=${sourceAudit.sha256} processedSha256=${outputAudit.sha256} bytes=${outputAudit.bytes} format=${outputAudit.format} dimensions=${outputAudit.width}x${outputAudit.height}`);
       } catch (e: any) {
-        await Promise.all(tempFiles.map(file => fsPromises.unlink(file).catch(() => {})));
-        tempFiles.length = 0;
-        await Promise.all(tempDirs.map(dir => fsPromises.rm(dir, { recursive: true, force: true }).catch(() => {})));
-        tempDirs.length = 0;
+        await cleanupTempArtifacts().catch(() => {});
         throw new Error(`${level} image alteration verification failed: ${e?.message ?? "unknown error"}`);
       }
     }
@@ -4684,14 +4702,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         width: processedAudit.width,
         height: processedAudit.height,
       },
-      cleanup: async () => {
-        for (const tempFile of tempFiles) {
-          await fsPromises.unlink(tempFile).catch(() => {});
-        }
-        for (const tempDir of tempDirs) {
-          await fsPromises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-        }
-      },
+      cleanup: cleanupTempArtifacts,
     };
   }
 

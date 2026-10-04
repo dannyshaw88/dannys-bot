@@ -38,12 +38,13 @@ export async function runUpdateProfilePicture(
     if (!files.length) { onLog?.("Update Profile Pic: ✗ no images found in folder"); return; }
     const localFile = files[0].name;
     const localPath = path.join(folderPath, localFile);
+    let prepared: Awaited<ReturnType<typeof prepareMakePostImage>> | undefined;
+    let actualDevicePath: string | undefined;
+    try {
 
-    // 2. Prepare and push the image to the device. Profile-picture uploads
-    // always use the same privacy/alteration pipeline as Make a Post:
-    // Fix AI Slop plus the Small alteration preset. The source file remains
-    // untouched; only the temporary processed copy is sent to the phone.
-    let prepared: Awaited<ReturnType<typeof prepareMakePostImage>>;
+    // 2. Prepare the source using the same image pipeline as Make a Post.
+    // Only the processed copy is sent to the phone; both local copies are
+    // cleaned up in the outer finally block after this selected attempt.
     try {
       prepared = await prepareMakePostImage(localPath, localFile, {
         doFixAiSlop: imageOptions?.fixAiSlop ?? false,
@@ -62,30 +63,21 @@ export async function runUpdateProfilePicture(
       return;
     }
 
-    // pushFileToDevice builds its own unique on-device path (ig_<random-id>_<name>) and
-    // returns it — capture the actual path so removeDeviceFile targets the
-    // correct file.  Previously the caller constructed a separate devicePath
-    // variable and passed it as the fileName argument, which caused the file
-    // to land at a completely different mangled path, making the removeDeviceFile
-    // call a no-op (it tried to delete a file that never existed at that path).
-    let actualDevicePath: string;
+    // Keep the exact generated destination so cleanup can remove this staged
+    // image, including a partial destination if the transfer fails.
     try {
-      actualDevicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName);
+      actualDevicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName, true, true);
       onLog?.(`Update Profile Pic: pushed ${localFile} to device — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
     } catch (e: any) {
+      actualDevicePath = typeof e?.partialDevicePath === "string" ? e.partialDevicePath : undefined;
       onLog?.(`Update Profile Pic: ✗ push failed: ${e?.message}`);
-      await prepared.cleanup();
+      if (e?.deviceCleanupError) {
+        onLog?.(`Update Profile Pic: ⚠ partial phone copy cleanup failed: ${e.deviceCleanupError}`);
+      }
       return;
     }
     await auditDeviceMediaCopy(serial, actualDevicePath, prepared.audit, onLog);
     await sleepOrAbort(serial, 1000);
-
-    // Steps 3–10: navigation.  Wrapped in try-finally so the device file is
-    // always removed regardless of whether navigation succeeds or bails early
-    // at any step — previously every early `return` left the image on the
-    // phone's storage indefinitely.
-    let uploadSucceeded = false;
-    try {
 
     // 3. Tap the profile tab (bottom-right, tab_avatar).
     {
@@ -205,25 +197,44 @@ export async function runUpdateProfilePicture(
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 400));
     onLog?.(`Update Profile Pic: tapped calibrated Instagram Back at (${calibratedBack.x},${calibratedBack.y})`);
 
-    uploadSucceeded = true;
-
     } finally {
-      // Always delete from device — regardless of whether any navigation step
-      // failed and returned early.  The image was already pushed in step 2 so
-      // it must be cleaned up unconditionally to avoid accumulating files on
-      // the phone's storage.
+      // Always remove the staged image, even if preparation, pushing, media
+      // auditing, or Instagram navigation fails. pushFileToDevice exposes a
+      // partial destination on transfer failure so it can be retried here.
+      if (actualDevicePath) {
+        try {
+          await android.removeDeviceFileStrict(serial, actualDevicePath);
+          onLog?.(`Update Profile Pic: deleted ${localFile} from device`);
+        } catch (e: any) {
+          onLog?.(`Update Profile Pic: ⚠ could not delete device file: ${e?.message}`);
+        }
+      }
+      if (prepared) {
+        try {
+          await prepared.cleanup();
+        } catch (e: any) {
+          onLog?.(`Update Profile Pic: ⚠ could not clean up processed PC copy: ${e?.message}`);
+        }
+      }
+
+      // The selected source is consumed by this attempt, not only by a
+      // successful avatar change. Remove it so the newest-file picker cannot
+      // choose it again on the next Random Actions cycle.
+      let sourceAlreadyAbsent = false;
       try {
-        await android.removeDeviceFile(serial, actualDevicePath!);
-        onLog?.(`Update Profile Pic: deleted ${localFile} from device`);
-      } catch (e: any) { onLog?.(`Update Profile Pic: ⚠ could not delete device file: ${e?.message}`); }
-      await prepared.cleanup();
+        fs.unlinkSync(localPath);
+      } catch (e: any) {
+        if (e?.code === "ENOENT") sourceAlreadyAbsent = true;
+        else onLog?.(`Update Profile Pic: ⚠ could not delete PC file: ${e?.message}`);
+      }
+      if (fs.existsSync(localPath)) {
+        onLog?.(`Update Profile Pic: ⚠ PC source still exists and may be selected again: ${localPath}`);
+      } else if (sourceAlreadyAbsent) {
+        onLog?.(`Update Profile Pic: PC source was already absent: ${localFile}`);
+      } else {
+        onLog?.(`Update Profile Pic: deleted ${localFile} from PC`);
+      }
     }
-
-    if (!uploadSucceeded) return;
-
-    // 11. Delete the file from the PC folder (only on successful upload).
-    try { fs.unlinkSync(localPath); onLog?.(`Update Profile Pic: deleted ${localFile} from PC`); }
-    catch (e: any) { onLog?.(`Update Profile Pic: ⚠ could not delete PC file: ${e?.message}`); }
 
     onLog?.("Update Profile Pic: ✓ done");
 }
