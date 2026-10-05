@@ -15193,30 +15193,20 @@ export async function findAndTapUserInSearch(
     // Instagram builds the exact username label is not itself clickable even
     // though tapping its center opens the row, so actionOwnerIndex is not an
     // identity gate here.
-    const normalizeUsernameLabel = (value: string) =>
-      value
-        .normalize("NFKC")
-        .replace(/[\u200B-\u200F\uFEFF]/g, "")
-        .trim()
-        .toLocaleLowerCase();
-    const cleanLc = normalizeUsernameLabel(clean);
+    const cleanLc = clean.toLocaleLowerCase();
     const exactNames = new Set([cleanLc, `@${cleanLc}`]);
     const exactUserPositions: Array<{ x: number; y: number }> = [];
     const exactUserSeen = new Set<string>();
-    const searchNodes = _liveActionNodes(xml);
-    for (const node of searchNodes) {
+    for (const node of _liveActionNodes(xml)) {
       if (/android\.widget\.EditText$/i.test(node.className)) continue;
       if (node.resourceId.includes("/row_search_keyword_title") ||
           node.resourceId.includes("/search_keyword_title") ||
           node.resourceId.includes("/row_search_recent_chip") ||
           node.resourceId.includes("/search_recent_chip")) continue;
-      const text = normalizeUsernameLabel(node.text);
-      const desc = normalizeUsernameLabel(node.contentDesc);
+      const text = node.text.trim().toLocaleLowerCase();
+      const desc = node.contentDesc.trim().toLocaleLowerCase();
       if (!exactNames.has(text) && !exactNames.has(desc)) continue;
-      // The exact username is identity evidence even when Instagram marks its
-      // TextView disabled; the enclosing result can still be touchable, and
-      // the post-tap profile-surface check below must confirm navigation before
-      // Follow proceeds. Do not conflate label.enabled with row identity.
+      if (!node.enabled) continue;
       const x = node.x;
       const y = node.y;
       // Child and wrapper can both repeat the exact username. Prefer the
@@ -15240,7 +15230,7 @@ export async function findAndTapUserInSearch(
     }
     if (exactUserPositions.length === 0) {
       onLog?.(
-        `Follow: @${clean} exact username label was not exposed by ${searchNodes.length} bounded accessibility nodes — target aborted safely`,
+        `Follow: @${clean} exact username is not listed in a search result — target aborted safely`,
       );
       return { found: false };
     }
