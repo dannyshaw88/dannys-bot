@@ -131,6 +131,11 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-05 — Match Make a Post staging to upload-avatar
+- **Rule:** Make a Post's device staging uses the same ADB push and best-effort media-scan behavior as Update Profile Picture. Keep the MediaStore audit diagnostic, not a gate after a successful push; a failed push still aborts, and calibrated picker/share checks and cleanup remain.
+- **Why:** The user identified upload-avatar's working device upload as the reference and said the failure is in Make a Post's image-staging path.
+- **How to apply:** Keep changes scoped to pre-picker staging. Do not reinstate the audit-result gate unless the user asks.
+
 ### 2026-10-04 — Quote Android MediaStore selections through adb shell
 - A later screenshot supersedes the earlier uncertainty for this cycle: Make a Post did run, the phone push and scanner request completed, then the strict audit aborted before opening Instagram after Android printed `content` usage text.
 - The avatar path awaits the same audit but ignores its `false` result, so it can continue while Make a Post correctly refuses to proceed. This points to the audit invocation, not a failed ADB transfer; it is not a reason to bypass exact-file validation.

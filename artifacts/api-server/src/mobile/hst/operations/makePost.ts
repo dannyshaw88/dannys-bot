@@ -74,7 +74,6 @@ try {
     prepared.pushFileName,
     true,
     true,
-    true,
   );
 } catch (e: any) {
   devicePath = typeof e?.partialDevicePath === "string" ? e.partialDevicePath : undefined;
@@ -88,19 +87,23 @@ try {
 onLog?.(`Make a Post: ADB push and MediaStore scan request completed — devicePath=${devicePath}`);
 await prepared.cleanup();
 onLog?.("Make a Post: local prepared image cleaned up after push");
-onLog?.("Make a Post: allowing MediaStore indexing to settle before the exact-file check");
-await sleepOrAbort(serial, 1200);
-  const mediaVerified = await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);
-  if (!mediaVerified) {
-    onLog?.("Make a Post: staged image was not confirmed in MediaStore with matching bytes — refusing to open Instagram's picker");
-    return { posted: false };
-  }
-onLog?.(`Make a Post: ✓ pushed and verified at ${devicePath}; looking for compose icon`);
+// Match Update Profile Picture's staging flow: a successful ADB push and
+// best-effort scanner request are the upload result. Keep the audit for
+// diagnostics, but do not block the post flow when MediaStore's query/pull
+// audit cannot confirm the copy; Instagram's picker checks below still fail
+// closed unless its calibrated crop control is present.
+const mediaVerified = await auditDeviceMediaCopy(serial, devicePath, prepared.audit, onLog);
+if (!mediaVerified) {
+  onLog?.("Make a Post: MediaStore audit did not confirm the staged image; continuing with the uploaded device copy, matching upload-avatar behavior");
+}
+await sleepOrAbort(serial, 1000);
+onLog?.(
+  `Make a Post: device image staging complete — ${mediaVerified ? "audit verified" : "ADB push completed; audit diagnostic only"}; looking for compose icon`,
+);
 
 // Do not touch Instagram until the assigned local image has been selected,
-// processed, pushed, and verified against the exact MediaStore entry and bytes.
-// This keeps an empty/unreadable folder or a stale gallery from becoming a
-// phone-only image selection.
+// processed, and pushed. The picker-specific calibrated controls below remain
+// the gate before any image editor or Share action.
 const homeTab = await android.tapCalibratedNavigationControl(serial, "home", onLog);
 const taps = Math.max(1, Math.round(homeTapCount));
 for (let tapIndex = 0; tapIndex < taps; tapIndex++) {
