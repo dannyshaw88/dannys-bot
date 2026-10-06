@@ -740,6 +740,10 @@ export async function runFollowUsersStep(
      searchAlreadyReady?: boolean;
      /** Reports whether cleanup left a confirmed, cleared Search field. */
      onSearchReadyForReuse?: (ready: boolean) => void;
+      /** Called only after an exact username is still absent from Instagram
+       *  search results. Profile-quality filter rejections do not call this.
+       *  Return true to stop this Follow run and the remaining Follow slots. */
+      onSearchMiss?: (username: string) => boolean;
      /** Keep the Search surface only when another spread slot follows
       *  immediately. The final slot must restore the normal Instagram UI. */
      keepSearchOpenAfterStep?: boolean;
@@ -1357,6 +1361,7 @@ export async function runFollowUsersStep(
       }
       if (!searchResult.found) {
         onLog?.(`Follow: @${username} not found in results — skipping`);
+        const stopFollowForExecution = params.onSearchMiss?.(username) === true;
         if (shouldResetToExploreForNextTarget()) {
           await refocusAndClearFollowSearch("result lookup failed");
         } else {
@@ -1366,6 +1371,10 @@ export async function runFollowUsersStep(
           await tapCalibratedProfileBack("result lookup failed — leaving current search surface");
         }
         onLog?.("Follow: failed result cleaned — next candidate will reuse the current search field");
+        if (stopFollowForExecution) {
+          onLog?.("Follow: five confirmed search misses reached — stopping remaining Follow candidates for this execution");
+          break;
+        }
         continue;
       }
 

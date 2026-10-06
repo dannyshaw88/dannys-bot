@@ -7744,6 +7744,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
       let _toolsRan = 0; // how many tools have executed before the current one
       let _viewFeedExecuted = false;
+      const FOLLOW_SEARCH_MISS_LIMIT = 5;
+      let followSearchMisses = 0;
+      let followDisabledForExecution = false;
+      const registerFollowSearchMiss = (username: string): boolean => {
+        followSearchMisses++;
+        tLog(`⚠ Follow search miss ${followSearchMisses}/${FOLLOW_SEARCH_MISS_LIMIT}: @${username} was not present in the exact search results`);
+        if (followSearchMisses >= FOLLOW_SEARCH_MISS_LIMIT) {
+          followDisabledForExecution = true;
+          tLog(`⛔ Follow Users disabled for the remainder of this Human Session execution on account slot ${slotIdx + 1}`);
+          return true;
+        }
+        return false;
+      };
 
       for (const [_toolIndex, _tool] of _toolSeq.entries()) {
         if (isCycleAborted(serial)) break;
@@ -7763,6 +7776,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           serial,
           _tool.startsWith("follow_spread:") ? "Follow Users" : (_currentToolLabels[_tool] ?? _tool),
         );
+        if (followDisabledForExecution && (_tool === "follow" || _tool.startsWith("follow_spread:"))) {
+          steps.push("follow(skipped — five search misses in this Human Session execution)");
+          tLog("▶ Follow Users skipped — the five-miss limit was reached earlier in this execution");
+          continue;
+        }
 
         // ── Feed ────────────────────────────────────────────────────────
         if (_tool === 'feed') {
@@ -8048,6 +8066,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
                 searchAlreadyReady,
                 onSearchReadyForReuse: (ready) => { searchReadyForReuse = ready; },
+                onSearchMiss: registerFollowSearchMiss,
                 // The spread owns cleanup across its entire candidate and
                 // backup sequence. Never press Back between candidates.
                 keepSearchOpenAfterStep: true,
@@ -8060,7 +8079,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             let _sfSearchAlreadyReady = _spreadResult.searchReadyForReuse;
 
             // If filtered/skipped at follow-time, try backup candidates first.
-            while (_sfCount === 0 && _sfSearchAlreadyReady && _sfBackupQueue.length > 0) {
+            while (!followDisabledForExecution && _sfCount === 0 && _sfSearchAlreadyReady && _sfBackupQueue.length > 0) {
               const _nextUser = _sfBackupQueue.shift()!;
               tLog(`  Spread Follow: @${_spreadUsername} filtered — trying backup @${_nextUser}`);
               _spreadResult = await _runOneSpreadSlot(_nextUser, _sfSearchAlreadyReady);
@@ -8069,7 +8088,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
 
             // Backup queue exhausted — do one HikerAPI re-scrape round.
-            if (_sfCount === 0 && _sfSearchAlreadyReady && _sfHikerToken && followSources.length) {
+            if (!followDisabledForExecution && _sfCount === 0 && _sfSearchAlreadyReady && _sfHikerToken && followSources.length) {
               tLog(`  Spread Follow: backup queue empty — re-scraping HikerAPI for replacement…`);
               try {
                 const _rsHiker = new HikerApiClient(_sfHikerToken);
@@ -8105,7 +8124,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 }
                 if (_sfBackupQueue.length) {
                   tLog(`  Spread Follow: re-scrape found ${_sfBackupQueue.length} new candidate(s)`);
-                  while (_sfCount === 0 && _sfSearchAlreadyReady && _sfBackupQueue.length > 0) {
+                  while (!followDisabledForExecution && _sfCount === 0 && _sfSearchAlreadyReady && _sfBackupQueue.length > 0) {
                     const _nextUser = _sfBackupQueue.shift()!;
                     tLog(`  Spread Follow: trying re-scraped @${_nextUser}`);
                     _spreadResult = await _runOneSpreadSlot(_nextUser, _sfSearchAlreadyReady);
@@ -8201,6 +8220,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 writeSkippedUsers: globalSkipSkipped,
                 profileId: mobileProfileId ?? undefined,
                 phoneSlotKey: mobileProfileId ? undefined : (slotUsername || undefined),
+                onSearchMiss: registerFollowSearchMiss,
               }, hstOperationContext);
               followedCount = followCount;
               steps.push(`follow(${followCount} followed)`);
