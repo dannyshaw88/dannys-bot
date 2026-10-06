@@ -104,7 +104,7 @@
 - [Windows LFS pointer line endings](windows-lfs-pointer-line-endings.md) — GitHub-written CRLF LFS pointers make Windows checkouts appear dirty; normalize pointers to LF before installer builds
 - [Males Only allowlist filter](males-only-allowlist-filter.md) — explicit comma-separated names match HikerAPI username, full name, or bio; never infer gender
 - [Mobile offline HST gate](mobile-offline-hst-gate.md) — pause all slot cycles on non-ready ADB state while preserving the saved toggle for reconnect resume
-- [Follow exact-target gate](follow-exact-target-gate.md) — never select a search result by row order; require an exact username node or abort and clear before the next target
+- [Follow exact-target gate](follow-exact-target-gate.md) — match exact username labels even if their text node is disabled; verify profile navigation before follow
 - [Private profile Inject Browsing gate](private-profile-inject-browsing.md) — detect the live private-profile notice before rolling browsing; still allow Follow when Skip Private is off
 - [Mobile account restriction screen](mobile-account-restriction-screen.md) — pause on Instagram’s “What happened” restriction overlay, tap live top-right close, verify dismissal, then resume
 - [UIAutomator attribute order](ui-automator-attribute-order.md) — parse complete nodes; never assume text/content-desc appears before bounds

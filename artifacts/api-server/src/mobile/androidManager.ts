@@ -15193,20 +15193,32 @@ export async function findAndTapUserInSearch(
     // Instagram builds the exact username label is not itself clickable even
     // though tapping its center opens the row, so actionOwnerIndex is not an
     // identity gate here.
-    const cleanLc = clean.toLocaleLowerCase();
+    const normalizeUsernameLabel = (value: string) =>
+      value
+        .normalize("NFKC")
+        .replace(/[\u200B-\u200F\uFEFF]/g, "")
+        .trim()
+        .toLocaleLowerCase();
+    const cleanLc = normalizeUsernameLabel(clean);
     const exactNames = new Set([cleanLc, `@${cleanLc}`]);
     const exactUserPositions: Array<{ x: number; y: number }> = [];
     const exactUserSeen = new Set<string>();
-    for (const node of _liveActionNodes(xml)) {
+    let disabledExactLabelCount = 0;
+    const searchNodes = _liveActionNodes(xml);
+    for (const node of searchNodes) {
       if (/android\.widget\.EditText$/i.test(node.className)) continue;
       if (node.resourceId.includes("/row_search_keyword_title") ||
           node.resourceId.includes("/search_keyword_title") ||
           node.resourceId.includes("/row_search_recent_chip") ||
           node.resourceId.includes("/search_recent_chip")) continue;
-      const text = node.text.trim().toLocaleLowerCase();
-      const desc = node.contentDesc.trim().toLocaleLowerCase();
+      const text = normalizeUsernameLabel(node.text);
+      const desc = normalizeUsernameLabel(node.contentDesc);
       if (!exactNames.has(text) && !exactNames.has(desc)) continue;
-      if (!node.enabled) continue;
+      if (!node.enabled) disabledExactLabelCount++;
+      // A result's username TextView can be marked disabled even though the
+      // enclosing row still responds to taps. Exact text establishes identity;
+      // the post-tap profile-surface check below must still confirm navigation
+      // before Follow proceeds.
       const x = node.x;
       const y = node.y;
       // Child and wrapper can both repeat the exact username. Prefer the
@@ -15220,6 +15232,12 @@ export async function findAndTapUserInSearch(
         exactUserPositions.push({ x, y });
       }
     }
+    if (disabledExactLabelCount > 0) {
+      onLog?.(
+        `Follow: @${clean} exact username matched ${disabledExactLabelCount} disabled label node(s); ` +
+        `retaining exact identity and requiring profile verification after tap`,
+      );
+    }
     exactUserPositions.sort((a, b) => a.y - b.y);
     if (exactUserPositions.length > 1) {
       onLog?.(
@@ -15230,7 +15248,7 @@ export async function findAndTapUserInSearch(
     }
     if (exactUserPositions.length === 0) {
       onLog?.(
-        `Follow: @${clean} exact username is not listed in a search result — target aborted safely`,
+        `Follow: @${clean} exact username label was not exposed by ${searchNodes.length} bounded accessibility nodes — target aborted safely`,
       );
       return { found: false };
     }
