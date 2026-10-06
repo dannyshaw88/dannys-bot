@@ -115,7 +115,7 @@
 - [Zero-weight swipe modes](zero-weight-swipe-modes.md) — an explicit 0–0 weight range disables a gesture; never treat zero as “not configured”
 - [Diagnostic API liveness](diagnostic-api-liveness.md) — child object presence and ChildProcess.killed do not prove the API is alive; track exit state and read the configured log
 - [Sharp Windows access violations](sharp-windows-access-violation.md) — serialize native Sharp screenshot decoding and keep libvips concurrency/cache conservative under multi-device polling
-- [Debug screenshot timestamp dedupe](debug-screenshot-timestamp-dedupe.md) — capture one composite per elapsed log timestamp; same-timestamp detail lines stay log-only
+- [Debug screenshot throttle](debug-screenshot-timestamp-dedupe.md) — cap screenshots at one per 2 seconds per device, never queue a backlog, and retain cycle-boundary frames
 - [Mobile tool discovery polling](mobile-tool-discovery-polling.md) — never run synchronous adb/emulator version probes on screenshot or device-status polling paths
 - [Mobile HST background rendering](mobile-hst-background-rendering.md) — keep hidden slot runtimes alive without mounting expensive editors or full settings hydration
 - [Account switch method rollout](account-switch-method-rollout.md) — alternate Profile-tab long-press switching is hardcoded internal variation, never an HST setting

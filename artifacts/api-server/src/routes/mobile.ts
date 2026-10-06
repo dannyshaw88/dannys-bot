@@ -853,11 +853,12 @@ const FOLDER_PATHS_DIR: string = process.env.EQUINOX_DATA_DIR
 try { fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true }); } catch { /* already exists */ }
 
 // Debug screenshots — one folder per public device model, cleared when a new
-// account's Human Session cycle starts. Each elapsed timestamp gets exactly one
-// screenshot; detail lines stamped with the same elapsed time are log-only.
+// account's Human Session cycle starts. Keep text logging at full detail, but
+// limit expensive ADB/Sharp composites to one every two seconds per device.
 const SCREENSHOTS_DIR: string = process.env.EQUINOX_DATA_DIR
   ? path.join(process.env.EQUINOX_DATA_DIR, "debug-screenshots")
   : path.join(path.dirname(path.resolve(process.argv[1] ?? ".")), "..", "debug-screenshots");
+const DEBUG_SCREENSHOT_MIN_INTERVAL_MS = 2_000;
 
 // Rolling per-device log buffer — last 40 lines, updated by pushDebugLogLine
 // which is called from tLog before captureDebugScreenshot so the current line
@@ -871,10 +872,12 @@ const debugLogBuffer = new Map<string, Array<{
 // text can incorrectly turn a Follow line containing "Reel" red.
 const debugLogContextBySerial = new Map<string, DebugScreenshotContext | null>();
 const DEBUG_LOG_BUFFER_SIZE = 40;
-// ADB screencap calls must be serialized per device. Without this queue, rapid
-// log lines start overlapping child processes and some frames never get saved.
+// Keep at most one debug screenshot in flight per device. Do not queue every
+// log row: an unbounded capture backlog can keep ADB and native image processing
+// busy long after the corresponding automation actions have finished.
 const debugScreenshotQueues = new Map<string, Promise<void>>();
-const debugScreenshotTimestamps = new Map<string, Set<string>>();
+const debugScreenshotLastStartedAt = new Map<string, number>();
+const debugScreenshotPendingFinal = new Map<string, { label: string; generation: number }>();
 // Incremented at every HST cycle boundary. A screenshot queued by the previous
 // cycle must not repopulate the folder after it is cleared.
 const debugScreenshotGenerations = new Map<string, number>();
@@ -1108,27 +1111,39 @@ async function captureDebugScreenshot(serial: string, label: string, generation:
   }
 }
 
-function queueDebugScreenshot(serial: string, timestamp: string, label: string): void {
-  let capturedTimestamps = debugScreenshotTimestamps.get(serial);
-  if (!capturedTimestamps) {
-    capturedTimestamps = new Set<string>();
-    debugScreenshotTimestamps.set(serial, capturedTimestamps);
-  }
-  if (capturedTimestamps.has(timestamp)) return;
-  capturedTimestamps.add(timestamp);
-  const generation = debugScreenshotGenerations.get(serial) ?? 0;
-
-  const previous = debugScreenshotQueues.get(serial) ?? Promise.resolve();
-  const next = previous
-    .catch(() => {})
+function startDebugScreenshot(serial: string, label: string, generation: number): void {
+  debugScreenshotLastStartedAt.set(serial, Date.now());
+  const next = Promise.resolve()
     .then(() => captureDebugScreenshot(serial, label, generation))
     .catch(() => {})
     .finally(() => {
-      if (debugScreenshotQueues.get(serial) === next) {
-        debugScreenshotQueues.delete(serial);
-      }
+      if (debugScreenshotQueues.get(serial) !== next) return;
+      debugScreenshotQueues.delete(serial);
+
+      // Keep a final cycle-boundary frame even when it arrived during another
+      // capture, while allowing at most one deferred frame per device.
+      const pendingFinal = debugScreenshotPendingFinal.get(serial);
+      if (!pendingFinal) return;
+      debugScreenshotPendingFinal.delete(serial);
+      if (debugScreenshotGenerations.get(serial) !== pendingFinal.generation) return;
+      startDebugScreenshot(serial, pendingFinal.label, pendingFinal.generation);
     });
   debugScreenshotQueues.set(serial, next);
+}
+
+function queueDebugScreenshot(serial: string, label: string): void {
+  const generation = debugScreenshotGenerations.get(serial) ?? 0;
+  const isCycleBoundary = /Cycle\s+(complete|failed|aborted)/i.test(label);
+
+  if (debugScreenshotQueues.has(serial)) {
+    if (isCycleBoundary) debugScreenshotPendingFinal.set(serial, { label, generation });
+    return;
+  }
+
+  const now = Date.now();
+  const lastStartedAt = debugScreenshotLastStartedAt.get(serial) ?? 0;
+  if (!isCycleBoundary && now - lastStartedAt < DEBUG_SCREENSHOT_MIN_INTERVAL_MS) return;
+  startDebugScreenshot(serial, label, generation);
 }
 
 function _folderPathFile(serial: string, slotIdx: number): string {
@@ -6629,10 +6644,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Push into the rolling buffer BEFORE capturing so the composite always
       // includes the current line in the log panel on the right.
       pushDebugLogLine(serial, fullLine);
-      // One frame per elapsed timestamp. Detail/status lines emitted during
-      // the same timestamp remain in the rolling log panel but do not start
-      // additional ADB/Sharp screenshot work.
-      queueDebugScreenshot(serial, elapsed, fullLine);
+      // Keep every row in the rolling text log, but sample the phone + log
+      // composite at a bounded rate instead of capturing once per row/timestamp.
+      queueDebugScreenshot(serial, fullLine);
       if (notebookStarted) {
         try { appendSlotCycleNotebook(serial, slotId, incomingCycleId, fullLine); }
         catch (error) { logger.warn({ err: error, serial, slotId }, "[mobile-cycle] notebook append failed"); }
@@ -6865,7 +6879,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }).catch(() => {});
 
       // Clear debug screenshots from the previous account's cycle so the new
-      // account starts fresh with its own 50-frame sequence.
+      // account starts fresh with its own screenshot sequence.
       debugScreenshotGenerations.set(
         serial,
         (debugScreenshotGenerations.get(serial) ?? 0) + 1,
@@ -6874,9 +6888,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // its backlog. In-flight work is generation-checked and will be dropped
       // before it can write into the freshly cleared directory.
       debugScreenshotQueues.delete(serial);
+      debugScreenshotLastStartedAt.delete(serial);
+      debugScreenshotPendingFinal.delete(serial);
       debugLogBuffer.delete(serial);
       debugLogContextBySerial.delete(serial);
-      debugScreenshotTimestamps.delete(serial);
       await fsPromises.rm(
         path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial)),
         { recursive: true, force: true },
@@ -9383,19 +9398,36 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const serial = p(req, "serial");
       android.resetDebugCaptures(serial);
-      const queues = new Map<string, Promise<void>>();
-      sessionRecorder.setScreenshotCapture((captureSerial, ts, label) => {
-        const previous = queues.get(captureSerial) ?? Promise.resolve();
-        const next = previous
-          .catch(() => {})
-          .then(async () => {
-            const file = await android.captureDebugScreenshot(captureSerial, ts, label);
+      const inFlight = new Set<string>();
+      const lastCaptureAt = new Map<string, number>();
+      const pendingFinal = new Map<string, { ts: number; label: string }>();
+      const startCapture = (captureSerial: string, ts: number, label: string) => {
+        inFlight.add(captureSerial);
+        lastCaptureAt.set(captureSerial, Date.now());
+        void android.captureDebugScreenshot(captureSerial, ts, label)
+          .then(file => {
             if (file) sessionRecorder.addScreenshot(captureSerial, ts, file, label);
           })
+          .catch(() => {})
           .finally(() => {
-            if (queues.get(captureSerial) === next) queues.delete(captureSerial);
+            inFlight.delete(captureSerial);
+            const finalCapture = pendingFinal.get(captureSerial);
+            if (!finalCapture) return;
+            pendingFinal.delete(captureSerial);
+            if (!sessionRecorder.isRecording(captureSerial)) return;
+            startCapture(captureSerial, finalCapture.ts, finalCapture.label);
           });
-        queues.set(captureSerial, next);
+      };
+      sessionRecorder.setScreenshotCapture((captureSerial, ts, label) => {
+        const isCycleBoundary = /Cycle\s+(complete|failed|aborted)/i.test(label);
+        if (inFlight.has(captureSerial)) {
+          if (isCycleBoundary) pendingFinal.set(captureSerial, { ts, label });
+          return;
+        }
+        const now = Date.now();
+        const lastStartedAt = lastCaptureAt.get(captureSerial) ?? 0;
+        if (!isCycleBoundary && now - lastStartedAt < DEBUG_SCREENSHOT_MIN_INTERVAL_MS) return;
+        startCapture(captureSerial, ts, label);
       });
       sessionRecorder.start(serial);
       logger.info({ serial }, "[session-recorder] recording started");

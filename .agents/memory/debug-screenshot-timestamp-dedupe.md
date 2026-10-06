@@ -1,10 +1,10 @@
 ---
-name: Debug screenshot timestamp dedupe
-description: Debug composites should capture one frame per elapsed log timestamp, not one frame per emitted log line
+name: Debug screenshot throttle
+description: Bound debug screenshot work while preserving full logs and cycle-boundary evidence
 ---
 
-The debug composite trigger is keyed by the elapsed timestamp generated at the start of each automation log line. Additional detail lines sharing that timestamp update the rolling log buffer but must not queue more ADB or image-processing work.
+Keep every automation log row, but capture no more than one debug screenshot per device every two seconds. Never queue a backlog of routine screenshots while a capture is in flight; coalesce only a pending cycle-complete/failed/aborted frame. Apply the same rate limit to optional Session Recorder screenshots.
 
-**Why:** A single automation timestamp can emit many status lines, and capturing each one created unnecessary screenshot load and contributed to native processing pressure.
+**Why:** Automation timestamps have 0.1-second precision, so frequent log rows can otherwise launch up to ten ADB screencaps per second per device. Each composite also resizes and rasterizes images through native Sharp/libvips, creating avoidable CPU and native-library pressure.
 
-**How to apply:** Clear the per-device timestamp set at the start of each new account cycle, then admit only the first log line for each elapsed timestamp into the screenshot queue.
+**How to apply:** Keep the two-second per-device minimum interval and one-in-flight rule. Reset throttle state at each new account cycle, retain full text logs, and allow one deferred final-cycle screenshot so the rate limit does not erase completion evidence.

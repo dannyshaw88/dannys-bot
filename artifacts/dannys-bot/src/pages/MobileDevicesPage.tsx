@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, UserRound, RotateCcw, Download, ChevronDown, Check } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, UserRound, RotateCcw, Download, ChevronDown, Check, Sun } from "lucide-react";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
@@ -1162,6 +1162,7 @@ function DeviceCard({
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [rebooting, setRebooting] = useState(false);
+  const [brightnessAdjusting, setBrightnessAdjusting] = useState<"up" | "down" | null>(null);
   const phoneAreaRef = useRef<HTMLDivElement>(null);
   const phoneFrameRef = useRef<HTMLDivElement>(null);
   const [simCenterX, setSimCenterX] = useState<number | null>(null);
@@ -1206,6 +1207,42 @@ function DeviceCard({
     }
     setTimeout(() => setRebooting(false), 15000);
   }, [device.serial, rebooting]);
+
+  const handleBrightnessAdjust = useCallback(async (
+    event: React.MouseEvent,
+    direction: "up" | "down",
+  ) => {
+    event.stopPropagation();
+    if (!device.serial || !online || rebooting || brightnessAdjusting !== null) return;
+
+    setBrightnessAdjusting(direction);
+    const url = `/api/mobile/devices/${encodeURIComponent(device.serial)}/brightness`;
+    try {
+      const currentResponse = await fetch(url);
+      const current = await currentResponse.json().catch(() => null);
+      if (!currentResponse.ok) {
+        throw new Error(current?.error ?? `Could not read device brightness (${currentResponse.status})`);
+      }
+      if (typeof current?.percent !== "number" || !Number.isFinite(current.percent)) {
+        throw new Error("Device returned an invalid brightness level");
+      }
+
+      const percent = Math.max(0, Math.min(100, current.percent + (direction === "up" ? 25 : -25)));
+      const updateResponse = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ percent }),
+      });
+      const result = await updateResponse.json().catch(() => null);
+      if (!updateResponse.ok || result?.ok !== true) {
+        throw new Error(result?.error ?? `Could not set device brightness (${updateResponse.status})`);
+      }
+    } catch (error) {
+      console.error(`[PhoneFarm] failed to ${direction === "up" ? "increase" : "decrease"} brightness`, error);
+    } finally {
+      setBrightnessAdjusting(null);
+    }
+  }, [device.serial, online, rebooting, brightnessAdjusting]);
 
   // ── Live mirror thumbnail ─────────────────────────────────────────────────
   // When the mirror is powered on (isStreaming), poll screencap.png every
@@ -1345,6 +1382,30 @@ function DeviceCard({
       {/* Persistent device controls — kept in the top-right so they are
           discoverable without hovering over the card. */}
       <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+        <button
+          onClick={event => { void handleBrightnessAdjust(event, "down"); }}
+          disabled={!online || rebooting || brightnessAdjusting !== null}
+          title="Decrease brightness by 25 percentage points"
+          aria-label="Decrease brightness by 25 percentage points"
+          data-testid={`button-brightness-down-${device.serial}`}
+          className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600 text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {brightnessAdjusting === "down"
+            ? <Loader2 className="w-3 h-3 animate-spin" />
+            : <span className="inline-flex items-center gap-px"><Sun className="w-3 h-3" /><span className="text-[9px] font-bold leading-none">−</span></span>}
+        </button>
+        <button
+          onClick={event => { void handleBrightnessAdjust(event, "up"); }}
+          disabled={!online || rebooting || brightnessAdjusting !== null}
+          title="Increase brightness by 25 percentage points"
+          aria-label="Increase brightness by 25 percentage points"
+          data-testid={`button-brightness-up-${device.serial}`}
+          className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-amber-500/10 hover:border-amber-500 hover:text-amber-600 text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {brightnessAdjusting === "up"
+            ? <Loader2 className="w-3 h-3 animate-spin" />
+            : <span className="inline-flex items-center gap-px"><Sun className="w-3 h-3" /><span className="text-[9px] font-bold leading-none">+</span></span>}
+        </button>
         <button
           onClick={handleRestart}
           disabled={rebooting}
