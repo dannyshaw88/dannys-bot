@@ -1,3 +1,14 @@
+## [1.2.581] — 2026-10-07
+
+### Fixed — Import Reel URL Validation
+
+- Import Reel accepts any valid HTTP(S) link, including profile-scoped Instagram Reel URLs, instead of requiring a fixed path format.
+- The user's link is added to every saved account slot while preserving each slot's processed-Reel history.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.581`.
+
 ## [1.2.580] — 2026-10-07
 
 ### Fixed — Repost from the Reel Viewer
