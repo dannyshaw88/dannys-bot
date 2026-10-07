@@ -31,6 +31,7 @@
 - [GitHub Actions Windows installer duplication](github-actions-windows-installer-duplication.md) — build-windows-installer.yml is canonical; keep deprecated stubs inert
 - [Git remote history and runtime-state cleanup](git-remote-runtime-state.md) — merge unrelated history; never force-push or track cookies, databases, or device tools
 - [Instagram Stories safety pointers](instagram-stories-safety.md) — consult the detailed notes for viewer timing/exits, action identity, dialog handling, tray markers, and composers
+- [Retired Story publisher](standalone-post-story-settings.md) — preserve legacy settings, but keep the unused publisher out of UI, Copy Settings, and automation dispatch
 - [Floating-windows recents close gesture](floating-windows-recents-close.md) — use a left-drag on the left-most card; repeat per app and poll pidof
 - [HST toggle self-echo](hst-toggle-self-echo.md) — mark locally accepted toggles before same-window broadcast so the originating runtime does not replay its own immediate ON
 - [DM share sheet blind-tap risk](dm-share-sheet-blind-tap.md) — confirm a modal sheet before coordinate-tapping; absence of a side effect does not prove it opened

@@ -80,20 +80,29 @@ Before changing Reel Viewer behavior:
 
 ## `artifacts/api-server/src/mobile/hst/operations/shareReel.ts`
 
+### `runShareReel`
+
+#### `Repost action and optional Like`
+
+- **Attempt:** Resolve the Repost control independently from the Like action set; tap Repost at most once, verify its changed state or explicit confirmation, then optionally Like.
+- **Status:** **Code/build validated; real-device confirmation pending.**
+- **Evidence:** Source tracing found that `findReelActionIcons` returns `null` when the Like anchor is absent, before exposing its otherwise independent Repost result. `runShareReel` treated that `null` as “Repost not found” and skipped the link. The standalone operation also had no Like action.
+- **Rule:** Require a unique clickable Repost-specific resource ID in the live right-side action column; never fall back to a generic label or guessed coordinate. Do not retry the Repost tap when its result is ambiguous. Like is optional, must be resolved from a fresh dump, and must not toggle an already-liked Reel.
+
 ### `shared this reel with you` popup
 
 - **Attempt:** Resolve the Reel action column immediately after the source URL opened.
 - **Status:** **Hardened.**
 - **Evidence:** The live dump showed `dialog_container` with `primary_button` = `Follow` and `negative_button` / `Not now`; this popup blocks the action column.
-- **Current behavior:** Detect the popup before Share to Feed, resolve the live `Not now` button, tap it, then re-dump before resolving Share to Feed.
-- **Rule:** Never press Share to Feed while this social-context popup is present.
+- **Current behavior:** Detect the popup before Repost, resolve the live `Not now` button, tap it, then re-dump before resolving the Repost control.
+- **Rule:** Never tap Repost while this social-context popup is present.
 
-### `Share Reel` exit
+### `Repost` exit
 
 - **Attempt:** Leave the source Reel open after processing.
 - **Status:** **Replaced.**
 - **Current behavior:** Always finish the selected-link run through the device's calibrated `settingsBack` control, including link failure paths.
-- **Rule:** Share Reel owns its viewer exit; do not use a guessed coordinate or generic Android Back.
+- **Rule:** Repost owns its viewer exit; do not use a guessed coordinate or generic Android Back.
 
 ## `artifacts/api-server/src/mobile/androidManager.ts`
 

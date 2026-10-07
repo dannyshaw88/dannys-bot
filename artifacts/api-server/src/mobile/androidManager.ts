@@ -6253,6 +6253,124 @@ export interface ReelActionIcons {
   alreadySaved: boolean;
 }
 
+export interface ReelRepostAction {
+  x: number;
+  y: number;
+  label: string;
+  alreadyReposted: boolean;
+}
+
+/**
+ * Resolve the Reel's Repost control independently from Like. The standalone
+ * Repost tool must still work when Instagram omits or mislabels the Like node.
+ * Identity remains strict: only verified Repost resource IDs qualify; label,
+ * icon order, and coordinates alone are never used as fallbacks.
+ */
+export async function findReelRepostAction(
+  serial: string,
+  onLog?: (msg: string) => void,
+  options?: { uiXml?: string },
+): Promise<ReelRepostAction | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = options?.uiXml ?? await _uiDump(adb, serial);
+  if (!xml) {
+    onLog?.("[reel-repost] UI dump unavailable — skipping Repost");
+    return null;
+  }
+  const sponsoredSignal = getSponsoredReelSignal(xml);
+  if (sponsoredSignal) {
+    onLog?.(`[reel-repost] sponsored Reel signal "${sponsoredSignal}" — skipping Repost`);
+    return null;
+  }
+
+  const repostResourceIds = [":id/repost_button", ":id/reposts_ufi_icon", ":id/repost_icon"];
+  const nodes = _liveActionNodes(xml);
+  const { w: screenW, h: screenH } = getScreenSize(serial);
+  const rightColumnInventory = nodes
+    .filter(node =>
+      node.x >= screenW * 0.68 &&
+      node.x < screenW * 0.98 &&
+      node.y >= screenH * 0.12 &&
+      node.y < screenH * 0.86 &&
+      node.width <= 220 &&
+      node.height <= 220,
+    )
+    .sort((a, b) => a.y - b.y);
+  onLog?.(
+    `[reel-repost] right-column inventory: ${
+      rightColumnInventory.map(node =>
+        `(${node.x},${node.y}) rid="${node.resourceId}" desc="${node.contentDesc}" ` +
+        `text="${node.text}" clickable=${node.clickable} owner=${node.actionOwnerIndex != null}`,
+      ).join(" | ") || "(none)"
+    }`,
+  );
+
+  const point = _findUniqueLiveActionNode(
+    xml,
+    repostResourceIds,
+    [],
+    onLog,
+    { allowDescriptionFallback: false },
+    nodes,
+  );
+  if (!point) return null;
+  if (
+    point.x < screenW * 0.68 ||
+    point.x >= screenW * 0.98 ||
+    point.y < screenH * 0.12 ||
+    point.y >= screenH * 0.86
+  ) {
+    onLog?.(
+      `[reel-repost] rejected Repost at (${point.x},${point.y}): outside the live right-side action column`,
+    );
+    return null;
+  }
+
+  const repostNode = nodes.find(node =>
+    node.x === point.x &&
+    node.y === point.y &&
+    repostResourceIds.some(suffix => node.resourceId === suffix || node.resourceId.endsWith(suffix)),
+  );
+  if (!repostNode) {
+    onLog?.("[reel-repost] rejected resolved point: matching resource node disappeared from the live dump");
+    return null;
+  }
+
+  const pointInside = (node: LiveActionNode) =>
+    point.x >= node.x1 && point.x <= node.x2 && point.y >= node.y1 && point.y <= node.y2;
+  const competingAction = nodes.find(node => {
+    if (node === repostNode || node.actionOwnerIndex == null) return false;
+    const id = node.resourceId.toLowerCase();
+    const label = node.contentDesc.trim() || node.text.trim();
+    const knownActionId =
+      [":id/like_button", ":id/comment_button", ":id/direct_share_button", ":id/save_button"]
+        .some(suffix => id === suffix || id.endsWith(suffix));
+    const knownActionLabel =
+      /^(?:like|unlike|comment|share|send|direct|message|add to saved|remove from saved)$/i.test(label);
+    return (knownActionId || knownActionLabel) && pointInside(node);
+  });
+  if (competingAction) {
+    onLog?.(
+      `[reel-repost] rejected Repost at (${point.x},${point.y}): point overlaps another live action ` +
+      `(rid="${competingAction.resourceId}" desc="${competingAction.contentDesc}")`,
+    );
+    return null;
+  }
+
+  const owner = repostNode.actionOwnerIndex == null ? null : nodes[repostNode.actionOwnerIndex];
+  const label =
+    [repostNode.contentDesc, repostNode.text, owner?.contentDesc, owner?.text]
+      .map(value => value?.trim() ?? "")
+      .find(Boolean) ?? "";
+  const alreadyReposted = /^(?:remove repost|reposted|undo repost|unrepost)\b/i.test(label);
+  onLog?.(
+    `[reel-repost] resolved verified Repost at (${point.x},${point.y}) ` +
+    `label="${label || "(none)"}" alreadyReposted=${alreadyReposted}`,
+  );
+  return { ...point, label, alreadyReposted };
+}
+
 /**
  * Returns the exact sponsored/ad signal exposed by the current Reel surface,
  * or null when the surface does not identify itself as an ad.

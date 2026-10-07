@@ -1,3 +1,14 @@
+## [1.2.579] — 2026-10-07
+
+### Removed — Post a Story
+
+- Removed the unused standalone story-publishing tool from the Human Session Tool panel, Copy Settings, and automated cycle dispatch.
+- Existing saved story-tool settings are retained for compatibility but are no longer executed.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.579`.
+
 ## [1.2.568] — 2026-10-03
 
 ### Fixed — Stop Follow When the Story Viewer Hasn’t Closed

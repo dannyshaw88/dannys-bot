@@ -1,10 +1,10 @@
 ---
-name: Standalone Post a Story settings
-description: Durable ownership and execution rules for the separate Human Session Tool Story publisher.
+name: Retired standalone Story publisher settings
+description: Compatibility rules after removal of the unused Human Session Tool Story publisher.
 ---
 
-The standalone Post a Story tool keeps behavioral settings (activation range, folder options, alteration, image filters, Fix AI Slop, and uniquification) in Trust Score templates and Copy Settings, but its local media directory is always owned by the physical device/account slot.
+The standalone Post a Story tool is retired from the HST panel, Copy Settings, activation, cycle dispatch, and operation module. Keep existing `postStory*` schema/default values and per-slot folder paths only for compatibility; they must not reactivate Story posting. Normal Make a Post remains feed-only.
 
-**Why:** Each slot may need a different local media source, while behavioral automation should stay consistent across accounts assigned to the same Trust Score.
+**Why:** The user no longer uses the tool and explicitly asked to remove it. Retaining old settings avoids rewriting existing configuration, while removing every dispatch path prevents a saved enabled flag from triggering automation.
 
-**How to apply:** Keep the Story directory out of behavioral copy operations and Trust Score template values. Persist it through a slot-specific store/endpoint and hydrate it after resolving Trust Score settings. Execute Story as its own shuffled Step 2 tool rather than restoring Story destinations to Make a Post.
+**How to apply:** Keep legacy fields at persistence boundaries but exclude the tool from visible UI, Copy Settings, activation, and normal/pre-switch dispatch. Remove or migrate those fields only with an explicit user-approved data migration.

@@ -75,7 +75,7 @@ type DebugTool =
   | "makePost"
   | "follow"
   | "randomActions"
-  | "postStory"
+  | "repost"
   | "updateProfile"
   | "updateBio";
 
@@ -90,7 +90,7 @@ const DEBUG_TOOL_COLORS: Record<DebugLogContext, string> = {
   makePost: "#c084fc",         // purple
   follow: "#60a5fa",           // blue
   randomActions: "#facc15",    // yellow
-  postStory: "#f472b6",        // pink
+  repost: "#fb7185",           // rose
   updateProfile: "#a3e635",    // lime
   updateBio: "#34d399",        // emerald
   accountSwitch: "#fbbf24",    // gold; the destination handle is pink below
@@ -110,9 +110,9 @@ function detectDebugToolHeader(message: string): DebugTool | null {
   if (/▶\s*(?:Direct Messaging|Check Inbox)\b/i.test(message)) return "directMessaging";
   if (/▶.*(?:View\s+)?Stories\b/i.test(message)) return "stories";
   if (/▶\s*Make a Post\b/i.test(message)) return "makePost";
+  if (/▶\s*Repost\b/i.test(message)) return "repost";
   if (/▶\s*Follow Users\b/i.test(message)) return "follow";
   if (/▶\s*Random Actions\b/i.test(message)) return "randomActions";
-  if (/▶\s*Post Story\b/i.test(message)) return "postStory";
   if (/▶\s*Update Profile(?: Picture)?\b/i.test(message)) return "updateProfile";
   if (/▶\s*Update Bio\b/i.test(message)) return "updateBio";
   return null;
@@ -6169,7 +6169,7 @@ export function AutomationSettingsPanel({
       "followFilterMalesOnly",
       "followFilterMaleNames",
     ]);
-    // Share Reel execution settings are inherited from the TrustScore.
+    // Repost execution settings are inherited from the TrustScore.
     // Only the source list remains editable on the physical HST slot.
     fields.delete("shareReelEnabled");
     return fields;
@@ -6435,7 +6435,6 @@ export function AutomationSettingsPanel({
   // Make a Post UI local state
   const [makePostImageSettingsOpen, setMakePostImageSettingsOpen] = useState(false);
   const [updateProfilePicImageSettingsOpen, setUpdateProfilePicImageSettingsOpen] = useState(false);
-  const [postStoryImageSettingsOpen, setPostStoryImageSettingsOpen] = useState(false);
   const [showPostedMedia, setShowPostedMedia] = useState(false);
   const [postedMediaEntries, setPostedMediaEntries] = useState<{
     id: string;
@@ -8699,20 +8698,20 @@ export function AutomationSettingsPanel({
           )}
         </div>
 
-        {/* ── Share Reel — independent URL deep-link publisher ─────────── */}
+        {/* ── Repost — independent Reel URL action ─────────────────────── */}
         <div className="border-t border-border" />
         <div className="space-y-3 relative">
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
-              id={`share-reel-enabled-${slotIdx ?? 0}`}
+              id={`repost-enabled-${slotIdx ?? 0}`}
               checked={settings.shareReelEnabled}
               onChange={e => setSettings(s => ({ ...s, shareReelEnabled: e.target.checked }))}
               disabled={fieldDisabled("shareReelEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
-            <label htmlFor={`share-reel-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">
-              Share Reel
+            <label htmlFor={`repost-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">
+              Repost
             </label>
             {settings.shareReelEnabled && (
               <>
@@ -8732,7 +8731,7 @@ export function AutomationSettingsPanel({
                   className="h-7 px-2.5 text-xs"
                   onClick={() => setShowShareReelShared(value => !value)}
                 >
-                  {showShareReelShared ? "Hide Shared" : "Shared"}
+                  {showShareReelShared ? "Hide Reposted" : "Reposted"}
                 </Button>
               </>
             )}
@@ -8809,7 +8808,7 @@ export function AutomationSettingsPanel({
                 </div>
               ) : (
                  <p className="text-xs text-muted-foreground">
-                   {settings.shareReelSources.length ? "All source links have been shared." : "No links added yet."}
+                    {settings.shareReelSources.length ? "All source links have been reposted." : "No links added yet."}
                  </p>
               )}
               <div className="flex items-center gap-2">
@@ -8842,7 +8841,7 @@ export function AutomationSettingsPanel({
            {settings.shareReelEnabled && showShareReelShared && (
              <div className="ml-1 border border-emerald-500/30 bg-emerald-500/5 rounded-lg p-3 space-y-2">
                <div className="flex items-center justify-between gap-3">
-                 <p className="text-xs font-semibold text-foreground">Shared</p>
+                  <p className="text-xs font-semibold text-foreground">Reposted</p>
                  <span className="text-xs text-muted-foreground">
                    {settings.shareReelProcessedLinks?.length ?? 0} completed
                  </span>
@@ -8852,12 +8851,12 @@ export function AutomationSettingsPanel({
                    {settings.shareReelProcessedLinks.map((link, index) => (
                      <div key={`${link}-${index}`} className="flex items-center gap-2 text-xs">
                        <span className="flex-1 truncate text-emerald-700 dark:text-emerald-300" title={link}>{link}</span>
-                       <span className="shrink-0 text-emerald-600 dark:text-emerald-400">Shared</span>
+                        <span className="shrink-0 text-emerald-600 dark:text-emerald-400">Reposted</span>
                      </div>
                    ))}
                  </div>
                ) : (
-                 <p className="text-xs text-muted-foreground">No shared links yet.</p>
+                  <p className="text-xs text-muted-foreground">No reposted links yet.</p>
                )}
              </div>
            )}
@@ -8907,229 +8906,6 @@ export function AutomationSettingsPanel({
             updateProfilePicMetadataCleanup: saved.metadataCleanup,
             updateProfilePicFrequencyDisruption: saved.frequencyDisruption,
           }))}
-        />
-
-        {/* ── Post a Story — standalone Story publisher. The directory is
-             persisted per physical device/account slot; the behavioral
-             settings are inherited from and copyable with Trust Scores. ─ */}
-        <div className="border-t border-border" />
-        <div className="space-y-3 relative">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id={`post-a-story-enabled-${slotIdx ?? 0}`}
-              checked={settings.postStoryEnabled}
-              onChange={e => setSettings(s => ({ ...s, postStoryEnabled: e.target.checked }))}
-              disabled={fieldDisabled("postStoryEnabled")}
-              className="w-4 h-4 accent-primary cursor-pointer"
-            />
-            <label htmlFor={`post-a-story-enabled-${slotIdx ?? 0}`} className="text-sm font-semibold text-foreground cursor-pointer select-none">
-              Post a Story
-            </label>
-          </div>
-
-          {settings.postStoryEnabled && (
-            <div className="pl-1 space-y-4">
-              {/* Keep activation and Story media controls on one shared row in
-                  both the live HST and the TrustScore template editor. */}
-              <div className="border border-border/60 rounded-lg p-3">
-                <div className="flex items-center flex-wrap gap-x-5 gap-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.postStoryActivatePctMin}
-                        onChange={e => setSettings(s => ({ ...s, postStoryActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={fieldDisabled("postStoryActivatePctMin")}
-                      />
-                      <span className="text-muted-foreground text-sm">to</span>
-                      <Input
-                        type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
-                        value={settings.postStoryActivatePctMax}
-                        onChange={e => setSettings(s => ({ ...s, postStoryActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
-                        disabled={fieldDisabled("postStoryActivatePctMax")}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-center">
-                    <button
-                      type="button"
-                      disabled={fieldDisabled("postStoryLocalFolderPath")}
-                      onClick={async () => {
-                        const api = (window as any).electronAPI;
-                        if (!api?.openFolderDialog) return;
-                        const result = await api.openFolderDialog(settings.postStoryLocalFolderPath || undefined);
-                        if (result?.canceled || !result?.folder) return;
-                        const updatedSettings = { ...settings, postStoryLocalFolderPath: result.folder };
-                        setSettings(() => updatedSettings);
-                        if (phone && slotIdx !== undefined) {
-                          fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/post-story-folder-path`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ path: result.folder }),
-                          }).catch(() => {});
-                        } else if (phone) {
-                          fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-settings`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(updatedSettings),
-                          }).catch(() => {});
-                        }
-                      }}
-                      className="h-7 px-3 text-xs rounded border border-border bg-background hover:border-foreground/30 hover:bg-accent transition-colors shrink-0 font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {settings.postStoryLocalFolderPath ? "Assigned Directory" : "Browse"}
-                    </button>
-                    {settings.postStoryLocalFolderPath && (
-                      <span className="max-w-[280px] truncate text-xs text-muted-foreground" title={settings.postStoryLocalFolderPath}>
-                        {settings.postStoryLocalFolderPath}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`post-a-story-local-no-repeat-${slotIdx ?? 0}`}
-                      checked={settings.postStoryLocalFolderNoRepeat}
-                      onChange={e => setSettings(s => ({ ...s, postStoryLocalFolderNoRepeat: e.target.checked }))}
-                      disabled={fieldDisabled("postStoryLocalFolderNoRepeat")}
-                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                    />
-                    <label htmlFor={`post-a-story-local-no-repeat-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                      Don't use same images
-                    </label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`post-a-story-local-random-${slotIdx ?? 0}`}
-                      checked={settings.postStoryLocalFolderRandom}
-                      onChange={e => setSettings(s => ({ ...s, postStoryLocalFolderRandom: e.target.checked }))}
-                      disabled={fieldDisabled("postStoryLocalFolderRandom")}
-                      className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                    />
-                    <label htmlFor={`post-a-story-local-random-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                      Pick randomly
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Link is the only Post a Story setting owned by the physical
-                  HST account slot. It is intentionally not part of the
-                  TrustScore template settings. */}
-              <div className="flex w-full items-center gap-3">
-                <input
-                  type="checkbox"
-                  id={`post-a-story-add-link-${slotIdx ?? 0}`}
-                  checked={settings.postStoryAddLink}
-                  onChange={e => setSettings(s => ({ ...s, postStoryAddLink: e.target.checked }))}
-                  disabled={fieldDisabled("postStoryAddLink")}
-                  className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                />
-                <label htmlFor={`post-a-story-add-link-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">
-                  Add Link
-                </label>
-                <Input
-                  type="url"
-                  value={settings.postStoryLinkUrl}
-                  onChange={e => setSettings(s => ({ ...s, postStoryLinkUrl: e.target.value }))}
-                  disabled={fieldDisabled("postStoryLinkUrl") || !settings.postStoryAddLink}
-                  placeholder="https://example.com"
-                  aria-label="Post a Story link URL"
-                  className="h-8 min-w-0 flex-1 w-full"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id={`post-a-story-alteration-enabled-${slotIdx ?? 0}`}
-                    checked={settings.postStoryAlterationEnabled}
-                    onChange={e => setSettings(s => ({ ...s, postStoryAlterationEnabled: e.target.checked }))}
-                    disabled={fieldDisabled("postStoryAlterationEnabled")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                  />
-                  <label htmlFor={`post-a-story-alteration-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">
-                    Alteration level
-                  </label>
-                  <div className="flex gap-1">
-                    {(["small", "medium", "high"] as const).map(lvl => (
-                      <button
-                        key={lvl}
-                        type="button"
-                        disabled={fieldDisabled("postStoryAlterationLevel") || !settings.postStoryAlterationEnabled}
-                        onClick={() => setSettings(s => ({ ...s, postStoryAlterationLevel: lvl }))}
-                        className={`h-8 px-3 text-xs rounded border transition-colors capitalize ${
-                          !settings.postStoryAlterationEnabled
-                            ? "bg-background border-border text-muted-foreground/40 cursor-not-allowed"
-                            : settings.postStoryAlterationLevel === lvl
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                        }`}
-                      >
-                        {lvl}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id={`post-a-story-image-settings-enabled-${slotIdx ?? 0}`}
-                    checked={settings.postStoryImageSettingsEnabled}
-                    onChange={e => setSettings(s => ({ ...s, postStoryImageSettingsEnabled: e.target.checked }))}
-                    disabled={fieldDisabled("postStoryImageSettingsEnabled")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer shrink-0"
-                  />
-                  <label htmlFor={`post-a-story-image-settings-enabled-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none shrink-0">
-                    Image settings
-                  </label>
-                  <button
-                    type="button"
-                    disabled={fieldDisabled("postStoryImageSettings") || !settings.postStoryImageSettingsEnabled}
-                    onClick={() => setPostStoryImageSettingsOpen(true)}
-                    className={`h-8 px-3 text-xs rounded border transition-colors ${
-                      settings.postStoryImageSettingsEnabled
-                        ? "bg-background border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                        : "bg-background border-border text-muted-foreground/40 cursor-not-allowed"
-                    }`}
-                  >
-                    Configure
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    id={`post-a-story-fix-ai-slop-${slotIdx ?? 0}`}
-                    checked={settings.postStoryFixAiSlop}
-                    onChange={e => setSettings(s => ({ ...s, postStoryFixAiSlop: e.target.checked }))}
-                    disabled={fieldDisabled("postStoryFixAiSlop")}
-                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
-                  />
-                  <label htmlFor={`post-a-story-fix-ai-slop-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">
-                    Fix AI Slop
-                  </label>
-                </div>
-
-              </div>
-            </div>
-          )}
-        </div>
-
-        <ImageSettingsDialog
-          open={postStoryImageSettingsOpen}
-          onClose={() => setPostStoryImageSettingsOpen(false)}
-          settings={settings.postStoryImageSettings}
-          alterationLevel={settings.postStoryAlterationLevel}
-          onSave={saved => setSettings(s => ({ ...s, postStoryImageSettings: saved }))}
         />
 
       </div>

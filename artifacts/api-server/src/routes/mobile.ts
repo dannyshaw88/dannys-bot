@@ -55,7 +55,6 @@ import {
   runViewReelsLoop as runViewReelsLoopOperation,
 } from "../mobile/hst/operations/viewReels";
 import { runMakePostStep as runMakePostStepOperation } from "../mobile/hst/operations/makePost";
-import { runMakePostStoryStep as runMakePostStoryStepOperation } from "../mobile/hst/operations/postStory";
 import { runShareReel as runShareReelOperation } from "../mobile/hst/operations/shareReel";
 import { runUpdateProfilePicture as runUpdateProfilePictureOperation } from "../mobile/hst/operations/updateProfilePicture";
 import { runUpdateBio as runUpdateBioOperation } from "../mobile/hst/operations/updateBio";
@@ -914,7 +913,6 @@ type DebugScreenshotTool =
   | "makePost"
   | "follow"
   | "randomActions"
-  | "postStory"
   | "updateProfile"
   | "updateBio";
 
@@ -929,7 +927,6 @@ const DEBUG_SCREENSHOT_TOOL_COLORS: Record<DebugScreenshotContext, string> = {
   makePost: "#c084fc",
   follow: "#60a5fa",
   randomActions: "#facc15",
-  postStory: "#f472b6",
   updateProfile: "#a3e635",
   updateBio: "#34d399",
   accountSwitch: "#fbbf24",
@@ -947,7 +944,6 @@ function detectDebugScreenshotToolHeader(line: string): DebugScreenshotTool | nu
   if (/▶\s*Make a Post\b/i.test(line)) return "makePost";
   if (/▶\s*Follow Users\b/i.test(line)) return "follow";
   if (/▶\s*Random Actions\b/i.test(line)) return "randomActions";
-  if (/▶\s*Post Story\b/i.test(line)) return "postStory";
   if (/▶\s*Update Profile(?: Picture)?\b/i.test(line)) return "updateProfile";
   if (/▶\s*Update Bio\b/i.test(line)) return "updateBio";
   return null;
@@ -3176,7 +3172,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     for (const [field, value] of Object.entries(template)) {
       if (FOLLOW_FILTER_FIELDS.has(field)) continue;
       if (TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) continue;
-      // Share Reel is template-controlled; only its source list belongs to
+      // Repost execution settings are template-controlled; only its source list belongs to
       // the physical HST slot.
       if (field === "shareReelEnabled") {
         effective[field] = Boolean(value);
@@ -5660,7 +5656,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const runViewExplorePage = (s: string, p: any) => runViewExplorePageOperation(s, p, hstOperationContext);
   const runViewReelsLoop = (s: string, p: any) => runViewReelsLoopOperation(s, p, hstOperationContext);
   const runMakePostStep = (s: string, p: any) => runMakePostStepOperation(s, p, hstOperationContext);
-  const runMakePostStoryStep = (s: string, p: any) => runMakePostStoryStepOperation(s, p, { ...hstOperationContext, slotIdx: p.slotIdx ?? 0 });
   const runShareReel = (s: string, p: any) => runShareReelOperation(s, p, {
     ...hstOperationContext,
     slotIdx: p.slotIdx ?? 0,
@@ -6806,10 +6801,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          makePostAddLocation,
         makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
         makePostImageSettings, makePostFixAiSlop, makePostMetadataCleanup, makePostFrequencyDisruption, makePostCaptionText,
-        postStoryEnabled, postStoryActivatePctMin, postStoryActivatePctMax,
-        postStoryLocalFolderPath, postStoryLocalFolderNoRepeat, postStoryLocalFolderRandom,
-        postStoryAlterationEnabled, postStoryAlterationLevel, postStoryImageSettingsEnabled,
-        postStoryImageSettings, postStoryFixAiSlop,
          shareReelEnabled, shareReelActivatePctMin, shareReelActivatePctMax,
          shareReelProcessMin, shareReelProcessMax, shareReelSources, shareReelProcessedLinks,
         slotUsername, slotIdx,
@@ -7092,7 +7083,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         follow: _activateTool("follow", "followEnabled", followActivatePctMin, followActivatePctMax),
         post: effectiveSettings.makePostEnabled === true &&
           _activateTool("post", "makePostEnabled", makePostActivatePctMin, makePostActivatePctMax),
-        postStory: _activateTool("postStory", "postStoryEnabled", postStoryActivatePctMin, postStoryActivatePctMax),
          shareReel: _activateTool("shareReel", "shareReelEnabled", shareReelActivatePctMin ?? 100, shareReelActivatePctMax ?? 100),
         // The master checkbox is a hard dispatch gate. Without this check,
         // the default 100% activation range could still enqueue Random
@@ -7109,10 +7099,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const _toolOrderLabels: Record<string, string> = {
         feed: "VIEW FEED", stories: "VIEW STORIES", explore: "VIEW EXPLORE",
          reels: "VIEW REELS", checkDm: "CHECK INBOX", follow: "FOLLOW USERS",
-         post: "MAKE A POST", postStory: "POST A STORY", shareReel: "SHARE REEL",
+         post: "MAKE A POST", shareReel: "REPOST",
          "Random Actions": "RANDOM ACTIONS",
       };
-      const _toolSeq = ["feed", "stories", "explore", "reels", "checkDm", "follow", "post", "postStory", "shareReel", "Random Actions"]
+      const _toolSeq = ["feed", "stories", "explore", "reels", "checkDm", "follow", "post", "shareReel", "Random Actions"]
         .filter(t => _toolActivated[t]);
       if (shuffleToolOrder) {
         for (let _si = _toolSeq.length - 1; _si > 0; _si--) {
@@ -7151,7 +7141,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             feedScrolled: 0,
             exploreScrolled: 0,
           };
-          // Share Reel uses URLs and history owned by the target slot. Do not
+          // Repost uses URLs and history owned by the target slot. Do not
           // run it while the previous Instagram account is still active.
           const preSwitchToolSeq = _toolSeq.filter(
             tool => tool !== "follow" && tool !== "shareReel" && !String(tool).startsWith("follow_spread:"),
@@ -7194,7 +7184,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               reels: "Reel Viewer",
               checkDm: "Check Inbox",
               post: "Make a Post",
-              postStory: "Post a Story",
               "Random Actions": "Random Actions",
             } as Record<string, string>)[preTool] ?? preTool);
             tLog(`▶ Pre-switch dispatch: ${_toolOrderLabels[preTool] ?? preTool}`);
@@ -7367,23 +7356,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 tLog("  Make a Post: upload still active; stopping this device cycle safely.");
                 throw new Error("make-post-upload-pending");
               }
-            } else if (preTool === "postStory") {
-              await runMakePostStoryStep(serial, {
-                localFolderPath: postStoryLocalFolderPath,
-                localFolderNoRepeat: postStoryLocalFolderNoRepeat,
-                localFolderRandom: postStoryLocalFolderRandom,
-                alterationEnabled: postStoryAlterationEnabled,
-                alterationLevel: postStoryAlterationLevel,
-                imageSettingsEnabled: postStoryImageSettingsEnabled,
-                imageSettings: postStoryImageSettings,
-                fixAiSlop: postStoryFixAiSlop,
-                addLink: postStoryAddLink,
-                linkUrl: postStoryLinkUrl,
-                onLog: (msg) => tLog(`  ${msg}`),
-              }).catch((e: any) => {
-                if (e?.message === "cycle-aborted") throw e;
-                tLog(`  ⚠ Pre-switch Post a Story skipped: ${e?.message ?? "unknown error"}`);
-              });
             } else if (preTool === "Random Actions") {
               await runRandomActionsStep(serial, (msg) => tLog(`  ${msg}`), {
                 checkNotificationsPctMin,
@@ -7769,7 +7741,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           checkDm: "Check Inbox",
           follow: "Follow Users",
           post: "Make a Post",
-          postStory: "Post a Story",
           "Random Actions": "Random Actions",
         };
         automationCurrentTool.set(
@@ -8263,8 +8234,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               for (let i = 0; i < postCount; i++) {
                 try {
                   tLog(`[TRACE] make-a-post: attempt ${i + 1}/${postCount}`);
-                  // Make a Post is feed-only. The preserved Story routine is
-                  // dispatched by the standalone Post a Story tool below.
+                  // Make a Post is feed-only; never redirect this flow to
+                  // Instagram's Story creator.
                   tLog("  Make a Post: destination → normal feed");
                   const result = await runMakePostStep(serial, {
                     localFolderPath: resolvedFolderPath,
@@ -8307,52 +8278,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             tLog("▶ Make a Post Activate Percentage roll missed — skipping this execution");
           }
 
-        // ── Post a Story ──────────────────────────────────────────────────
-        } else if (_tool === 'postStory') {
-          if (_toolActivated[_tool]) {
-            tLog("[TRACE] post-a-story: start");
-            const resolvedStoryFolderPath =
-              postStoryLocalFolderPath || getPostStoryFolderPath(serial, slotIdx);
-            if (!resolvedStoryFolderPath) {
-              steps.push("post-a-story(skipped — Local Folder source not configured)");
-              tLog("▶ Post a Story enabled but no Local Folder path configured — skipping");
-            } else {
-              tLog("▶ Post a Story — attempting one story from local folder…");
-              let posted = 0;
-              try {
-                const result = await runMakePostStoryStep(serial, {
-                  localFolderPath: resolvedStoryFolderPath,
-                  localFolderRandom: postStoryLocalFolderRandom,
-                  localFolderNoRepeat: postStoryLocalFolderNoRepeat,
-                  alterationEnabled: postStoryAlterationEnabled,
-                  alterationLevel: postStoryAlterationLevel,
-                  imageSettingsEnabled: postStoryImageSettingsEnabled,
-                  imageSettings: postStoryImageSettings,
-                  doFixAiSlop: postStoryFixAiSlop,
-                  onLog: (msg) => tLog(`  ${msg}`),
-                });
-                if (result.posted) {
-                  posted++;
-                  postsUploaded++;
-                  tLog("  Post a Story: upload confirmed — dwelling 5 s before continuing…");
-                  await sleepOrAbort(serial, 5000);
-                }
-              } catch (e: any) {
-                if (e?.message === "cycle-aborted") throw e;
-                tLog(`▶ Post a Story attempt error — ${e?.message}`);
-              }
-              steps.push(`post-a-story(${posted}/1 posted)`);
-              tLog(`▶ Post a Story done — ${posted}/1 posted`);
-            }
-          } else if (postStoryEnabled) {
-            steps.push("post-a-story(skipped — Activate Percentage roll missed this execution)");
-            tLog("▶ Post a Story Activate Percentage roll missed — skipping this execution");
-          }
-
-        // ── Share Reel — standalone deep-link tool ───────────────────────
+        // ── Repost — standalone deep-link tool ───────────────────────────
         } else if (_tool === 'shareReel') {
           if (_toolActivated[_tool] && shareReelEnabled) {
-            tLog("▶ Share Reel — opening configured Reel links directly");
+            tLog("▶ Repost — opening configured Reel links directly");
             try {
               const result = await runShareReel(serial, {
                 sources: shareReelSources ?? [],
@@ -8363,16 +8292,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 onLog: (msg: string) => tLog(`  ${msg}`),
               });
               sharesFeed += result.processed;
-              steps.push(`share-reel(${result.processed} shared, ${result.skipped} skipped)`);
-              tLog(`▶ Share Reel done — ${result.processed} shared, ${result.skipped} skipped`);
+              steps.push(`repost(${result.processed} completed, ${result.skipped} skipped)`);
+              tLog(`▶ Repost done — ${result.processed} completed, ${result.skipped} skipped`);
             } catch (e: any) {
               if (e?.message === "cycle-aborted") throw e;
-              steps.push("share-reel(failed)");
-              tLog(`▶ Share Reel error — ${e?.message ?? "unknown error"}`);
+              steps.push("repost(failed)");
+              tLog(`▶ Repost error — ${e?.message ?? "unknown error"}`);
             }
           } else if (shareReelEnabled) {
-            steps.push("share-reel(skipped — Activate Percentage roll missed this execution)");
-            tLog("▶ Share Reel Activate Percentage roll missed — skipping this execution");
+            steps.push("repost(skipped — Activate Percentage roll missed this execution)");
+            tLog("▶ Repost Activate Percentage roll missed — skipping this execution");
           }
 
         // ── Random Jitter ───────────────────────────────────────────────

@@ -678,20 +678,10 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postChatGptCaption',label: 'ChatGPT / caption settings',    fields: ['makePostUseChatGpt','makePostCaptionText'] },
     { key: 'postFixAiSlop',      label: 'Image cleanup',                 fields: ['makePostFixAiSlop','makePostMetadataCleanup','makePostFrequencyDisruption'] },
   ]},
-  { key: 'postStory',      label: 'Post a Story', sub: [
-    { key: 'storyPostEnabled',   label: 'Enabled',             fields: ['postStoryEnabled'] },
-    { key: 'storyPostActivate',  label: 'Activate Percentage', fields: ['postStoryActivatePctMin','postStoryActivatePctMax'] },
-    { key: 'storyPostOptions',   label: 'Directory options',   fields: ['postStoryLocalFolderNoRepeat','postStoryLocalFolderRandom'] },
-    { key: 'storyPostAddLink',   label: 'Add Link',             fields: ['postStoryAddLink'] },
-    { key: 'storyPostLinkUrl',   label: 'Link URL',             fields: ['postStoryLinkUrl'] },
-    { key: 'storyPostAlteration', label: 'Image Alteration',    fields: ['postStoryAlterationEnabled','postStoryAlterationLevel'] },
-    { key: 'storyPostImageSettings', label: 'Image Settings',   fields: ['postStoryImageSettingsEnabled','postStoryImageSettings'] },
-    { key: 'storyPostFixAiSlop', label: 'Fix AI Slop',           fields: ['postStoryFixAiSlop'] },
-  ]},
-  { key: 'shareReel',      label: 'Share Reel', sub: [
+  { key: 'shareReel',      label: 'Repost', sub: [
     { key: 'shareReelEnabled',  label: 'Enabled',             fields: ['shareReelEnabled'] },
     { key: 'shareReelActivate', label: 'Activate Percentage', fields: ['shareReelActivatePctMin','shareReelActivatePctMax'] },
-    { key: 'shareReelProcess',  label: 'Process amount',      fields: ['shareReelProcessMin','shareReelProcessMax'] },
-    { key: 'shareReelSources',  label: 'Sources',              fields: ['shareReelSources'] },
+    { key: 'shareReelProcess',  label: 'Reposts per run',     fields: ['shareReelProcessMin','shareReelProcessMax'] },
+    { key: 'shareReelSources',  label: 'Reel links',           fields: ['shareReelSources'] },
   ]},
 ];

@@ -43,6 +43,21 @@ sheet and being counted as success before the resulting surface was inspected.
 resolve it immediately before tapping and fail closed when the node is absent,
 ambiguous, too close to DM, out of vertical order, or opens the DM sheet.
 
+The standalone Repost tool must resolve its verified Repost resource ID
+independently from the combined Reel action scanner. That scanner currently
+requires a valid Like anchor and can return null before exposing Repost. A
+missing Like must not suppress Repost; Like remains optional and is checked
+from a fresh dump after Repost is confirmed.
+
+**Why:** The standalone tool opened a Reel, then did nothing when the shared
+action scanner rejected the action set because Like was missing. Repost was
+independently identifiable, but the operation treated the whole scan as failed.
+
+**How to apply:** Use the dedicated Repost resolver with verified resource IDs,
+right-column bounds, and cross-action collision checks. Never use a generic
+label or guessed coordinate; send no second Repost tap when the result is
+ambiguous.
+
 For Reels Share-to-Feed, require a verified repost-specific resource ID. Do not
 fall back to a generic `content-desc="Repost"` match: on a real device that
 fallback resolved a tap that opened the comment/reply sheet instead of the
