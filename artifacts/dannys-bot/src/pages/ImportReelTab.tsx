@@ -35,7 +35,6 @@ export function ImportReelTabContent() {
   const mutation = useMutation({
     mutationFn: importReelToAllSlots,
     onSuccess: async (data) => {
-      setUrl("");
       setResult(data);
       toast({
         title: "Reel imported",
@@ -50,7 +49,8 @@ export function ImportReelTabContent() {
           ),
       });
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, submittedUrl: string) => {
+      setUrl(current => current || submittedUrl);
       toast({
         title: "Reel import failed",
         description: error instanceof Error ? error.message : "Could not import this Reel.",
@@ -64,6 +64,7 @@ export function ImportReelTabContent() {
     const value = url.trim();
     if (!value || mutation.isPending) return;
     setResult(null);
+    setUrl("");
     mutation.mutate(value);
   };
 
