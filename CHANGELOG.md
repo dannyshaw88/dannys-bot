@@ -1,3 +1,14 @@
+## [1.2.582] — 2026-10-07
+
+### Fixed — Follow Search Result Timing
+
+- Follow now checks fresh search results briefly when Instagram has not exposed the exact username in its first accessibility snapshot.
+- It still opens a result only on an exact username match and confirms the profile before following.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.582`.
+
 ## [1.2.581] — 2026-10-07
 
 ### Fixed — Import Reel URL Validation
