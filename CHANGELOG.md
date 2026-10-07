@@ -1,3 +1,13 @@
+## [1.2.580] — 2026-10-07
+
+### Fixed — Repost from the Reel Viewer
+
+- Resolve Instagram’s ID-less Repost control only when its exact clickable label is uniquely anchored in the Reel’s right-side action column.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.580`.
+
 ## [1.2.579] — 2026-10-07
 
 ### Removed — Post a Story
