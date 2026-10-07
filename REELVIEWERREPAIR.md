@@ -116,6 +116,14 @@ Before changing Reel Viewer behavior:
 - **Current behavior:** Deduplicate and remove processed links, shuffle the remaining links without source-order bias, then take the configured count.
 - **Rule:** Do not restore the random-comparator sort; preserve processMin/processMax and processed-link filtering.
 
+#### `Global Settings → Import Reel`
+
+- **Attempt:** Add one pasted Reel URL to the Repost source list for every saved account slot.
+- **Status:** **Implemented; API/web builds, URL validation, and per-slot history smoke checks passed.**
+- **Evidence:** The helper test covered stable slot IDs, existing-source deduplication across tracking-query variants, preservation of unrelated settings and processed URLs, and repeat imports. Both live API listeners return the expected 400 response for a non-Instagram URL.
+- **Current behavior:** Canonicalize Instagram host aliases, tracking query values, fragments, and trailing slashes; append the URL only to `shareReelSources`; leave each slot's processed history unchanged.
+- **Rule:** Do not copy, clear, or overwrite `shareReelProcessedLinks`. Preserve all other slot settings and use canonical matching in import, UI filtering, and Repost execution.
+
 #### `Optional Save ribbon`
 
 - **Attempt:** Give each selected Reel an independent hardcoded chance, chosen from 1–100%, to tap Save after the optional Like.

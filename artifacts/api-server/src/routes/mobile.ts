@@ -60,6 +60,7 @@ import {
   normalizeReelSourceUrl,
   runShareReel as runShareReelOperation,
 } from "../mobile/hst/operations/shareReel";
+import { appendReelSourceToAllAccountSlots } from "../mobile/shareReelSourceImporter";
 import { runUpdateProfilePicture as runUpdateProfilePictureOperation } from "../mobile/hst/operations/updateProfilePicture";
 import { runUpdateBio as runUpdateBioOperation } from "../mobile/hst/operations/updateBio";
 import { runRandomActionsStep, type RandomActionsOperationContext } from "../mobile/hst/operations/randomActions";
@@ -3356,44 +3357,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (!reelUrl) return void res.status(400).json({ error: "Enter a Reel link from instagram.com." });
 
       const cfg = loadInstanceConfigs();
-      let totalSlots = 0;
-      let addedSlots = 0;
-      let alreadyPresentSlots = 0;
-      for (const [serial, instance] of Object.entries(cfg)) {
-        const slots = instance.account?.slots ?? [];
-        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
-          const slot = slots[slotIdx];
-          const stableKey = slotAutomationKey(serial, slotIdx, slot.slotId);
-          const existing = (
-            instance.slotAutomation?.[stableKey] ??
-            instance.slotAutomation?.[String(slotIdx)] ??
-            {}
-          ) as AutomationSettings;
-          const sources = Array.isArray(existing.shareReelSources)
-            ? existing.shareReelSources
-            : [];
-          totalSlots++;
-          if (sources.some(source => normalizeReelSourceUrl(source?.value) === reelUrl)) {
-            alreadyPresentSlots++;
-            continue;
-          }
+      const counts = appendReelSourceToAllAccountSlots(
+        cfg,
+        reelUrl,
+        slotAutomationKey,
+        normalizeReelSourceUrl,
+      );
 
-          instance.slotAutomation = {
-            ...instance.slotAutomation,
-            [stableKey]: {
-              ...existing,
-              shareReelSources: [...sources, { type: "link", value: reelUrl }],
-            },
-          };
-          addedSlots++;
-        }
-      }
-
-      if (totalSlots === 0) {
+      if (counts.totalSlots === 0) {
         return void res.status(409).json({ error: "No saved account slots were found." });
       }
-      if (addedSlots > 0) saveInstanceConfigs(cfg);
-      res.json({ ok: true, url: reelUrl, totalSlots, addedSlots, alreadyPresentSlots });
+      if (counts.addedSlots > 0) saveInstanceConfigs(cfg);
+      res.json({ ok: true, url: reelUrl, ...counts });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Reel import failed." });
     }

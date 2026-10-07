@@ -38,6 +38,7 @@
 - [Share-sheet label-scan exclusions](share-sheet-label-scan-exclusions.md) — exclude feed hashtags and counts so underlying nodes cannot pass as recipients
 - [Reel share-sheet resource-id alias](share-sheet-resource-id-alias.md) — require ancestor Chat evidence; the avatar ID is reused by WhatsApp/Share shortcuts
 - [Reel Viewer repair log](../../REELVIEWERREPAIR.md) — read the dedicated filename → tool → sub-setting ledger before another Reel action fix
+- [Import Reel per-slot history](repost-source-import.md) — share the canonical source URL across slots while preserving independent processed-link histories
 - [Per-device fast confirmation](per-device-fast-confirmation.md) — replace each slow confirmation callsite individually; fixing a shared helper does not fix inline sibling checks
 - [License auth is a single global session](license-global-session.md) — /api/license/login affects every browser tab using that server
 - [Make a Post image alteration scope](make-a-post-image-alteration-scope.md) — keep alteration controls in the shared caption section for every image source
