@@ -1136,7 +1136,13 @@ export async function runFollowUsersStep(
   // Its coordinates overlap controls in the viewer, so the Search taps would
   // otherwise repeat against the wrong screen while backups are consumed.
   if (!params.searchAlreadyReady) {
-    const storyViewerOrUnknown = await android.isInStoryViewerSlow(serial).catch(() => true);
+    const storyViewerOrUnknown = await android.isInStoryViewerSlow(
+      serial,
+      (message: string) => params.onLog?.(`Follow screen check: ${message}`),
+    ).catch((error: any) => {
+      params.onLog?.(`Follow screen check threw: ${error?.message ?? String(error)}; treating screen as unconfirmed`);
+      return true;
+    });
     if (storyViewerOrUnknown) {
       onLog?.("Follow: Story viewer or unverified Instagram screen remains open — aborting before Search navigation");
       params.onSearchReadyForReuse?.(false);

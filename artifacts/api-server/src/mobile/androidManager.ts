@@ -10474,11 +10474,35 @@ async function findHomeTabInternal(
  * causes a harmless mis-advance; a wrong "closed" causes blind taps on
  * whatever is underneath — the exact failure this check exists to prevent.
  */
-export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  const xml = await _uiDump(adb, serial).catch(() => null);
-  if (!xml) return true; // dump failed → assume still in viewer (safe default)
+export async function isInStoryViewerSlow(
+  serial: string,
+  onDiagnostic?: (message: string) => void,
+): Promise<boolean> {
+  const report = onDiagnostic
+    ? (message: string) => {
+        try { onDiagnostic(message); } catch { /* diagnostics must not affect the safety check */ }
+      }
+    : undefined;
+  const classify = (storyViewer: boolean, reason: string) => {
+    report?.(`screen classification=${storyViewer ? "story-viewer" : "not-story-viewer"}; reason=${reason}`);
+    return storyViewer;
+  };
+
+  let xml: string;
+  try {
+    const tools = detectToolset();
+    const adb = requireTool(tools.adb, "adb");
+    xml = await _uiDump(adb, serial, report);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    report?.(`screen-state probe threw: ${detail.slice(0, 300)}`);
+    report?.("screen classification=unknown; fail-closed as story-viewer-or-unknown");
+    return true;
+  }
+  if (!xml) {
+    report?.("screen classification=unknown; no complete UIAutomator XML; fail-closed as story-viewer-or-unknown");
+    return true;
+  }
 
   // ── 0. Standalone Reels player — NOT the story viewer ────────────────────
   // The Reels player (opened by tapping a Reel in the feed or the Reels tab)
@@ -10503,13 +10527,16 @@ export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
     ":id/reels_viewer",
     ":id/reels_player",
   ];
-  const hasReelsPlayerMarker = REELS_PLAYER_MARKERS.some(m => xml.includes(m));
+  const matchedReelsPlayerMarker = REELS_PLAYER_MARKERS.find(m => xml.includes(m));
+  const hasReelsPlayerMarker = Boolean(matchedReelsPlayerMarker);
   // Also catch the "Reels" header title that appears in the top bar of the
   // standalone Reels player (content-desc or text node).
   const hasReelsHeader =
     /content-desc="Reels"/.test(xml) ||
     /text="Reels"/.test(xml);
-  if (hasReelsPlayerMarker || hasReelsHeader) return false;
+  if (hasReelsPlayerMarker || hasReelsHeader) {
+    return classify(false, matchedReelsPlayerMarker ? `Reels-player marker ${matchedReelsPlayerMarker}` : "Reels header");
+  }
 
   // ── 1. Positive story-viewer markers ─────────────────────────────────────
   // Any of these resource-id substrings are only present when the story
@@ -10525,9 +10552,8 @@ export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
     "story_viewer",          // older IG builds use story_viewer_* resource IDs
     "tray_viewer",           // some builds: tray_viewer_container
   ] as const;
-  for (const marker of STORY_MARKERS) {
-    if (xml.includes(marker)) return true;
-  }
+  const matchedStoryMarker = STORY_MARKERS.find(marker => xml.includes(marker));
+  if (matchedStoryMarker) return classify(true, `Story-viewer marker ${matchedStoryMarker}`);
 
   // ── 1b. Newer Story viewer layout fallback ─────────────────────────────
   // Some Instagram builds expose none of the historical story/reel viewer
@@ -10544,7 +10570,9 @@ export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
   const hasStoryActionSignal =
     /(?:content-desc|text)="(?:Like Story|Share Story|Send)"/i.test(xml) ||
     /(?:toolbar_like|story_like|story_share|story_action|reshare)/i.test(xml);
-  if (hasStoryReplyBar && hasStoryActionSignal) return true;
+  if (hasStoryReplyBar && hasStoryActionSignal) {
+    return classify(true, "Story reply bar paired with a Story action");
+  }
 
   // ── 1a. Story-creation / media-picker screen — NOT the viewer ────────────
   // If the device accidentally opened the "Add to story" upload editor (e.g.
@@ -10557,18 +10585,18 @@ export async function isInStoryViewerSlow(serial: string): Promise<boolean> {
     /text="Add to story"/i.test(xml) ||
     /content-desc="Add to story"/i.test(xml)
   ) {
-    return false;
+    return classify(false, "Story creation editor");
   }
 
   // ── 2. Home-tab check — content-desc and resource-id ONLY ────────────────
   // Deliberately no positional fallback here (that's what caused the bug).
   const homeByDesc = /content-desc="Home[^"]*"/.test(xml);
-  if (homeByDesc) return false;
+  if (homeByDesc) return classify(false, "Home tab content description");
   const homeById = _findByResId(xml, ":id/feed_tab", ":id/home_tab");
-  if (homeById) return false;
+  if (homeById) return classify(false, "Home tab resource ID");
 
   // ── 3. Ambiguous — default to "still in viewer" ───────────────────────────
-  return true;
+  return classify(true, "ambiguous XML has neither Story nor Home markers; fail-closed");
 }
 
 /**
@@ -11734,9 +11762,18 @@ export async function switchToInstagramAccount(
  * the layout scan and "0 keys mapped" for the keyboard, even with the
  * keyboard genuinely open.
  */
-async function _uiDumpOnce(adb: string, serial: string): Promise<string> {
+async function _uiDumpOnce(
+  adb: string,
+  serial: string,
+  onDiagnostic?: (message: string) => void,
+): Promise<string> {
   const tmpDev = "/sdcard/equinox_ui_dump.xml";
   const tmpHost = path.join(os.tmpdir(), `equinox-ui-${serial.replace(/[^a-z0-9]/gi, "-")}.xml`);
+  const report = onDiagnostic
+    ? (message: string) => {
+        try { onDiagnostic(message); } catch { /* diagnostics must not affect the UI dump */ }
+      }
+    : undefined;
   // CRITICAL: use async spawn (not spawnSync) so the Node event loop stays
   // free during the UIAutomator dump. spawnSync was blocking the entire
   // event loop, preventing the video WebSocket from flushing frames to the
@@ -11747,38 +11784,132 @@ async function _uiDumpOnce(adb: string, serial: string): Promise<string> {
   // (search "Recent" results) plus an open soft keyboard can take the
   // on-device dump noticeably longer than a simple static screen, and
   // killing it mid-write is what produced truncated XML in the first place.
-  await new Promise<void>((resolve) => {
-    const child = spawn(adb, ["-s", serial, "shell", "uiautomator", "dump", tmpDev], { stdio: "ignore" });
-    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 9000);
-    child.on("close", () => { clearTimeout(t); resolve(); });
-    child.on("error", () => { clearTimeout(t); resolve(); });
+  type AdbCommandResult = {
+    ok: boolean;
+    exitCode: number | null;
+    signal: string | null;
+    timedOut: boolean;
+    spawnError: string | null;
+    stdout: string;
+    stderr: string;
+  };
+  const runAdbCommand = (
+    phase: string,
+    args: string[],
+    timeoutMs: number,
+  ): Promise<AdbCommandResult> => new Promise(resolve => {
+    let settled = false;
+    let stdout = "";
+    let stderr = "";
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (result: Omit<AdbCommandResult, "stdout" | "stderr">) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      const normalizedStdout = stdout.replace(/\s+/g, " ").trim().slice(0, 400);
+      const normalizedStderr = stderr.replace(/\s+/g, " ").trim().slice(0, 400);
+      const completed = { ...result, stdout: normalizedStdout, stderr: normalizedStderr };
+      const output = [
+        normalizedStdout ? `stdout="${normalizedStdout}"` : "",
+        normalizedStderr ? `stderr="${normalizedStderr}"` : "",
+      ].filter(Boolean).join(", ");
+      const outputSuffix = output ? `; ${output}` : "";
+      if (completed.timedOut) {
+        report?.(`ADB ${phase} timed out after ${timeoutMs}ms${outputSuffix}`);
+      } else if (completed.spawnError) {
+        report?.(`ADB ${phase} could not start: ${completed.spawnError.slice(0, 300)}`);
+      } else if (!completed.ok) {
+        const signal = completed.signal ? `, signal=${completed.signal}` : "";
+        report?.(`ADB ${phase} failed: exit=${completed.exitCode ?? "unknown"}${signal}${outputSuffix}`);
+      } else {
+        report?.(`ADB ${phase} completed: exit=0${outputSuffix}`);
+      }
+      resolve(completed);
+    };
+
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(adb, args, {
+        stdio: report ? ["ignore", "pipe", "pipe"] : "ignore",
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      finish({ ok: false, exitCode: null, signal: null, timedOut: false, spawnError: detail });
+      return;
+    }
+
+    child.stdout?.on("data", chunk => {
+      if (stdout.length < 400) stdout += chunk.toString("utf8").slice(0, 400 - stdout.length);
+    });
+    child.stderr?.on("data", chunk => {
+      if (stderr.length < 400) stderr += chunk.toString("utf8").slice(0, 400 - stderr.length);
+    });
+    child.once("error", error => {
+      finish({ ok: false, exitCode: null, signal: null, timedOut: false, spawnError: error.message });
+    });
+    child.once("close", (code, signal) => {
+      finish({
+        ok: code === 0,
+        exitCode: code,
+        signal: signal ? String(signal) : null,
+        timedOut: false,
+        spawnError: null,
+      });
+    });
+    timer = setTimeout(() => {
+      try { child.kill(); } catch { /* timeout is still recorded below */ }
+      finish({ ok: false, exitCode: null, signal: null, timedOut: true, spawnError: null });
+    }, timeoutMs);
   });
-  await new Promise<void>((resolve) => {
-    const child = spawn(adb, ["-s", serial, "pull", tmpDev, tmpHost], { stdio: "ignore" });
-    const t = setTimeout(() => { try { child.kill(); } catch { /**/ } resolve(); }, 6000);
-    child.on("close", () => { clearTimeout(t); resolve(); });
-    child.on("error", () => { clearTimeout(t); resolve(); });
-  });
+
+  const dumpResult = await runAdbCommand(
+    "uiautomator dump",
+    ["-s", serial, "shell", "uiautomator", "dump", tmpDev],
+    9000,
+  );
+  // For diagnostic callers, a failed dump must not be followed by a pull of
+  // potentially stale XML. The caller will keep its existing fail-closed path.
+  if (report && !dumpResult.ok) return "";
+
+  const pullResult = await runAdbCommand("UI XML pull", ["-s", serial, "pull", tmpDev, tmpHost], 6000);
+  if (report && !pullResult.ok) return "";
   try {
     const xml = fs.readFileSync(tmpHost, "utf8");
     try { fs.unlinkSync(tmpHost); } catch { /**/ }
+    report?.(`UIAutomator XML read: ${xml.length} characters`);
     return xml;
-  } catch { return ""; }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    report?.(`UIAutomator XML read failed: ${detail.slice(0, 300)}`);
+    return "";
+  }
 }
 
-async function _uiDump(adb: string, serial: string): Promise<string> {
+async function _uiDump(
+  adb: string,
+  serial: string,
+  onDiagnostic?: (message: string) => void,
+): Promise<string> {
+  const report = onDiagnostic
+    ? (message: string) => {
+        try { onDiagnostic(message); } catch { /* diagnostics must not affect the UI dump */ }
+      }
+    : undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const xml = await _uiDumpOnce(adb, serial);
+    const xml = await _uiDumpOnce(adb, serial, report);
     // A complete dump always closes its root element. A truncated write
     // (killed mid-dump, or a partial pull) is missing this — retry instead
     // of silently handing back a document that's only populated near the
     // top of the tree.
     if (xml && xml.includes("</hierarchy>")) {
       recorder.addDump(serial, xml);
+      report?.(`Complete UIAutomator XML accepted on attempt ${attempt + 1}/3`);
       return xml;
     }
+    report?.(`UIAutomator XML was ${xml ? "incomplete" : "empty"} on attempt ${attempt + 1}/3`);
     if (attempt < 2) await _sleep(400);
   }
+  report?.("No complete UIAutomator XML after 3 attempts");
   return "";
 }
 

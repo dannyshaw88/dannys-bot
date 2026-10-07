@@ -177,7 +177,13 @@ export async function pickAndOpenRandomStory(serial: string, w: number, h: numbe
       const stillOnFeedFast = await android.isStoryViewerOpenFast(serial).catch(() => null);
       const storyOpen = stillOnFeedFast === true
         ? true
-        : await android.isInStoryViewerSlow(serial).catch(() => false);
+        : await android.isInStoryViewerSlow(
+            serial,
+            (message: string) => onLog?.(`Story bubble verification: ${message}`),
+          ).catch((error: any) => {
+            onLog?.(`Story bubble verification threw: ${error?.message ?? String(error)}`);
+            return false;
+          });
       if (storyOpen) {
         onLog?.(`Story tray: "${bubble.desc}" opened successfully`);
         return { slot: attempt + 1, opened: true };
@@ -196,7 +202,13 @@ export async function prepareViewStoriesEntry(
   context: ViewStoriesOperationContext,
 ): Promise<{ alreadyInStoryViewer: boolean; slot: number; opened: boolean }> {
   const { android, getScreenSize, sleepOrAbort } = context;
-  const alreadyInStoryViewer = await android.isInStoryViewerSlow(serial).catch(() => false);
+  const alreadyInStoryViewer = await android.isInStoryViewerSlow(
+    serial,
+    (message: string) => onLog(`Stories entry screen check: ${message}`),
+  ).catch((error: any) => {
+    onLog(`Stories entry screen check threw: ${error?.message ?? String(error)}`);
+    return false;
+  });
   if (alreadyInStoryViewer) {
     onLog("Stories: already in Story viewer — skipping Home and story-bubble taps");
     return { alreadyInStoryViewer: true, slot: 0, opened: true };
@@ -338,7 +350,13 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
       // matched the story viewer's own bottom-bar clickables ("Send message"
       // input + heart/share icons all sit at y > 88%), making it return
       // non-null and falsely concluding the viewer was closed.
-      const result = await android.isInStoryViewerSlow(serial).catch(() => false);
+      const result = await android.isInStoryViewerSlow(
+        serial,
+        (message: string) => params.onLog?.(`Story loop screen check: ${message}`),
+      ).catch((error: any) => {
+        params.onLog?.(`Story loop screen check threw: ${error?.message ?? String(error)}`);
+        return false;
+      });
       onLog?.(`  (story-viewer check: fast scan ${slowStart - fastStart}ms inconclusive → slow dump ${Date.now() - slowStart}ms)`);
       return result;
     };
@@ -915,9 +933,21 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
       "back",
     );
     await sleepOrAbort(serial, 800);
-    let storyViewerExitUnconfirmed = await android.isInStoryViewerSlow(serial).catch(() => true);
+    const confirmStoryViewerExit = async (stage: string): Promise<boolean> => {
+      try {
+        return await android.isInStoryViewerSlow(serial, (message: string) => {
+          params.onLog?.(`Story exit check (${stage}): ${message}`);
+        });
+      } catch (error: any) {
+        const detail = error?.message ?? String(error);
+        params.onLog?.(`Story exit check (${stage}) threw: ${detail}; treating screen as unconfirmed`);
+        return true;
+      }
+    };
+
+    let storyViewerExitUnconfirmed = await confirmStoryViewerExit("after swipe");
     if (storyViewerExitUnconfirmed) {
-      onLog?.("Story exit: viewer dismissal is not confirmed after the swipe — pressing Android Back once");
+      onLog?.("Story exit: screen is still unconfirmed after the swipe — pressing Android Back once");
       try {
         await android.pressBack(serial);
       } catch (error: any) {
@@ -925,10 +955,10 @@ export async function runViewStoriesFromFeedLoop(serial: string, params: {
         onLog?.(`Story exit: Android Back fallback failed — ${error?.message ?? "unknown error"}`);
       }
       await sleepOrAbort(serial, 800);
-      storyViewerExitUnconfirmed = await android.isInStoryViewerSlow(serial).catch(() => true);
+      storyViewerExitUnconfirmed = await confirmStoryViewerExit("after Android Back");
     }
     if (storyViewerExitUnconfirmed) {
-      onLog?.("Story exit: viewer dismissal remains unconfirmed — stopping the tool sequence before further phone input");
+      onLog?.("Story exit: screen remains unconfirmed after the swipe and one Android Back — stopping before further phone input");
       throw new Error("instagram-screen-state-unconfirmed");
     }
     onLog?.("Story exit: viewer dismissal confirmed");
