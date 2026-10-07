@@ -56,7 +56,7 @@ import {
 } from "../mobile/hst/operations/viewReels";
 import { runMakePostStep as runMakePostStepOperation } from "../mobile/hst/operations/makePost";
 import {
-  normalizeInstagramReelImportUrl,
+  normalizeRepostImportUrl,
   normalizeReelSourceUrl,
   runShareReel as runShareReelOperation,
 } from "../mobile/hst/operations/shareReel";
@@ -3346,15 +3346,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Split failed" }); }
   });
 
-  // Import one shared Reel URL into each persisted account slot without
+  // Import one shared Repost source URL into each persisted account slot without
   // replacing its other Repost sources or its per-account processed history.
   app.post("/api/mobile/share-reel/import", (req: Request, res: Response) => {
     try {
       const input = typeof req.body?.url === "string" ? req.body.url.trim() : "";
-      if (!input) return void res.status(400).json({ error: "Paste an Instagram Reel URL." });
+      if (!input) return void res.status(400).json({ error: "Paste a source URL." });
 
-      const reelUrl = normalizeInstagramReelImportUrl(input);
-      if (!reelUrl) return void res.status(400).json({ error: "Enter a Reel link from instagram.com." });
+      const reelUrl = normalizeRepostImportUrl(input);
+      if (!reelUrl) return void res.status(400).json({ error: "Enter a valid HTTP or HTTPS link." });
 
       const cfg = loadInstanceConfigs();
       const counts = appendReelSourceToAllAccountSlots(

@@ -76,7 +76,7 @@ export function normalizeReelSourceUrl(value: string): string | null {
   }
 }
 
-export function normalizeInstagramReelImportUrl(value: string): string | null {
+export function normalizeRepostImportUrl(value: string): string | null {
   const raw = value.trim();
   if (!raw) return null;
   const candidate = raw.startsWith("//")
@@ -86,22 +86,11 @@ export function normalizeInstagramReelImportUrl(value: string): string | null {
       : `https://${raw}`;
   try {
     const parsed = new URL(candidate);
-    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
-    const isInstagramHost = hostname === "instagram.com" || hostname.endsWith(".instagram.com");
-    const [firstPathSegment, secondPathSegment] = parsed.pathname.split("/").filter(Boolean);
-    const firstSegment = firstPathSegment?.toLowerCase() ?? "";
-    const hasReelPath = (
-      ["reel", "reels", "p"].includes(firstSegment) && Boolean(secondPathSegment)
-    ) || (
-      firstSegment === "share" && Boolean(secondPathSegment)
-    );
     if (
       (parsed.protocol !== "https:" && parsed.protocol !== "http:") ||
-      !isInstagramHost ||
-      Boolean(parsed.port) ||
+      !parsed.hostname ||
       parsed.username ||
-      parsed.password ||
-      !hasReelPath
+      parsed.password
     ) return null;
     return normalizeReelSourceUrl(parsed.toString());
   } catch {

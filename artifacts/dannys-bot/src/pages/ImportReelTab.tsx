@@ -31,11 +31,13 @@ export function ImportReelTabContent() {
   const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
   const [result, setResult] = useState<ImportReelResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: importReelToAllSlots,
     onSuccess: async (data) => {
       setResult(data);
+      setErrorMessage(null);
       toast({
         title: "Reel imported",
         description: `Added to ${data.addedSlots} account slot${data.addedSlots === 1 ? "" : "s"}; already present in ${data.alreadyPresentSlots} slot${data.alreadyPresentSlots === 1 ? "" : "s"}. Processed history was preserved.`,
@@ -51,6 +53,7 @@ export function ImportReelTabContent() {
     },
     onError: (error: unknown, submittedUrl: string) => {
       setUrl(current => current || submittedUrl);
+      setErrorMessage(error instanceof Error ? error.message : "Could not import this link.");
       toast({
         title: "Reel import failed",
         description: error instanceof Error ? error.message : "Could not import this Reel.",
@@ -64,6 +67,7 @@ export function ImportReelTabContent() {
     const value = url.trim();
     if (!value || mutation.isPending) return;
     setResult(null);
+    setErrorMessage(null);
     setUrl("");
     mutation.mutate(value);
   };
@@ -77,14 +81,14 @@ export function ImportReelTabContent() {
         <div>
           <h2 className="text-lg font-semibold">Import Reel</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Add one Instagram Reel URL to the Repost sources for every saved account slot.
+            Add any HTTP or HTTPS link to the Repost sources for every saved account slot.
           </p>
         </div>
       </div>
 
       <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row">
         <div className="min-w-0 flex-1">
-          <label className="sr-only" htmlFor="import-reel-url">Instagram Reel URL</label>
+          <label className="sr-only" htmlFor="import-reel-url">Source URL</label>
           <Input
             id="import-reel-url"
             type="text"
@@ -93,7 +97,7 @@ export function ImportReelTabContent() {
             spellCheck={false}
             value={url}
             onChange={event => setUrl(event.target.value)}
-            placeholder="https://www.instagram.com/reel/…"
+            placeholder="https://example.com/..."
             aria-describedby="import-reel-help"
             disabled={mutation.isPending}
           />
@@ -108,8 +112,12 @@ export function ImportReelTabContent() {
       </form>
 
       <p id="import-reel-help" className="text-xs leading-relaxed text-muted-foreground">
-        Existing Repost sources stay in place. Each account keeps its own processed-Reel history, so a link already visited by one account remains completed only for that account.
+        Any valid HTTP(S) URL is accepted; its path does not need to match a specific format. Existing sources stay in place, and each account keeps its own processed-Reel history.
       </p>
+
+      {errorMessage && (
+        <p role="alert" className="text-sm text-destructive">{errorMessage}</p>
+      )}
 
       {result && (
         <div role="status" className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
