@@ -6261,10 +6261,12 @@ export interface ReelRepostAction {
 }
 
 /**
- * Resolve the Reel's Repost control independently from Like. The standalone
- * Repost tool must still work when Instagram omits or mislabels the Like node.
- * Identity remains strict: only verified Repost resource IDs qualify; label,
- * icon order, and coordinates alone are never used as fallbacks.
+ * Resolve the Reel's Repost control independently from Like. Prefer a verified
+ * Repost resource ID. Some Instagram builds omit that ID, so an exact Repost
+ * state label is accepted only when it is a unique clickable node in the live
+ * right-side action column, vertically anchored between other verified action
+ * controls. A screen-wide label, icon order, or guessed coordinate is never a
+ * fallback.
  */
 export async function findReelRepostAction(
   serial: string,
@@ -6287,26 +6289,29 @@ export async function findReelRepostAction(
   const repostResourceIds = [":id/repost_button", ":id/reposts_ufi_icon", ":id/repost_icon"];
   const nodes = _liveActionNodes(xml);
   const { w: screenW, h: screenH } = getScreenSize(serial);
+  const inRightColumn = (node: LiveActionNode) =>
+    node.x >= screenW * 0.68 &&
+    node.x < screenW * 0.98 &&
+    node.y >= screenH * 0.12 &&
+    node.y < screenH * 0.86 &&
+    node.width > 0 &&
+    node.height > 0 &&
+    node.width <= 220 &&
+    node.height <= 220;
   const rightColumnInventory = nodes
-    .filter(node =>
-      node.x >= screenW * 0.68 &&
-      node.x < screenW * 0.98 &&
-      node.y >= screenH * 0.12 &&
-      node.y < screenH * 0.86 &&
-      node.width <= 220 &&
-      node.height <= 220,
-    )
+    .filter(inRightColumn)
     .sort((a, b) => a.y - b.y);
   onLog?.(
     `[reel-repost] right-column inventory: ${
       rightColumnInventory.map(node =>
         `(${node.x},${node.y}) rid="${node.resourceId}" desc="${node.contentDesc}" ` +
-        `text="${node.text}" clickable=${node.clickable} owner=${node.actionOwnerIndex != null}`,
+        `text="${node.text}" size=${node.width}x${node.height} ` +
+        `clickable=${node.clickable} owner=${node.actionOwnerIndex != null}`,
       ).join(" | ") || "(none)"
     }`,
   );
 
-  const point = _findUniqueLiveActionNode(
+  let point = _findUniqueLiveActionNode(
     xml,
     repostResourceIds,
     [],
@@ -6314,26 +6319,78 @@ export async function findReelRepostAction(
     { allowDescriptionFallback: false },
     nodes,
   );
-  if (!point) return null;
-  if (
-    point.x < screenW * 0.68 ||
-    point.x >= screenW * 0.98 ||
-    point.y < screenH * 0.12 ||
-    point.y >= screenH * 0.86
-  ) {
+  let repostNode = point
+    ? nodes.find(node =>
+        node.x === point!.x &&
+        node.y === point!.y &&
+        repostResourceIds.some(suffix => node.resourceId === suffix || node.resourceId.endsWith(suffix)),
+      ) ?? null
+    : null;
+  if (!point || !repostNode) {
+    const exactRepostStates = new Set(["repost", "reposted", "remove repost", "undo repost", "unrepost"]);
+    const labelledCandidates = nodes.filter(node =>
+      inRightColumn(node) &&
+      node.enabled &&
+      node.actionOwnerIndex != null &&
+      node.width <= 220 &&
+      node.height <= 220 &&
+      [node.contentDesc, node.text].some(value => exactRepostStates.has(value.trim().toLowerCase())),
+    );
+    if (labelledCandidates.length !== 1) {
+      onLog?.(
+        `[reel-repost] exact right-column Repost-label fallback rejected: ` +
+        `expected one clickable candidate, found ${labelledCandidates.length}`,
+      );
+      return null;
+    }
+
+    const uniqueAnchor = (resourceIdSuffix: string): LiveActionNode | null => {
+      const matches = nodes.filter(node =>
+        inRightColumn(node) &&
+        node.enabled &&
+        node.actionOwnerIndex != null &&
+        (node.resourceId === resourceIdSuffix || node.resourceId.endsWith(resourceIdSuffix)),
+      );
+      return matches.length === 1 ? matches[0] : null;
+    };
+    const upperAnchor =
+      uniqueAnchor(":id/comment_button") ??
+      uniqueAnchor(":id/like_button");
+    const lowerAnchor =
+      uniqueAnchor(":id/direct_share_button") ??
+      uniqueAnchor(":id/save_button");
+    const candidate = labelledCandidates[0];
+    const columnXTolerance = Math.max(40, screenW * 0.08);
+    if (
+      !upperAnchor ||
+      !lowerAnchor ||
+      upperAnchor.y + 24 >= candidate.y ||
+      candidate.y + 24 >= lowerAnchor.y ||
+      Math.abs(candidate.x - upperAnchor.x) > columnXTolerance ||
+      Math.abs(candidate.x - lowerAnchor.x) > columnXTolerance
+    ) {
+      onLog?.(
+        `[reel-repost] exact label "${candidate.contentDesc || candidate.text}" rejected: ` +
+        "it is not uniquely between verified right-column action anchors",
+      );
+      return null;
+    }
+    point = { x: candidate.x, y: candidate.y };
+    repostNode = candidate;
+    onLog?.(
+      `[reel-repost] resolved exact Repost label at (${point.x},${point.y}) ` +
+      `between verified right-column anchors (${upperAnchor.x},${upperAnchor.y}) ` +
+      `and (${lowerAnchor.x},${lowerAnchor.y})`,
+    );
+  }
+  if (!repostNode) {
+    onLog?.("[reel-repost] rejected resolved point: matching live action node disappeared");
+    return null;
+  }
+  if (!inRightColumn(repostNode)) {
     onLog?.(
       `[reel-repost] rejected Repost at (${point.x},${point.y}): outside the live right-side action column`,
     );
-    return null;
-  }
-
-  const repostNode = nodes.find(node =>
-    node.x === point.x &&
-    node.y === point.y &&
-    repostResourceIds.some(suffix => node.resourceId === suffix || node.resourceId.endsWith(suffix)),
-  );
-  if (!repostNode) {
-    onLog?.("[reel-repost] rejected resolved point: matching resource node disappeared from the live dump");
     return null;
   }
 
@@ -6418,19 +6475,11 @@ export function getSponsoredReelSignal(xml: string): string | null {
  * Locates Instagram's Reels viewer action-icon COLUMN (Like, Comment,
  * Repost/Share, Send) — for Reels these render VERTICALLY down the right
  * edge of the screen, unlike a normal feed post's horizontal bottom action
- * bar (see findFeedActionIcons). This reuses the exact same
- * accessibility-tree content-desc labels already proven reliable for the
- * feed's action bar ("Like"/"Unlike", "Comment", "Repost"/"Share",
- * "Send"/"Direct"/"Message") — Instagram reuses these labels for the Reels
- * icon column, just laid out on a different axis. No fixed pixel
- * coordinates are used anywhere in this function, per project rule.
- *
- * NOT YET VALIDATED against a real device screenshot of an open Reel (added
- * 15 Jul 2026, no diagnostic run yet). Ships with the same "diagnostic dump
- * on failure" pattern as findFeedActionIcons: if the Like/Unlike anchor or
- * the Comment/Repost/Send labels don't match what a real device actually
- * exposes, this logs every right-edge clickable node instead of guessing, so
- * the next fix has real evidence rather than another blind attempt.
+ * bar (see findFeedActionIcons). Real-device logs confirm that these controls
+ * are vertically arranged on the right and that Instagram may omit the
+ * Repost resource ID. Repost resolution therefore goes through the strict
+ * right-column resolver above; other controls retain their live-ID/state
+ * checks. No feed-bottom-bar coordinates are used.
  */
 export async function findReelActionIcons(
   serial: string,
@@ -6504,18 +6553,16 @@ export async function findReelActionIcons(
     onLog?.("[reel-icons] live like_button node not found or ambiguous — skipping reel actions");
     return null;
   }
-  // Reels can expose "Repost" as a label on non-action containers/statistics
-  // nodes, so keep the same compact-size and clickable-ancestor validation as
-  // Like. Accept the known resource IDs first, then the exact Repost label for
-  // builds that omit or rename the resource ID. Never use the generic Share
-  // label here because Share opens the DM sheet in the Reel viewer.
-  const liveShareFeed = _findUniqueLiveActionNode(
-    xml,
-    [":id/repost_button", ":id/reposts_ufi_icon", ":id/repost_icon"],
-    ["Repost"],
-    onLog,
-    { allowDescriptionFallback: false },
-  );
+  // Prefer the verified Repost resource ID, with the same strict, right-column
+  // anchored exact-label fallback used by the standalone Repost tool. Never
+  // accept a screen-wide "Repost" label or the Reel's generic "Share" control.
+  const repostAction = await findReelRepostAction(serial, onLog, { uiXml: xml }).catch(() => null);
+  const liveShareFeed = repostAction && !repostAction.alreadyReposted
+    ? { x: repostAction.x, y: repostAction.y }
+    : null;
+  if (repostAction?.alreadyReposted) {
+    onLog?.("[reel-icons] Reel is already reposted — leaving its Repost state unchanged");
+  }
   const liveShareDm = _findUniqueLiveActionNode(xml, [":id/direct_share_button"], ["Share", "Send", "Direct", "Message"], onLog);
   // Resolve Save from the same live accessibility action node used for Like.
   // Do not require a screenshot asset: the current Reel dump already exposes

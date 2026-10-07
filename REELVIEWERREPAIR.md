@@ -42,6 +42,16 @@ Before changing Reel Viewer behavior:
 - **Current behavior:** Save performs a fresh action-column scan immediately before tapping and retains the cross-action collision/order guard.
 - **Rule:** Never restore the original shared scan coordinate for Save. Other actions still need separate real-device evidence before changing their freshness behavior.
 
+### `findReelRepostAction`
+
+#### `Repost` without a resource ID
+
+- **Attempt:** Require a verified Repost resource ID and reject content-description-only matches.
+- **Status:** **Replaced with a structurally anchored exact-label fallback; build-validated, real-device retest pending.**
+- **Evidence:** The 2026-10-07 device log showed a clickable `content-desc="Repost"` node with no resource ID in the Reel's right-side action column, bracketed by live Comment and Direct Share controls. The ID-only resolver skipped before sending any tap.
+- **Current behavior:** Prefer known Repost resource IDs. If absent, require one exact Repost-state label on a compact clickable right-column node, aligned and vertically bracketed by unique verified Reel action anchors; reject collisions and ambiguous matches.
+- **Rule:** Never use a screen-wide label, the generic Share button, a feed bottom-bar position, or a guessed coordinate. Keep the resolver independent of Like and do not send a second Repost tap after an uncertain result.
+
 ## `artifacts/api-server/src/mobile/hst/operations/viewReels.ts`
 
 ### `Like`
@@ -85,9 +95,10 @@ Before changing Reel Viewer behavior:
 #### `Repost action and optional Like`
 
 - **Attempt:** Resolve the Repost control independently from the Like action set; tap Repost at most once, verify its changed state or explicit confirmation, then optionally Like.
-- **Status:** **Code/build validated; real-device confirmation pending.**
-- **Evidence:** Source tracing found that `findReelActionIcons` returns `null` when the Like anchor is absent, before exposing its otherwise independent Repost result. `runShareReel` treated that `null` as “Repost not found” and skipped the link. The standalone operation also had no Like action.
-- **Rule:** Require a unique clickable Repost-specific resource ID in the live right-side action column; never fall back to a generic label or guessed coordinate. Do not retry the Repost tap when its result is ambiguous. Like is optional, must be resolved from a fresh dump, and must not toggle an already-liked Reel.
+- **Status:** **Hardened; build-validated; real-device confirmation of the new fallback pending.**
+- **Evidence:** Source tracing found that the combined Reel action scanner can fail independently of the standalone resolver when Like is absent. The 2026-10-07 device log then showed the standalone tool open a Reel whose clickable right-column Repost node had an empty resource ID, between verified Comment and Direct Share controls. The ID-only resolver skipped before tapping.
+- **Current behavior:** Prefer a verified Repost resource ID. When Instagram omits it, accept one exact Repost state label only on a compact clickable node in the live right-side action column, aligned and vertically bracketed by unique verified Reel action anchors. The View Reels scanner uses the same resolver and leaves an already-reposted Reel unchanged.
+- **Rule:** Never use a screen-wide label, generic Share button, feed bottom-bar coordinate, or guessed position. Do not retry the Repost tap when its result is ambiguous. Like is optional, must be resolved from a fresh dump, and must not toggle an already-liked Reel.
 
 ### `shared this reel with you` popup
 

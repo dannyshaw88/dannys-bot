@@ -58,17 +58,24 @@ right-column bounds, and cross-action collision checks. Never use a generic
 label or guessed coordinate; send no second Repost tap when the result is
 ambiguous.
 
-For Reels Share-to-Feed, require a verified repost-specific resource ID. Do not
-fall back to a generic `content-desc="Repost"` match: on a real device that
-fallback resolved a tap that opened the comment/reply sheet instead of the
-intended share-to-feed action.
+For Reels Share-to-Feed, prefer a verified Repost-specific resource ID. If
+Instagram omits the ID, accept only one exact Repost state label on an enabled,
+clickable, compact node in the right-side Reel action column, between unique
+verified action anchors (Comment or Like above; Direct Share or Save below).
+Check horizontal alignment and reject any collision with another action. Never
+accept a screen-wide label, the generic Share button, the feed's bottom action
+bar, count nodes, or guessed coordinates.
 
-**Why:** The observed dump exposed a Repost content description without a
-verified repost resource ID, and the resulting tap produced the comment sheet.
+**Why:** An earlier unbounded `content-desc="Repost"` fallback tapped the
+comment/reply surface. Newer real-device evidence shows the actual clickable
+Repost icon in the right-side column can have no resource ID; the ID-only
+resolver then skipped without sending a tap. The strict spatial and neighboring
+action checks distinguish that icon from the unsafe generic label.
 
-**How to apply:** If no known repost resource ID is present, leave
-`shareFeed` null and skip the action safely; never guess from vertical position
-or the label alone.
+**How to apply:** Use the same anchored exact-label rule in the standalone
+Repost resolver and View Reels. If the label is missing, duplicated, not
+clickable, outside the right column, or lacks unambiguous action anchors, skip
+Repost safely and never send a second tap after an uncertain result.
 
 Accessibility action matches must also be validated as clickable, icon-sized
 nodes; count labels and row-sized containers are not safe tap targets.

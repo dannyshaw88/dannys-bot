@@ -140,8 +140,8 @@ export async function runShareReel(
           { uiXml: reelXml },
         ).catch(() => null);
         if (!repostAction) {
-          onLog?.("Repost: no unique, clickable Repost control with a verified Repost resource ID — skipping link");
-          logger.warn({ serial, url }, "[repost] verified Repost control was not found");
+          onLog?.("Repost: no unique, clickable Repost control in the verified right-side Reel action stack — skipping link");
+          logger.warn({ serial, url }, "[repost] verified right-side Repost control was not found");
           continue;
         }
 
