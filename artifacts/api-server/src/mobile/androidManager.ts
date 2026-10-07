@@ -15546,18 +15546,11 @@ export async function findAndTapUserInSearch(
   const adb = requireTool(tools.adb, "adb");
   const clean = username.replace(/^@/, "");
 
-  // Compact initial settle. The caller already waited for Search to reopen and
-  // for the keyboard entry to complete; this is only for the result request
-  // and first row render.
+  // The caller has completed calibrated typing, but Instagram's search request
+  // and result rows can still lag behind the final key tap.
   await _sleep(1000);
 
   {
-    const xml = await _uiDump(adb, serial);
-    if (!xml) {
-      onLog?.(`Follow: @${clean} search-results dump was empty — target aborted safely`);
-      return { found: false };
-    }
-
     // ── Candidate selection ───────────────────────────────────────────────────
     //
     // Fix 5 (26 Jul 2026) — avatar-ring positive signal replaces broken chip
@@ -15608,34 +15601,76 @@ export async function findAndTapUserInSearch(
     const exactUserPositions: Array<{ x: number; y: number }> = [];
     const exactUserSeen = new Set<string>();
     let disabledExactLabelCount = 0;
-    const searchNodes = _liveActionNodes(xml);
-    for (const node of searchNodes) {
-      if (/android\.widget\.EditText$/i.test(node.className)) continue;
-      if (node.resourceId.includes("/row_search_keyword_title") ||
-          node.resourceId.includes("/search_keyword_title") ||
-          node.resourceId.includes("/row_search_recent_chip") ||
-          node.resourceId.includes("/search_recent_chip")) continue;
-      const text = normalizeUsernameLabel(node.text);
-      const desc = normalizeUsernameLabel(node.contentDesc);
-      if (!exactNames.has(text) && !exactNames.has(desc)) continue;
-      if (!node.enabled) disabledExactLabelCount++;
-      // A result's username TextView can be marked disabled even though the
-      // enclosing row still responds to taps. Exact text establishes identity;
-      // the post-tap profile-surface check below must still confirm navigation
-      // before Follow proceeds.
-      const x = node.x;
-      const y = node.y;
-      // Child and wrapper can both repeat the exact username. Prefer the
-      // action owner when one is exposed; otherwise deduplicate by the exact
-      // label's center and retain the older working text-node tap behavior.
-      const key = node.actionOwnerIndex == null
-        ? `point:${x},${y}`
-        : `owner:${node.actionOwnerIndex}`;
-      if (!exactUserSeen.has(key)) {
-        exactUserSeen.add(key);
-        exactUserPositions.push({ x, y });
+    let xml = "";
+    let searchNodes: LiveActionNode[] = [];
+    let completeDumpCount = 0;
+    let matchScan = 0;
+    const maxResultScans = 3;
+    const retryDelayMs = 900;
+
+    // Take fresh trees rather than treating a single early snapshot as a
+    // definitive search miss. Only an exact username match can authorize a
+    // tap; the retries never fall back to a row index, avatar, or coordinate.
+    for (let scan = 1; scan <= maxResultScans; scan++) {
+      if (scan > 1) await _sleep(retryDelayMs);
+      const currentXml = await _uiDump(adb, serial).catch(() => "");
+      if (!currentXml) {
+        if (scan < maxResultScans) {
+          onLog?.(`Follow: @${clean} result scan ${scan}/${maxResultScans} had no complete UI dump — retrying`);
+        }
+        continue;
+      }
+
+      xml = currentXml;
+      completeDumpCount++;
+      searchNodes = _liveActionNodes(xml);
+      exactUserPositions.length = 0;
+      exactUserSeen.clear();
+      disabledExactLabelCount = 0;
+      for (const node of searchNodes) {
+        if (/android\.widget\.EditText$/i.test(node.className)) continue;
+        if (node.resourceId.includes("/row_search_keyword_title") ||
+            node.resourceId.includes("/search_keyword_title") ||
+            node.resourceId.includes("/row_search_recent_chip") ||
+            node.resourceId.includes("/search_recent_chip")) continue;
+        const text = normalizeUsernameLabel(node.text);
+        const desc = normalizeUsernameLabel(node.contentDesc);
+        if (!exactNames.has(text) && !exactNames.has(desc)) continue;
+        if (!node.enabled) disabledExactLabelCount++;
+        // A result's username TextView can be marked disabled even though the
+        // enclosing row still responds to taps. Exact text establishes identity;
+        // the post-tap profile-surface check below must still confirm navigation
+        // before Follow proceeds.
+        const x = node.x;
+        const y = node.y;
+        // Child and wrapper can both repeat the exact username. Prefer the
+        // action owner when one is exposed; otherwise deduplicate by the exact
+        // label's center and retain the older working text-node tap behavior.
+        const key = node.actionOwnerIndex == null
+          ? `point:${x},${y}`
+          : `owner:${node.actionOwnerIndex}`;
+        if (!exactUserSeen.has(key)) {
+          exactUserSeen.add(key);
+          exactUserPositions.push({ x, y });
+        }
+      }
+      if (exactUserPositions.length > 0) {
+        matchScan = scan;
+        break;
+      }
+      if (scan < maxResultScans) {
+        onLog?.(
+          `Follow: @${clean} result scan ${scan}/${maxResultScans} found no exact username in ` +
+          `${searchNodes.length} bounded accessibility nodes — retrying in ${retryDelayMs}ms`,
+        );
       }
     }
+
+    if (completeDumpCount === 0) {
+      onLog?.(`Follow: @${clean} search-results dump stayed empty across ${maxResultScans} scans — target aborted safely`);
+      return { found: false };
+    }
+
     if (disabledExactLabelCount > 0) {
       onLog?.(
         `Follow: @${clean} exact username matched ${disabledExactLabelCount} disabled label node(s); ` +
@@ -15652,7 +15687,8 @@ export async function findAndTapUserInSearch(
     }
     if (exactUserPositions.length === 0) {
       onLog?.(
-        `Follow: @${clean} exact username label was not exposed by ${searchNodes.length} bounded accessibility nodes — target aborted safely`,
+        `Follow: @${clean} exact username label was not exposed after ${maxResultScans} result scans ` +
+        `(${completeDumpCount} complete dumps; last complete dump had ${searchNodes.length} bounded accessibility nodes) — target aborted safely`,
       );
       return { found: false };
     }
@@ -15697,7 +15733,10 @@ export async function findAndTapUserInSearch(
 
     // Use ring positions if found (they bypass chips entirely); else text candidates.
     const finalCandidates = ringPositions;
-    onLog?.(`Follow: @${clean} — exact username node found (${finalCandidates.length} match${finalCandidates.length === 1 ? "" : "es"})`);
+    onLog?.(
+      `Follow: @${clean} — exact username node found on scan ${matchScan}/${maxResultScans} ` +
+      `(${finalCandidates.length} match${finalCandidates.length === 1 ? "" : "es"})`,
+    );
 
     if (finalCandidates.length > 0) {
       // Try candidates top-to-bottom. After each tap, verify we landed on a
