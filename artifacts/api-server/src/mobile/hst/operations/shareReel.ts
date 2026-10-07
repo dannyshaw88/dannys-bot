@@ -17,6 +17,17 @@ export interface ShareReelOperationContext {
       onLog?: (message: string) => void,
       options?: { uiXml?: string },
     ): Promise<{ like: { x: number; y: number }; alreadyLiked?: boolean } | null>;
+    findReelSaveAction(
+      serial: string,
+      onLog?: (message: string) => void,
+      options?: { uiXml?: string },
+    ): Promise<{ x: number; y: number; alreadySaved: boolean } | null>;
+    isInstagramShareSheetXml(xml: string): boolean;
+    isInstagramMoreActionsSheetXml(xml: string): boolean;
+    findInstagramMoreActionsSaveButton(
+      serial: string,
+      onLog?: (message: string) => void,
+    ): Promise<{ x: number; y: number } | null>;
     findButtonByLabel(serial: string, label: string): Promise<{ x: number; y: number } | null>;
     tap(serial: string, x: number, y: number): Promise<void>;
     pressBack(serial: string): Promise<void>;
@@ -26,6 +37,12 @@ export interface ShareReelOperationContext {
       onLog?: (message: string) => void,
     ): Promise<{ x: number; y: number }>;
   };
+  dismissSaveCollectionPrompt: (
+    serial: string,
+    xml: string,
+    onLog?: (message: string) => void,
+    context?: string,
+  ) => Promise<boolean>;
   sleepOrAbort: (serial: string, milliseconds: number) => Promise<void>;
   rollRange: (minimum: number, maximum: number) => number;
   isCycleAborted?: (serial: string) => boolean;
@@ -34,15 +51,59 @@ export interface ShareReelOperationContext {
   slotIdx: number;
 }
 
-function normalizeSourceUrl(value: string): string | null {
+export function normalizeReelSourceUrl(value: string): string | null {
   const raw = value.trim();
   if (!raw) return null;
   try {
     const parsed = new URL(raw);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
     if (!parsed.hostname) return null;
-    parsed.hash = "";
+    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
+    if (hostname === "instagram.com" || hostname.endsWith(".instagram.com")) {
+      parsed.protocol = "https:";
+      parsed.hostname = "www.instagram.com";
+      parsed.port = "";
+      parsed.search = "";
+      parsed.hash = "";
+      const path = parsed.pathname.replace(/\/+$/, "");
+      parsed.pathname = path ? `${path}/` : "/";
+    } else {
+      parsed.hash = "";
+    }
     return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeInstagramReelImportUrl(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  const candidate = raw.startsWith("//")
+    ? `https:${raw}`
+    : /^https?:\/\//i.test(raw)
+      ? raw
+      : `https://${raw}`;
+  try {
+    const parsed = new URL(candidate);
+    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
+    const isInstagramHost = hostname === "instagram.com" || hostname.endsWith(".instagram.com");
+    const [firstPathSegment, secondPathSegment] = parsed.pathname.split("/").filter(Boolean);
+    const firstSegment = firstPathSegment?.toLowerCase() ?? "";
+    const hasReelPath = (
+      ["reel", "reels", "p"].includes(firstSegment) && Boolean(secondPathSegment)
+    ) || (
+      firstSegment === "share" && Boolean(secondPathSegment)
+    );
+    if (
+      (parsed.protocol !== "https:" && parsed.protocol !== "http:") ||
+      !isInstagramHost ||
+      Boolean(parsed.port) ||
+      parsed.username ||
+      parsed.password ||
+      !hasReelPath
+    ) return null;
+    return normalizeReelSourceUrl(parsed.toString());
   } catch {
     return null;
   }
@@ -55,6 +116,137 @@ function isReelViewerXml(xml: string): boolean {
     (
       /reel_viewer|reels_feed_media_view|clips_author_username|repost_button|reposts_ufi_icon/.test(xml)
     );
+}
+
+function fisherYatesShuffle<T>(items: readonly T[]): T[] {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const otherIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[otherIndex]] = [shuffled[otherIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
+async function saveReelWithRandomChance(
+  serial: string,
+  url: string,
+  onLog: ((message: string) => void) | undefined,
+  context: ShareReelOperationContext,
+): Promise<void> {
+  const { android, dismissSaveCollectionPrompt, sleepOrAbort, logger } = context;
+  const saveChancePct = 1 + Math.floor(Math.random() * 100);
+  const saveRollPct = Math.random() * 100;
+  const shouldSave = saveRollPct < saveChancePct;
+  onLog?.(
+    `Repost: Save roll — ${saveChancePct}% chance, result=${shouldSave ? "save" : "skip"}`,
+  );
+  if (!shouldSave) return;
+
+  try {
+    const saveAction = await android.findReelSaveAction(
+      serial,
+      message => onLog?.(`  ${message}`),
+    ).catch(() => null);
+    if (!saveAction) {
+      onLog?.("Repost: fresh Save ribbon identity was not confirmed — skipping Save");
+      return;
+    }
+    if (saveAction.alreadySaved) {
+      onLog?.("Repost: Reel is already saved — not toggling Save off");
+      return;
+    }
+
+    onLog?.(`Repost: tapping freshly validated Save ribbon at (${saveAction.x},${saveAction.y})`);
+    await android.tap(serial, saveAction.x, saveAction.y);
+    await sleepOrAbort(serial, 600);
+
+    let afterSaveXml = await android.dumpUi(serial).catch(() => "");
+    if (android.isInstagramShareSheetXml(afterSaveXml)) {
+      logger.warn({ serial, url, savePoint: saveAction }, "[repost] Save tap opened the DM/share sheet");
+      onLog?.("Repost: Save target opened the DM/share sheet — closing it; no Save confirmation");
+      await android.pressBack(serial).catch(() => {});
+      await sleepOrAbort(serial, 300);
+      return;
+    }
+
+    if (android.isInstagramMoreActionsSheetXml(afterSaveXml)) {
+      onLog?.("Repost: Save tap opened the Reel overflow sheet — resolving its live Save row");
+      const overflowSave = await android.findInstagramMoreActionsSaveButton(
+        serial,
+        message => onLog?.(`  ${message}`),
+      ).catch(() => null);
+      if (!overflowSave) {
+        onLog?.("Repost: overflow-sheet Save row was not confirmed — closing without another Save tap");
+        await android.pressBack(serial).catch(() => {});
+        await sleepOrAbort(serial, 300);
+        return;
+      }
+      await android.tap(serial, overflowSave.x, overflowSave.y);
+      await sleepOrAbort(serial, 600);
+      afterSaveXml = await android.dumpUi(serial).catch(() => "");
+      if (android.isInstagramShareSheetXml(afterSaveXml)) {
+        logger.warn({ serial, url, savePoint: overflowSave }, "[repost] overflow Save opened the DM/share sheet");
+        onLog?.("Repost: overflow Save opened the DM/share sheet — closing it; no Save confirmation");
+        await android.pressBack(serial).catch(() => {});
+        await sleepOrAbort(serial, 300);
+        return;
+      }
+    }
+
+    let collectionPromptDismissed = false;
+    for (let poll = 0; poll < 4; poll++) {
+      if (android.isInstagramShareSheetXml(afterSaveXml)) {
+        logger.warn({ serial, url }, "[repost] Save result surfaced the DM/share sheet");
+        onLog?.("Repost: DM/share sheet detected during Save verification — closing it");
+        await android.pressBack(serial).catch(() => {});
+        await sleepOrAbort(serial, 300);
+        return;
+      }
+      if (android.isInstagramMoreActionsSheetXml(afterSaveXml)) {
+        onLog?.("Repost: overflow sheet remained open after one Save attempt — closing without retry");
+        await android.pressBack(serial).catch(() => {});
+        await sleepOrAbort(serial, 300);
+        return;
+      }
+
+      if (!collectionPromptDismissed) {
+        collectionPromptDismissed = await dismissSaveCollectionPrompt(
+          serial,
+          afterSaveXml,
+          message => onLog?.(`  ${message}`),
+          "Repost Save",
+        );
+        if (collectionPromptDismissed) {
+          await sleepOrAbort(serial, 300);
+          afterSaveXml = await android.dumpUi(serial).catch(() => "");
+        }
+      }
+
+      if (isReelViewerXml(afterSaveXml)) {
+        const verifiedAction = await android.findReelSaveAction(
+          serial,
+          message => onLog?.(`  ${message}`),
+          { uiXml: afterSaveXml },
+        ).catch(() => null);
+        if (verifiedAction?.alreadySaved) {
+          onLog?.("Repost: ✓ Save state confirmed");
+          return;
+        }
+      }
+
+      if (poll < 3) {
+        await sleepOrAbort(serial, 350);
+        afterSaveXml = await android.dumpUi(serial).catch(() => "");
+      }
+    }
+
+    logger.warn({ serial, url, savePoint: saveAction }, "[repost] Save tap result was not confirmed");
+    onLog?.("Repost: Save tap was not confirmed — no second Save tap was sent");
+  } catch (error: any) {
+    if (error?.message === "cycle-aborted") throw error;
+    logger.warn({ serial, url, error: error?.message ?? String(error) }, "[repost] optional Save failed");
+    onLog?.(`Repost: optional Save failed — ${error?.message ?? "unknown error"}`);
+  }
 }
 
 /**
@@ -77,10 +269,10 @@ export async function runShareReel(
 ): Promise<{ processed: number; skipped: number }> {
   const { android, sleepOrAbort, rollRange, isCycleAborted, logger, onProcessed, slotIdx } = context;
   const { sources, processedLinks = [], processMin, processMax, onLog } = params;
-  const processed = new Set(processedLinks.map(normalizeSourceUrl).filter((url): url is string => Boolean(url)));
+  const processed = new Set(processedLinks.map(normalizeReelSourceUrl).filter((url): url is string => Boolean(url)));
   const available = [...new Set(
     sources
-      .map(source => normalizeSourceUrl(source.value))
+      .map(source => normalizeReelSourceUrl(source.value))
       .filter((url): url is string => Boolean(url)),
   )].filter(url => !processed.has(url));
 
@@ -90,10 +282,8 @@ export async function runShareReel(
   }
 
   const requested = Math.max(0, Math.floor(rollRange(processMin, processMax)));
-  const selected = available
-    .sort(() => Math.random() - 0.5)
-    .slice(0, requested);
-  onLog?.(`Repost: selected ${selected.length}/${available.length} unvisited Reel link(s)`);
+  const selected = fisherYatesShuffle(available).slice(0, requested);
+  onLog?.(`Repost: selected ${selected.length}/${available.length} unvisited Reel link(s) from a randomized order`);
 
   let completed = 0;
   try {
@@ -238,6 +428,8 @@ export async function runShareReel(
             onLog?.(`Repost: optional Like failed — ${likeError?.message ?? "unknown error"}`);
           }
         }
+
+        await saveReelWithRandomChance(serial, url, onLog, context);
       } catch (error: any) {
         if (error?.message === "cycle-aborted") throw error;
         logger.warn({ serial, url, error: error?.message ?? String(error) }, "[repost] link failed");

@@ -1,5 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { TrustScoresTabContent, BulkImportTabContent } from "@/pages/ToolsPage";
+import { ImportReelTabContent } from "@/pages/ImportReelTab";
 import ImagesPage from "@/pages/ImagesPage";
 import { JarveeBinaryViewerContent } from "@/pages/JarveeBinaryViewerPage";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ const SETTINGS_TABS = [
   { label: "Trust Scores", icon: Shield },
   { label: "Fix Images", icon: Palette },
   { label: "Import", icon: Upload },
+  { label: "Import Reel", icon: Plus },
   { label: "Jarvee Import", icon: Upload },
   { label: "Scraping", icon: Database },
   { label: "Automation", icon: Timer },
@@ -653,6 +655,8 @@ export function SettingsPage() {
         </div>
       )}
 
+      {settingsTab === "import reel" && <ImportReelTabContent />}
+
       {/* Keep this mounted while switching tabs so parsed account details survive
           tab navigation. Raw file contents are intentionally not persisted to
           browser storage because Jarvee files may contain credentials/cookies. */}
@@ -660,7 +664,7 @@ export function SettingsPage() {
         <JarveeBinaryViewerContent />
       </div>
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import", "import reel", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button

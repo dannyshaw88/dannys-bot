@@ -62,6 +62,29 @@ import {
 
 declare const __API_PORT__: string;
 
+function normalizeShareReelSourceUrl(value: string): string {
+  const raw = value.trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (hostname === "instagram.com" || hostname.endsWith(".instagram.com")) {
+      url.protocol = "https:";
+      url.hostname = "www.instagram.com";
+      url.port = "";
+      url.search = "";
+      url.hash = "";
+      const path = url.pathname.replace(/\/+$/, "");
+      url.pathname = path ? `${path}/` : "/";
+    } else {
+      url.hash = "";
+    }
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 // ─── Persistent debugging-log colour system ───────────────────────────────────
 // Tool identity owns the colour for the whole active block. Message content
 // (for example, "this post is a Reel" inside View Explore) must never replace
@@ -6287,26 +6310,15 @@ export function AutomationSettingsPanel({
   const sharedReelLinkSet = useMemo(() => {
     const normalized = new Set<string>();
     for (const value of settings.shareReelProcessedLinks ?? []) {
-      try {
-        const url = new URL(value.trim());
-        url.hash = "";
-        normalized.add(url.toString());
-      } catch {
-        if (value.trim()) normalized.add(value.trim());
-      }
+      const canonical = normalizeShareReelSourceUrl(value);
+      if (canonical) normalized.add(canonical);
     }
     return normalized;
   }, [settings.shareReelProcessedLinks]);
   const activeShareReelSources = useMemo(
-    () => settings.shareReelSources.filter(source => {
-      try {
-        const url = new URL(source.value.trim());
-        url.hash = "";
-        return !sharedReelLinkSet.has(url.toString());
-      } catch {
-        return !sharedReelLinkSet.has(source.value.trim());
-      }
-    }),
+    () => settings.shareReelSources.filter(
+      source => !sharedReelLinkSet.has(normalizeShareReelSourceUrl(source.value)),
+    ),
     [settings.shareReelSources, sharedReelLinkSet],
   );
 
@@ -6328,9 +6340,16 @@ export function AutomationSettingsPanel({
       setShareReelSourceError("Enter a valid http:// or https:// link.");
       return;
     }
+    const normalizedUrl = normalizeShareReelSourceUrl(parsed.toString());
+    if (settings.shareReelSources.some(
+      source => normalizeShareReelSourceUrl(source.value) === normalizedUrl,
+    )) {
+      setShareReelSourceError("That Reel is already in this source list.");
+      return;
+    }
     setSettings(s => ({
       ...s,
-      shareReelSources: [...s.shareReelSources, { type: "link", value: parsed.toString() }],
+      shareReelSources: [...s.shareReelSources, { type: "link", value: normalizedUrl }],
     }));
     setNewShareReelSourceValue("");
     setShareReelSourceError("");

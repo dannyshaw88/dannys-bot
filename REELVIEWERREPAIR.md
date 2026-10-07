@@ -27,6 +27,14 @@ Before changing Reel Viewer behavior:
 - **Reason:** Visual matching previously hit the Likes/statistics area, but accessibility metadata can also be stale or reused.
 - **Current guard:** Reject Save when its resolved point lies inside a `direct_share_button` node, is not below the resolved DM action, or is less than 80 px from it; skip Save only.
 
+#### `findReelSaveAction` for standalone Repost
+
+- **Attempt:** Reuse the combined Reel action scan, which requires a Like node.
+- **Status:** **Replaced with an independent live Save resolver; API/Electron builds and mocked flow validated, real-device check pending.**
+- **Evidence:** The API bundle builds with the independent resolver, which keeps the right-column and Direct Share collision checks without requiring Like to resolve first.
+- **Current behavior:** Resolve the Save ribbon from a fresh Reel dump, independent of Like and Repost; enforce right-column bounds and reject overlap or unsafe proximity to Direct Share.
+- **Rule:** Never tap a generic Save label, stale action coordinate, or a state already marked Saved. Confirm the changed saved state after one tap; do not retry an uncertain tap.
+
 #### `Share via DM`
 
 - **Attempt:** Resolve `direct_share_button` and tap its stored coordinate when `wantShareDm` is true.
@@ -99,6 +107,22 @@ Before changing Reel Viewer behavior:
 - **Evidence:** Source tracing found that the combined Reel action scanner can fail independently of the standalone resolver when Like is absent. The 2026-10-07 device log then showed the standalone tool open a Reel whose clickable right-column Repost node had an empty resource ID, between verified Comment and Direct Share controls. The ID-only resolver skipped before tapping.
 - **Current behavior:** Prefer a verified Repost resource ID. When Instagram omits it, accept one exact Repost state label only on a compact clickable node in the live right-side action column, aligned and vertically bracketed by unique verified Reel action anchors. The View Reels scanner uses the same resolver and leaves an already-reposted Reel unchanged.
 - **Rule:** Never use a screen-wide label, generic Share button, feed bottom-bar coordinate, or guessed position. Do not retry the Repost tap when its result is ambiguous. Like is optional, must be resolved from a fresh dump, and must not toggle an already-liked Reel.
+
+#### `Source link order`
+
+- **Attempt:** Randomly sort the available links with a random-comparator sort before selecting the requested count.
+- **Status:** **Replaced with Fisher–Yates shuffle; build and mocked selection check passed.**
+- **Evidence:** API/Electron builds passed; a deterministic mocked run selected different first links for two distinct shuffle values.
+- **Current behavior:** Deduplicate and remove processed links, shuffle the remaining links without source-order bias, then take the configured count.
+- **Rule:** Do not restore the random-comparator sort; preserve processMin/processMax and processed-link filtering.
+
+#### `Optional Save ribbon`
+
+- **Attempt:** Give each selected Reel an independent hardcoded chance, chosen from 1–100%, to tap Save after the optional Like.
+- **Status:** **Added with live-target and saved-state checks; API/Electron builds and mocked flow validated, real-device check pending.**
+- **Evidence:** A deterministic mocked operation confirmed that a 100% roll taps Save once and an already-saved result never taps.
+- **Current behavior:** Use a fresh, independent Save resolver; skip already-saved Reels; dismiss the known first-save prompt; close a mis-targeted DM sheet; verify the result and never send a second Save tap.
+- **Rule:** The chance remains hardcoded and independent of Like settings. Missing, ambiguous, conflicting, or unverified Save state means no further tap.
 
 ### `shared this reel with you` popup
 

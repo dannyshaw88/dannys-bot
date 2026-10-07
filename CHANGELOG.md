@@ -3,6 +3,8 @@
 ### Fixed — Repost from the Reel Viewer
 
 - Resolve Instagram’s ID-less Repost control only when its exact clickable label is uniquely anchored in the Reel’s right-side action column.
+- Randomize unvisited Repost links independently of source-list order, and add a per-Reel hardcoded 1–100% chance to Save.
+- Add Settings → Import Reel to append a shared Reel link to every account slot's Repost sources while preserving each slot's processed history.
 
 ### Release
 

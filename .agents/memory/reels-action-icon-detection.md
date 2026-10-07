@@ -77,6 +77,33 @@ Repost resolver and View Reels. If the label is missing, duplicated, not
 clickable, outside the right column, or lacks unambiguous action anchors, skip
 Repost safely and never send a second tap after an uncertain result.
 
+Standalone Repost link selection uses a Fisher–Yates shuffle after filtering
+processed links, so the configured source-list order does not bias which links
+are opened first. Each selected Reel independently rolls a hardcoded 1–100%
+chance to Save; resolve Save with a fresh detector separate from Like/Repost,
+and never tap when the live state is already saved.
+
+**Why:** The user requested random source-link ordering and a separate hardcoded
+Save chance for the Repost tool.
+
+**How to apply:** Preserve the process count and processed-link filtering while
+shuffling. Keep Save’s chance independent from Like and fail closed on missing,
+ambiguous, DM-conflicting, or unverified Save controls.
+
+Settings → Import Reel must append a canonical link to every persisted account
+slot's Repost source list without replacing its per-slot processed-link history.
+Canonical Reel matching ignores Instagram host aliases, tracking query values,
+fragments, and trailing slashes so a copied variant remains completed only for
+accounts that already processed that Reel.
+
+**Why:** The user requested one-step cross-slot Reel imports because accounts
+may have different visited-Reel histories; those histories must remain
+independent.
+
+**How to apply:** Resolve each slot through its persisted slot ID and patch only
+`shareReelSources`. Preserve `shareReelProcessedLinks` exactly, and normalize
+Instagram URLs consistently in import, active-source display, and execution.
+
 Accessibility action matches must also be validated as clickable, icon-sized
 nodes; count labels and row-sized containers are not safe tap targets.
 

@@ -6260,6 +6260,12 @@ export interface ReelRepostAction {
   alreadyReposted: boolean;
 }
 
+export interface ReelSaveAction {
+  x: number;
+  y: number;
+  alreadySaved: boolean;
+}
+
 /**
  * Resolve the Reel's Repost control independently from Like. Prefer a verified
  * Repost resource ID. Some Instagram builds omit that ID, so an exact Repost
@@ -6469,6 +6475,108 @@ export function getSponsoredReelSignal(xml: string): string | null {
     if (ctaLabels.has(label)) return match[1].trim();
   }
   return null;
+}
+
+/**
+ * Resolve the Reel's Save ribbon independently from Like, Repost, and DM.
+ * Standalone Repost needs to save even when one of those other controls is
+ * missing, while retaining the same live-node and cross-action geometry guards.
+ */
+export async function findReelSaveAction(
+  serial: string,
+  onLog?: (msg: string) => void,
+  options?: { uiXml?: string },
+): Promise<ReelSaveAction | null> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const xml = options?.uiXml || await _uiDump(adb, serial);
+  if (!xml) {
+    onLog?.("[reel-save] UI dump unavailable — skipping Save");
+    return null;
+  }
+  const sponsoredSignal = getSponsoredReelSignal(xml);
+  if (sponsoredSignal) {
+    onLog?.(`[reel-save] sponsored Reel signal "${sponsoredSignal}" — skipping Save`);
+    return null;
+  }
+
+  const nodes = _liveActionNodes(xml);
+  const { w: screenW, h: screenH } = getScreenSize(serial);
+  const pointInside = (point: { x: number; y: number }, node: LiveActionNode) =>
+    point.x >= node.x1 && point.x <= node.x2 && point.y >= node.y1 && point.y <= node.y2;
+  const savePoint = _findUniqueLiveActionNode(
+    xml,
+    [":id/save_button"],
+    ["Add to Saved", "Remove from Saved", "Saved"],
+    onLog,
+    undefined,
+    nodes,
+  );
+  if (!savePoint) {
+    onLog?.("[reel-save] unique clickable Save ribbon was not found — skipping Save");
+    return null;
+  }
+  if (
+    savePoint.x < screenW * 0.68 ||
+    savePoint.x >= screenW * 0.98 ||
+    savePoint.y < screenH * 0.12 ||
+    savePoint.y >= screenH * 0.86
+  ) {
+    onLog?.(
+      `[reel-save] rejected Save at (${savePoint.x},${savePoint.y}): outside the live right-side Reel action column`,
+    );
+    return null;
+  }
+
+  const directShareNodes = nodes.filter(node =>
+    node.resourceId === ":id/direct_share_button" ||
+    node.resourceId.endsWith(":id/direct_share_button"),
+  );
+  if (directShareNodes.some(node => pointInside(savePoint, node))) {
+    onLog?.(
+      `[reel-save] rejected Save at (${savePoint.x},${savePoint.y}): overlaps live Direct Share bounds`,
+    );
+    return null;
+  }
+
+  const saveNodes = nodes.filter(node =>
+    node.resourceId === ":id/save_button" ||
+    node.resourceId.endsWith(":id/save_button"),
+  );
+  let liveShareDm = _findUniqueLiveActionNode(
+    xml,
+    [":id/direct_share_button"],
+    ["Share", "Send", "Direct", "Message"],
+    onLog,
+    undefined,
+    nodes,
+  );
+  if (liveShareDm && saveNodes.some(node => pointInside(liveShareDm!, node))) {
+    onLog?.("[reel-save] Share-via-DM point overlaps Save bounds — excluding it from spacing checks");
+    liveShareDm = null;
+  }
+  if (liveShareDm) {
+    const separation = Math.hypot(savePoint.x - liveShareDm.x, savePoint.y - liveShareDm.y);
+    if (separation < 80 || savePoint.y <= liveShareDm.y + 24) {
+      onLog?.(
+        `[reel-save] rejected Save at (${savePoint.x},${savePoint.y}): not safely below/distinct ` +
+        `from Direct Share (${liveShareDm.x},${liveShareDm.y}); separation=${separation.toFixed(1)}`,
+      );
+      return null;
+    }
+  }
+
+  const matchingNodes = nodes.filter(node => node.x === savePoint.x && node.y === savePoint.y);
+  const saveLabels = matchingNodes.flatMap(node => {
+    const owner = node.actionOwnerIndex == null ? null : nodes[node.actionOwnerIndex];
+    return [node.contentDesc, node.text, owner?.contentDesc ?? "", owner?.text ?? ""];
+  });
+  const alreadySaved = saveLabels.some(label => /^(?:saved|remove from saved)$/i.test(label.trim()));
+  onLog?.(
+    `[reel-save] resolved verified right-column Save at (${savePoint.x},${savePoint.y}) ` +
+    `alreadySaved=${alreadySaved}`,
+  );
+  return { ...savePoint, alreadySaved };
 }
 
 /**

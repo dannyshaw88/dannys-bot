@@ -55,7 +55,11 @@ import {
   runViewReelsLoop as runViewReelsLoopOperation,
 } from "../mobile/hst/operations/viewReels";
 import { runMakePostStep as runMakePostStepOperation } from "../mobile/hst/operations/makePost";
-import { runShareReel as runShareReelOperation } from "../mobile/hst/operations/shareReel";
+import {
+  normalizeInstagramReelImportUrl,
+  normalizeReelSourceUrl,
+  runShareReel as runShareReelOperation,
+} from "../mobile/hst/operations/shareReel";
 import { runUpdateProfilePicture as runUpdateProfilePictureOperation } from "../mobile/hst/operations/updateProfilePicture";
 import { runUpdateBio as runUpdateBioOperation } from "../mobile/hst/operations/updateBio";
 import { runRandomActionsStep, type RandomActionsOperationContext } from "../mobile/hst/operations/randomActions";
@@ -3339,6 +3343,60 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       })));
       res.json({ ok: true, users: users.length, slots: slots.length });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Split failed" }); }
+  });
+
+  // Import one shared Reel URL into each persisted account slot without
+  // replacing its other Repost sources or its per-account processed history.
+  app.post("/api/mobile/share-reel/import", (req: Request, res: Response) => {
+    try {
+      const input = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+      if (!input) return void res.status(400).json({ error: "Paste an Instagram Reel URL." });
+
+      const reelUrl = normalizeInstagramReelImportUrl(input);
+      if (!reelUrl) return void res.status(400).json({ error: "Enter a Reel link from instagram.com." });
+
+      const cfg = loadInstanceConfigs();
+      let totalSlots = 0;
+      let addedSlots = 0;
+      let alreadyPresentSlots = 0;
+      for (const [serial, instance] of Object.entries(cfg)) {
+        const slots = instance.account?.slots ?? [];
+        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+          const slot = slots[slotIdx];
+          const stableKey = slotAutomationKey(serial, slotIdx, slot.slotId);
+          const existing = (
+            instance.slotAutomation?.[stableKey] ??
+            instance.slotAutomation?.[String(slotIdx)] ??
+            {}
+          ) as AutomationSettings;
+          const sources = Array.isArray(existing.shareReelSources)
+            ? existing.shareReelSources
+            : [];
+          totalSlots++;
+          if (sources.some(source => normalizeReelSourceUrl(source?.value) === reelUrl)) {
+            alreadyPresentSlots++;
+            continue;
+          }
+
+          instance.slotAutomation = {
+            ...instance.slotAutomation,
+            [stableKey]: {
+              ...existing,
+              shareReelSources: [...sources, { type: "link", value: reelUrl }],
+            },
+          };
+          addedSlots++;
+        }
+      }
+
+      if (totalSlots === 0) {
+        return void res.status(409).json({ error: "No saved account slots were found." });
+      }
+      if (addedSlots > 0) saveInstanceConfigs(cfg);
+      res.json({ ok: true, url: reelUrl, totalSlots, addedSlots, alreadyPresentSlots });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Reel import failed." });
+    }
   });
 
   // ── Per-slot Human Session Tool automation settings ─────────────────────────
