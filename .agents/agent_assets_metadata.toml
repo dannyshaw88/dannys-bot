@@ -127,3 +127,31 @@ mtime_ms = 1791757151122
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/74250b2a-7680-4475-8770-16f292ddeb38/2c506046-096d-4123-8bf2-ab5639675a30"
 storage_version_token = "1791757160317705"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "_0fuwYYyV09QF5hgi4EsN"
+uri = "file://generated-artifacts/removed_duplicates_contact_sheet.jpg"
+type = "image"
+title = "Contact sheet — images removed as repeats"
+description = "Visual overview of the 17 images removed during the first-pass face deduplication. Labels are the source image numbers."
+logical_id = "8462d035-4e36-4ea8-8732-dc7a1728b60c"
+content_hash = "sha256:6c2a45e9247592e248273abcffe6451c33d60ca53682488b344ac2ee4218b245"
+size = 342317
+mtime_ms = 1791757267961
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/8462d035-4e36-4ea8-8732-dc7a1728b60c/cf93b785-6cf4-4388-a392-d630b934b342"
+storage_version_token = "1791757283787844"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "zLag3kvgHzvaCa7omfd88"
+uri = "file://generated-artifacts/AlterEgo_Fitness_Posts_removed_duplicates.zip"
+type = "unspecified"
+title = "Removed images — ZIP"
+description = "The 17 original images removed from the returned archive, with their original filenames preserved."
+logical_id = "2b37e7f2-a683-4842-9343-c1596b9cee52"
+content_hash = "sha256:b2a742e883a47294827a950510a1e0d793d614c6aec7f9cfcf460d3b2d3692b4"
+size = 3243192
+mtime_ms = 1791757266429
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/2b37e7f2-a683-4842-9343-c1596b9cee52/cf5971fb-f12e-4da2-b625-9d2e3e606866"
+storage_version_token = "1791757284561964"
+content_type = "application/octet-stream"
