@@ -1,3 +1,14 @@
+## [1.2.583] — 2026-10-11
+
+### Added — TrustScore Make a Post Count Cutoff
+
+- Configure the enabled switch and post-count range in Settings → TrustScores, then copy those settings across TrustScore labels.
+- Keep the random cutoff target and reached state specific to each account slot.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.583`.
+
 ## [1.2.582] — 2026-10-07
 
 ### Fixed — Follow Search Result Timing
