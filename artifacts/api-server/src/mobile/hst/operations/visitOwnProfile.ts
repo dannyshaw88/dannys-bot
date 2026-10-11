@@ -6,6 +6,7 @@ export interface VisitOwnProfileOperationContext {
     pressBack(serial: string): Promise<void>;
   };
   hstRandomDelay(serial: string, minimumMs: number, maximumMs: number): Promise<void>;
+  onProfileReady?: () => Promise<void>;
   logger: { warn(payload: unknown, message: string): void };
   onLog?: (message: string) => void;
 }
@@ -24,6 +25,13 @@ export async function runVisitOwnProfile(
     onLog?.(`Random Jitter: dismissed contacts popup ("${dismissed}")`);
     await hstRandomDelay(serial, 2500, 10000);
   }
+
+  // Optional observers run while the account's own profile header is already
+  // visible. They must not navigate or poll, so unrelated tools keep their
+  // existing timing and device input sequence.
+  await context.onProfileReady?.().catch(error => {
+    logger.warn({ err: error }, "Own-profile observer failed");
+  });
 
   onLog?.("Random Actions: ✓ visited own profile");
   await android.tapCalibratedNavigationControl(serial, "home", onLog);

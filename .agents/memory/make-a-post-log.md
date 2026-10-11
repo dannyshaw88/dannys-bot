@@ -131,6 +131,18 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-11 — Post-count cutoff configuration belongs to TrustScore templates
+- The enabled switch and minimum/maximum range are configured in Settings → TrustScores and can be copied from one TrustScore label to the others with Copy Settings.
+- Do not show these controls or offer them in Phone Farm account Copy Settings. The randomly selected target and reached latch remain per-slot runtime state.
+- Changing the template range invalidates that slot's saved target on its next existing own-profile visit; do not add a navigation or recurring check.
+- **Verification:** API and frontend builds passed. Account switching already normalizes both target and visible usernames to lowercase; the supplied log did not show a casing-based miss. Real-device confirmation remains outstanding.
+
+### 2026-10-11 — Per-slot Make a Post cutoff uses existing profile visits
+- Added a per-slot option to disable Make a Post at one randomly selected count between the configured minimum and maximum.
+- The count is read only during Random Actions' existing visit to that account's own profile; no profile navigation or recurring count check was added.
+- The chosen target is persisted by stable slot identity. Reaching it disables Make a Post for that slot, and a server-side latch prevents stale autosaves from turning it back on; a fresh checkbox action is required to re-enable it.
+- An unreadable count leaves settings unchanged. API and frontend package builds pass; real-device behavior still needs confirmation.
+
 ### 2026-10-05 — Match Make a Post staging to upload-avatar
 - **Rule:** Make a Post's device staging uses the same ADB push and best-effort media-scan behavior as Update Profile Picture. Keep the MediaStore audit diagnostic, not a gate after a successful push; a failed push still aborts, and calibrated picker/share checks and cleanup remain.
 - **Why:** The user identified upload-avatar's working device upload as the reference and said the failure is in Make a Post's image-staging path.

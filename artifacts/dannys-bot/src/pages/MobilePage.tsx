@@ -5342,6 +5342,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             appSwitchPctMin: s.appSwitchPctMin,
             appSwitchPctMax: s.appSwitchPctMax,
             makePostEnabled: s.makePostEnabled,
+            makePostDisableAtPostCountEnabled: s.makePostDisableAtPostCountEnabled,
+            makePostDisableAtPostCountMin: s.makePostDisableAtPostCountMin,
+            makePostDisableAtPostCountMax: s.makePostDisableAtPostCountMax,
+            makePostDisableAtPostCountTarget: s.makePostDisableAtPostCountTarget,
             makePostActivatePctMin: s.makePostActivatePctMin,
             makePostActivatePctMax: s.makePostActivatePctMax,
             makePostPerSessionMin: s.makePostPerSessionMin,
@@ -5396,6 +5400,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           }),
         });
         const body = await r.json().catch(() => null);
+        if (typeof body?.makePostPostCountTarget === "number" || body?.makePostAutoDisabledByPostCount) {
+          setSettings(current => ({
+            ...current,
+            ...(typeof body?.makePostPostCountTarget === "number"
+              ? { makePostDisableAtPostCountTarget: body.makePostPostCountTarget }
+              : {}),
+            ...(body?.makePostAutoDisabledByPostCount ? { makePostEnabled: false } : {}),
+            ...(body?.makePostAutoDisabledByPostCount ? { makePostDisableAtPostCountReached: true } : {}),
+          }));
+        }
         srvLog(`${_dbgTag} — cycle response (status=${r.status}, ok=${r.ok}, error=${body?.error ?? "none"})`);
         if (Array.isArray(body?.executionTrace)) {
           for (const entry of body.executionTrace) {
@@ -8421,7 +8435,15 @@ export function AutomationSettingsPanel({
               type="checkbox"
               id={`make-a-post-enabled-${slotIdx ?? 0}`}
               checked={settings.makePostEnabled}
-              onChange={e => setSettings(s => ({ ...s, makePostEnabled: e.target.checked }))}
+              onChange={e => setSettings(s => ({
+                ...s,
+                makePostEnabled: e.target.checked,
+                ...(e.target.checked ? {
+                  makePostDisableAtPostCountTarget: null,
+                  makePostDisableAtPostCountReached: false,
+                  makePostPostCountManualReenableToken: Date.now(),
+                } : {}),
+              }))}
               disabled={fieldDisabled("makePostEnabled")}
               className="w-4 h-4 accent-primary cursor-pointer"
             />
@@ -8559,6 +8581,36 @@ export function AutomationSettingsPanel({
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-disable-exhausted-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Stop if folders empty</label>
                       </div>
+                      {isTrustScoreTemplateEditor && <div className="flex flex-wrap items-center gap-2">
+                        <input type="checkbox" id={`make-a-post-disable-post-count-${slotIdx ?? 0}`}
+                          checked={settings.makePostDisableAtPostCountEnabled}
+                          onChange={e => setSettings(s => ({
+                            ...s,
+                            makePostDisableAtPostCountEnabled: e.target.checked,
+                            makePostDisableAtPostCountTarget: null,
+                          }))}
+                          disabled={fieldDisabled("makePostDisableAtPostCountEnabled")}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor={`make-a-post-disable-post-count-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Disable when account reaches</label>
+                        <Input type="number" min={1} max={1000000} className={`${NUM_INPUT_CLASS} w-16`}
+                          value={settings.makePostDisableAtPostCountMin}
+                          onChange={e => setSettings(s => ({
+                            ...s,
+                            makePostDisableAtPostCountMin: Math.max(1, Math.min(1000000, clamp4(Number(e.target.value)))),
+                            makePostDisableAtPostCountTarget: null,
+                          }))}
+                          disabled={fieldDisabled("makePostDisableAtPostCountMin") || !settings.makePostDisableAtPostCountEnabled} />
+                        <span className="text-xs text-muted-foreground">to</span>
+                        <Input type="number" min={1} max={1000000} className={`${NUM_INPUT_CLASS} w-16`}
+                          value={settings.makePostDisableAtPostCountMax}
+                          onChange={e => setSettings(s => ({
+                            ...s,
+                            makePostDisableAtPostCountMax: Math.max(1, Math.min(1000000, clamp4(Number(e.target.value)))),
+                            makePostDisableAtPostCountTarget: null,
+                          }))}
+                          disabled={fieldDisabled("makePostDisableAtPostCountMax") || !settings.makePostDisableAtPostCountEnabled} />
+                        <span className="text-xs text-muted-foreground">posts</span>
+                      </div>}
                       <div className="flex items-center gap-2">
                         <input type="checkbox" id={`make-a-post-add-location-${slotIdx ?? 0}`}
                           checked={settings.makePostAddLocation}

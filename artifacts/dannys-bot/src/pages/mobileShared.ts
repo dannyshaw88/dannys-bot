@@ -216,6 +216,14 @@ export interface AutomationSettingsData {
   followActivatePctMin: number; followActivatePctMax: number;
   randomJitterActivatePctMin: number; randomJitterActivatePctMax: number;
   makePostEnabled: boolean;
+  makePostDisableAtPostCountEnabled: boolean;
+  makePostDisableAtPostCountMin: number;
+  makePostDisableAtPostCountMax: number;
+  makePostDisableAtPostCountTarget: number | null;
+  makePostDisableAtPostCountTargetMin: number | null;
+  makePostDisableAtPostCountTargetMax: number | null;
+  makePostDisableAtPostCountReached: boolean;
+  makePostPostCountManualReenableToken: number;
   makePostActivatePctMin: number; makePostActivatePctMax: number;
   makePostPerSessionMin: number; makePostPerSessionMax: number;
   makePostFilterChanceMin: number; makePostFilterChanceMax: number;
@@ -367,6 +375,14 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   followActivatePctMin: 100, followActivatePctMax: 100,
   randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
   makePostEnabled: false,
+  makePostDisableAtPostCountEnabled: false,
+  makePostDisableAtPostCountMin: 20,
+  makePostDisableAtPostCountMax: 25,
+  makePostDisableAtPostCountTarget: null,
+  makePostDisableAtPostCountTargetMin: null,
+  makePostDisableAtPostCountTargetMax: null,
+  makePostDisableAtPostCountReached: false,
+  makePostPostCountManualReenableToken: 0,
   makePostActivatePctMin: 100, makePostActivatePctMax: 100,
   makePostPerSessionMin: 1, makePostPerSessionMax: 1,
   makePostFilterChanceMin: 0, makePostFilterChanceMax: 100,
@@ -477,6 +493,11 @@ export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "makePostMetadataCleanup",
   "makePostFrequencyDisruption",
   "makePostEnabled",
+  "makePostDisableAtPostCountTarget",
+  "makePostDisableAtPostCountTargetMin",
+  "makePostDisableAtPostCountTargetMax",
+  "makePostDisableAtPostCountReached",
+  "makePostPostCountManualReenableToken",
   "makePostFilterChanceMin",
   "makePostFilterChanceMax",
   "makePostDisableWhenExhausted",
@@ -668,6 +689,7 @@ export const COPY_SECTIONS: CopySection[] = [
     { key: 'postEnabled',       label: 'Enabled',                       fields: ['makePostEnabled'] },
     { key: 'postActivate',      label: 'Activate Percentage',           fields: ['makePostActivatePctMin','makePostActivatePctMax'] },
     { key: 'postPerSession',    label: 'Posts per session',             fields: ['makePostPerSessionMin','makePostPerSessionMax'] },
+    { key: 'postDisableAtCount', label: 'Disable when account reaches', fields: ['makePostDisableAtPostCountEnabled','makePostDisableAtPostCountMin','makePostDisableAtPostCountMax'] },
     { key: 'postRerunChance',   label: 'Re-run Chance %',                fields: ['makePostRerunChanceMin','makePostRerunChanceMax'] },
     { key: 'postAlteration',    label: 'Image Alteration',              fields: ['makePostAlterationEnabled','makePostAlterationLevel'] },
     { key: 'postImgSettings',   label: 'Image Settings',                fields: ['makePostImageSettingsEnabled','makePostImageSettings'] },

@@ -704,6 +704,14 @@ type AutomationSettings = {
   // automation-cycle image-preparation path before the Android media-picker
   // upload.
   makePostEnabled?: boolean;
+  makePostDisableAtPostCountEnabled?: boolean;
+  makePostDisableAtPostCountMin?: number;
+  makePostDisableAtPostCountMax?: number;
+  makePostDisableAtPostCountTarget?: number | null;
+  makePostDisableAtPostCountTargetMin?: number | null;
+  makePostDisableAtPostCountTargetMax?: number | null;
+  makePostDisableAtPostCountReached?: boolean;
+  makePostPostCountManualReenableToken?: number;
   makePostActivatePctMin?: number;
   makePostActivatePctMax?: number;
   makePostPerSessionMin?: number;
@@ -2661,6 +2669,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // repost* settings. The automation cycle consumes the local-folder,
     // alteration, and image-settings fields below.
     makePostEnabled: z.boolean().default(false),
+    makePostDisableAtPostCountEnabled: z.boolean().default(false),
+    makePostDisableAtPostCountMin: z.number().int().min(1).max(1_000_000).default(20),
+    makePostDisableAtPostCountMax: z.number().int().min(1).max(1_000_000).default(25),
+    makePostDisableAtPostCountTarget: z.number().int().min(1).max(1_000_000).nullable().default(null),
+    makePostDisableAtPostCountTargetMin: z.number().int().min(1).max(1_000_000).nullable().default(null),
+    makePostDisableAtPostCountTargetMax: z.number().int().min(1).max(1_000_000).nullable().default(null),
+    makePostDisableAtPostCountReached: z.boolean().default(false),
+    makePostPostCountManualReenableToken: z.number().int().nonnegative().default(0),
     makePostActivatePctMin: z.number().min(0).max(100).default(100),
     makePostActivatePctMax: z.number().min(0).max(100).default(100),
     makePostPerSessionMin: z.number().min(1).max(20).default(1),
@@ -2836,6 +2852,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       followActivatePctMin: 100, followActivatePctMax: 100,
       randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
       makePostEnabled: false,
+      makePostDisableAtPostCountEnabled: false,
+      makePostDisableAtPostCountMin: 20, makePostDisableAtPostCountMax: 25,
+      makePostDisableAtPostCountTarget: null,
+      makePostDisableAtPostCountTargetMin: null,
+      makePostDisableAtPostCountTargetMax: null,
+      makePostDisableAtPostCountReached: false, makePostPostCountManualReenableToken: 0,
       makePostActivatePctMin: 100, makePostActivatePctMax: 100,
        makePostPerSessionMin: 1, makePostPerSessionMax: 1,
        makePostFilterChanceMin: 0, makePostFilterChanceMax: 100,
@@ -2996,10 +3018,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "updateBioActivatePctMin",
     "updateBioActivatePctMax",
     "updateBioText",
-    // Disable-after-use behavior is owned by the Trust Score template, not
-    // by an individual physical phone/account slot.
+    // The profile-post cutoff configuration is TrustScore-template owned.
+    // The randomly chosen target and reached latch remain slot-owned runtime state.
     "makePostLocalFolderEnabled",
     "makePostLocalFolderPath",
+    "makePostDisableAtPostCountTarget",
+    "makePostDisableAtPostCountTargetMin",
+    "makePostDisableAtPostCountTargetMax",
+    "makePostDisableAtPostCountReached",
+    "makePostPostCountManualReenableToken",
     "makePostAddLocation",
     "makePostAlterationEnabled",
     "makePostAlterationLevel",
@@ -3551,6 +3578,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         followActivatePctMin: 100, followActivatePctMax: 100,
         randomJitterActivatePctMin: 100, randomJitterActivatePctMax: 100,
         makePostEnabled: false,
+        makePostDisableAtPostCountEnabled: false,
+        makePostDisableAtPostCountMin: 20, makePostDisableAtPostCountMax: 25,
+        makePostDisableAtPostCountTarget: null,
+        makePostDisableAtPostCountTargetMin: null,
+        makePostDisableAtPostCountTargetMax: null,
+        makePostDisableAtPostCountReached: false, makePostPostCountManualReenableToken: 0,
         makePostActivatePctMin: 100, makePostActivatePctMax: 100,
          makePostPerSessionMin: 1, makePostPerSessionMax: 1,
          makePostFilterChanceMin: 0, makePostFilterChanceMax: 100,
@@ -3657,6 +3690,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // wipe, etc.).  Stripping the empty value here means the existing saved
       // path in `base` (from mobile-instances.json) is preserved instead.
       const body = { ...req.body };
+      const currentReenableToken = Number(existing.makePostPostCountManualReenableToken ?? 0);
+      const incomingReenableToken = Number(body.makePostPostCountManualReenableToken ?? currentReenableToken);
+      const explicitReenable = Number.isSafeInteger(incomingReenableToken) && incomingReenableToken > currentReenableToken;
+      if (explicitReenable) {
+        body.makePostPostCountManualReenableToken = incomingReenableToken;
+        body.makePostDisableAtPostCountReached = false;
+      } else if (existing.makePostDisableAtPostCountReached === true) {
+        // A stale autosave must not undo the server-side post-count cutoff.
+        body.makePostPostCountManualReenableToken = currentReenableToken;
+        body.makePostDisableAtPostCountReached = true;
+        body.makePostEnabled = false;
+      } else {
+        body.makePostPostCountManualReenableToken = currentReenableToken;
+      }
       if (body.makePostLocalFolderPath === "") delete body.makePostLocalFolderPath;
       if (body.postStoryLocalFolderPath === "") delete body.postStoryLocalFolderPath;
       const assignment = await loadTrustScoreAssignment(serial, slotIdx);
@@ -6619,6 +6666,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let exploreLikes = 0;
     let injectBrowsingLikes = 0;
     let postsUploaded = 0;
+    let makePostAutoDisabledByPostCount = false;
+    let makePostPostCountTarget: number | null = null;
     // Hoisted so the catch block can include partial stats in the COMPLETE log
     // even when the cycle is aborted or errors mid-run.
     let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0, hashtagTaps = 0, authorVisits = 0;
@@ -8351,6 +8400,80 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               homeTapCount: _viewFeedExecuted ? 2 : 1,
               visitProfilePctMin,
               visitProfilePctMax,
+              onOwnProfileReady: async () => {
+                const configs = loadInstanceConfigs();
+                const key = slotAutomationKey(serial, slotIdx, slotId);
+                const saved = configs[serial]?.slotAutomation?.[key]
+                  ?? configs[serial]?.slotAutomation?.[String(slotIdx)]
+                  ?? {};
+                if (effectiveSettings.makePostDisableAtPostCountEnabled !== true) return;
+
+                const postCount = await android.getProfilePostCount(serial).catch(() => null);
+                if (postCount === null) {
+                  tLog("  Make a Post limit: profile post count was not readable; leaving this slot unchanged");
+                  return;
+                }
+
+                const min = Math.max(1, Math.min(1_000_000, Math.trunc(effectiveSettings.makePostDisableAtPostCountMin ?? 20)));
+                const max = Math.max(min, Math.min(1_000_000, Math.trunc(effectiveSettings.makePostDisableAtPostCountMax ?? 25)));
+                let target = Number.isInteger(saved.makePostDisableAtPostCountTarget)
+                  ? saved.makePostDisableAtPostCountTarget
+                  : null;
+                if (
+                  target === null ||
+                  target < min ||
+                  target > max ||
+                  saved.makePostDisableAtPostCountTargetMin !== min ||
+                  saved.makePostDisableAtPostCountTargetMax !== max
+                ) {
+                  target = min + Math.floor(Math.random() * (max - min + 1));
+                  const latest = loadInstanceConfigs();
+                  const latestSettings = latest[serial]?.slotAutomation?.[key]
+                    ?? latest[serial]?.slotAutomation?.[String(slotIdx)]
+                    ?? saved;
+                  latest[serial] = {
+                    ...latest[serial],
+                    slotAutomation: {
+                      ...latest[serial]?.slotAutomation,
+                      [key]: {
+                        ...latestSettings,
+                        makePostDisableAtPostCountTarget: target,
+                        makePostDisableAtPostCountTargetMin: min,
+                        makePostDisableAtPostCountTargetMax: max,
+                      },
+                    },
+                  };
+                  saveInstanceConfigs(latest);
+                }
+                makePostPostCountTarget = target;
+
+                tLog(`  Make a Post limit: @${slotUsername || "unknown"} has ${postCount} post(s); slot target is ${target}`);
+                if (postCount < target) return;
+
+                const latest = loadInstanceConfigs();
+                const latestSettings = latest[serial]?.slotAutomation?.[key]
+                  ?? latest[serial]?.slotAutomation?.[String(slotIdx)]
+                  ?? saved;
+                const toolOverrides = {
+                  ...(latestSettings.trustScoreToolOverrides ?? {}),
+                  makePostEnabled: false,
+                };
+                latest[serial] = {
+                  ...latest[serial],
+                  slotAutomation: {
+                    ...latest[serial]?.slotAutomation,
+                    [key]: {
+                      ...latestSettings,
+                      makePostEnabled: false,
+                      makePostDisableAtPostCountReached: true,
+                      trustScoreToolOverrides: toolOverrides,
+                    },
+                  },
+                };
+                saveInstanceConfigs(latest);
+                makePostAutoDisabledByPostCount = true;
+                tLog(`  Make a Post limit reached (${postCount}/${target}); disabled Make a Post for this account slot only`);
+              },
               visitSavedPctMin,
               visitSavedPctMax,
               visitSettingsPctMin,
@@ -8572,6 +8695,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         storiesWatched,
         followedCount,
         postsUploaded,
+        makePostAutoDisabledByPostCount,
+        makePostPostCountTarget,
+        makePostDisableAtPostCountReached: makePostAutoDisabledByPostCount,
         strayNavRecoveries,
         steps,
         executionTrace,

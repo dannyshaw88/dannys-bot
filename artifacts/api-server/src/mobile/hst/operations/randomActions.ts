@@ -41,6 +41,7 @@ export interface RandomActionsOptions {
   updateBioActivatePctMin?: number; updateBioActivatePctMax?: number;
   updateBioText?: string; updateBioDisableAfterUsed?: boolean;
   slotIdx?: number; slotAutomationKey?: string;
+  onOwnProfileReady?: () => Promise<void>;
 }
 
 /** Run the complete, deliberately ordered Random Actions sequence. */
@@ -66,7 +67,11 @@ export async function runRandomActionsStep(
   const profileChance = rollRange(opts.visitProfilePctMin, opts.visitProfilePctMax) / 100;
   if (profileChance > 0 && Math.random() < profileChance) {
     onLog("Random Actions: visiting own profile…");
-    await runVisitOwnProfile(serial, { ...context, onLog: (message: string) => onLog(`  ${message}`) });
+    await runVisitOwnProfile(serial, {
+      ...context,
+      onLog: (message: string) => onLog(`  ${message}`),
+      onProfileReady: opts.onOwnProfileReady,
+    });
     fired = true;
     await mutateAfter?.("profile");
   }
