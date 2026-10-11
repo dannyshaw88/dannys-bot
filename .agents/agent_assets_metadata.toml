@@ -155,3 +155,45 @@ mtime_ms = 1791757266429
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/2b37e7f2-a683-4842-9343-c1596b9cee52/cf5971fb-f12e-4da2-b625-9d2e3e606866"
 storage_version_token = "1791757284561964"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "HjVjYy5_g2X_hl4y64Gp-"
+uri = "file://generated-artifacts/face_pairs_visual_candidates.jpg"
+type = "image"
+title = "Side-by-side face pairs"
+description = "Each adjacent pair shows a retained candidate on the left and a removed image on the right. These are visual candidate matches, not automated identity verification."
+logical_id = "e1a560bd-8b3a-4e9b-8377-151ad40c574c"
+content_hash = "sha256:8f6624405a8455ac79c420394d5b526e8fad527df2beac9596876ab26da5e4d2"
+size = 395206
+mtime_ms = 1791757457101
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/e1a560bd-8b3a-4e9b-8377-151ad40c574c/413b8b42-dcb3-4e6d-ae96-662fb49a6e88"
+storage_version_token = "1791757476397506"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "hN4qo4Oa6p9FCzVwOVJWY"
+uri = "file://generated-artifacts/face_matches_uncertain.jpg"
+type = "image"
+title = "Removed images without a confident match"
+description = "These removed images did not have a confident retained counterpart in the visual review."
+logical_id = "cb5ad69d-2e4e-4d98-8c64-ee86e01e83dd"
+content_hash = "sha256:8d7269eff0214add8bb2e90a2d84c579336ac16042f3cdfcc356e34a92a2b3c7"
+size = 132816
+mtime_ms = 1791757457913
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/cb5ad69d-2e4e-4d98-8c64-ee86e01e83dd/62567f31-244c-4501-a89f-a1000ff3e43e"
+storage_version_token = "1791757477066020"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "vii9zvUSaZtd_L-osyaWt"
+uri = "file://generated-artifacts/face_pair_candidates.txt"
+type = "text"
+title = "Face-pair candidate IDs"
+description = "A text list of the side-by-side candidate image IDs and the removed images without a confident match."
+logical_id = "de498b55-510f-400b-b5a1-9b7c8ab7ba17"
+content_hash = "sha256:5959abbd1c11d708aa4ac835093ef7dfa666aa779692f28bfbcaf12e2fb645fa"
+size = 285
+mtime_ms = 1791757454318
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/de498b55-510f-400b-b5a1-9b7c8ab7ba17/27f39b67-e0d0-4133-9185-d27ba3bc5ec3"
+storage_version_token = "1791757477765309"
+content_type = "text/plain"
