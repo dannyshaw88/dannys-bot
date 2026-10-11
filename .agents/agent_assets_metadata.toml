@@ -118,56 +118,56 @@ content_type = "application/octet-stream"
 id = "bbCazS8_KMwgsMWn5R0Hu"
 uri = "file://generated-artifacts/AlterEgo_Fitness_Posts_unique_faces.zip"
 type = "unspecified"
-title = "Fitness posts — visually deduplicated faces"
-description = "ZIP containing 97 images from the uploaded archive. I removed 17 images judged to repeat a person, retaining one representative per recurring face; the ZIP integrity check passed."
+title = "Corrected image archive — 110 images"
+description = "Updated conservatively after review: image 112 and other uncertain removals were restored. Four visually strong repeat candidates remain removed."
 logical_id = "74250b2a-7680-4475-8770-16f292ddeb38"
-content_hash = "sha256:bf91085b4ff077ca3236082faec89b9b5a9cb310b6c9b6dcf78e95352fe934ac"
-size = 20138949
-mtime_ms = 1791757151122
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/74250b2a-7680-4475-8770-16f292ddeb38/2c506046-096d-4123-8bf2-ab5639675a30"
-storage_version_token = "1791757160317705"
+content_hash = "sha256:9ad7f18ba9321f751b818dc53c95555fd1351183cef24b695eac376f572b9227"
+size = 22668338
+mtime_ms = 1791757706958
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/74250b2a-7680-4475-8770-16f292ddeb38/9cbc8aba-9749-4f8b-aa38-c1d3e369cccc"
+storage_version_token = "1791757737246514"
 content_type = "application/octet-stream"
 
 [[outputs]]
 id = "_0fuwYYyV09QF5hgi4EsN"
 uri = "file://generated-artifacts/removed_duplicates_contact_sheet.jpg"
 type = "image"
-title = "Contact sheet — images removed as repeats"
-description = "Visual overview of the 17 images removed during the first-pass face deduplication. Labels are the source image numbers."
+title = "Contact sheet — four removed candidates"
+description = "Face crops for the four files in the removed-image ZIP."
 logical_id = "8462d035-4e36-4ea8-8732-dc7a1728b60c"
-content_hash = "sha256:6c2a45e9247592e248273abcffe6451c33d60ca53682488b344ac2ee4218b245"
-size = 342317
-mtime_ms = 1791757267961
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/8462d035-4e36-4ea8-8732-dc7a1728b60c/cf93b785-6cf4-4388-a392-d630b934b342"
-storage_version_token = "1791757283787844"
+content_hash = "sha256:91e97c3272d50a617837720b6b471dd3b880a15498aa4f5b19b1bfd7560dc818"
+size = 84577
+mtime_ms = 1791757725869
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/8462d035-4e36-4ea8-8732-dc7a1728b60c/8a233962-190c-4db0-b8cf-ac2ddad1a1b3"
+storage_version_token = "1791757739561609"
 content_type = "image/jpeg"
 
 [[outputs]]
 id = "zLag3kvgHzvaCa7omfd88"
 uri = "file://generated-artifacts/AlterEgo_Fitness_Posts_removed_duplicates.zip"
 type = "unspecified"
-title = "Removed images — ZIP"
-description = "The 17 original images removed from the returned archive, with their original filenames preserved."
+title = "Four removed repeat candidates"
+description = "Original files for the four images still removed from the corrected archive."
 logical_id = "2b37e7f2-a683-4842-9343-c1596b9cee52"
-content_hash = "sha256:b2a742e883a47294827a950510a1e0d793d614c6aec7f9cfcf460d3b2d3692b4"
-size = 3243192
-mtime_ms = 1791757266429
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/2b37e7f2-a683-4842-9343-c1596b9cee52/cf5971fb-f12e-4da2-b625-9d2e3e606866"
-storage_version_token = "1791757284561964"
+content_hash = "sha256:fb8463bd51dd0a249b2d042dba6de6cb947945b0296524c8a5fb91336088b986"
+size = 713803
+mtime_ms = 1791757706986
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/2b37e7f2-a683-4842-9343-c1596b9cee52/86b89110-d3b9-40b6-b39c-bb35b2fc76b9"
+storage_version_token = "1791757738839573"
 content_type = "application/octet-stream"
 
 [[outputs]]
 id = "HjVjYy5_g2X_hl4y64Gp-"
 uri = "file://generated-artifacts/face_pairs_visual_candidates.jpg"
 type = "image"
-title = "Side-by-side face pairs"
-description = "Each adjacent pair shows a retained candidate on the left and a removed image on the right. These are visual candidate matches, not automated identity verification."
+title = "Revised side-by-side repeat candidates"
+description = "Four remaining candidate pairs. Left is the retained image; right is the removed image. Visual matches are not biometric verification."
 logical_id = "e1a560bd-8b3a-4e9b-8377-151ad40c574c"
-content_hash = "sha256:8f6624405a8455ac79c420394d5b526e8fad527df2beac9596876ab26da5e4d2"
-size = 395206
-mtime_ms = 1791757457101
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/e1a560bd-8b3a-4e9b-8377-151ad40c574c/413b8b42-dcb3-4e6d-ae96-662fb49a6e88"
-storage_version_token = "1791757476397506"
+content_hash = "sha256:4c6ea3006d5462f1f038f8ae5e49c88b44abd5358799cb7513ac3c7babc2eb27"
+size = 185066
+mtime_ms = 1791757708138
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/e1a560bd-8b3a-4e9b-8377-151ad40c574c/02d52ceb-5597-41cc-8153-65f21c0d771c"
+storage_version_token = "1791757738112001"
 content_type = "image/jpeg"
 
 [[outputs]]
