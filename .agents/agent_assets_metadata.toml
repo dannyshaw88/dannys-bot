@@ -113,3 +113,17 @@ mtime_ms = 1789733463583
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/a3d6cad2-8e26-47ca-9d51-85be9306e49d/61d1e657-5b5d-4acc-8a4c-63500321e470"
 storage_version_token = "1789733470682420"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "bbCazS8_KMwgsMWn5R0Hu"
+uri = "file://generated-artifacts/AlterEgo_Fitness_Posts_unique_faces.zip"
+type = "unspecified"
+title = "Fitness posts — visually deduplicated faces"
+description = "ZIP containing 97 images from the uploaded archive. I removed 17 images judged to repeat a person, retaining one representative per recurring face; the ZIP integrity check passed."
+logical_id = "74250b2a-7680-4475-8770-16f292ddeb38"
+content_hash = "sha256:bf91085b4ff077ca3236082faec89b9b5a9cb310b6c9b6dcf78e95352fe934ac"
+size = 20138949
+mtime_ms = 1791757151122
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/74250b2a-7680-4475-8770-16f292ddeb38/2c506046-096d-4123-8bf2-ab5639675a30"
+storage_version_token = "1791757160317705"
+content_type = "application/octet-stream"
