@@ -1,3 +1,9 @@
+## [1.2.586] — 2026-10-12
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.586`.
+
 ## [1.2.585] — 2026-10-12
 
 ### Fixed — Verify Update Bio text before saving
