@@ -134,6 +134,7 @@
 - [Split HST toggle ownership](split-hst-toggle-ownership.md) — coordinate cross-component toggle events so reconciliation cannot create duplicate writes and cycles
 - [Fix AI Slop Windows binary packaging](fix-ai-slop-windows-binary.md) — Windows dependency installs skip lifecycle scripts, so explicitly install, verify, and bundle ffmpeg.exe
 - [Update Bio screen gate](update-bio-screen-gate.md) — require the dedicated Bio editor marker; generic form markers also occur on Edit Profile and can select Name
+- [Update Bio typing verification](update-bio-text-verification.md) — calibrated tap dispatch is not proof of entered text; read the focused field back before saving
 - [Debug screenshot text](debug-screenshot-text.md) — wrap complete buffered log lines in server composites instead of clipping them to one row
 - [Device debug-log boundaries and colours](debug-log-colour-ownership.md) — clear per-device lines at HST lease start; retain action/API history and keep tool-owned colours
 - [Account-switch durable boundaries](account-switch-durable-boundaries.md) — persist switch boundaries in the API log; the rolling device trace can disappear on restart

@@ -17,6 +17,32 @@ function resolveSpinSyntax(text: string): string {
   });
 }
 
+function decodeXmlAttribute(value: string): string {
+  return value.replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (entity) => {
+    const name = entity.slice(1, -1).toLowerCase();
+    if (name === "amp") return "&";
+    if (name === "lt") return "<";
+    if (name === "gt") return ">";
+    if (name === "quot") return '"';
+    if (name === "apos") return "'";
+    const codePoint = name.startsWith("#x")
+      ? Number.parseInt(name.slice(2), 16)
+      : Number.parseInt(name.slice(1), 10);
+    return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+      ? String.fromCodePoint(codePoint)
+      : entity;
+  });
+}
+
+function getFocusedEditText(xml: string): string | null {
+  const node = xml.match(
+    /<node\b(?=[^>]*\bclass="android\.widget\.EditText")(?=[^>]*\bfocused="true")[^>]*>/i,
+  )?.[0];
+  if (!node) return null;
+  const text = node.match(/\btext="([^"]*)"/i)?.[1] ?? "";
+  return decodeXmlAttribute(text).replace(/\r\n?/g, "\n");
+}
+
 export async function runUpdateBio(
   serial: string,
   bioText: string,
@@ -25,7 +51,7 @@ export async function runUpdateBio(
 ): Promise<void> {
   const { android, sleepOrAbort, effectiveTypingProfile } = context;
   const originalBioText = bioText;
-    onLog?.(`Update Bio: input received — length=${originalBioText.length}, value=${JSON.stringify(originalBioText)}`);
+    onLog?.(`Update Bio: input received — length=${originalBioText.length}`);
     if (!bioText.trim()) { onLog?.("Update Bio: ✗ bio text is empty — skipping"); return; }
     // Normalize textarea/API line endings before resolving spin groups. Saved
     // settings can contain Windows CRLF (or legacy bare CR) line breaks; the
@@ -33,7 +59,7 @@ export async function runUpdateBio(
     bioText = bioText.replace(/\r\n?/g, "\n");
     // Resolve spin syntax before typing — each {a|b|c} group is rolled independently.
     bioText = resolveSpinSyntax(bioText);
-    onLog?.(`Update Bio: spin resolved — inputLength=${originalBioText.length}, outputLength=${bioText.length}, value=${JSON.stringify(bioText)}, spinGroupsRemaining=${(bioText.match(/\{[^{}]*\}/g) ?? []).length}`);
+    onLog?.(`Update Bio: spin resolved — inputLength=${originalBioText.length}, outputLength=${bioText.length}, spinGroupsRemaining=${(bioText.match(/\{[^{}]*\}/g) ?? []).length}`);
 
     // 1. Tap the profile tab (bottom-right, tab_avatar).
     {
@@ -201,7 +227,7 @@ export async function runUpdateBio(
         await android.pressBack(serial);
         return;
       }
-      onLog?.(`Update Bio: typing start — length=${bioText.length}, value=${JSON.stringify(bioText)}`);
+      onLog?.(`Update Bio: typing start — length=${bioText.length}`);
       const typed = await android.typeViaSavedCalibrationMap(
         serial,
         bioText,
@@ -219,7 +245,28 @@ export async function runUpdateBio(
         return;
       }
       onLog?.(`Update Bio: typing result — ok=${typed.ok}, calibrationAvailable=${typed.available}, missing=${typed.missing.join(",") || "none"}`);
-      onLog?.(`Update Bio: entered bio text via keyboard calibration (${bioText.length} chars)`);
+      await sleepOrAbort(serial, 350);
+      const afterTypingXml = await android.dumpUi(serial).catch(() => "");
+      const actualBio = getFocusedEditText(afterTypingXml);
+      const expectedBio = bioText.replace(/\r\n?/g, "\n");
+      if (actualBio !== expectedBio) {
+        let firstMismatch = 0;
+        while (
+          firstMismatch < expectedBio.length &&
+          firstMismatch < (actualBio?.length ?? 0) &&
+          expectedBio[firstMismatch] === actualBio?.[firstMismatch]
+        ) {
+          firstMismatch++;
+        }
+        onLog?.(
+          `Update Bio: ✗ typed text verification failed — ` +
+          `focusedEditTextFound=${actualBio !== null}, expectedLength=${expectedBio.length}, ` +
+          `actualLength=${actualBio?.length ?? 0}, firstMismatch=${firstMismatch}; aborting without save`,
+        );
+        await android.pressBack(serial);
+        return;
+      }
+      onLog?.(`Update Bio: ✓ typed text verified in focused Bio field (${expectedBio.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
 
