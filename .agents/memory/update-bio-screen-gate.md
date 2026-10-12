@@ -21,8 +21,8 @@ The flow now polls boundedly until the Edit Profile form marker and Bio field ar
 
 ### Keep Update Bio navigation aligned with Update Profile Picture
 
-When Update Bio fails to locate Edit profile, compare it with the working Update Profile Picture flow before changing its timing or adding retries. Both actions should share one live accessibility-tree locator; it must handle labels on a child and clickable bounds on its ancestor.
+When Update Bio fails to locate Edit profile, compare it with the working Update Profile Picture flow before changing its timing or adding retries. Keep the Bio tap locator identical to the avatar path: `desc="Edit profile"` and bounds on that same live node, in either attribute order.
 
-**Why:** The two operations had separate Edit profile matchers, so equivalent screens could produce different outcomes and Bio failures gave no successful-tap confirmation.
+**Why:** The user confirmed the avatar flow targets the right control and wants Bio to use that exact navigation behavior, rather than a separate broader matcher.
 
-**How to apply:** Reuse the shared Edit profile locator in both operations and retain the live-node fail-closed behavior; use its diagnostics to investigate any remaining device-specific miss.
+**How to apply:** Reuse the same live-node matching logic for both operations and retain the fail-closed behavior; use the added tap/miss diagnostics to investigate any remaining device-specific miss.

@@ -7901,77 +7901,22 @@ export async function findButtonByLabel(serial: string, label: string): Promise<
 }
 
 /**
- * Find Instagram's Edit profile control in a UIAutomator dump. The label can
- * be exposed on the text child while the clickable bounds belong to an
- * ancestor, so prefer the labeled node and otherwise use its nearest clickable
- * ancestor. All tap coordinates still come from the current accessibility tree.
+ * Find Instagram's Edit profile control using the exact locator that the
+ * working Update Profile Picture flow used: desc="Edit profile" and bounds on
+ * that same live UIAutomator node, regardless of attribute order.
  */
 export function findEditProfileButtonInUiXml(
   xml: string,
 ): { x: number; y: number; matchedBy: string } | null {
-  type UiNode = {
-    attrs: string;
-    parent: UiNode | null;
-    bounds: string | null;
+  const match =
+    xml.match(/desc="Edit profile"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
+    xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*desc="Edit profile"/);
+  if (!match) return null;
+  return {
+    x: Math.round((Number(match[1]) + Number(match[3])) / 2),
+    y: Math.round((Number(match[2]) + Number(match[4])) / 2),
+    matchedBy: 'avatar flow: desc="Edit profile" with same-node bounds',
   };
-  const roots: UiNode[] = [];
-  const stack: UiNode[] = [];
-  const tokenRe = /<\/?node\b[^>]*>/gi;
-  let token: RegExpExecArray | null;
-
-  while ((token = tokenRe.exec(xml)) !== null) {
-    if (/^<\/node/i.test(token[0])) {
-      stack.pop();
-      continue;
-    }
-    const attrs = token[0].match(/^<node\b([^>]*)>/i)?.[1] ?? "";
-    const node: UiNode = {
-      attrs,
-      parent: stack.at(-1) ?? null,
-      bounds: attrs.match(/\bbounds="([^"]+)"/i)?.[1] ?? null,
-    };
-    roots.push(node);
-    if (!/\/\s*>$/.test(token[0])) stack.push(node);
-  }
-
-  const readAttr = (attrs: string, name: string) =>
-    attrs.match(new RegExp(`(?:^|\\s)${name}="([^"]*)"`, "i"))?.[1]
-      ?.replace(/&quot;/g, '"')
-      .replace(/&apos;/g, "'")
-      .replace(/&amp;/g, "&")
-      .trim() ?? "";
-  const isTarget = (node: UiNode) => {
-    const label = ["text", "content-desc", "desc", "hint"]
-      .map(name => readAttr(node.attrs, name))
-      .some(value => value.toLowerCase() === "edit profile");
-    const resourceId = readAttr(node.attrs, "resource-id");
-    return label || /edit_profile(?:_button)?/i.test(resourceId);
-  };
-  const center = (bounds: string | null) => {
-    const match = bounds?.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
-    if (!match) return null;
-    const x1 = Number(match[1]), y1 = Number(match[2]);
-    const x2 = Number(match[3]), y2 = Number(match[4]);
-    if (x2 <= x1 || y2 <= y1) return null;
-    return { x: Math.round((x1 + x2) / 2), y: Math.round((y1 + y2) / 2) };
-  };
-
-  for (const node of roots) {
-    if (!isTarget(node)) continue;
-    const ownBounds = center(node.bounds);
-    if (ownBounds) return { ...ownBounds, matchedBy: "Edit profile node" };
-
-    let ancestor = node.parent;
-    while (ancestor) {
-      const clickable = readAttr(ancestor.attrs, "clickable").toLowerCase() === "true";
-      const ancestorBounds = clickable ? center(ancestor.bounds) : null;
-      if (ancestorBounds) {
-        return { ...ancestorBounds, matchedBy: "clickable ancestor of Edit profile node" };
-      }
-      ancestor = ancestor.parent;
-    }
-  }
-  return null;
 }
 
 /**
