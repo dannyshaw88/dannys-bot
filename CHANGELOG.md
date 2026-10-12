@@ -1,3 +1,13 @@
+## [1.2.587] — 2026-10-12
+
+### Added — TrustScore Make a Post AI label
+
+- Added the TrustScore-owned Add AI label option to Make a Post settings and Copy Settings. When enabled, automation sets and verifies Instagram's toggle before Share, stopping safely if it cannot confirm the state.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.587`.
+
 ## [1.2.586] — 2026-10-12
 
 ### Release
