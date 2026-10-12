@@ -617,6 +617,7 @@ async function runCycleBg(
         makePostLocalFolderNoRepeat: s.makePostLocalFolderNoRepeat,
         makePostLocalFolderRandom: s.makePostLocalFolderRandom,
         makePostAddLocation: s.makePostAddLocation,
+        makePostAddAiLabel: s.makePostAddAiLabel,
         updateProfilePicActivatePctMin: s.updateProfilePicActivatePctMin,
         updateProfilePicActivatePctMax: s.updateProfilePicActivatePctMax,
         updateProfilePicFolderPath: s.updateProfilePicFolderPath,

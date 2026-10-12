@@ -5361,6 +5361,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             makePostLocalFolderNoRepeat: s.makePostLocalFolderNoRepeat,
             makePostLocalFolderRandom: s.makePostLocalFolderRandom,
             makePostAddLocation: s.makePostAddLocation,
+            makePostAddAiLabel: s.makePostAddAiLabel,
             updateProfilePicActivatePctMin: s.updateProfilePicActivatePctMin,
             updateProfilePicActivatePctMax: s.updateProfilePicActivatePctMax,
             updateProfilePicFolderPath: s.updateProfilePicFolderPath,
@@ -8618,6 +8619,14 @@ export function AutomationSettingsPanel({
                           disabled={fieldDisabled("makePostAddLocation")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-add-location-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Add location</label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id={`make-a-post-add-ai-label-${slotIdx ?? 0}`}
+                          checked={settings.makePostAddAiLabel}
+                          onChange={e => setSettings(s => ({ ...s, makePostAddAiLabel: e.target.checked }))}
+                          disabled={fieldDisabled("makePostAddAiLabel")}
+                          className="w-3.5 h-3.5 accent-primary cursor-pointer" />
+                        <label htmlFor={`make-a-post-add-ai-label-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Add AI label</label>
                       </div>
                     </div>
                     <p className="text-[11px] text-muted-foreground">

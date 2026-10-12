@@ -728,6 +728,7 @@ type AutomationSettings = {
   makePostLocalFolderRandom?: boolean;
   makePostLocalFolderDeleteAfterUpload?: boolean;
   makePostAddLocation?: boolean;
+  makePostAddAiLabel?: boolean;
   makePostUseChatGpt?: boolean;
   makePostFixAiSlop?: boolean;
   makePostMetadataCleanup?: boolean;
@@ -2696,6 +2697,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     makePostLocalFolderRandom: z.boolean().default(false),
     makePostLocalFolderDeleteAfterUpload: z.boolean().default(false),
     makePostAddLocation: z.boolean().default(false),
+    makePostAddAiLabel: z.boolean().default(false),
     makePostUseChatGpt: z.boolean().default(false),
     makePostFixAiSlop: z.boolean().default(true),
     makePostMetadataCleanup: z.boolean().default(true),
@@ -2867,6 +2869,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
       makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
       makePostLocalFolderDeleteAfterUpload: false,
+      makePostAddAiLabel: false,
     makePostUseChatGpt: false, makePostFixAiSlop: true,
       makePostCaptionText: "",
       makePostImageSettings: {
@@ -3028,6 +3031,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostDisableAtPostCountReached",
     "makePostPostCountManualReenableToken",
     "makePostAddLocation",
+    "makePostAddAiLabel",
     "makePostAlterationEnabled",
     "makePostAlterationLevel",
     "makePostImageSettingsEnabled",
@@ -3097,6 +3101,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostEnabled",
     "makePostLocalFolderPath",
     "makePostAddLocation",
+    "makePostAddAiLabel",
     "makePostAlterationEnabled",
     "makePostAlterationLevel",
     "makePostImageSettingsEnabled",
@@ -3593,6 +3598,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         makePostLocalFolderEnabled: true, makePostLocalFolderPath: "",
         makePostLocalFolderNoRepeat: false, makePostLocalFolderRandom: false,
         makePostLocalFolderDeleteAfterUpload: false,
+        makePostAddAiLabel: false,
         makePostUseChatGpt: false, makePostFixAiSlop: true,
         makePostPostToProfilePctMin: 100, makePostPostToProfilePctMax: 100,
         makePostPostToStoryPctMin: 0, makePostPostToStoryPctMax: 0,
@@ -6881,6 +6887,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          makePostLocalFolderEnabled, makePostLocalFolderPath,
         makePostLocalFolderNoRepeat, makePostLocalFolderRandom,
          makePostAddLocation,
+         makePostAddAiLabel,
         makePostAlterationEnabled, makePostAlterationLevel, makePostImageSettingsEnabled,
         makePostImageSettings, makePostFixAiSlop, makePostMetadataCleanup, makePostFrequencyDisruption, makePostCaptionText,
          shareReelEnabled, shareReelActivatePctMin, shareReelActivatePctMax,
@@ -7420,6 +7427,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 localFolderNoRepeat: makePostLocalFolderNoRepeat,
                 captionText: makePostCaptionText,
                 addLocation: makePostAddLocation,
+                addAiLabel: makePostAddAiLabel,
                 alterationEnabled: makePostAlterationEnabled,
                 alterationLevel: makePostAlterationLevel,
                 imageSettingsEnabled: makePostImageSettingsEnabled,
@@ -8332,6 +8340,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     doFixAiSlop: makePostFixAiSlop,
                     frequencyDisruption: makePostFrequencyDisruption,
                     addLocation: makePostAddLocation,
+                    addAiLabel: makePostAddAiLabel,
                     captionText: makePostCaptionText,
                     homeTapCount: _viewFeedExecuted ? 2 : 1,
                     onLog: (msg) => tLog(`  ${msg}`),

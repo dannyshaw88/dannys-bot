@@ -20,7 +20,7 @@ export interface MakePostOperationContext {
 
 export async function runMakePostStep(serial: string, opts: {
   localFolderPath: string; localFolderRandom: boolean; localFolderNoRepeat: boolean;
-  captionText: string; addLocation?: boolean;
+  captionText: string; addLocation?: boolean; addAiLabel?: boolean;
   accountUsername?: string; slotIdx?: number; homeTapCount?: number;
   filterChanceMin?: number; filterChanceMax?: number;
   doFixAiSlop?: boolean; alterationEnabled?: boolean; alterationLevel?: any;
@@ -34,7 +34,7 @@ export async function runMakePostStep(serial: string, opts: {
   const {
     localFolderPath, localFolderRandom, localFolderNoRepeat,
     captionText, doFixAiSlop, alterationEnabled, alterationLevel,
-    imageSettingsEnabled, imageSettings, frequencyDisruption, addLocation, accountUsername, slotIdx, onLog,
+    imageSettingsEnabled, imageSettings, frequencyDisruption, addLocation, addAiLabel, accountUsername, slotIdx, onLog,
     filterChanceMin = 0, filterChanceMax = 100,
     homeTapCount = 1,
   } = opts;
@@ -558,6 +558,90 @@ if (addLocation) {
     finalShareBtn = resolveCalibratedControl("makePostShare");
 if (!finalShareBtn) {
   onLog?.("Make a Post: Share control not found after returning from location — aborting safely");
+  await android.removeDeviceFile(serial, devicePath).catch(() => {});
+  return { posted: false };
+}
+if (addAiLabel) {
+  let verified = false;
+  let lastXml = "";
+  const getAttr = (node: string, name: string) =>
+    node.match(new RegExp("(?:^|\\s)" + name + "=\"([^\"]*)\"", "i"))?.[1] ?? "";
+  const getBounds = (node: string) => {
+    const m = getAttr(node, "bounds").match(/^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$/);
+    return m ? { x1: +m[1], y1: +m[2], x2: +m[3], y2: +m[4] } : null;
+  };
+
+  for (let scrollAttempt = 0; scrollAttempt <= 4; scrollAttempt++) {
+    lastXml = await android.dumpUi(serial);
+    const nodes = [...lastXml.matchAll(/<node\b([^>]*)>/gi)].map(match => match[1]);
+    const labelNode = nodes.find(node =>
+      /^(?:Add AI label)$/i.test(getAttr(node, "text").trim()) ||
+      /^(?:Add AI label)$/i.test(getAttr(node, "content-desc").trim()),
+    );
+    const labelBounds = labelNode ? getBounds(labelNode) : null;
+    const switchNode = labelBounds && nodes
+      .map(node => ({ node, box: getBounds(node), checked: getAttr(node, "checked") }))
+      .filter(item =>
+        !!item.box &&
+        getAttr(item.node, "clickable") === "true" &&
+        item.box.x1 > labelBounds.x2 &&
+        Math.abs((item.box.y1 + item.box.y2) / 2 - (labelBounds.y1 + labelBounds.y2) / 2) <= 70
+      )
+      .sort((a, b) =>
+        Math.abs((a.box!.y1 + a.box!.y2) / 2 - (labelBounds.y1 + labelBounds.y2) / 2) -
+        Math.abs((b.box!.y1 + b.box!.y2) / 2 - (labelBounds.y1 + labelBounds.y2) / 2))[0];
+
+    if (switchNode?.box) {
+      if (switchNode.checked !== "true") {
+        await android.tap(
+          serial,
+          Math.round((switchNode.box.x1 + switchNode.box.x2) / 2),
+          Math.round((switchNode.box.y1 + switchNode.box.y2) / 2),
+        );
+        await sleepOrAbort(serial, 500);
+        const verifyXml = await android.dumpUi(serial);
+        const newNodes = [...verifyXml.matchAll(/<node\b([^>]*)>/gi)].map(match => match[1]);
+        const observedState = newNodes.map(node => {
+          const box = getBounds(node);
+          return !!box && box.x1 > labelBounds!.x2 &&
+            Math.abs((box.y1 + box.y2) / 2 - (labelBounds!.y1 + labelBounds!.y2) / 2) <= 70
+            ? getAttr(node, "checked")
+            : "";
+        }).find(Boolean);
+        if (observedState === "false") {
+          onLog?.("Make a Post: ✗ Add AI label switch did not reach the configured state — aborting before Share");
+          await android.removeDeviceFile(serial, devicePath).catch(() => {});
+          return { posted: false };
+        }
+      }
+      onLog?.(switchNode.checked === "true"
+        ? "Make a Post: Add AI label is already ON"
+        : "Make a Post: tapped Add AI label switch; Instagram accessibility may not expose its checked state");
+      verified = true;
+      break;
+    }
+
+    if (scrollAttempt < 4) {
+      const scrollNode = nodes.find(node =>
+        getAttr(node, "scrollable") === "true" || /scroll_view/i.test(getAttr(node, "resource-id")),
+      );
+      const scrollBounds = scrollNode && getBounds(scrollNode);
+      if (!scrollBounds) break;
+      const x = Math.round((scrollBounds.x1 + scrollBounds.x2) / 2);
+      await android.swipe(serial, x, scrollBounds.y2 - 50, x, scrollBounds.y1 + 60, 350, false);
+      await sleepOrAbort(serial, 350);
+    }
+  }
+  if (!verified) {
+    onLog?.(`Make a Post: ✗ could not locate the Add AI label toggle — aborting before Share (${lastXml.length} chars)`);
+    await android.removeDeviceFile(serial, devicePath).catch(() => {});
+    return { posted: false };
+  }
+}
+
+finalShareBtn = await android.findShareFooterButton(serial).catch(() => null);
+if (!finalShareBtn) {
+  onLog?.("Make a Post: Share control not found after Add AI label — aborting safely");
   await android.removeDeviceFile(serial, devicePath).catch(() => {});
   return { posted: false };
 }
