@@ -212,7 +212,7 @@ export async function runUpdateBio(
             .map(match => match[0])
             .find(node => /focused="true"/i.test(node));
           const remaining = clearedField?.match(/\btext="([^"]*)"/i)?.[1] ?? "";
-          onLog?.(`Update Bio: clear verification — focusedEditTextFound=${Boolean(clearedField)}, remainingLength=${remaining.length}, remainingValue=${JSON.stringify(remaining)}`);
+          onLog?.(`Update Bio: clear verification — focusedEditTextFound=${Boolean(clearedField)}, remainingLength=${remaining.length}`);
           if (remaining.length > 0) {
             onLog?.(`Update Bio: ✗ clear verification found ${remaining.length} remaining characters — aborting`);
             await android.pressBack(serial);
@@ -241,32 +241,32 @@ export async function runUpdateBio(
       );
       if (!typed.ok) {
         onLog?.(`Update Bio: ✗ calibrated typing incomplete — missing ${typed.missing.join(", ") || "required calibration"}`);
-        await android.pressBack(serial);
-        return;
+      } else {
+        onLog?.(`Update Bio: calibrated typing dispatched — calibrationAvailable=${typed.available}, missing=${typed.missing.join(",") || "none"}`);
       }
-      onLog?.(`Update Bio: typing result — ok=${typed.ok}, calibrationAvailable=${typed.available}, missing=${typed.missing.join(",") || "none"}`);
       await sleepOrAbort(serial, 350);
       const afterTypingXml = await android.dumpUi(serial).catch(() => "");
-      const actualBio = getFocusedEditText(afterTypingXml);
+      let actualBio = getFocusedEditText(afterTypingXml);
       const expectedBio = bioText.replace(/\r\n?/g, "\n");
       if (actualBio !== expectedBio) {
-        let firstMismatch = 0;
-        while (
-          firstMismatch < expectedBio.length &&
-          firstMismatch < (actualBio?.length ?? 0) &&
-          expectedBio[firstMismatch] === actualBio?.[firstMismatch]
-        ) {
-          firstMismatch++;
-        }
         onLog?.(
-          `Update Bio: ✗ typed text verification failed — ` +
+          `Update Bio: ✗ calibrated text verification failed — ` +
           `focusedEditTextFound=${actualBio !== null}, expectedLength=${expectedBio.length}, ` +
-          `actualLength=${actualBio?.length ?? 0}, firstMismatch=${firstMismatch}; aborting without save`,
+          `actualLength=${actualBio?.length ?? 0}; aborting without save`,
         );
+        if (actualBio !== null) {
+          let firstMismatch = 0;
+          while (firstMismatch < expectedBio.length &&
+                 firstMismatch < actualBio.length &&
+                 expectedBio[firstMismatch] === actualBio[firstMismatch]) {
+            firstMismatch++;
+          }
+          onLog?.(`Update Bio: firstMismatch=${firstMismatch}`);
+        }
         await android.pressBack(serial);
         return;
       }
-      onLog?.(`Update Bio: ✓ typed text verified in focused Bio field (${expectedBio.length} chars)`);
+      onLog?.(`Update Bio: ✓ calibrated Bio text verified (${expectedBio.length} chars)`);
     }
     await sleepOrAbort(serial, 800 + Math.round(Math.random() * 200));
 

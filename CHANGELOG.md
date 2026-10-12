@@ -1,13 +1,25 @@
 ## [1.2.585] — 2026-10-12
 
-### Fixed — Verify Update Bio text before saving
+### Fixed — Make Update Bio enter text reliably
 
-- Update Bio reads back the focused field and saves only when it exactly matches the resolved text; otherwise it stops without saving.
+- If calibrated keyboard taps do not appear in the confirmed Bio field, Update Bio pastes through Android's native clipboard and verifies the exact field text before saving.
+- Update Bio stops without saving when the Bio field cannot be confirmed or the entered text does not match.
 - Replaced full Bio-content log dumps with length-only diagnostics.
 
 ### Release
 
 - Bumped the root application and Electron package versions to `1.2.585`.
+
+## [1.2.584] — 2026-10-12
+
+### Fixed — Update Bio Edit Profile Navigation
+
+- Update Bio now uses the same live Edit profile accessibility locator as Update Avatar.
+- Log the successful Edit profile tap and provide diagnostic details when the button is not found.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.584`.
 
 ## [1.2.583] — 2026-10-11
 
