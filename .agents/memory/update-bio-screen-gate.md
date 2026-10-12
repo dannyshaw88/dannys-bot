@@ -18,3 +18,11 @@ The flow now polls boundedly until the Edit Profile form marker and Bio field ar
 **Why:** A single accessibility dump races slow Instagram/MIUI rendering, but accepting the generic form marker alone can target the wrong EditText.
 
 **How to apply:** Use one-dump-per-attempt readiness polling with a hard timeout, require the target field before tapping, and fail closed after the timeout.
+
+### Keep Update Bio navigation aligned with Update Profile Picture
+
+When Update Bio fails to locate Edit profile, compare it with the working Update Profile Picture flow before changing its timing or adding retries. Both actions should share one live accessibility-tree locator; it must handle labels on a child and clickable bounds on its ancestor.
+
+**Why:** The two operations had separate Edit profile matchers, so equivalent screens could produce different outcomes and Bio failures gave no successful-tap confirmation.
+
+**How to apply:** Reuse the shared Edit profile locator in both operations and retain the live-node fail-closed behavior; use its diagnostics to investigate any remaining device-specific miss.

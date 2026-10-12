@@ -48,11 +48,18 @@ export async function runUpdateBio(
     // 2. Tap the "Edit profile" button.
     {
       const xml = await android.dumpUi(serial);
-      const m = xml.match(/(?:desc|text|content-desc)="Edit profile"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i) ||
-                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*(?:desc|text|content-desc)="Edit profile"/i) ||
-                xml.match(/resource-id="[^"]*(?:edit_profile|edit_profile_button)[^"]*"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
-      if (!m) { onLog?.("Update Bio: ✗ Edit profile button not found"); await android.pressBack(serial); return; }
-      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
+      const editProfile = android.findEditProfileButtonInUiXml(xml);
+      if (!editProfile) {
+        const labelPresent = /\b(?:text|content-desc|desc|hint)="[^"]*edit profile/i.test(xml);
+        onLog?.(
+          `Update Bio: ✗ Edit profile button not found ` +
+          `(labelPresent=${labelPresent}, dumpLength=${xml.length})`,
+        );
+        await android.pressBack(serial);
+        return;
+      }
+      await android.tap(serial, editProfile.x, editProfile.y);
+      onLog?.(`Update Bio: tapped Edit profile (${editProfile.matchedBy})`);
     }
     await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
 

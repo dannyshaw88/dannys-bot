@@ -92,11 +92,18 @@ export async function runUpdateProfilePicture(
     // 4. Tap the "Edit profile" button.
     {
       const xml = await android.dumpUi(serial);
-      const m = xml.match(/desc="Edit profile"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ||
-                xml.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"[^>]*desc="Edit profile"/);
-      if (!m) { onLog?.("Update Profile Pic: ✗ Edit profile button not found"); await android.pressBack(serial); return; }
-      await android.tap(serial, Math.round((+m[1] + +m[3]) / 2), Math.round((+m[2] + +m[4]) / 2));
-      onLog?.("Update Profile Pic: tapped Edit profile");
+      const editProfile = android.findEditProfileButtonInUiXml(xml);
+      if (!editProfile) {
+        const labelPresent = /\b(?:text|content-desc|desc|hint)="[^"]*edit profile/i.test(xml);
+        onLog?.(
+          `Update Profile Pic: ✗ Edit profile button not found ` +
+          `(labelPresent=${labelPresent}, dumpLength=${xml.length})`,
+        );
+        await android.pressBack(serial);
+        return;
+      }
+      await android.tap(serial, editProfile.x, editProfile.y);
+      onLog?.(`Update Profile Pic: tapped Edit profile (${editProfile.matchedBy})`);
     }
     await sleepOrAbort(serial, 1800 + Math.round(Math.random() * 400));
 
