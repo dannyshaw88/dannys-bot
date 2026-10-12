@@ -1,3 +1,14 @@
+## [1.2.584] — 2026-10-12
+
+### Fixed — Update Bio Edit Profile Navigation
+
+- Update Bio now uses the same live Edit profile accessibility locator as Update Avatar.
+- Log the successful Edit profile tap and provide diagnostic details when the button is not found.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.584`.
+
 ## [1.2.583] — 2026-10-11
 
 ### Added — TrustScore Make a Post Count Cutoff
