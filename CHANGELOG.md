@@ -1,9 +1,9 @@
 ## [1.2.585] — 2026-10-12
 
-### Fixed — Make Update Bio enter text reliably
+### Fixed — Verify Update Bio text before saving
 
-- If calibrated keyboard taps do not appear in the confirmed Bio field, Update Bio pastes through Android's native clipboard and verifies the exact field text before saving.
-- Update Bio stops without saving when the Bio field cannot be confirmed or the entered text does not match.
+- Update Bio reads back the focused Bio field after calibrated keyboard input and saves only when it exactly matches the resolved text.
+- Update Bio stops without saving when the text is absent or does not match.
 - Replaced full Bio-content log dumps with length-only diagnostics.
 
 ### Release
