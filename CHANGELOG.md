@@ -4,6 +4,7 @@
 
 - Update Bio reads back the focused Bio field after calibrated keyboard input and saves only when it exactly matches the resolved text.
 - Update Bio stops without saving when the text is absent or does not match.
+- Update Bio restores the prior select-all/delete reset before calibrated typing, after confirming the Bio field is focused.
 - Replaced full Bio-content log dumps with length-only diagnostics.
 
 ### Release
