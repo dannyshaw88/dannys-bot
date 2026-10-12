@@ -3031,7 +3031,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "makePostDisableAtPostCountReached",
     "makePostPostCountManualReenableToken",
     "makePostAddLocation",
-    "makePostAddAiLabel",
     "makePostAlterationEnabled",
     "makePostAlterationLevel",
     "makePostImageSettingsEnabled",
