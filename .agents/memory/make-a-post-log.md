@@ -131,6 +131,13 @@ Additionally: the mobile API client session may be expired by the time the post 
 
 ## Chronological entries (newest first)
 
+### 2026-10-13 — Add AI label failed after a generic automated switch tap
+- The supplied device screenshot/log shows Make a Post reached the final caption screen, then reported `Add AI label switch did not reach the configured state` and aborted before Share.
+- **Cause in the current code:** unlike Make a Post's calibrated controls, the live switch center was tapped through the default bot path instead of the exact/manual input path.
+- **Fix:** dispatch the state-changing tap exactly at the current live switch bounds' center and retain the existing post-tap state readback.
+- **How to apply:** stateful small Instagram controls should use exact coordinates from the live accessibility node; do not use generic bot tap jitter for them.
+- Status: code-level change applied; real-device confirmation remains outstanding.
+
 ### 2026-10-11 — Post-count cutoff configuration belongs to TrustScore templates
 - The enabled switch and minimum/maximum range are configured in Settings → TrustScores and can be copied from one TrustScore label to the others with Copy Settings.
 - Do not show these controls or offer them in Phone Farm account Copy Settings. The randomly selected target and reached latch remain per-slot runtime state.

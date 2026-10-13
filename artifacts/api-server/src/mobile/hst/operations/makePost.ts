@@ -595,10 +595,16 @@ if (addAiLabel) {
 
     if (switchNode?.box && switchNode.checked) {
       if ((switchNode.checked === "true") !== addAiLabel) {
+        const switchX = Math.round((switchNode.box.x1 + switchNode.box.x2) / 2);
+        const switchY = Math.round((switchNode.box.y1 + switchNode.box.y2) / 2);
+        onLog?.(`Make a Post: tapping Add AI label switch exactly at (${switchX},${switchY})…`);
         await android.tap(
           serial,
-          Math.round((switchNode.box.x1 + switchNode.box.x2) / 2),
-          Math.round((switchNode.box.y1 + switchNode.box.y2) / 2),
+          switchX,
+          switchY,
+          "manual",
+          "Make a Post: Add AI label switch",
+          "automation",
         );
         await sleepOrAbort(serial, 500);
         const verifyXml = await android.dumpUi(serial);
