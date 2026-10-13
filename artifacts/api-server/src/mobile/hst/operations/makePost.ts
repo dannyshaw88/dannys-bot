@@ -74,6 +74,7 @@ try {
     prepared.pushFileName,
     true,
     true,
+    true,
   );
 } catch (e: any) {
   devicePath = typeof e?.partialDevicePath === "string" ? e.partialDevicePath : undefined;

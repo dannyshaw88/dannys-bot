@@ -2346,7 +2346,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (!stat.isFile()) throw new Error("Selected image path is not a file");
       if (stat.size > 100 * 1024 * 1024) throw new Error("Image is larger than 100 MB");
 
-      const devicePath = await android.pushFileToDevice(serial, sourcePath, body.fileName);
+      const devicePath = await android.pushFileToDevice(serial, sourcePath, body.fileName, true, true, true);
       logger.info({ serial, fileName: body.fileName, devicePath }, "[manual-media] loaded image onto phone");
       res.json({ ok: true, fileName: body.fileName, devicePath });
     } catch (e: any) {
