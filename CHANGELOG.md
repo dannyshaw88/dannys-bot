@@ -1,3 +1,13 @@
+## [1.2.589] — 2026-10-13
+
+### Fixed — Make a Post Add AI label switch
+
+- Dispatch the live Add AI label switch tap at its exact center instead of using the generic automated tap path.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.589`.
+
 ## [1.2.588] — 2026-10-13
 
 ### Fixed — PC-to-phone media transfer
