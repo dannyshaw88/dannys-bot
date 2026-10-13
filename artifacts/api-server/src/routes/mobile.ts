@@ -3712,11 +3712,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (body.makePostLocalFolderPath === "") delete body.makePostLocalFolderPath;
       if (body.postStoryLocalFolderPath === "") delete body.postStoryLocalFolderPath;
       const assignment = await loadTrustScoreAssignment(serial, slotIdx);
+      const isTrustScoreCopy = body.trustScoreCopy === true;
+      // Ignore effective tool values from a settings snapshot that belongs to
+      // the previous TrustScore assignment. A label change can race the
+      // 500 ms autosave and otherwise convert old template values to overrides.
+      if (!isTrustScoreCopy && body.trustScoreId !== assignment.scoreId) {
+        for (const field of TRUST_SCORE_TOOL_FIELDS) delete body[field];
+        delete body.trustScoreToolOverrides;
+        delete body.trustScoreDisabledTools;
+      }
       // Never let a full effective-settings response write template values
       // back into the slot's manual baseline. Feature switches are represented
       // by trustScoreDisabledTools instead.
       if (assignment.scoreId) {
-        const isTrustScoreCopy = body.trustScoreCopy === true;
         const copyToolOverrides = isTrustScoreCopy
           ? Object.fromEntries(
             ["makePostEnabled"]
@@ -4178,6 +4186,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         assignmentKey,
         JSON.stringify(scoreId),
       );
+      if (previousScoreId !== scoreId) {
+        const cfg = loadInstanceConfigs();
+        const stableKey = slotAutomationKey(serial, slotIdx);
+        const saved = cfg[serial]?.slotAutomation?.[stableKey]
+          ?? cfg[serial]?.slotAutomation?.[String(slotIdx)];
+        if (saved) {
+          const overrides = saved.trustScoreToolOverrides;
+          const disabledTools = saved.trustScoreDisabledTools;
+          if (
+            (overrides && typeof overrides === "object" && Object.keys(overrides).length > 0) ||
+            (Array.isArray(disabledTools) && disabledTools.length > 0)
+          ) {
+            cfg[serial] = {
+              ...cfg[serial],
+              slotAutomation: {
+                ...cfg[serial]?.slotAutomation,
+                [stableKey]: {
+                  ...saved,
+                  trustScoreToolOverrides: {},
+                  trustScoreDisabledTools: [],
+                },
+              },
+            };
+            saveInstanceConfigs(cfg);
+          }
+        }
+      }
       if (scoreId === null) {
         if (previousScoreId && existingTimer?.scoreId === previousScoreId) {
           await writeTrustScoreTimer(serial, slotIdx, {
