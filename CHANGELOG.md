@@ -1,3 +1,9 @@
+## [1.2.650] — 2026-10-13
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.650`.
+
 ## [1.2.587] — 2026-10-12
 
 ### Added — TrustScore Make a Post AI label
