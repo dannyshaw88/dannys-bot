@@ -74,7 +74,6 @@ try {
     prepared.pushFileName,
     true,
     true,
-    true,
   );
 } catch (e: any) {
   devicePath = typeof e?.partialDevicePath === "string" ? e.partialDevicePath : undefined;
@@ -595,16 +594,10 @@ if (addAiLabel) {
 
     if (switchNode?.box && switchNode.checked) {
       if ((switchNode.checked === "true") !== addAiLabel) {
-        const switchX = Math.round((switchNode.box.x1 + switchNode.box.x2) / 2);
-        const switchY = Math.round((switchNode.box.y1 + switchNode.box.y2) / 2);
-        onLog?.(`Make a Post: tapping Add AI label switch exactly at (${switchX},${switchY})…`);
         await android.tap(
           serial,
-          switchX,
-          switchY,
-          "manual",
-          "Make a Post: Add AI label switch",
-          "automation",
+          Math.round((switchNode.box.x1 + switchNode.box.x2) / 2),
+          Math.round((switchNode.box.y1 + switchNode.box.y2) / 2),
         );
         await sleepOrAbort(serial, 500);
         const verifyXml = await android.dumpUi(serial);

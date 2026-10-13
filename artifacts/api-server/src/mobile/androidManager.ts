@@ -10092,41 +10092,10 @@ export async function pushFileToDevice(
   // visible to gallery/media-picker consumers. The extension is retained
   // only so Android can identify the media type.
   const deviceFileName = `IMG_${randomBytes(12).toString("hex")}${safeExt}`;
-  const deviceDirectory = "/sdcard/DCIM/Camera";
-  const devicePath = `${deviceDirectory}/${deviceFileName}`;
+  const devicePath = `/sdcard/DCIM/Camera/${deviceFileName}`;
   try {
-    // A phone that has never saved a camera photo may not have DCIM/Camera.
-    // Create the target directory explicitly before ADB pushes the image.
-    await runAdbStrict(adb, ["-s", serial, "shell", "mkdir", "-p", deviceDirectory], 8000);
     await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
-    // adb push can return successfully while the file is not actually
-    // available through the device's shared-storage view. Confirm the
-    // selected serial can see a non-empty destination before reporting a
-    // successful transfer.
-    await runAdbStrict(adb, ["-s", serial, "shell", "test", "-s", devicePath], 8000);
-    if (scan) {
-      await scanMediaFile(serial, devicePath, strictMediaScan);
-      if (strictMediaScan) {
-        // Some devices acknowledge the scanner broadcast before MediaStore
-        // has indexed the new image. Rescan once and wait briefly rather than
-        // opening Instagram with an empty gallery.
-        let indexed = false;
-        for (let attempt = 0; attempt < 2; attempt++) {
-          await new Promise(resolve => setTimeout(resolve, 900));
-          const media = await queryMediaStoreFile(serial, devicePath);
-          if (media.found) {
-            indexed = true;
-            break;
-          }
-          if (attempt === 0) await scanMediaFile(serial, devicePath, true);
-        }
-        if (!indexed) {
-          throw new Error(
-            `File reached ${devicePath}, but Android did not index it after a rescan`,
-          );
-        }
-      }
-    }
+    if (scan) await scanMediaFile(serial, devicePath, strictMediaScan);
     return devicePath;
   } catch (error) {
     if (!cleanupPartialOnFailure) throw error;

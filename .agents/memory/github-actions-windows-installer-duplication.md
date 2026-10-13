@@ -23,12 +23,3 @@ vanish from history while guaranteeing they can never trigger again.
 of the deprecated stub files, and never create another new workflow file for
 the Windows installer — extend `build-windows-installer.yml` in place if the
 build/release pipeline needs to change.
-
-The Replit Linux container is not a working Windows-installer host: the
-electron-builder cross-build stops because its Wine loader cannot execute.
-Installing the Nix `wine` package or pointing electron-builder at `wine64`
-does not fix that loader here.
-
-**How to apply:** build the `.exe` on the canonical `windows-2022` GitHub
-Actions runner. Do not treat a partial `.exe` left by a failed Linux
-cross-build as a deliverable.

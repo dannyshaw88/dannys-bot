@@ -66,7 +66,7 @@ export async function runUpdateProfilePicture(
     // Keep the exact generated destination so cleanup can remove this staged
     // image, including a partial destination if the transfer fails.
     try {
-      actualDevicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName, true, true, true);
+      actualDevicePath = await android.pushFileToDevice(serial, prepared.pushFilePath, prepared.pushFileName, true, true);
       onLog?.(`Update Profile Pic: pushed ${localFile} to device — processedSha256=${prepared.audit.processedSha256} filename=${prepared.pushFileName} bytes=${prepared.audit.processedBytes}`);
     } catch (e: any) {
       actualDevicePath = typeof e?.partialDevicePath === "string" ? e.partialDevicePath : undefined;
