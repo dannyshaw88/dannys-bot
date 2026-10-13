@@ -1,3 +1,14 @@
+## [1.2.588] — 2026-10-13
+
+### Fixed — PC-to-phone media transfer
+
+- Verify each image on the selected phone, retry Android's media indexing once, and stop Make a Post or Update Avatar instead of continuing when the image was not staged and indexed.
+- The manual Media transfer now reports failure rather than “Loaded” when the phone cannot confirm the image.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.588`.
+
 ## [1.2.587] — 2026-10-12
 
 ### Added — TrustScore Make a Post AI label

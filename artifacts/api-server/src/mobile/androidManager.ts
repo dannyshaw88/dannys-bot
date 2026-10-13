@@ -10092,8 +10092,12 @@ export async function pushFileToDevice(
   // visible to gallery/media-picker consumers. The extension is retained
   // only so Android can identify the media type.
   const deviceFileName = `IMG_${randomBytes(12).toString("hex")}${safeExt}`;
-  const devicePath = `/sdcard/DCIM/Camera/${deviceFileName}`;
+  const deviceDirectory = "/sdcard/DCIM/Camera";
+  const devicePath = `${deviceDirectory}/${deviceFileName}`;
   try {
+    // A phone that has never saved a camera photo may not have DCIM/Camera.
+    // Create the target directory explicitly before ADB pushes the image.
+    await runAdbStrict(adb, ["-s", serial, "shell", "mkdir", "-p", deviceDirectory], 8000);
     await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
     // adb push can return successfully while the file is not actually
     // available through the device's shared-storage view. Confirm the
