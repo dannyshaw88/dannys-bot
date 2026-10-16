@@ -5407,7 +5407,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             ...(typeof body?.makePostPostCountTarget === "number"
               ? { makePostDisableAtPostCountTarget: body.makePostPostCountTarget }
               : {}),
-            ...(body?.makePostAutoDisabledByPostCount ? { makePostEnabled: false } : {}),
+            ...(body?.makePostAutoDisabledByPostCount && !current.trustScoreId ? { makePostEnabled: false } : {}),
             ...(body?.makePostAutoDisabledByPostCount ? { makePostDisableAtPostCountReached: true } : {}),
           }));
         }
@@ -6191,12 +6191,11 @@ export function AutomationSettingsPanel({
     "makePostFrequencyDisruption",
   ]);
   // These are the only settings a physical slot may change while its
-  // effective values come from a TrustScore template.  Everything else in
-  // the HST form is template-controlled and must stay visibly disabled.
+  // effective values come from a TrustScore template. Tool switches are
+  // owned by the assigned TrustScore and cannot be changed in the HST.
   const TRUST_SCORE_SLOT_EDITABLE_FIELDS = useMemo(() => {
     const fields = new Set([
       "enabled",
-      ...TRUST_SCORE_FEATURE_FIELDS,
       ...TRUST_SCORE_SLOT_OWNED_FIELDS,
       "followFiltersEnabled",
       "followFilterPrivateUsers",
@@ -6209,7 +6208,7 @@ export function AutomationSettingsPanel({
     ]);
     // Repost execution settings are inherited from the TrustScore.
     // Only the source list remains editable on the physical HST slot.
-    fields.delete("shareReelEnabled");
+    for (const field of TRUST_SCORE_FEATURE_FIELDS) fields.delete(field);
     return fields;
   }, []);
   const templateEditableFields = useMemo(
@@ -6222,10 +6221,12 @@ export function AutomationSettingsPanel({
         ? templateLockedFields.filter(field => !templateEditableFields.has(field))
         :
        (trustScoreActive
-        ? (settings.trustScoreControlledFields ?? []).filter(field =>
-            !TRUST_SCORE_FEATURE_FIELDS.has(field) &&
-            !MAKE_POST_HST_IMAGE_FIELDS.has(field),
-          )
+         ? [
+             ...(settings.trustScoreControlledFields ?? []).filter(field =>
+               !MAKE_POST_HST_IMAGE_FIELDS.has(field),
+             ),
+             ...TRUST_SCORE_FEATURE_FIELDS,
+           ]
        : []),
     ),
     [templateLockedFields, templateEditableFields, trustScoreActive, settings.trustScoreControlledFields],
@@ -6247,14 +6248,8 @@ export function AutomationSettingsPanel({
         if (field in previous) (next as unknown as Record<string, unknown>)[field] = (previous as unknown as Record<string, unknown>)[field];
       }
       if (trustScoreActive) {
-        const overrides = { ...(previous.trustScoreToolOverrides ?? {}) };
-        for (const field of TRUST_SCORE_FEATURE_FIELDS) {
-          if (templateDisabledTools.has(field)) continue;
-          if ((proposed as unknown as Record<string, unknown>)[field] !== (previous as unknown as Record<string, unknown>)[field]) {
-            overrides[field] = Boolean((proposed as unknown as Record<string, unknown>)[field]);
-          }
-        }
-        next.trustScoreToolOverrides = overrides;
+        next.trustScoreToolOverrides = {};
+        next.trustScoreDisabledTools = [];
       }
       // Account Slot panels must never be able to mutate an inherited
       // TrustScore value, even if a newly added control forgot to use the
@@ -6271,13 +6266,13 @@ export function AutomationSettingsPanel({
       }
       return next;
     });
-  }, [setSettingsExternal, lockedFields, trustScoreActive, trustScoreSlotLocked, TRUST_SCORE_SLOT_EDITABLE_FIELDS, templateDisabledTools]);
+  }, [setSettingsExternal, lockedFields, trustScoreActive, trustScoreSlotLocked, TRUST_SCORE_SLOT_EDITABLE_FIELDS]);
   // When a slot has an assigned TrustScore, the displayed values are inherited
-  // and must be read-only. The exceptions below intentionally keep the master
-  // switch, per-tool switches, and slot-owned source controls editable.
+  // and must be read-only. Only the master switch and slot-owned source
+  // controls remain editable; individual tool switches follow the template.
   // A live slot inherits the template values and therefore starts with the
-  // whole HST form locked.  The field-level exceptions below reopen only the
-  // master switch, individual tool switches, and physical-slot-owned sources.
+  // whole HST form locked. The field-level exceptions below reopen only the
+  // master switch and physical-slot-owned sources.
   // The TrustScore editor passes templateLockedFields, so its normal template
   // values remain editable while excluded slot fields stay locked.
   const loading = loadingExternal || trustScoreSlotLocked;

@@ -3194,18 +3194,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
     }
 
-    const disabledTools = Array.isArray(base.trustScoreDisabledTools)
-      ? base.trustScoreDisabledTools.filter((key: unknown): key is string => typeof key === "string")
-      : [];
-    const toolOverrides = base.trustScoreToolOverrides &&
-      typeof base.trustScoreToolOverrides === "object"
-      ? base.trustScoreToolOverrides as Record<string, boolean>
-      : {};
     const effective = { ...base };
     const templateDisabledTools = [...TRUST_SCORE_TOOL_FIELDS].filter(
       field => template[field] === false,
     );
     for (const [field, value] of Object.entries(template)) {
+      if (TRUST_SCORE_TOOL_FIELDS.has(field)) continue;
       if (FOLLOW_FILTER_FIELDS.has(field)) continue;
       if (TRUST_SCORE_SLOT_OWNED_FIELDS.has(field)) continue;
       // Repost execution settings are template-controlled; only its source list belongs to
@@ -3214,32 +3208,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         effective[field] = Boolean(value);
         continue;
       }
-      if (
-        TRUST_SCORE_TOOL_FIELDS.has(field) &&
-        templateDisabledTools.includes(field)
-      ) {
-        effective[field] = false;
-        continue;
-      }
-      if (Object.prototype.hasOwnProperty.call(toolOverrides, field)) continue;
-      if (TRUST_SCORE_TOOL_FIELDS.has(field) && disabledTools.includes(field)) continue;
       effective[field] = value;
     }
     for (const field of TRUST_SCORE_TOOL_FIELDS) {
-      if (field === "shareReelEnabled") {
-        effective[field] = Boolean(template[field]);
-      } else if (templateDisabledTools.includes(field)) {
-        effective[field] = false;
-      } else if (Object.prototype.hasOwnProperty.call(toolOverrides, field)) {
-        effective[field] = Boolean(toolOverrides[field]);
-      } else if (disabledTools.includes(field)) {
-        effective[field] = false;
-      }
+      effective[field] = Boolean(template[field]);
     }
     effective.trustScoreId = scoreId;
-    effective.trustScoreDisabledTools = disabledTools;
+    effective.trustScoreDisabledTools = [];
     effective.trustScoreTemplateDisabledTools = templateDisabledTools;
-    effective.trustScoreToolOverrides = toolOverrides;
+    effective.trustScoreToolOverrides = {};
     return { settings: effective, scoreId, configured };
   };
 
@@ -3722,28 +3699,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         delete body.trustScoreDisabledTools;
       }
       // Never let a full effective-settings response write template values
-      // back into the slot's manual baseline. Feature switches are represented
-      // by trustScoreDisabledTools instead.
+      // back into the slot's manual baseline. The TrustScore template is the
+      // only source of truth for tool switches while a score is assigned.
       if (assignment.scoreId) {
-        const copyToolOverrides = isTrustScoreCopy
-          ? Object.fromEntries(
-            ["makePostEnabled"]
-              .filter(field => typeof body[field] === "boolean")
-              .map(field => [field, body[field]]),
-          )
-          : {};
-        const toolOverrides = {
-          ...(base.trustScoreToolOverrides ?? {}),
-          ...(isTrustScoreCopy ? copyToolOverrides : Object.fromEntries(
-            [...TRUST_SCORE_TOOL_FIELDS]
-              .filter(field => typeof body[field] === "boolean")
-              .map(field => [field, body[field]]),
-          )),
-        };
-        body.trustScoreToolOverrides = toolOverrides;
+        for (const field of TRUST_SCORE_TOOL_FIELDS) delete body[field];
+        body.trustScoreToolOverrides = {};
+        body.trustScoreDisabledTools = [];
         for (const field of Object.keys(body)) {
           const allowedForRequest = isTrustScoreCopy
-            ? COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field) || field === "trustScoreToolOverrides"
+            ? COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field) && !TRUST_SCORE_TOOL_FIELDS.has(field)
             : TRUST_SCORE_SLOT_OWNED_FIELDS.has(field) || field.startsWith("trustScore");
           if (
             field !== "trustScoreCopy" &&
@@ -6825,14 +6789,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Make a Post is slot-owned in the HST.  The cycle request can be
       // in-flight while the autosave request is catching up, so do not let a
       // stale parsed checkbox value override the persisted slot decision.
-      const persistedMakePostEnabled =
-        typeof savedSlotSettings?.trustScoreToolOverrides?.makePostEnabled === "boolean"
-          ? savedSlotSettings.trustScoreToolOverrides.makePostEnabled
-          : typeof savedSlotSettings?.makePostEnabled === "boolean"
+      if (!effectiveCycle.scoreId) {
+        const persistedMakePostEnabled =
+          typeof savedSlotSettings?.makePostEnabled === "boolean"
             ? savedSlotSettings.makePostEnabled
             : undefined;
-      if (typeof persistedMakePostEnabled === "boolean") {
-        effectiveCycle.settings.makePostEnabled = persistedMakePostEnabled;
+        if (typeof persistedMakePostEnabled === "boolean") {
+          effectiveCycle.settings.makePostEnabled = persistedMakePostEnabled;
+        }
       }
       const effectiveSettings: any = applyDevicePersonality(serial, effectiveCycle.settings);
       const {
@@ -8497,19 +8461,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 const latestSettings = latest[serial]?.slotAutomation?.[key]
                   ?? latest[serial]?.slotAutomation?.[String(slotIdx)]
                   ?? saved;
-                const toolOverrides = {
-                  ...(latestSettings.trustScoreToolOverrides ?? {}),
-                  makePostEnabled: false,
-                };
                 latest[serial] = {
                   ...latest[serial],
                   slotAutomation: {
                     ...latest[serial]?.slotAutomation,
                     [key]: {
                       ...latestSettings,
-                      makePostEnabled: false,
+                      ...(!effectiveCycle.scoreId ? { makePostEnabled: false } : {}),
                       makePostDisableAtPostCountReached: true,
-                      trustScoreToolOverrides: toolOverrides,
                     },
                   },
                 };

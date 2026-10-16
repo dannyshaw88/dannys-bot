@@ -3,8 +3,8 @@ name: TrustScore assignment autosave isolation
 description: HST settings saves racing TrustScore label changes must not create mismatched tool overrides.
 ---
 
-Tool enable overrides are specific to the slot's current TrustScore assignment. Clear them when the assignment changes, and reject full settings autosaves whose `trustScoreId` no longer matches the slot's current assignment. This includes a transition to manual mode; a stale response must not seed overrides for a later assignment.
+For an assigned Phone Farm slot, the TrustScore template is the sole source of truth for every tool's enabled state. Ignore legacy slot-level tool overrides, keep those switches read-only in the HST, and do not persist HST tool-toggle changes as slot overrides. Reject full settings autosaves whose `trustScoreId` no longer matches the current assignment. Clear legacy overrides when the assignment changes.
 
-**Why:** HST settings autosave is debounced while TrustScore changes trigger a re-hydration. An old effective-settings response can arrive after the new assignment and persist old template booleans as new per-slot overrides.
+**Why:** Slot-level overrides caused tools to disagree with TrustScore settings and could make switches appear to turn off later. Debounced HST saves can also race assignment changes.
 
-**How to apply:** Preserve overrides when the assignment is unchanged. On an actual transition, clear old per-slot tool overrides and verify the server ignores any mismatched autosave payload before recording tool values.
+**How to apply:** Resolve tool booleans directly from the assigned template in both settings reads and cycle execution. Keep slot-level tool values only for manual mode; preserve unrelated slot-owned settings and ensure post-count behavior does not rewrite an assigned template's tool switch.
