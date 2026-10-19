@@ -56,22 +56,20 @@ use the point only for that first Gallery tap (and its guarded retry), and
 never treat the point as proof that selection succeeded; `send_media_counter=1`
 and the live selected thumbnail/tray must still be observed.
 
-WhatsApp phone-app executions must pass the persisted contacted-recipient
-history into the live picker and never fall back to an already-contacted row.
-Retain the full history instead of evicting older recipients; when all visible
-rows have already been contacted, stop without sending. The scheduler's
-interval is measured between cycle starts, not added after the previous cycle
-finishes. Use a normalized hashed phone identity when the picker exposes one,
-alongside the legacy label key so existing history continues to match.
+WhatsApp phone-app executions must compare resolved contact numbers against a
+per-device append-only number-index file and never fall back to an already
+contacted row. Reserve a number before tapping Send so an interrupted run does
+not repeat a possibly accepted message. If a picker row cannot be resolved to
+one unambiguous phone number, skip it. The scheduler's interval is measured
+between cycle starts, not added after the previous cycle finishes.
 
-**Why:** Resetting or truncating the contact set, or falling back when the
-picker is exhausted, causes repeat messages. Scheduling only after app cleanup
-made a configured five-minute interval behave like five minutes plus the
-entire WhatsApp run.
+**Why:** Recent-history limits and fallback behavior caused repeat messages.
+The number file scales beyond thousands of contacts; reserving before Send
+prioritizes avoiding duplicate messages if the process is interrupted.
 
-**How to apply:** Keep recipient keys device-scoped and persistent, update them
-only after a successful send, stop when there are no unseen rows, re-arm an
-existing timer when interval fields change, and anchor the next due time to
-the cycle start. The phone-number match is only as reliable as WhatsApp's
-accessibility labels; do not claim number-level identity when the picker omits
-the number.
+**How to apply:** Keep the index device-scoped and durable, resolve WhatsApp
+picker names through Android's contacts provider only when exactly one number
+matches, and stop rather than guess. Number reservations may include an
+unconfirmed send after interruption, which is safer than sending twice.
+Re-arm an existing timer when interval fields change, and anchor the next due
+time to the cycle start.

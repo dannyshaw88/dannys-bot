@@ -10884,7 +10884,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.wakeScreen(serial);
       await android.unlockScreen(serial);
 
-      let result: { ok: boolean; steps: string[]; error?: string; contactKeysUsed?: string[] };
+      let result: { ok: boolean; steps: string[]; error?: string };
 
       if (appId === "chrome") {
         result = await android.runChromeApp(serial, {
@@ -10934,24 +10934,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           swipeGesture: devicePrefsPA.swipeGesture,
           media,
         });
-        if (result.contactKeysUsed?.length) {
-          const cfgAfterRun = loadInstanceConfigs();
-          const existingPhoneApps = (cfgAfterRun[serial] as any)?.phoneApps ?? {};
-          const existingWhatsApp = existingPhoneApps.whatsapp ?? {};
-          const priorHistory = Array.isArray(existingWhatsApp.recentContactKeys)
-            ? existingWhatsApp.recentContactKeys.filter((key: unknown): key is string => typeof key === "string")
-            : [];
-          const history = [...priorHistory, ...result.contactKeysUsed]
-            .filter((key, index, all) => all.indexOf(key) === index);
-          (cfgAfterRun[serial] as any) = {
-            ...cfgAfterRun[serial],
-            phoneApps: {
-              ...existingPhoneApps,
-              whatsapp: { ...existingWhatsApp, recentContactKeys: history },
-            },
-          };
-          saveInstanceConfigs(cfgAfterRun);
-        }
       } else {
         // Snapchat is not implemented yet.
         result = { ok: true, steps: [`${appId}: not yet implemented`] };

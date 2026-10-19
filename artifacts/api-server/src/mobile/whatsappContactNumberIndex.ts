@@ -36,6 +36,9 @@ export function loadWhatsAppSentNumberIndex(serial: string): Set<string> {
 export function reserveWhatsAppPhoneNumber(serial: string, number: string): void {
   const normalized = normalizeWhatsAppPhoneNumber(number);
   if (!normalized) throw new Error("WhatsApp recipient phone number is not valid");
+  if (loadWhatsAppSentNumberIndex(serial).has(normalized)) {
+    throw new Error("WhatsApp recipient number is already in the sent-number index");
+  }
   const filePath = indexPath(serial);
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -48,9 +51,9 @@ export function reserveWhatsAppPhoneNumber(serial: string, number: string): void
 export function parseAndroidPhonebook(output: string): Map<string, Set<string>> {
   const byName = new Map<string, Set<string>>();
   for (const line of output.split(/\r?\n/)) {
-    const displayName = line.match(/(?:^|, )display_name=(.*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]?.trim();
-    const normalizedNumber = line.match(/(?:^|, )normalized_number=([^,]*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]?.trim();
-    const rawNumber = line.match(/(?:^|, )data1=([^,]*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]?.trim();
+    const displayName = line.match(/(?:^|[,\s])display_name=(.*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]?.trim();
+    const normalizedNumber = line.match(/(?:^|[,\s])normalized_number=([^,]*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]?.trim();
+    const rawNumber = line.match(/(?:^|[,\s])data1=([^,]*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]?.trim();
     const number = normalizeWhatsAppPhoneNumber(normalizedNumber || rawNumber || "");
     const nameKey = displayName?.toLocaleLowerCase().replace(/\s+/g, " ");
     if (!nameKey || !number) continue;

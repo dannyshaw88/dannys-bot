@@ -151,7 +151,7 @@
 - [Mobile collision coordinator](mobile-collision-coordinator.md) — every device automation owner must acquire and release a lease token through one shared per-device coordinator
 - [Notification Back surface guard](notification-back-surface-guard.md) — calibrated upper-left Back is Home's Create button when the notification surface disappears; confirm the live surface first
 - [Debug screenshot capture timing](debug-screenshot-capture-timing.md) — filename time orders the phone frame; embedded log labels can be stale behind the per-device capture queue
-- [WhatsApp contact automation safety](whatsapp-contact-automation-safety.md) — use persistent contacted-recipient history; never send to an old row as an exhaustion fallback
+- [WhatsApp contact automation safety](whatsapp-contact-automation-safety.md) — index recipient numbers per device in a durable file; fail closed when identity is ambiguous
 - [Manual Instagram launch diagnostics](manual-instagram-launch-probe.md) — physical/mirror opens bypass launchInstagram; use delayed samples to filter transient splash frames
 - [Windows packaged diagnostic parity](windows-packaged-diagnostic-parity.md) — source diagnostics require rebuilding the embedded API, frontend, and Electron dist before Windows logs contain them
 - [Instagram ChallengeActivity white surface](instagram-challenge-white-surface.md) — paired ADB/H.264 evidence can identify a real full-screen Instagram challenge, not a mirror freeze

@@ -18,6 +18,33 @@ import {
 } from "./whatsappContactNumberIndex";
 
 const execFileP = promisify(execFile);
+const whatsappPhonebookCache = new Map<string, {
+  loadedAt: number;
+  byName: Map<string, Set<string>>;
+}>();
+
+async function getWhatsAppPhonebook(
+  adb: string,
+  serial: string,
+): Promise<Map<string, Set<string>>> {
+  const cached = whatsappPhonebookCache.get(serial);
+  if (cached && Date.now() - cached.loadedAt < 30 * 60_000) return cached.byName;
+  const { stdout } = await execFileP(adb, [
+    "-s", serial, "shell", "content", "query",
+    "--uri", "content://com.android.contacts/data/phones",
+    "--projection", "display_name:data1:normalized_number",
+  ], {
+    encoding: "utf8",
+    timeout: 60_000,
+    maxBuffer: 32 * 1024 * 1024,
+  } as any);
+  const byName = parseAndroidPhonebook(String(stdout ?? ""));
+  if (byName.size === 0) {
+    throw new Error("Could not read Android contact phone numbers; WhatsApp sending stopped to prevent duplicate messages");
+  }
+  whatsappPhonebookCache.set(serial, { loadedAt: Date.now(), byName });
+  return byName;
+}
 
 const inputTransactionContext = new AsyncLocalStorage<string>();
 const inputGateTails = new Map<string, Promise<void>>();
@@ -1766,7 +1793,7 @@ export async function runWhatsAppApp(
       dataUrl: string;
     } | null;
   },
-): Promise<{ ok: boolean; steps: string[]; error?: string; contactKeysUsed?: string[] }> {
+): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
@@ -1913,6 +1940,33 @@ export async function runWhatsAppApp(
   };
 
   try {
+    const sentNumbers = loadWhatsAppSentNumberIndex(serial);
+    const phonebook = await getWhatsAppPhonebook(adb, serial);
+    // Migrate any names retained by the old settings-based history into the
+    // durable number index when Android resolves them to exactly one number.
+    for (const oldKey of opts?.recentContactKeys ?? []) {
+      const oldName = oldKey.split("\u0000", 1)[0]?.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+      const matches = oldName ? phonebook.get(oldName) : undefined;
+      if (matches?.size === 1) {
+        const number = [...matches][0];
+        if (!sentNumbers.has(number)) {
+          reserveWhatsAppPhoneNumber(serial, number);
+          sentNumbers.add(number);
+        }
+      }
+    }
+    const resolveRecipientNumber = (node: WhatsAppLiveNode): string | null => {
+      const visibleNumbers = (`${node.text} ${node.contentDesc}`.match(/(?:\+|00)?\d[\d\s().-]{5,}\d/g) ?? [])
+        .map(normalizeWhatsAppPhoneNumber)
+        .filter((number): number is string => Boolean(number));
+      const uniqueVisibleNumbers = [...new Set(visibleNumbers)];
+      if (uniqueVisibleNumbers.length === 1) return uniqueVisibleNumbers[0];
+      if (uniqueVisibleNumbers.length > 1) return null;
+      const nameKey = node.text.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+      const matches = phonebook.get(nameKey);
+      return matches?.size === 1 ? [...matches][0] : null;
+    };
+
     if (opts?.media?.dataUrl) {
       const match = opts.media.dataUrl.match(/^data:[^;]+;base64,(.*)$/s);
       if (!match) throw new Error("WhatsApp attachment is not a valid data URL");
@@ -2016,27 +2070,6 @@ export async function runWhatsAppApp(
     // bounds distinguish duplicate rows within this picker view and remain
     // stable when we return to the same list.
     const usedContactKeys = new Set<string>();
-    const recentContactKeys = new Set(
-      (opts?.recentContactKeys ?? []).filter(key => typeof key === "string" && key.length > 0),
-    );
-    const contactHistoryKeys = (node: WhatsAppLiveNode) => {
-      const labelKey =
-        `${node.text.trim().toLocaleLowerCase()}\u0000${node.contentDesc.trim().toLocaleLowerCase()}`;
-      // Some WhatsApp builds expose the phone number alongside the contact
-      // label. Prefer a stable hash of its digits so contact renames and
-      // formatting changes still match without storing the number itself.
-      const phoneText = `${node.text} ${node.contentDesc}`;
-      const phoneCandidates = phoneText.match(/(?:\+|00)?\d[\d\s().-]{5,}\d/g) ?? [];
-      const normalizedPhone = phoneCandidates
-        .map(candidate => candidate.replace(/\D/g, ""))
-        .filter(digits => digits.length >= 7)
-        .sort((a, b) => b.length - a.length)[0];
-      const keys = [labelKey];
-      if (normalizedPhone) {
-        keys.push(`phone-sha256:${createHash("sha256").update(normalizedPhone).digest("hex")}`);
-      }
-      return keys;
-    };
     let sent = 0;
     for (let attempt = 0; attempt < targetCount; attempt++) {
       xml = await _uiDump(adb, serial);
@@ -2088,36 +2121,42 @@ export async function runWhatsAppApp(
       // A recipient already in persisted history must never be used as a
       // fallback. If the visible picker has no fresh recipients, stop rather
       // than sending another message to someone contacted by a prior run.
-      const candidates = unselectedCandidates.filter(node =>
-        !contactHistoryKeys(node).some(key => recentContactKeys.has(key)),
-      );
+      const candidates = unselectedCandidates
+        .map(node => ({ node, number: resolveRecipientNumber(node) }))
+        .filter((entry): entry is { node: WhatsAppLiveNode; number: string } =>
+          Boolean(entry.number) && !sentNumbers.has(entry.number),
+        );
       if (candidates.length === 0) {
+        const unknownNumberCount = unselectedCandidates
+          .filter(node => !resolveRecipientNumber(node)).length;
         whatsappDebug(
-          `contact-list has no fresh uncontacted recipient after ${sent} sent`,
+          `contact-list has no fresh identifiable number after ${sent} sent`,
           {
             ...describeWhatsAppSurface(xml),
-            recentContactHistorySize: recentContactKeys.size,
+            sentNumberIndexSize: sentNumbers.size,
             unselectedCandidateCount: unselectedCandidates.length,
+            unknownNumberCount,
           },
         );
         steps.push(
-          unselectedCandidates.length > 0
-            ? `WhatsApp stopped — all ${unselectedCandidates.length} visible contacts were already messaged`
+          unknownNumberCount > 0
+            ? `WhatsApp stopped — ${unknownNumberCount} visible contacts could not be matched to one phone number`
+            : unselectedCandidates.length > 0
+            ? `WhatsApp stopped — all ${unselectedCandidates.length} visible contacts are already in the sent-number index`
             : `WhatsApp stopped — no unselected contacts found after ${sent} message${sent === 1 ? "" : "s"}`,
         );
         await pressBack();
         break;
       }
-      const contact = candidates[Math.floor(Math.random() * candidates.length)];
+      const { node: contact, number: contactNumber } = candidates[Math.floor(Math.random() * candidates.length)];
       const contactKey = `${contact.text}\u0000${contact.contentDesc}\u0000${contact.x1},${contact.y1},${contact.x2},${contact.y2}`;
-      const historyKeys = contactHistoryKeys(contact);
       usedContactKeys.add(contactKey);
       whatsappDebug(`selected contact row "${contact.text}"`, {
         attempt: attempt + 1,
         contactKey,
-        historyKeys,
+        recipientNumberHash: createHash("sha256").update(contactNumber).digest("hex"),
         freshCandidateCount: candidates.length,
-        recentContactHistorySize: recentContactKeys.size,
+        sentNumberIndexSize: sentNumbers.size,
         resourceId: contact.resourceId,
         bounds: `[${contact.x1},${contact.y1}][${contact.x2},${contact.y2}]`,
         remainingVisibleCandidates: candidates.length - 1,
@@ -2556,11 +2595,14 @@ export async function runWhatsAppApp(
         y: send.y,
         withAttachment: Boolean(remoteMediaPath),
       });
+      // Record before tapping Send. If Android accepts the message but the
+      // process is interrupted before the response returns, the next run must
+      // still know not to message this number again.
+      reserveWhatsAppPhoneNumber(serial, contactNumber);
+      sentNumbers.add(contactNumber);
       await _adbTapAsync(adb, serial, send.x, send.y);
       await _sleep(700);
       sent++;
-      successfulContactKeys.push(...historyKeys);
-      historyKeys.forEach(key => recentContactKeys.add(key));
       steps.push(`WhatsApp sent a randomized message${remoteMediaPath ? " with attachment" : ""} to ${contact.text} (${sent}/${targetCount})`);
       await pressBack();
     }
@@ -2569,16 +2611,14 @@ export async function runWhatsAppApp(
         ok: false,
         steps,
         error: "WhatsApp did not send a message to any contact",
-        contactKeysUsed: successfulContactKeys,
       };
     }
-    return { ok: true, steps, contactKeysUsed: successfulContactKeys };
+    return { ok: true, steps };
   } catch (error: any) {
     return {
       ok: false,
       steps,
       error: error?.message ?? "WhatsApp messaging failed",
-      contactKeysUsed: successfulContactKeys,
     };
   } finally {
     try {
