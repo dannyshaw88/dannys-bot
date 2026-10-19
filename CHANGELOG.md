@@ -1,3 +1,13 @@
+## [1.2.670] — 2026-10-19
+
+### Fixed
+
+- Replace the misleading WhatsApp inspection pause with a clear no-send status and the specific failure reason.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.670`.
+
 ## [1.2.669] — 2026-10-19
 
 ### Release
