@@ -10,6 +10,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { logger } from "../lib/logger";
 import * as recorder from "./sessionRecorder";
 import { getDebugScreenshotFolderName } from "./debugScreenshotPaths";
+import {
+  loadWhatsAppSentNumberIndex,
+  normalizeWhatsAppPhoneNumber,
+  parseAndroidPhonebook,
+  reserveWhatsAppPhoneNumber,
+} from "./whatsappContactNumberIndex";
 
 const execFileP = promisify(execFile);
 
@@ -1773,7 +1779,6 @@ export async function runWhatsAppApp(
   let tempMediaPath: string | null = null;
   let remoteMediaPath: string | null = null;
   let galleryMediaTimestamp: number | null = null;
-  const successfulContactKeys: string[] = [];
   const isImageMedia = Boolean(opts?.media && (
     /^image\//i.test(opts.media.mimeType) ||
     /\.(?:jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(opts.media.fileName)
