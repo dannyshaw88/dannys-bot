@@ -10942,8 +10942,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             ? existingWhatsApp.recentContactKeys.filter((key: unknown): key is string => typeof key === "string")
             : [];
           const history = [...priorHistory, ...result.contactKeysUsed]
-            .filter((key, index, all) => all.indexOf(key) === index)
-            .slice(-20);
+            .filter((key, index, all) => all.indexOf(key) === index);
           (cfgAfterRun[serial] as any) = {
             ...cfgAfterRun[serial],
             phoneApps: {

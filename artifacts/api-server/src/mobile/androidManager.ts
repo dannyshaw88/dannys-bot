@@ -2014,8 +2014,24 @@ export async function runWhatsAppApp(
     const recentContactKeys = new Set(
       (opts?.recentContactKeys ?? []).filter(key => typeof key === "string" && key.length > 0),
     );
-    const contactHistoryKey = (node: WhatsAppLiveNode) =>
-      `${node.text.trim().toLocaleLowerCase()}\u0000${node.contentDesc.trim().toLocaleLowerCase()}`;
+    const contactHistoryKeys = (node: WhatsAppLiveNode) => {
+      const labelKey =
+        `${node.text.trim().toLocaleLowerCase()}\u0000${node.contentDesc.trim().toLocaleLowerCase()}`;
+      // Some WhatsApp builds expose the phone number alongside the contact
+      // label. Prefer a stable hash of its digits so contact renames and
+      // formatting changes still match without storing the number itself.
+      const phoneText = `${node.text} ${node.contentDesc}`;
+      const phoneCandidates = phoneText.match(/(?:\+|00)?\d[\d\s().-]{5,}\d/g) ?? [];
+      const normalizedPhone = phoneCandidates
+        .map(candidate => candidate.replace(/\D/g, ""))
+        .filter(digits => digits.length >= 7)
+        .sort((a, b) => b.length - a.length)[0];
+      const keys = [labelKey];
+      if (normalizedPhone) {
+        keys.push(`phone-sha256:${createHash("sha256").update(normalizedPhone).digest("hex")}`);
+      }
+      return keys;
+    };
     let sent = 0;
     for (let attempt = 0; attempt < targetCount; attempt++) {
       xml = await _uiDump(adb, serial);
@@ -2064,32 +2080,39 @@ export async function runWhatsAppApp(
           other.y1 === node.y1,
         ) === index,
       );
-      // Prefer people not contacted by the recent completed executions. If
-      // the visible picker is smaller than the history, fall back to the
-      // oldest/available rows rather than silently sending nothing forever.
-      const freshCandidates = unselectedCandidates.filter(node =>
-        !recentContactKeys.has(contactHistoryKey(node)),
+      // A recipient already in persisted history must never be used as a
+      // fallback. If the visible picker has no fresh recipients, stop rather
+      // than sending another message to someone contacted by a prior run.
+      const candidates = unselectedCandidates.filter(node =>
+        !contactHistoryKeys(node).some(key => recentContactKeys.has(key)),
       );
-      const candidates = freshCandidates.length > 0 ? freshCandidates : unselectedCandidates;
       if (candidates.length === 0) {
         whatsappDebug(
-          `contact-list settled without an unselected contact after ${sent} sent`,
-          describeWhatsAppSurface(xml),
+          `contact-list has no fresh uncontacted recipient after ${sent} sent`,
+          {
+            ...describeWhatsAppSurface(xml),
+            recentContactHistorySize: recentContactKeys.size,
+            unselectedCandidateCount: unselectedCandidates.length,
+          },
         );
-        steps.push(`WhatsApp stopped — no unselected contacts found after ${sent} message${sent === 1 ? "" : "s"}`);
+        steps.push(
+          unselectedCandidates.length > 0
+            ? `WhatsApp stopped — all ${unselectedCandidates.length} visible contacts were already messaged`
+            : `WhatsApp stopped — no unselected contacts found after ${sent} message${sent === 1 ? "" : "s"}`,
+        );
         await pressBack();
         break;
       }
       const contact = candidates[Math.floor(Math.random() * candidates.length)];
       const contactKey = `${contact.text}\u0000${contact.contentDesc}\u0000${contact.x1},${contact.y1},${contact.x2},${contact.y2}`;
-      const historyKey = contactHistoryKey(contact);
+      const historyKeys = contactHistoryKeys(contact);
       usedContactKeys.add(contactKey);
       whatsappDebug(`selected contact row "${contact.text}"`, {
         attempt: attempt + 1,
         contactKey,
-        historyKey,
-        freshCandidateCount: freshCandidates.length,
-        historyFallback: freshCandidates.length === 0,
+        historyKeys,
+        freshCandidateCount: candidates.length,
+        recentContactHistorySize: recentContactKeys.size,
         resourceId: contact.resourceId,
         bounds: `[${contact.x1},${contact.y1}][${contact.x2},${contact.y2}]`,
         remainingVisibleCandidates: candidates.length - 1,
@@ -2531,8 +2554,8 @@ export async function runWhatsAppApp(
       await _adbTapAsync(adb, serial, send.x, send.y);
       await _sleep(700);
       sent++;
-      successfulContactKeys.push(historyKey);
-      recentContactKeys.add(historyKey);
+      successfulContactKeys.push(...historyKeys);
+      historyKeys.forEach(key => recentContactKeys.add(key));
       steps.push(`WhatsApp sent a randomized message${remoteMediaPath ? " with attachment" : ""} to ${contact.text} (${sent}/${targetCount})`);
       await pressBack();
     }

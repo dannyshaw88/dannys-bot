@@ -56,16 +56,22 @@ use the point only for that first Gallery tap (and its guarded retry), and
 never treat the point as proof that selection succeeded; `send_media_counter=1`
 and the live selected thumbnail/tray must still be observed.
 
-WhatsApp phone-app executions must pass a persisted recent-contact history into
-the live picker and prefer rows outside that history, while still falling back
-when the visible picker is exhausted. The scheduler's interval is measured
-between cycle starts, not added after the previous cycle finishes.
+WhatsApp phone-app executions must pass the persisted contacted-recipient
+history into the live picker and never fall back to an already-contacted row.
+Retain the full history instead of evicting older recipients; when all visible
+rows have already been contacted, stop without sending. The scheduler's
+interval is measured between cycle starts, not added after the previous cycle
+finishes. Use a normalized hashed phone identity when the picker exposes one,
+alongside the legacy label key so existing history continues to match.
 
-**Why:** Resetting the contact set per execution caused the same visible
-recipients to be selected again, and scheduling only after app cleanup made a
-configured five-minute interval behave like five minutes plus the entire
-WhatsApp run.
+**Why:** Resetting or truncating the contact set, or falling back when the
+picker is exhausted, causes repeat messages. Scheduling only after app cleanup
+made a configured five-minute interval behave like five minutes plus the
+entire WhatsApp run.
 
-**How to apply:** Keep recent keys device-scoped and bounded, update them only
-after a successful send, re-arm an existing timer when the interval fields
-change, and anchor the next due time to the cycle start.
+**How to apply:** Keep recipient keys device-scoped and persistent, update them
+only after a successful send, stop when there are no unseen rows, re-arm an
+existing timer when interval fields change, and anchor the next due time to
+the cycle start. The phone-number match is only as reliable as WhatsApp's
+accessibility labels; do not claim number-level identity when the picker omits
+the number.
