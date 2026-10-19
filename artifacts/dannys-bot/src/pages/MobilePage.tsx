@@ -9560,7 +9560,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
 });
 
 type AccountSettingsPanelHandle = { backToSlots: () => void; backToSlot: (idx: number | null) => void };
-type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null; onAnyEnabled?: (anyEnabled: boolean) => void; onPhoneAppsRunning?: (running: boolean) => void; onOpenBrowserProfile?: (username: string) => void };
+type AccountSettingsPanelProps  = { phone: UsbPhone | null; addLog: (msg: string) => void; onSlotChange?: (slotIdx: number | null) => void; initialSlot?: number | null; onAnyEnabled?: (anyEnabled: boolean) => void; onPhoneAppsRunning?: (running: boolean) => void; onPhoneAppsInspectionHold?: (hold: boolean) => void; onOpenBrowserProfile?: (username: string) => void };
 
 /**
  * Connect legacy Account Settings records to the TrustScore inheritance
@@ -9636,7 +9636,7 @@ async function hydrateAccountTrustScoreAssignments(
 }
 
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
-function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning, onOpenBrowserProfile }, ref) {
+function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning, onPhoneAppsInspectionHold, onOpenBrowserProfile }, ref) {
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
   const [randomisingSlot, setRandomisingSlot] = useState<number | null>(null);
   const [randomisedSlot, setRandomisedSlot] = useState<number | null>(null);
@@ -10235,6 +10235,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           onEnabled={setPhoneAppsEnabled}
           onNextRunAt={setPhoneAppsNextRunAt}
           onRunning={setPhoneAppsRunning}
+          onInspectionHold={onPhoneAppsInspectionHold}
           onLog={addLog}
           requestSlot={requestSlot}
           releaseSlot={releaseSlot}
@@ -12616,6 +12617,10 @@ export function MobilePage() {
   // AccountSettingsPanel via onPhoneAppsRunning. Activates the mirror alongside
   // hstEnabled and liveOn.
   const [phoneAppsRunning, setPhoneAppsRunning] = useState(false);
+  // Keep the mirror mounted after WhatsApp contact lookup fails and leaves its
+  // picker open. The scheduler stops running at that point, but inspection
+  // still needs the active video stream until the user explicitly turns it off.
+  const [phoneAppsInspectionHold, setPhoneAppsInspectionHold] = useState(false);
   const [restartRequested, setRestartRequested] = useState(() =>
     targetSerial !== null && sessionStorage.getItem("mobile-device-restart-requested") === targetSerial
   );
@@ -12758,10 +12763,18 @@ export function MobilePage() {
                   //   • user clicked the Power button (liveOn) — manual override
                   //   • a HST cycle is actively executing right now (hstEnabled)
                   //   • a Phone Apps cycle is actively executing (phoneAppsRunning)
-                  live={!!(phone && (liveOn[phone.serial] || hstEnabled || phoneAppsRunning))}
-                  manualLive={!!(phone && liveOn[phone.serial])}
+                  live={!!(phone && (liveOn[phone.serial] || hstEnabled || phoneAppsRunning || phoneAppsInspectionHold))}
+                  manualLive={!!(phone && (liveOn[phone.serial] || phoneAppsInspectionHold))}
                   automationActive={hstEnabled || phoneAppsRunning}
-                  onPower={() => { if (phone) setLiveOn(s => ({ ...s, [phone.serial]: !s[phone.serial] })); }}
+                  onPower={() => {
+                    if (!phone) return;
+                    if (phoneAppsInspectionHold) {
+                      setPhoneAppsInspectionHold(false);
+                      setLiveOn(s => ({ ...s, [phone.serial]: false }));
+                    } else {
+                      setLiveOn(s => ({ ...s, [phone.serial]: !s[phone.serial] }));
+                    }
+                  }}
                   ref={phone?.serial === activeSerial ? activeSlotRef : undefined}
                   inspectMode={inspectMode}
                   logRecMode={logRecMode}
@@ -12821,7 +12834,7 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel key={stickySlot0Ref.current?.serial ?? "no-device"} ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} onOpenBrowserProfile={openBrowserProfile} />
+                  <AccountSettingsPanel key={stickySlot0Ref.current?.serial ?? "no-device"} ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} onPhoneAppsInspectionHold={setPhoneAppsInspectionHold} onOpenBrowserProfile={openBrowserProfile} />
                 </div>
                 {/* Browser tab — isolated ghost browser per device serial */}
                 {/* Positioned absolutely so it spans the full split-view width

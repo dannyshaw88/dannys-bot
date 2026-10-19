@@ -395,6 +395,7 @@ interface MobilePhoneAppsPanelProps {
   onEnabled:         (v: boolean) => void;
   onNextRunAt:       (ts: number | null) => void;
   onRunning?:        (running: boolean) => void;
+  onInspectionHold?: (hold: boolean) => void;
   onLog?:            (msg: string) => void;
   requestSlot?:      (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string) => Promise<CollisionLease>;
   releaseSlot?:      (lease: CollisionLease, skipRest?: boolean) => void;
@@ -405,7 +406,7 @@ const NUM_INPUT_CLASS = "w-16 text-center";
 
 export const MobilePhoneAppsPanel = React.forwardRef<MobilePhoneAppsPanelHandle, MobilePhoneAppsPanelProps>(
 function MobilePhoneAppsPanel({
-  serial, onEnabled, onNextRunAt, onRunning, onLog, requestSlot, releaseSlot, cancelQueuedSlot,
+  serial, onEnabled, onNextRunAt, onRunning, onInspectionHold, onLog, requestSlot, releaseSlot, cancelQueuedSlot,
 }, ref) {
   const [settings,    setSettings]    = useState<PhoneAppsSettings>(DEFAULT_SETTINGS);
   const [nextRunAt,   setNextRunAt]   = useState<number | null>(null);
@@ -421,6 +422,7 @@ function MobilePhoneAppsPanel({
   const stopRef            = useRef(false);
   const serialRef          = useRef(serial);
   const onRunningRef       = useRef(onRunning);
+  const onInspectionHoldRef = useRef(onInspectionHold);
   const onLogRef           = useRef(onLog);
   const pendingEnabledRef  = useRef<boolean | null>(null);
   // Set to true when the user explicitly toggles the tool on — causes the
@@ -430,6 +432,7 @@ function MobilePhoneAppsPanel({
   useEffect(() => { settingsRef.current  = settings;  }, [settings]);
   useEffect(() => { serialRef.current    = serial;    }, [serial]);
   useEffect(() => { onRunningRef.current = onRunning; }, [onRunning]);
+  useEffect(() => { onInspectionHoldRef.current = onInspectionHold; }, [onInspectionHold]);
   useEffect(() => { onLogRef.current     = onLog;     }, [onLog]);
 
   // ── nextRunAt helper ──────────────────────────────────────────────────────
@@ -514,6 +517,7 @@ function MobilePhoneAppsPanel({
     if (!settingsRef.current.enabled || runningRef.current || stopRef.current) return;
     runningRef.current = true;
     onRunningRef.current?.(true);
+    onInspectionHoldRef.current?.(false);
     setCompletionStatus("running");
     const cycleStartedAt = Date.now();
     // Preserve the timer's original due time before clearing the display
@@ -568,7 +572,10 @@ function MobilePhoneAppsPanel({
             // exactly what happened during the run (cookie banners, scrolls, etc.)
             try {
               const data: { ok?: boolean; steps?: string[]; error?: string; keepScreenOn?: boolean } = await res.json();
-              if (data.keepScreenOn) keepScreenAwakeForInspection = true;
+              if (data.keepScreenOn) {
+                keepScreenAwakeForInspection = true;
+                onInspectionHoldRef.current?.(true);
+              }
               const log = onLogRef.current;
               if (log) {
                 if (Array.isArray(data.steps)) {

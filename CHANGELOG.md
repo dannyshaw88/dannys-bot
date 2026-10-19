@@ -1,3 +1,13 @@
+## [1.2.658] — 2026-10-19
+
+### Fixed
+
+- Keep the Phone Farm mirror mounted after WhatsApp pauses for contact-picker inspection.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.658`.
+
 ## [1.2.657] — 2026-10-19
 
 ### Release
