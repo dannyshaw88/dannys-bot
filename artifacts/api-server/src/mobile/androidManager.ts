@@ -1737,6 +1737,7 @@ type WhatsAppLiveNode = {
   resourceId: string;
   className: string;
   clickable: boolean;
+  enabled: boolean;
   focused: boolean;
   x1: number;
   y1: number;
@@ -1762,6 +1763,7 @@ function parseWhatsAppLiveNodes(xml: string): WhatsAppLiveNode[] {
       resourceId: attr("resource-id").trim(),
       className: attr("class").trim(),
       clickable: attr("clickable").toLowerCase() === "true",
+      enabled: attr("enabled").toLowerCase() !== "false",
       focused: attr("focused").toLowerCase() === "true",
       x1, y1, x2, y2,
       x: Math.round((x1 + x2) / 2),
@@ -1826,6 +1828,8 @@ export async function runWhatsAppApp(
   const targetCount = min + Math.floor(Math.random() * (max - min + 1));
   let tempMediaPath: string | null = null;
   let remoteMediaPath: string | null = null;
+  let remoteMediaReused = false;
+  let retainRemoteMediaPath = false;
   let galleryMediaTimestamp: number | null = null;
   const isImageMedia = Boolean(opts?.media && (
     /^image\//i.test(opts.media.mimeType) ||
@@ -1838,6 +1842,7 @@ export async function runWhatsAppApp(
       return null;
     }
   })();
+  let galleryTapForMedia = calibratedGalleryTap;
   const excludedLabels = new Set([
     "new chat", "new conversation", "new contact", "create group",
     "new group", "new community", "broadcast lists", "communities",
@@ -1877,6 +1882,22 @@ export async function runWhatsAppApp(
     return nodes.find(node =>
       wanted.has(node.text.toLowerCase()) || wanted.has(node.contentDesc.toLowerCase()),
     ) ?? null;
+  };
+  const findTextMessageSendControl = (xml: string): WhatsAppLiveNode | null => {
+    const candidates = parseWhatsAppLiveNodes(xml).filter(node => {
+      const text = node.text.trim().toLowerCase();
+      const contentDesc = node.contentDesc.trim().toLowerCase();
+      const resourceId = node.resourceId.toLowerCase();
+      const exactSendId = /(?:^|\/)send(?:_button)?$/.test(resourceId);
+      return node.clickable && node.enabled && (
+        exactSendId || text === "send" || contentDesc === "send"
+      );
+    });
+    return candidates.sort((a, b) => {
+      const areaA = (a.x2 - a.x1) * (a.y2 - a.y1);
+      const areaB = (b.x2 - b.x1) * (b.y2 - b.y1);
+      return areaA - areaB || b.y - a.y || b.x - a.x;
+    })[0] ?? null;
   };
 
   const getContactCandidates = (xml: string): WhatsAppLiveNode[] =>
@@ -1965,24 +1986,78 @@ export async function runWhatsAppApp(
       const match = opts.media.dataUrl.match(/^data:[^;]+;base64,(.*)$/s);
       if (!match) throw new Error("WhatsApp attachment is not a valid data URL");
       const safeName = path.basename(opts.media.fileName).replace(/[<>:"/\\|?*\x00-\x1F]/g, "_") || "attachment";
+      const mediaBytes = Buffer.from(match[1], "base64");
       tempMediaPath = path.join(os.tmpdir(), `whatsapp-${Date.now()}-${safeName}`);
-      fs.writeFileSync(tempMediaPath, Buffer.from(match[1], "base64"));
+      fs.writeFileSync(tempMediaPath, mediaBytes);
       if (isImageMedia) {
         // Image attachments must enter WhatsApp through Gallery, just like
         // Make a Post. Documents/Download is a different picker and does not
         // make the staged image the selected media item.
-        remoteMediaPath = await pushFileToDevice(serial, tempMediaPath, safeName);
+        const mimeType = opts.media.mimeType.toLowerCase().split(";", 1)[0].trim();
+        const mimeExtension: Record<string, string> = {
+          "image/jpeg": ".jpg",
+          "image/png": ".png",
+          "image/webp": ".webp",
+          "image/gif": ".gif",
+          "image/heic": ".heic",
+          "image/heif": ".heif",
+          "image/avif": ".avif",
+          "image/bmp": ".bmp",
+        };
+        const requestedExtension = path.extname(safeName).toLowerCase();
+        const safeExtension = mimeExtension[mimeType] ?? (
+          [".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp"].includes(requestedExtension)
+            ? requestedExtension
+            : ".jpg"
+        );
+        const imageDigest = createHash("sha256").update(mediaBytes).digest("hex");
+        const stagedName = `IMG_${imageDigest}${safeExtension}`;
+        remoteMediaPath = `/sdcard/DCIM/Camera/${stagedName}`;
+        retainRemoteMediaPath = true;
+        let existingSize: number | null = null;
+        try {
+          const probe = await execFileP(adb, [
+            "-s", serial, "shell", "stat", "-c", "%s", remoteMediaPath,
+          ], { encoding: "utf8", timeout: 5000 } as any);
+          const parsedSize = Number(String(probe.stdout ?? "").trim());
+          if (Number.isSafeInteger(parsedSize) && parsedSize >= 0) existingSize = parsedSize;
+        } catch {
+          // No file at the content-addressed path; import it below.
+        }
+        if (existingSize === mediaBytes.length) {
+          remoteMediaReused = true;
+          whatsappDebug("reusing identical image already imported on device", {
+            sha256: imageDigest,
+            byteLength: mediaBytes.length,
+            devicePath: remoteMediaPath,
+          });
+        } else {
+          if (existingSize !== null) {
+            await runAdbStrict(adb, ["-s", serial, "shell", "rm", "-f", remoteMediaPath], 5000);
+          }
+          await runAdbStrict(adb, ["-s", serial, "push", tempMediaPath, remoteMediaPath], 30000);
+          await scanMediaFile(serial, remoteMediaPath, true);
+          whatsappDebug("imported image to device content cache", {
+            sha256: imageDigest,
+            byteLength: mediaBytes.length,
+            devicePath: remoteMediaPath,
+          });
+        }
+        galleryTapForMedia = remoteMediaReused ? null : calibratedGalleryTap;
         let indexed: Awaited<ReturnType<typeof queryMediaStoreFile>> = {
           found: false,
           raw: "",
           fields: {},
         };
-        if (calibratedGalleryTap) {
+        if (calibratedGalleryTap && !remoteMediaReused) {
           whatsappDebug("skipping MediaStore lookup because calibrated Gallery tap is configured", {
             devicePath: remoteMediaPath,
           });
         } else {
           indexed = await queryMediaStoreFile(serial, remoteMediaPath);
+          if (remoteMediaReused && !indexed.found) {
+            await scanMediaFile(serial, remoteMediaPath, true);
+          }
           for (let mediaPoll = 1; mediaPoll < 4 && !indexed.found; mediaPoll++) {
             await _sleep(450);
             indexed = await queryMediaStoreFile(serial, remoteMediaPath);
@@ -2317,10 +2392,10 @@ export async function runWhatsAppApp(
            const galleryDateHints = galleryMediaTimestamp
              ? getWhatsAppGalleryDateHints(galleryMediaTimestamp)
              : [];
-            if (calibratedGalleryTap) {
+            if (galleryTapForMedia) {
               whatsappDebug("using calibrated WhatsApp first-media Gallery tap", {
-                x: calibratedGalleryTap.x,
-                y: calibratedGalleryTap.y,
+                x: galleryTapForMedia.x,
+                y: galleryTapForMedia.y,
               });
             }
            const galleryMediaSelector = (currentXml: string) =>
@@ -2370,7 +2445,7 @@ export async function runWhatsAppApp(
            let lastTargetSignature = "";
            let stableTargetPolls = 0;
            let galleryReadyXml = xml;
-            if (calibratedGalleryTap) {
+            if (galleryTapForMedia) {
               const beforeTap = gallerySelectionState(galleryReadyXml);
               if (!beforeTap.verified) {
                 await _sleep(250);
@@ -2381,8 +2456,8 @@ export async function runWhatsAppApp(
                 );
                 calibratedTapPerformed = true;
                 whatsappDebug("tapped calibrated WhatsApp first-media Gallery point", {
-                  x: calibratedGalleryTap.x,
-                  y: calibratedGalleryTap.y,
+                  x: galleryTapForMedia.x,
+                  y: galleryTapForMedia.y,
                   beforeTap,
                 });
               } else {
@@ -2395,7 +2470,7 @@ export async function runWhatsAppApp(
                 mediaStoreFound: false,
               });
             }
-            for (let galleryPoll = 1; !calibratedGalleryTap && galleryPoll <= 4 && galleryDateHints.length > 0; galleryPoll++) {
+            for (let galleryPoll = 1; !galleryTapForMedia && galleryPoll <= 4 && galleryDateHints.length > 0; galleryPoll++) {
              if (galleryPoll > 1) {
                await _sleep(300);
                galleryReadyXml = await _uiDump(adb, serial);
@@ -2429,6 +2504,13 @@ export async function runWhatsAppApp(
                   node.contentDesc.toLowerCase().includes(hint.toLowerCase()),
                 ),
               );
+               if (remoteMediaReused && matches.length > 1) {
+                 whatsappDebug("reused Gallery image is ambiguous; refusing to tap", {
+                   matchingTargetCount: matches.length,
+                   mediaItemDescriptions: matches.slice(0, 12).map(node => node.contentDesc),
+                 });
+                 break;
+               }
               if (matches.length >= 1) {
                 // The accessibility tree exposes only a date rounded to the
                 // minute. When another photo shares that minute, Gallery
@@ -2483,7 +2565,7 @@ export async function runWhatsAppApp(
              mediaItemDescriptions: mediaItems.slice(0, 12).map(node => node.contentDesc),
              stagedItemFound: Boolean(stagedItem),
            });
-            if (!stagedItem && !calibratedTapPerformed) {
+             if (!stagedItem && !calibratedTapPerformed) {
              const alreadySelected = gallerySelectionState(xml).verified;
              if (!alreadySelected) {
                steps.push(`WhatsApp skipped "${contact.text}" — staged image was not uniquely identified in Gallery`);
@@ -2502,7 +2584,7 @@ export async function runWhatsAppApp(
                       y: stagedItem.y,
                       bounds: `[${stagedItem.x1},${stagedItem.y1}][${stagedItem.x2},${stagedItem.y2}]`,
                     }
-                  : { x: calibratedGalleryTap?.x, y: calibratedGalleryTap?.y },
+                   : { x: galleryTapForMedia?.x, y: galleryTapForMedia?.y },
               );
               if (!calibratedTapPerformed) {
                 await _adbTapAsync(adb, serial, stagedItem.x, stagedItem.y);
@@ -2527,8 +2609,8 @@ export async function runWhatsAppApp(
                whatsappDebug(`Gallery selection poll ${selectionPoll}/12`, {
                  ...selection,
                   contentDesc: stagedItem?.contentDesc ?? "calibrated first Gallery media",
-                  x: stagedItem?.x ?? calibratedGalleryTap?.x,
-                  y: stagedItem?.y ?? calibratedGalleryTap?.y,
+                  x: stagedItem?.x ?? galleryTapForMedia?.x,
+                  y: stagedItem?.y ?? galleryTapForMedia?.y,
                });
              }
 
@@ -2542,10 +2624,10 @@ export async function runWhatsAppApp(
                if (!selection.hasAnySelectedState) {
                  whatsappDebug("Gallery first tap produced no selected state — guarded retry", {
                     contentDesc: stagedItem?.contentDesc ?? "calibrated first Gallery media",
-                    x: stagedItem?.x ?? calibratedGalleryTap?.x,
-                    y: stagedItem?.y ?? calibratedGalleryTap?.y,
+                    x: stagedItem?.x ?? galleryTapForMedia?.x,
+                    y: stagedItem?.y ?? galleryTapForMedia?.y,
                  });
-                  if (calibratedGalleryTap) {
+                  if (galleryTapForMedia) {
                     await tapCalibratedNavigationControl(
                       serial,
                       "whatsappFirstMediaGallery",
@@ -2561,8 +2643,8 @@ export async function runWhatsAppApp(
                    whatsappDebug(`Gallery retry selection poll ${selectionPoll}/12`, {
                      ...selection,
                      contentDesc: stagedItem?.contentDesc ?? "calibrated first Gallery media",
-                     x: stagedItem?.x ?? calibratedGalleryTap?.x,
-                     y: stagedItem?.y ?? calibratedGalleryTap?.y,
+                     x: stagedItem?.x ?? galleryTapForMedia?.x,
+                     y: stagedItem?.y ?? galleryTapForMedia?.y,
                    });
                  }
                }
@@ -2620,9 +2702,23 @@ export async function runWhatsAppApp(
       xml = await _uiDump(adb, serial);
       const send = remoteMediaPath
         ? findLiveLabel(xml, ["send 1 media", "send media"], ["send_media_btn"])
-        : findLiveLabel(xml, ["send"], ["send"]);
+        : findTextMessageSendControl(xml);
       if (!send) {
-        whatsappDebug(`Send control not found for "${contact.text}"`, describeWhatsAppSurface(xml));
+        const textSendCandidates = remoteMediaPath ? undefined : parseWhatsAppLiveNodes(xml)
+          .filter(node => /send/i.test(`${node.text} ${node.contentDesc} ${node.resourceId}`))
+          .map(node => ({
+            text: node.text,
+            contentDesc: node.contentDesc,
+            resourceId: node.resourceId,
+            className: node.className,
+            clickable: node.clickable,
+            enabled: node.enabled,
+            bounds: `[${node.x1},${node.y1}][${node.x2},${node.y2}]`,
+          }));
+        whatsappDebug(`Send control not found for "${contact.text}"`, {
+          ...describeWhatsAppSurface(xml),
+          textSendCandidates,
+        });
         steps.push(`WhatsApp skipped "${contact.text}" — Send control not found`);
         await pressBack();
         break;
@@ -2631,6 +2727,8 @@ export async function runWhatsAppApp(
         resourceId: send.resourceId,
         text: send.text,
         contentDesc: send.contentDesc,
+        clickable: send.clickable,
+        enabled: send.enabled,
         x: send.x,
         y: send.y,
         withAttachment: Boolean(remoteMediaPath),
@@ -2693,7 +2791,7 @@ export async function runWhatsAppApp(
     if (tempMediaPath) {
       try { fs.unlinkSync(tempMediaPath); } catch {}
     }
-    if (remoteMediaPath) {
+    if (remoteMediaPath && !retainRemoteMediaPath) {
       try {
         await removeDeviceFile(serial, remoteMediaPath);
         steps.push(`WhatsApp staged media deleted from device: ${path.basename(remoteMediaPath)}`);
@@ -2707,6 +2805,8 @@ export async function runWhatsAppApp(
         });
         steps.push(`WhatsApp media cleanup warning: ${message}`);
       }
+    } else if (remoteMediaPath && retainRemoteMediaPath) {
+      steps.push(`WhatsApp cached image retained on device: ${path.basename(remoteMediaPath)}`);
     }
   }
 }

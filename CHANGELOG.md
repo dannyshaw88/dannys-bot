@@ -1,3 +1,33 @@
+## [1.2.668] — 2026-10-19
+
+### Fixed
+
+- Refuse ambiguous Gallery matches for a reused cached image instead of risking a different photo.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.668`.
+
+## [1.2.667] — 2026-10-19
+
+### Fixed
+
+- Reuse identical WhatsApp images from a per-device content-addressed Gallery cache instead of importing and deleting a fresh copy for each run.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.667`.
+
+## [1.2.666] — 2026-10-19
+
+### Fixed
+
+- Select non-media WhatsApp Send only from a live, enabled, clickable control; log matching nodes when no safe control is available.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.666`.
+
 ## [1.2.665] — 2026-10-19
 
 ### Release

@@ -3,7 +3,7 @@ name: WhatsApp contact automation safety
 description: Safety rules for selecting WhatsApp contacts and sending configured messages through native Android UI automation.
 ---
 
-The WhatsApp automation must discover the Send message FAB (`fabText`), contact rows (`contactpicker_row_name` Buttons), composer (`entry`), attachment option (`pickfiletype_document_holder`), and final media send (`send_media_btn`) from the current UI hierarchy before tapping. It must skip or stop when any expected target is missing, ambiguous, or stale, rather than falling back to guessed coordinates. Use an internal live-row key (label/content-desc plus bounds) for within-process deduplication; display names alone are not unique.
+The WhatsApp automation must discover the Send message FAB (`fabText`), contact rows (`contactpicker_row_name` Buttons), composer (`entry`), attachment option (`pickfiletype_document_holder`), and final media send (`send_media_btn`) from the current UI hierarchy before tapping. For a text-only send, require an exact Send label/resource ID on an enabled, clickable live node; never match any node merely because its resource ID contains "send". It must skip or stop when any expected target is missing, ambiguous, or stale, rather than falling back to guessed coordinates. Use an internal live-row key (label/content-desc plus bounds) for within-process deduplication; display names alone are not unique.
 
 **Why:** WhatsApp accessibility labels and contact-picker layouts vary across app versions and devices; a guessed tap can message the wrong person.
 
@@ -32,6 +32,12 @@ WhatsApp Add Media is a raw-transfer path, not Make a Post processing: do not st
 **Why:** The selected attachment should be sent as the user supplied it; Make a Post's cleanup pipeline is intentionally unrelated to WhatsApp messaging.
 
 **How to apply:** Decode the selected data URL, transfer those bytes to the phone, scan/index the copy, and use only the picker/import verification needed to attach it. At the end of the run, close WhatsApp through the same configured floating-window recents gesture used by HST; do not add an airplane-mode cycle to WhatsApp.
+
+Cache WhatsApp images on-device by a SHA-256-derived filename and byte length; keep those cached Gallery files so later recipients/runs can reuse them. When reusing an older cached image, resolve its MediaStore date and select that exact Gallery item instead of using a calibrated first-thumbnail point.
+
+**Why:** Re-uploading and rescanning the same image for each recipient wastes time and creates duplicate Gallery imports; an old cached image is not necessarily the first Gallery item.
+
+**How to apply:** Before pushing, probe the content-addressed device path and verify its size. Push/scan only when absent or mismatched, retain image cache files during cleanup, and fail closed if a reused item cannot be uniquely identified in Gallery.
 
 WhatsApp's Gallery sheet has two coordinate spaces: the unselected thumbnail can be near the bottom of the screen, then moves upward when the selected-media tray expands. Once the Gallery surface is open and a live media node matches the staged media identity, tap that saved pre-selection coordinate immediately, then poll for the selected tray, thumbnail, counter, and send control. Allow a second tap only when the first tap produced no selected-state marker at all; never tap again while the sheet is visibly transitioning.
 
