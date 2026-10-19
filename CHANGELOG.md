@@ -1,3 +1,9 @@
+## [1.2.669] — 2026-10-19
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.669`.
+
 ## [1.2.668] — 2026-10-19
 
 ### Fixed
