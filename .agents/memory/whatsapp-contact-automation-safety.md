@@ -75,13 +75,14 @@ cleanup then closed the app.
 **How to apply:** Keep the index device-scoped and durable, resolve WhatsApp
 picker names through Android's contacts provider only when exactly one number
 matches, and stop rather than guess. Launch WhatsApp, tap the live New Chat
-control, and wait for the contact picker before querying the provider. If number
-lookup fails, leave WhatsApp at the picker, report `keepScreenOn`, and skip the
-outer Phone Apps sleep request. Also hold the Phone Farm mirror active
-independently of the scheduler's `running` state until the user powers it off or
-a new Phone Apps cycle starts; otherwise the client unmounts LiveCanvas and
-closes the video WebSocket as soon as the run flag clears. Do not select or
-send. Number reservations may include an unconfirmed send after interruption,
+control, and wait for the contact picker before querying the provider. If no
+message send is confirmed after WhatsApp launches, leave WhatsApp open, report
+`keepScreenOn`, and skip the outer Phone Apps sleep request so the failure
+surface can be inspected. Also hold the Phone Farm mirror active independently
+of the scheduler's `running` state until the user powers it off or a new Phone
+Apps cycle starts; otherwise the client unmounts LiveCanvas and closes the video
+WebSocket as soon as the run flag clears. Never select or send on an unresolved
+number. Number reservations may include an unconfirmed send after interruption,
 which is safer than sending twice.
 Re-arm an existing timer when interval fields change, and anchor the next due
 time to the cycle start.

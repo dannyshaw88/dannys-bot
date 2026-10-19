@@ -1816,6 +1816,8 @@ export async function runWhatsAppApp(
   const steps: string[] = [];
   const runStartedAt = Date.now();
   let leaveWhatsAppOpenForInspection = false;
+  let whatsappLaunched = false;
+  let inspectionReason = "message send was not confirmed";
   const messageTemplate = String(opts?.message ?? "").trim();
   if (!messageTemplate) throw new Error("WhatsApp message is empty");
   const min = Math.max(1, Math.round(opts?.userCountMin ?? 1));
@@ -2054,6 +2056,7 @@ export async function runWhatsAppApp(
       ...describeWhatsAppSurface(xml),
       elapsedSinceRunStartMs: Date.now() - launchStartedAt,
     });
+    whatsappLaunched = true;
     steps.push(`WhatsApp launched — selected ${targetCount} contact${targetCount === 1 ? "" : "s"}`);
 
     // This is deliberately an internal row identity rather than a display
@@ -2131,6 +2134,7 @@ export async function runWhatsAppApp(
           };
         } catch (error) {
           leaveWhatsAppOpenForInspection = true;
+          inspectionReason = "Android contact-number lookup failed";
           throw error;
         }
       }
@@ -2239,7 +2243,16 @@ export async function runWhatsAppApp(
         .update(resolvedMessage, "utf8")
         .digest("hex")
         .slice(0, 12);
+      whatsappDebug(`typing configured message into composer for "${contact.text}"`, {
+        messageLength: resolvedMessage.length,
+        messageFingerprint,
+        composerFocused: Boolean(focusedComposer?.focused),
+      });
       await inputText(serial, resolvedMessage);
+      whatsappDebug(`message input command completed for "${contact.text}"`, {
+        messageLength: resolvedMessage.length,
+        messageFingerprint,
+      });
       await _sleep(350);
       const typedXml = await _uiDump(adb, serial);
       const typedComposer = parseWhatsAppLiveNodes(typedXml).find(node =>
@@ -2634,14 +2647,19 @@ export async function runWhatsAppApp(
       await pressBack();
     }
     if (sent === 0) {
+      leaveWhatsAppOpenForInspection = whatsappLaunched;
       return {
         ok: false,
         steps,
         error: "WhatsApp did not send a message to any contact",
+        keepScreenOn: leaveWhatsAppOpenForInspection,
       };
     }
     return { ok: true, steps };
   } catch (error: any) {
+    if (whatsappLaunched && sent === 0) {
+      leaveWhatsAppOpenForInspection = true;
+    }
     return {
       ok: false,
       steps,
@@ -2650,8 +2668,8 @@ export async function runWhatsAppApp(
     };
   } finally {
     if (leaveWhatsAppOpenForInspection) {
-      steps.push("WhatsApp left open because Android contact-number lookup failed");
-    } else {
+      steps.push(`WhatsApp left open for inspection because ${inspectionReason}`);
+    } else if (sent > 0) {
       try {
         const dismissDirection = opts?.dismissDirection
           ?? getModelDismissDirection(getDeviceModel(serial));

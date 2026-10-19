@@ -1,3 +1,13 @@
+## [1.2.662] — 2026-10-19
+
+### Fixed
+
+- Keep WhatsApp open and the phone awake for inspection whenever no message send is confirmed; add privacy-safe message-entry progress markers.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.662`.
+
 ## [1.2.661] — 2026-10-19
 
 ### Release
