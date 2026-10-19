@@ -32,7 +32,9 @@ async function getWhatsAppPhonebook(
   const { stdout, stderr } = await execFileP(adb, [
     "-s", serial, "shell", "content", "query",
     "--uri", "content://com.android.contacts/data/phones",
-    "--projection", "display_name:data1:normalized_number",
+    // ContactsContract.CommonDataKinds.Phone stores the normalized number in
+    // data4; "normalized_number" is not a column on the data/phones URI.
+    "--projection", "display_name:data1:data4",
   ], {
     encoding: "utf8",
     timeout: 60_000,

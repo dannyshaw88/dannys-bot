@@ -1,3 +1,13 @@
+## [1.2.660] — 2026-10-19
+
+### Fixed
+
+- Query Android's Contacts phone-number columns using the correct normalized-number field so WhatsApp can safely match picker contacts.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.660`.
+
 ## [1.2.659] — 2026-10-19
 
 ### Release

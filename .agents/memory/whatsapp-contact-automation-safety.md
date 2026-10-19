@@ -68,7 +68,9 @@ The number file scales beyond thousands of contacts; reserving before Send
 prioritizes avoiding duplicate messages if the process is interrupted. Contact
 provider lookup can fail before returning any usable rows; doing it before
 launch prevented WhatsApp from opening, and even after launch it prevented the
-New Chat button from being tapped. Unconditional cleanup then closed the app.
+New Chat button from being tapped. On Contacts' `data/phones` URI, normalized
+numbers are exposed as `data4`, not a `normalized_number` column. Unconditional
+cleanup then closed the app.
 
 **How to apply:** Keep the index device-scoped and durable, resolve WhatsApp
 picker names through Android's contacts provider only when exactly one number

@@ -52,7 +52,10 @@ export function parseAndroidPhonebook(output: string): Map<string, Set<string>> 
   const byName = new Map<string, Set<string>>();
   for (const line of output.split(/\r?\n/)) {
     const displayName = line.match(/(?:^|[,\s])display_name=(.*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]?.trim();
-    const normalizedNumber = line.match(/(?:^|[,\s])normalized_number=([^,]*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]?.trim();
+    const normalizedNumber = (
+      line.match(/(?:^|[,\s])normalized_number=([^,]*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1] ??
+      line.match(/(?:^|[,\s])data4=([^,]*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]
+    )?.trim();
     const rawNumber = line.match(/(?:^|[,\s])data1=([^,]*?)(?=, [A-Za-z_][A-Za-z0-9_]*=|$)/)?.[1]?.trim();
     const number = normalizeWhatsAppPhoneNumber(normalizedNumber || rawNumber || "");
     const nameKey = displayName?.toLocaleLowerCase().replace(/\s+/g, " ");
