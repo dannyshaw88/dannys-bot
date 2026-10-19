@@ -41,15 +41,21 @@ async function getWhatsAppPhonebook(
   const output = String(stdout ?? "");
   const byName = parseAndroidPhonebook(output);
   if (byName.size === 0) {
-    logger.warn({
+    const diagnostics = {
       serial,
       outputBytes: Buffer.byteLength(output),
       outputRows: output.split(/\r?\n/).filter(line => /^\s*Row:/i.test(line)).length,
       hasDisplayNameField: /display_name=/i.test(output),
       hasData1Field: /data1=/i.test(output),
       stderrPresent: Boolean(String(stderr ?? "").trim()),
-    }, "WhatsApp Android phonebook query returned no parseable recipients");
-    throw new Error("Android contact-number lookup returned no parseable numbers; WhatsApp was opened but no message was sent");
+    };
+    logger.warn(diagnostics, "WhatsApp Android phonebook query returned no parseable recipients");
+    throw new Error(
+      "Android contact-number lookup returned no parseable numbers; " +
+      `diagnostics: rows=${diagnostics.outputRows}, bytes=${diagnostics.outputBytes}, ` +
+      `displayNameField=${diagnostics.hasDisplayNameField}, data1Field=${diagnostics.hasData1Field}, ` +
+      `stderrPresent=${diagnostics.stderrPresent}. No message was sent.`,
+    );
   }
   whatsappPhonebookCache.set(serial, { loadedAt: Date.now(), byName });
   return byName;
@@ -2048,45 +2054,13 @@ export async function runWhatsAppApp(
     });
     steps.push(`WhatsApp launched — selected ${targetCount} contact${targetCount === 1 ? "" : "s"}`);
 
-    let sentNumbers: Set<string>;
-    let phonebook: Map<string, Set<string>>;
-    try {
-      sentNumbers = loadWhatsAppSentNumberIndex(serial);
-      phonebook = await getWhatsAppPhonebook(adb, serial);
-    } catch (error) {
-      leaveWhatsAppOpenForInspection = true;
-      throw error;
-    }
-    // Migrate any names retained by the old settings-based history into the
-    // durable number index when Android resolves them to exactly one number.
-    for (const oldKey of opts?.recentContactKeys ?? []) {
-      const oldName = oldKey.split("\u0000", 1)[0]?.trim().toLocaleLowerCase().replace(/\s+/g, " ");
-      const matches = oldName ? phonebook.get(oldName) : undefined;
-      if (matches?.size === 1) {
-        const number = [...matches][0];
-        if (!sentNumbers.has(number)) {
-          reserveWhatsAppPhoneNumber(serial, number);
-          sentNumbers.add(number);
-        }
-      }
-    }
-    const resolveRecipientNumber = (node: WhatsAppLiveNode): string | null => {
-      const visibleNumbers = (`${node.text} ${node.contentDesc}`.match(/(?:\+|00)?\d[\d\s().-]{5,}\d/g) ?? [])
-        .map(normalizeWhatsAppPhoneNumber)
-        .filter((number): number is string => Boolean(number));
-      const uniqueVisibleNumbers = [...new Set(visibleNumbers)];
-      if (uniqueVisibleNumbers.length === 1) return uniqueVisibleNumbers[0];
-      if (uniqueVisibleNumbers.length > 1) return null;
-      const nameKey = node.text.trim().toLocaleLowerCase().replace(/\s+/g, " ");
-      const matches = phonebook.get(nameKey);
-      return matches?.size === 1 ? [...matches][0] : null;
-    };
-
     // This is deliberately an internal row identity rather than a display
     // name. Duplicate contact names are common; the live row's label plus
     // bounds distinguish duplicate rows within this picker view and remain
     // stable when we return to the same list.
     const usedContactKeys = new Set<string>();
+    let sentNumbers: Set<string> | null = null;
+    let resolveRecipientNumber: ((node: WhatsAppLiveNode) => string | null) | null = null;
     let sent = 0;
     for (let attempt = 0; attempt < targetCount; attempt++) {
       xml = await _uiDump(adb, serial);
@@ -2124,6 +2098,40 @@ export async function runWhatsAppApp(
       xml = await _uiDump(adb, serial);
       const settled = await waitForContactList(xml, attempt + 1);
       xml = settled.xml;
+      steps.push("WhatsApp New Chat opened — checking contacts before selecting a recipient");
+      if (!sentNumbers || !resolveRecipientNumber) {
+        try {
+          sentNumbers = loadWhatsAppSentNumberIndex(serial);
+          const phonebook = await getWhatsAppPhonebook(adb, serial);
+          // Migrate names retained by the old settings-based history only when
+          // Android resolves each name to exactly one phone number.
+          for (const oldKey of opts?.recentContactKeys ?? []) {
+            const oldName = oldKey.split("\u0000", 1)[0]?.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+            const matches = oldName ? phonebook.get(oldName) : undefined;
+            if (matches?.size === 1) {
+              const number = [...matches][0];
+              if (!sentNumbers.has(number)) {
+                reserveWhatsAppPhoneNumber(serial, number);
+                sentNumbers.add(number);
+              }
+            }
+          }
+          resolveRecipientNumber = (node: WhatsAppLiveNode): string | null => {
+            const visibleNumbers = (`${node.text} ${node.contentDesc}`.match(/(?:\+|00)?\d[\d\s().-]{5,}\d/g) ?? [])
+              .map(normalizeWhatsAppPhoneNumber)
+              .filter((number): number is string => Boolean(number));
+            const uniqueVisibleNumbers = [...new Set(visibleNumbers)];
+            if (uniqueVisibleNumbers.length === 1) return uniqueVisibleNumbers[0];
+            if (uniqueVisibleNumbers.length > 1) return null;
+            const nameKey = node.text.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+            const matches = phonebook.get(nameKey);
+            return matches?.size === 1 ? [...matches][0] : null;
+          };
+        } catch (error) {
+          leaveWhatsAppOpenForInspection = true;
+          throw error;
+        }
+      }
       const unselectedCandidates = settled.candidates.filter(node => {
         const key = `${node.text}\u0000${node.contentDesc}\u0000${node.x1},${node.y1},${node.x2},${node.y2}`;
         return !usedContactKeys.has(key);
@@ -2139,13 +2147,13 @@ export async function runWhatsAppApp(
       // fallback. If the visible picker has no fresh recipients, stop rather
       // than sending another message to someone contacted by a prior run.
       const candidates = unselectedCandidates
-        .map(node => ({ node, number: resolveRecipientNumber(node) }))
+        .map(node => ({ node, number: resolveRecipientNumber!(node) }))
         .filter((entry): entry is { node: WhatsAppLiveNode; number: string } =>
-          Boolean(entry.number) && !sentNumbers.has(entry.number),
+          Boolean(entry.number) && !sentNumbers!.has(entry.number),
         );
       if (candidates.length === 0) {
         const unknownNumberCount = unselectedCandidates
-          .filter(node => !resolveRecipientNumber(node)).length;
+          .filter(node => !resolveRecipientNumber!(node)).length;
         whatsappDebug(
           `contact-list has no fresh identifiable number after ${sent} sent`,
           {
@@ -2616,7 +2624,7 @@ export async function runWhatsAppApp(
       // process is interrupted before the response returns, the next run must
       // still know not to message this number again.
       reserveWhatsAppPhoneNumber(serial, contactNumber);
-      sentNumbers.add(contactNumber);
+      sentNumbers!.add(contactNumber);
       await _adbTapAsync(adb, serial, send.x, send.y);
       await _sleep(700);
       sent++;

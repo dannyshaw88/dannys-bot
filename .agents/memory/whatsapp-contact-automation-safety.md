@@ -66,15 +66,16 @@ between cycle starts, not added after the previous cycle finishes.
 **Why:** Recent-history limits and fallback behavior caused repeat messages.
 The number file scales beyond thousands of contacts; reserving before Send
 prioritizes avoiding duplicate messages if the process is interrupted. Contact
-provider lookup can fail before returning any usable rows; doing that before
-launch prevented WhatsApp from opening, and unconditional cleanup then closed
-it.
+provider lookup can fail before returning any usable rows; doing it before
+launch prevented WhatsApp from opening, and even after launch it prevented the
+New Chat button from being tapped. Unconditional cleanup then closed the app.
 
 **How to apply:** Keep the index device-scoped and durable, resolve WhatsApp
 picker names through Android's contacts provider only when exactly one number
-matches, and stop rather than guess. Launch and verify WhatsApp before querying
-the provider; if number lookup fails, leave WhatsApp open for inspection rather
-than running normal close cleanup. Number reservations may include an
-unconfirmed send after interruption, which is safer than sending twice.
+matches, and stop rather than guess. Launch WhatsApp, tap the live New Chat
+control, and wait for the contact picker before querying the provider. If number
+lookup fails, leave WhatsApp at the picker and do not select or send. Number
+reservations may include an unconfirmed send after interruption, which is
+safer than sending twice.
 Re-arm an existing timer when interval fields change, and anchor the next due
 time to the cycle start.

@@ -1,3 +1,19 @@
+## [1.2.655] — 2026-10-19
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.655`.
+
+## [1.2.654] — 2026-10-19
+
+### Fixed
+
+- Open the WhatsApp New Chat contact picker before running recipient-number checks.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.654`.
+
 ## [1.2.653] — 2026-10-19
 
 ### Release
