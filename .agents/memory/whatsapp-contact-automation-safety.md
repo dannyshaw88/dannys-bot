@@ -39,6 +39,12 @@ WhatsApp's Gallery sheet has two coordinate spaces: the unselected thumbnail can
 
 **How to apply:** Treat `gallery_selected_media`, `selected_media_item_thumbnail`, `send_media_counter=1`, or `send_media_btn` as evidence that selection is in progress; continue polling instead of tapping. If the MediaStore identity is unavailable, abort immediately rather than repeatedly dumping an unmatchable surface. Fail closed unless the complete selected state is confirmed.
 
+Any state read by `finally` (including send counts and inspection-hold flags) must be declared in the enclosing function scope, not inside its `try` block.
+
+**Why:** A block-scoped variable referenced by cleanup throws a `ReferenceError` during finalization, overriding the intended result and preventing `keepScreenOn` from reaching Phone Apps.
+
+**How to apply:** When changing WhatsApp cleanup, check every value read from `finally` is visible there and preserve the result/inspection-hold path when no send was confirmed.
+
 The WhatsApp image flow also supports a strict per-device navigation-calibration
 point for the first Gallery thumbnail. When that point is present, tap it
 directly after Gallery opens and skip the MediaStore lookup entirely; still

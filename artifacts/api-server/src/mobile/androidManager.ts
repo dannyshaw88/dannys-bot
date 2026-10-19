@@ -1810,7 +1810,7 @@ export async function runWhatsAppApp(
       dataUrl: string;
     } | null;
   },
-): Promise<{ ok: boolean; steps: string[]; error?: string }> {
+): Promise<{ ok: boolean; steps: string[]; error?: string; keepScreenOn?: boolean }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
@@ -1818,6 +1818,7 @@ export async function runWhatsAppApp(
   let leaveWhatsAppOpenForInspection = false;
   let whatsappLaunched = false;
   let inspectionReason = "message send was not confirmed";
+  let sent = 0;
   const messageTemplate = String(opts?.message ?? "").trim();
   if (!messageTemplate) throw new Error("WhatsApp message is empty");
   const min = Math.max(1, Math.round(opts?.userCountMin ?? 1));
@@ -2066,7 +2067,6 @@ export async function runWhatsAppApp(
     const usedContactKeys = new Set<string>();
     let sentNumbers: Set<string> | null = null;
     let resolveRecipientNumber: ((node: WhatsAppLiveNode) => string | null) | null = null;
-    let sent = 0;
     for (let attempt = 0; attempt < targetCount; attempt++) {
       xml = await _uiDump(adb, serial);
       let newChat = findLiveLabel(

@@ -1,3 +1,13 @@
+## [1.2.664] — 2026-10-19
+
+### Fixed
+
+- Keep WhatsApp run state visible to cleanup so an unconfirmed send no longer throws during finalization and incorrectly lets Phone Apps lock the phone.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.664`.
+
 ## [1.2.663] — 2026-10-19
 
 ### Release
