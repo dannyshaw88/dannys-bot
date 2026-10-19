@@ -144,7 +144,7 @@ interface PhoneAppsSettings {
   whatsapp:     AppSlotSettings;
 }
 
-type PhoneAppsCompletionStatus = "idle" | "running" | "locking" | "locked" | "inspection" | "error";
+type PhoneAppsCompletionStatus = "idle" | "running" | "locking" | "locked" | "stopped" | "error";
 
 const DEFAULT_APP_SLOT: AppSlotSettings = { enabled: false, activatePctMin: 0, activatePctMax: 0 };
 
@@ -413,6 +413,7 @@ function MobilePhoneAppsPanel({
   const [loading,     setLoading]     = useState(true);
   const [saveError,   setSaveError]   = useState<string | null>(null);
   const [completionStatus, setCompletionStatus] = useState<PhoneAppsCompletionStatus>("idle");
+  const [completionDetail, setCompletionDetail] = useState<string | null>(null);
 
   // Always-current refs for use inside scheduler closures.
   const settingsRef        = useRef<PhoneAppsSettings>(settings);
@@ -519,6 +520,7 @@ function MobilePhoneAppsPanel({
     onRunningRef.current?.(true);
     onInspectionHoldRef.current?.(false);
     setCompletionStatus("running");
+    setCompletionDetail(null);
     const cycleStartedAt = Date.now();
     // Preserve the timer's original due time before clearing the display
     // state. The shared coordinator uses this timestamp to prioritize turns
@@ -575,6 +577,10 @@ function MobilePhoneAppsPanel({
               if (data.keepScreenOn) {
                 keepScreenAwakeForInspection = true;
                 onInspectionHoldRef.current?.(true);
+                const stopStep = [...(data.steps ?? [])].reverse().find(step =>
+                  /^WhatsApp (?:skipped|stopped)/i.test(step),
+                );
+                setCompletionDetail(stopStep ?? data.error ?? "No WhatsApp message send was confirmed.");
               }
               const log = onLogRef.current;
               if (log) {
@@ -618,10 +624,10 @@ function MobilePhoneAppsPanel({
         }
 
         if (keepScreenAwakeForInspection) {
-          setCompletionStatus("inspection");
-          onLogRef.current?.("Phone Apps — WhatsApp contact picker left open; keeping phone awake so the mirror stays live for inspection");
+          setCompletionStatus("stopped");
+          onLogRef.current?.("Phone Apps — WhatsApp stopped without a confirmed send; screen left open and awake");
           cycleOutcomeLogged = true;
-          onLogRef.current?.("Cycle paused — Phone Apps left open for inspection");
+          onLogRef.current?.("Cycle stopped — WhatsApp message was not confirmed");
         } else {
           // A normal completed cycle locks even when every app activation roll misses.
           setCompletionStatus("locking");
@@ -794,14 +800,20 @@ function MobilePhoneAppsPanel({
       pendingEnabledRef.current = v;
       setSettings(current => ({ ...current, enabled: v }));
       settingsRef.current = { ...settingsRef.current, enabled: v };
-      if (!v) setCompletionStatus("idle");
+       if (!v) {
+         setCompletionStatus("idle");
+         setCompletionDetail(null);
+       }
       onLogRef.current?.(`Phone Apps — ${v ? "enabled" : "disabled"}`);
       onEnabled(v);
       return;
     }
     if (v) manualToggleOnRef.current = true;
     const next = patch({ enabled: v });
-    if (!v) setCompletionStatus("idle");
+    if (!v) {
+      setCompletionStatus("idle");
+      setCompletionDetail(null);
+    }
     onLogRef.current?.(`Phone Apps — ${v ? "enabled" : "disabled"}`);
     onEnabled(next.enabled);
   };
@@ -1325,11 +1337,16 @@ function MobilePhoneAppsPanel({
                     Runs after the selected apps finish their close gesture. The phone is locked with the explicit sleep command.
                   </span>
                 </div>
-                <div className="ml-auto flex items-center gap-2 text-xs font-semibold whitespace-nowrap">
+                <div className="ml-auto flex flex-col items-end gap-1 text-xs font-semibold">
                   {completionStatus === "running" && <><Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-500" /><span className="text-cyan-600 dark:text-cyan-400">Running Step 2</span></>}
                   {completionStatus === "locking" && <><Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" /><span className="text-amber-600 dark:text-amber-400">Locking…</span></>}
                   {completionStatus === "locked" && <><CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /><span className="text-green-600 dark:text-green-400">Phone locked</span></>}
-                  {completionStatus === "inspection" && <span className="text-amber-600 dark:text-amber-400">Paused for inspection</span>}
+                  {completionStatus === "stopped" && (
+                    <>
+                      <span className="text-amber-600 dark:text-amber-400">WhatsApp stopped — no send confirmed; screen left on</span>
+                      {completionDetail && <span className="max-w-[28rem] whitespace-normal text-right font-normal text-muted-foreground">{completionDetail}</span>}
+                    </>
+                  )}
                   {completionStatus === "error" && <span className="text-red-500">Lock failed</span>}
                 </div>
               </div>

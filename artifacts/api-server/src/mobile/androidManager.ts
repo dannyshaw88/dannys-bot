@@ -1817,9 +1817,9 @@ export async function runWhatsAppApp(
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
   const runStartedAt = Date.now();
-  let leaveWhatsAppOpenForInspection = false;
+  let leaveWhatsAppOpenOnFailure = false;
   let whatsappLaunched = false;
-  let inspectionReason = "message send was not confirmed";
+  let openScreenReason = "no WhatsApp send was confirmed";
   let sent = 0;
   const messageTemplate = String(opts?.message ?? "").trim();
   if (!messageTemplate) throw new Error("WhatsApp message is empty");
@@ -2215,8 +2215,8 @@ export async function runWhatsAppApp(
             return matches?.size === 1 ? [...matches][0] : null;
           };
         } catch (error) {
-          leaveWhatsAppOpenForInspection = true;
-          inspectionReason = "Android contact-number lookup failed";
+          leaveWhatsAppOpenOnFailure = true;
+          openScreenReason = "Android contact-number lookup failed";
           throw error;
         }
       }
@@ -2752,28 +2752,28 @@ export async function runWhatsAppApp(
       await pressBack();
     }
     if (sent === 0) {
-      leaveWhatsAppOpenForInspection = whatsappLaunched;
+      leaveWhatsAppOpenOnFailure = whatsappLaunched;
       return {
         ok: false,
         steps,
         error: "WhatsApp did not send a message to any contact",
-        keepScreenOn: leaveWhatsAppOpenForInspection,
+        keepScreenOn: leaveWhatsAppOpenOnFailure,
       };
     }
     return { ok: true, steps };
   } catch (error: any) {
     if (whatsappLaunched && sent === 0) {
-      leaveWhatsAppOpenForInspection = true;
+      leaveWhatsAppOpenOnFailure = true;
     }
     return {
       ok: false,
       steps,
       error: error?.message ?? "WhatsApp messaging failed",
-      keepScreenOn: leaveWhatsAppOpenForInspection,
+      keepScreenOn: leaveWhatsAppOpenOnFailure,
     };
   } finally {
-    if (leaveWhatsAppOpenForInspection) {
-      steps.push(`WhatsApp left open for inspection because ${inspectionReason}`);
+    if (leaveWhatsAppOpenOnFailure) {
+      steps.push(`WhatsApp left open because ${openScreenReason}`);
     } else if (sent > 0) {
       try {
         const dismissDirection = opts?.dismissDirection
