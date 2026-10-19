@@ -29,7 +29,7 @@ async function getWhatsAppPhonebook(
 ): Promise<Map<string, Set<string>>> {
   const cached = whatsappPhonebookCache.get(serial);
   if (cached && Date.now() - cached.loadedAt < 30 * 60_000) return cached.byName;
-  const { stdout } = await execFileP(adb, [
+  const { stdout, stderr } = await execFileP(adb, [
     "-s", serial, "shell", "content", "query",
     "--uri", "content://com.android.contacts/data/phones",
     "--projection", "display_name:data1:normalized_number",
@@ -38,9 +38,18 @@ async function getWhatsAppPhonebook(
     timeout: 60_000,
     maxBuffer: 32 * 1024 * 1024,
   } as any);
-  const byName = parseAndroidPhonebook(String(stdout ?? ""));
+  const output = String(stdout ?? "");
+  const byName = parseAndroidPhonebook(output);
   if (byName.size === 0) {
-    throw new Error("Could not read Android contact phone numbers; WhatsApp sending stopped to prevent duplicate messages");
+    logger.warn({
+      serial,
+      outputBytes: Buffer.byteLength(output),
+      outputRows: output.split(/\r?\n/).filter(line => /^\s*Row:/i.test(line)).length,
+      hasDisplayNameField: /display_name=/i.test(output),
+      hasData1Field: /data1=/i.test(output),
+      stderrPresent: Boolean(String(stderr ?? "").trim()),
+    }, "WhatsApp Android phonebook query returned no parseable recipients");
+    throw new Error("Android contact-number lookup returned no parseable numbers; WhatsApp was opened but no message was sent");
   }
   whatsappPhonebookCache.set(serial, { loadedAt: Date.now(), byName });
   return byName;
@@ -1798,6 +1807,7 @@ export async function runWhatsAppApp(
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
   const runStartedAt = Date.now();
+  let leaveWhatsAppOpenForInspection = false;
   const messageTemplate = String(opts?.message ?? "").trim();
   if (!messageTemplate) throw new Error("WhatsApp message is empty");
   const min = Math.max(1, Math.round(opts?.userCountMin ?? 1));
@@ -1940,33 +1950,6 @@ export async function runWhatsAppApp(
   };
 
   try {
-    const sentNumbers = loadWhatsAppSentNumberIndex(serial);
-    const phonebook = await getWhatsAppPhonebook(adb, serial);
-    // Migrate any names retained by the old settings-based history into the
-    // durable number index when Android resolves them to exactly one number.
-    for (const oldKey of opts?.recentContactKeys ?? []) {
-      const oldName = oldKey.split("\u0000", 1)[0]?.trim().toLocaleLowerCase().replace(/\s+/g, " ");
-      const matches = oldName ? phonebook.get(oldName) : undefined;
-      if (matches?.size === 1) {
-        const number = [...matches][0];
-        if (!sentNumbers.has(number)) {
-          reserveWhatsAppPhoneNumber(serial, number);
-          sentNumbers.add(number);
-        }
-      }
-    }
-    const resolveRecipientNumber = (node: WhatsAppLiveNode): string | null => {
-      const visibleNumbers = (`${node.text} ${node.contentDesc}`.match(/(?:\+|00)?\d[\d\s().-]{5,}\d/g) ?? [])
-        .map(normalizeWhatsAppPhoneNumber)
-        .filter((number): number is string => Boolean(number));
-      const uniqueVisibleNumbers = [...new Set(visibleNumbers)];
-      if (uniqueVisibleNumbers.length === 1) return uniqueVisibleNumbers[0];
-      if (uniqueVisibleNumbers.length > 1) return null;
-      const nameKey = node.text.trim().toLocaleLowerCase().replace(/\s+/g, " ");
-      const matches = phonebook.get(nameKey);
-      return matches?.size === 1 ? [...matches][0] : null;
-    };
-
     if (opts?.media?.dataUrl) {
       const match = opts.media.dataUrl.match(/^data:[^;]+;base64,(.*)$/s);
       if (!match) throw new Error("WhatsApp attachment is not a valid data URL");
@@ -2064,6 +2047,40 @@ export async function runWhatsAppApp(
       elapsedSinceRunStartMs: Date.now() - launchStartedAt,
     });
     steps.push(`WhatsApp launched — selected ${targetCount} contact${targetCount === 1 ? "" : "s"}`);
+
+    let sentNumbers: Set<string>;
+    let phonebook: Map<string, Set<string>>;
+    try {
+      sentNumbers = loadWhatsAppSentNumberIndex(serial);
+      phonebook = await getWhatsAppPhonebook(adb, serial);
+    } catch (error) {
+      leaveWhatsAppOpenForInspection = true;
+      throw error;
+    }
+    // Migrate any names retained by the old settings-based history into the
+    // durable number index when Android resolves them to exactly one number.
+    for (const oldKey of opts?.recentContactKeys ?? []) {
+      const oldName = oldKey.split("\u0000", 1)[0]?.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+      const matches = oldName ? phonebook.get(oldName) : undefined;
+      if (matches?.size === 1) {
+        const number = [...matches][0];
+        if (!sentNumbers.has(number)) {
+          reserveWhatsAppPhoneNumber(serial, number);
+          sentNumbers.add(number);
+        }
+      }
+    }
+    const resolveRecipientNumber = (node: WhatsAppLiveNode): string | null => {
+      const visibleNumbers = (`${node.text} ${node.contentDesc}`.match(/(?:\+|00)?\d[\d\s().-]{5,}\d/g) ?? [])
+        .map(normalizeWhatsAppPhoneNumber)
+        .filter((number): number is string => Boolean(number));
+      const uniqueVisibleNumbers = [...new Set(visibleNumbers)];
+      if (uniqueVisibleNumbers.length === 1) return uniqueVisibleNumbers[0];
+      if (uniqueVisibleNumbers.length > 1) return null;
+      const nameKey = node.text.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+      const matches = phonebook.get(nameKey);
+      return matches?.size === 1 ? [...matches][0] : null;
+    };
 
     // This is deliberately an internal row identity rather than a display
     // name. Duplicate contact names are common; the live row's label plus
@@ -2621,24 +2638,28 @@ export async function runWhatsAppApp(
       error: error?.message ?? "WhatsApp messaging failed",
     };
   } finally {
-    try {
-      const dismissDirection = opts?.dismissDirection
-        ?? getModelDismissDirection(getDeviceModel(serial));
-      await closeInstagramViaRecents(
-        serial,
-        dismissDirection,
-        (message) => whatsappDebug(message),
-        opts?.swipeGesture,
-        "com.whatsapp",
-        "WhatsApp",
-      );
-      await keyevent(serial, 3 /* KEYCODE_HOME */);
-      await _sleep(500);
-      steps.push("WhatsApp closed via floating-window recents gesture");
-    } catch (closeError: any) {
-      const message = closeError?.message ?? String(closeError);
-      whatsappDebug(`could not close WhatsApp via floating-window recents: ${message}`);
-      steps.push(`WhatsApp close warning: ${message}`);
+    if (leaveWhatsAppOpenForInspection) {
+      steps.push("WhatsApp left open because Android contact-number lookup failed");
+    } else {
+      try {
+        const dismissDirection = opts?.dismissDirection
+          ?? getModelDismissDirection(getDeviceModel(serial));
+        await closeInstagramViaRecents(
+          serial,
+          dismissDirection,
+          (message) => whatsappDebug(message),
+          opts?.swipeGesture,
+          "com.whatsapp",
+          "WhatsApp",
+        );
+        await keyevent(serial, 3 /* KEYCODE_HOME */);
+        await _sleep(500);
+        steps.push("WhatsApp closed via floating-window recents gesture");
+      } catch (closeError: any) {
+        const message = closeError?.message ?? String(closeError);
+        whatsappDebug(`could not close WhatsApp via floating-window recents: ${message}`);
+        steps.push(`WhatsApp close warning: ${message}`);
+      }
     }
     if (tempMediaPath) {
       try { fs.unlinkSync(tempMediaPath); } catch {}
