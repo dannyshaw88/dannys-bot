@@ -2078,15 +2078,19 @@ export async function runWhatsAppApp(
         galleryMediaTimestamp = indexed.found
           ? timestampCandidates[0] ?? null
           : null;
-        whatsappDebug("image attachment staged for Gallery", {
+        whatsappDebug(
+          remoteMediaReused ? "reused cached image is ready for Gallery" : "image attachment staged for Gallery",
+          {
           fileName: safeName,
           devicePath: remoteMediaPath,
+          reusedFromDeviceCache: remoteMediaReused,
           mediaStoreFound: indexed.found,
           mediaStoreDateTaken: indexed.fields.date_taken ?? null,
           mediaStoreDateModified: indexed.fields.date_modified ?? null,
           mediaStoreDateAdded: indexed.fields.date_added ?? null,
           galleryMediaTimestamp,
-        });
+          },
+        );
       } else {
         remoteMediaPath = `/sdcard/Download/${safeName}`;
         await runAdb(adb, ["-s", serial, "push", tempMediaPath, remoteMediaPath], 30000);
@@ -2099,7 +2103,10 @@ export async function runWhatsAppApp(
           "-d", `file://${remoteMediaPath}`,
         ], 8000).catch(() => {});
       }
-      steps.push(`WhatsApp attachment staged: ${safeName}`);
+      steps.push(
+        `WhatsApp attachment ${remoteMediaReused ? "reused from device cache" : "staged"}: ` +
+        (remoteMediaReused ? path.basename(remoteMediaPath!) : safeName),
+      );
     }
     const launchStartedAt = Date.now();
     logger.info({
