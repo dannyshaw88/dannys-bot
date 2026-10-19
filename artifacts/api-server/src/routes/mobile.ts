@@ -10884,7 +10884,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       await android.wakeScreen(serial);
       await android.unlockScreen(serial);
 
-      let result: { ok: boolean; steps: string[]; error?: string };
+      let result: { ok: boolean; steps: string[]; error?: string; keepScreenOn?: boolean };
 
       if (appId === "chrome") {
         result = await android.runChromeApp(serial, {

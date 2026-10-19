@@ -74,8 +74,9 @@ New Chat button from being tapped. Unconditional cleanup then closed the app.
 picker names through Android's contacts provider only when exactly one number
 matches, and stop rather than guess. Launch WhatsApp, tap the live New Chat
 control, and wait for the contact picker before querying the provider. If number
-lookup fails, leave WhatsApp at the picker and do not select or send. Number
-reservations may include an unconfirmed send after interruption, which is
-safer than sending twice.
+lookup fails, leave WhatsApp at the picker, report `keepScreenOn`, and skip the
+outer Phone Apps sleep request so the user can inspect it through the live
+mirror. Do not select or send. Number reservations may include an unconfirmed
+send after interruption, which is safer than sending twice.
 Re-arm an existing timer when interval fields change, and anchor the next due
 time to the cycle start.

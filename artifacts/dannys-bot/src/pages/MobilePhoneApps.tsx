@@ -144,7 +144,7 @@ interface PhoneAppsSettings {
   whatsapp:     AppSlotSettings;
 }
 
-type PhoneAppsCompletionStatus = "idle" | "running" | "locking" | "locked" | "error";
+type PhoneAppsCompletionStatus = "idle" | "running" | "locking" | "locked" | "inspection" | "error";
 
 const DEFAULT_APP_SLOT: AppSlotSettings = { enabled: false, activatePctMin: 0, activatePctMax: 0 };
 
@@ -525,6 +525,7 @@ function MobilePhoneAppsPanel({
 
     let collisionLease: CollisionLease | null = null;
     let cycleOutcomeLogged = false;
+    let keepScreenAwakeForInspection = false;
     try {
       if (requestSlot) {
         collisionLease = await requestSlot(PHONE_APPS_SLOT_IDX, hstTurnAt, () => {
@@ -566,7 +567,8 @@ function MobilePhoneAppsPanel({
             // Log each step the server recorded so the Action Log tab shows
             // exactly what happened during the run (cookie banners, scrolls, etc.)
             try {
-              const data: { ok?: boolean; steps?: string[]; error?: string } = await res.json();
+              const data: { ok?: boolean; steps?: string[]; error?: string; keepScreenOn?: boolean } = await res.json();
+              if (data.keepScreenOn) keepScreenAwakeForInspection = true;
               const log = onLogRef.current;
               if (log) {
                 if (Array.isArray(data.steps)) {
@@ -608,28 +610,34 @@ function MobilePhoneAppsPanel({
           });
         }
 
-        // This is deliberately outside the activation branches: a completed
-        // cycle must lock even when every app roll misses.
-        setCompletionStatus("locking");
-        onLogRef.current?.("Phone Apps — app steps complete; locking phone");
-        try {
-          const lockRes = await fetch(
-            `/api/mobile/devices/${encodeURIComponent(serial)}/phone-apps-complete`,
-            { method: "POST", headers: { "Content-Type": "application/json" } },
-          );
-          const lockData: { ok?: boolean; error?: string } = await lockRes.json();
-          if (!lockRes.ok || !lockData.ok) {
-            throw new Error(lockData.error ?? `lock request failed (${lockRes.status})`);
+        if (keepScreenAwakeForInspection) {
+          setCompletionStatus("inspection");
+          onLogRef.current?.("Phone Apps — WhatsApp contact picker left open; keeping phone awake so the mirror stays live for inspection");
+          cycleOutcomeLogged = true;
+          onLogRef.current?.("Cycle paused — Phone Apps left open for inspection");
+        } else {
+          // A normal completed cycle locks even when every app activation roll misses.
+          setCompletionStatus("locking");
+          onLogRef.current?.("Phone Apps — app steps complete; locking phone");
+          try {
+            const lockRes = await fetch(
+              `/api/mobile/devices/${encodeURIComponent(serial)}/phone-apps-complete`,
+              { method: "POST", headers: { "Content-Type": "application/json" } },
+            );
+            const lockData: { ok?: boolean; error?: string } = await lockRes.json();
+            if (!lockRes.ok || !lockData.ok) {
+              throw new Error(lockData.error ?? `lock request failed (${lockRes.status})`);
+            }
+            setCompletionStatus("locked");
+            onLogRef.current?.("Phone Apps — phone locked ✓");
+            cycleOutcomeLogged = true;
+            onLogRef.current?.("Cycle complete — Phone Apps");
+          } catch (e: any) {
+            setCompletionStatus("error");
+            onLogRef.current?.(`Phone Apps — ⚠ phone lock failed: ${e?.message ?? "unknown error"}`);
+            cycleOutcomeLogged = true;
+            onLogRef.current?.(`Cycle failed — Phone Apps: ${e?.message ?? "phone lock failed"}`);
           }
-          setCompletionStatus("locked");
-          onLogRef.current?.("Phone Apps — phone locked ✓");
-          cycleOutcomeLogged = true;
-          onLogRef.current?.("Cycle complete — Phone Apps");
-        } catch (e: any) {
-          setCompletionStatus("error");
-          onLogRef.current?.(`Phone Apps — ⚠ phone lock failed: ${e?.message ?? "unknown error"}`);
-          cycleOutcomeLogged = true;
-          onLogRef.current?.(`Cycle failed — Phone Apps: ${e?.message ?? "phone lock failed"}`);
         }
       } else {
         const message = "Phone Apps cycle could not start — no device connected";
@@ -1314,6 +1322,7 @@ function MobilePhoneAppsPanel({
                   {completionStatus === "running" && <><Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-500" /><span className="text-cyan-600 dark:text-cyan-400">Running Step 2</span></>}
                   {completionStatus === "locking" && <><Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" /><span className="text-amber-600 dark:text-amber-400">Locking…</span></>}
                   {completionStatus === "locked" && <><CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /><span className="text-green-600 dark:text-green-400">Phone locked</span></>}
+                  {completionStatus === "inspection" && <span className="text-amber-600 dark:text-amber-400">Paused for inspection</span>}
                   {completionStatus === "error" && <span className="text-red-500">Lock failed</span>}
                 </div>
               </div>

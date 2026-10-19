@@ -2644,6 +2644,7 @@ export async function runWhatsAppApp(
       ok: false,
       steps,
       error: error?.message ?? "WhatsApp messaging failed",
+      keepScreenOn: leaveWhatsAppOpenForInspection,
     };
   } finally {
     if (leaveWhatsAppOpenForInspection) {

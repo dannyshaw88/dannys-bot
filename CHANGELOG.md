@@ -1,3 +1,13 @@
+## [1.2.656] — 2026-10-19
+
+### Fixed
+
+- Keep the WhatsApp contact picker and screen mirror awake when recipient lookup fails.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.656`.
+
 ## [1.2.655] — 2026-10-19
 
 ### Release
