@@ -1245,17 +1245,16 @@ function DeviceCard({
   }, [device.serial, online, rebooting, brightnessAdjusting]);
 
   // ── Live mirror thumbnail ─────────────────────────────────────────────────
-  // When the mirror is powered on (isStreaming), poll screencap.png every
-  // 1.5 s and show the live screen inside the phone shell SVG. A screenshot
-  // must load successfully and contain visible pixels before it replaces the
-  // configured wallpaper/text. This is important because an asleep/off
-  // device can return a valid but completely black PNG.
+  // Keep the farm-card thumbnail useful when no live mirror is running.
+  // Do not poll screencap.png while H.264 mirroring is active: ADB PNG capture
+  // shares the phone/USB path with the video stream and can make the mirror
+  // visibly stutter. The detailed device view remains the live screen surface.
   const [mirrorTs, setMirrorTs] = useState<number | null>(null);
   const mirrorSerial = phone?.serial;
   useEffect(() => {
     let cancelled = false;
     let latestProbe = 0;
-    if (!isStreaming || !mirrorSerial) {
+    if (isStreaming || !mirrorSerial) {
       setMirrorTs(null);
       return () => { cancelled = true; };
     }
@@ -1297,7 +1296,7 @@ function DeviceCard({
     };
 
     probe();
-    const id = setInterval(probe, 1_500);
+    const id = setInterval(probe, 10_000);
     return () => {
       cancelled = true;
       clearInterval(id);

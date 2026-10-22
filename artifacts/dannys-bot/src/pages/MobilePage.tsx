@@ -552,6 +552,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     let canvasDrawnFrames = 0;
     let decodeErrors = 0;
     let lastDecodeChunkErrorAt = 0;
+    let lastMirrorEvidencePostAt = 0;
     let firstDataLogged = false;
     let firstDecodedFrameLogged = false;
     let canvasUnavailableLogged = false;
@@ -676,27 +677,33 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       return ctxRef.current;
     };
 
-    const reportMirrorFrameEvidence = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, videoW: number, videoH: number): boolean | null => {
+    const screenEvidenceCanvas = document.createElement("canvas");
+    screenEvidenceCanvas.width = 48;
+    screenEvidenceCanvas.height = 96;
+    const screenEvidenceCtx = screenEvidenceCanvas.getContext("2d", { willReadFrequently: true });
+
+    const reportMirrorFrameEvidence = (canvas: HTMLCanvasElement, videoW: number, videoH: number): boolean | null => {
       const now = Date.now();
       if (now - lastMirrorEvidenceAtRef.current < 1000) return null;
       lastMirrorEvidenceAtRef.current = now;
       try {
         const rect = drawRectRef.current;
         if (!rect || canvas.width < 1 || canvas.height < 1) return null;
-        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-        const stepX = Math.max(1, Math.floor(rect.dw / 48));
-        const stepY = Math.max(1, Math.floor(rect.dh / 96));
+        // Avoid a full-resolution synchronous canvas readback on the renderer
+        // thread. The mirror only needs a coarse black-screen check, so
+        // downsample the phone image before reading pixels.
+        if (!screenEvidenceCtx) return null;
+        screenEvidenceCtx.drawImage(canvas, rect.dx, rect.dy, rect.dw, rect.dh, 0, 0, screenEvidenceCanvas.width, screenEvidenceCanvas.height);
+        const pixels = screenEvidenceCtx.getImageData(0, 0, screenEvidenceCanvas.width, screenEvidenceCanvas.height).data;
         let sampled = 0;
         let nearWhite = 0;
         let nearBlack = 0;
         let visiblePixels = 0;
         let lumaSum = 0;
         let lumaSquaredSum = 0;
-        const xEnd = Math.min(canvas.width, Math.ceil(rect.dx + rect.dw));
-        const yEnd = Math.min(canvas.height, Math.ceil(rect.dy + rect.dh));
-        for (let y = Math.max(0, Math.floor(rect.dy)); y < yEnd; y += stepY) {
-          for (let x = Math.max(0, Math.floor(rect.dx)); x < xEnd; x += stepX) {
-            const offset = (y * canvas.width + x) * 4;
+        for (let y = 0; y < screenEvidenceCanvas.height; y++) {
+          for (let x = 0; x < screenEvidenceCanvas.width; x++) {
+            const offset = (y * screenEvidenceCanvas.width + x) * 4;
             const r = pixels[offset];
             const g = pixels[offset + 1];
             const b = pixels[offset + 2];
@@ -712,24 +719,30 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
         if (!sampled) return null;
         const meanLuma = lumaSum / sampled;
         const nearBlackPct = (nearBlack / sampled) * 100;
-        void fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/mirror-frame-evidence`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            source: useVideoRef.current ? "h264" : "png",
-            videoW,
-            videoH,
-            canvasW: canvas.width,
-            canvasH: canvas.height,
-            nearWhitePct: (nearWhite / sampled) * 100,
-            nearBlackPct,
-            meanLuma,
-            lumaVariance: Math.max(0, lumaSquaredSum / sampled - meanLuma * meanLuma),
-            decodedAgeMs: Math.max(0, now - lastDecodedAtRef.current),
-            fps: fpsCountRef.current,
-            automationActive: automationActiveRef.current,
-          }),
-        }).catch(() => {});
+        // The local asleep/live decision still runs once per second, but
+        // diagnostic telemetry does not need to generate a request and INFO
+        // log entry every second for every connected phone.
+        if (now - lastMirrorEvidencePostAt >= 10_000) {
+          lastMirrorEvidencePostAt = now;
+          void fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/mirror-frame-evidence`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              source: useVideoRef.current ? "h264" : "png",
+              videoW,
+              videoH,
+              canvasW: canvas.width,
+              canvasH: canvas.height,
+              nearWhitePct: (nearWhite / sampled) * 100,
+              nearBlackPct,
+              meanLuma,
+              lumaVariance: Math.max(0, lumaSquaredSum / sampled - meanLuma * meanLuma),
+              decodedAgeMs: Math.max(0, now - lastDecodedAtRef.current),
+              fps: fpsCountRef.current,
+              automationActive: automationActiveRef.current,
+            }),
+          }).catch(() => {});
+        }
         // Some devices continue returning decoded all-black frames after the
         // display times out. Frame freshness alone then says "live" forever.
         // Only classify a screen-off frame when the phone image (excluding
@@ -814,7 +827,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
             frame.close();
             return;
           }
-          screenVisible = reportMirrorFrameEvidence(canvas, ctx, frame.displayWidth, frame.displayHeight);
+          screenVisible = reportMirrorFrameEvidence(canvas, frame.displayWidth, frame.displayHeight);
         } else if (!canvasUnavailableLogged) {
           canvasUnavailableLogged = true;
           addLog("[mirror] decoder produced frames, but a 2D canvas context could not be created");
@@ -858,6 +871,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       frameSeenRef.current = false;
       lastDecodedAtRef.current = 0;
       lastMirrorEvidenceAtRef.current = 0;
+      lastMirrorEvidencePostAt = 0;
       darkFrameSinceRef.current = 0;
       phoneSizeRef.current = null;
       decodeQueueHighSince = 0;
