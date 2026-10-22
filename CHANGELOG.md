@@ -1,3 +1,13 @@
+## [1.2.673] — 2026-10-22
+
+### Fixed
+
+- WhatsApp now proceeds from typing directly to attachment and Send without a composer readback check.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.673`.
+
 ## [1.2.672] — 2026-10-22
 
 ### Fixed
