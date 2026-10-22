@@ -2432,39 +2432,7 @@ export async function runWhatsAppApp(
         messageLength: resolvedMessage.length,
         messageFingerprint,
       });
-      let typedXml = "";
-      let typedText = "";
-      let typedComposer: WhatsAppLiveNode | undefined;
-      let directEntryVerified = false;
-      let textVerificationPolls = 0;
-      for (let poll = 1; poll <= 10; poll++) {
-        textVerificationPolls = poll;
-        if (poll > 1) await _sleep(350);
-        typedXml = await _uiDump(adb, serial);
-        typedComposer = parseWhatsAppLiveNodes(typedXml).find(node =>
-          node.resourceId.toLowerCase().endsWith("/entry") &&
-          node.className === "android.widget.EditText",
-        );
-        typedText = typedComposer?.text ?? "";
-        directEntryVerified = textMatchesWhatsAppComposer(typedText, resolvedMessage);
-        if (directEntryVerified) break;
-      }
-      whatsappDebug(`direct text entry for "${contact.text}"`, {
-        messageLength: resolvedMessage.length,
-        messageFingerprint,
-        verified: directEntryVerified,
-        verificationPolls: textVerificationPolls,
-        composerTextLength: typedText.length,
-        composerFocused: Boolean(typedComposer?.focused),
-      });
-      if (!directEntryVerified) {
-        leaveWhatsAppOpenOnFailure = true;
-        openScreenReason = "typed message could not be verified in the composer";
-        steps.push(`WhatsApp stopped for "${contact.text}" — typed text could not be verified after ${textVerificationPolls} checks; composer left open`);
-        break;
-      }
-      steps.push(`WhatsApp verified the typed message for "${contact.text}" after ${textVerificationPolls} check${textVerificationPolls === 1 ? "" : "s"}`);
-      xml = typedXml;
+      steps.push(`WhatsApp typed message for "${contact.text}"`);
 
       if ((remoteMediaPath && opts?.media) || useDeviceGalleryMedia) {
         xml = await _uiDump(adb, serial);
@@ -4736,17 +4704,6 @@ async function probeClipboard(serial: string, expected: string): Promise<Clipboa
   } catch {
     return { status: "unavailable", observedLength: null };
   }
-}
-
-function textMatchesWhatsAppComposer(actual: string, expected: string): boolean {
-  const normalize = (value: string) => value.replace(/\r\n/g, "\n").trim().replace(/\s+/g, " ");
-  const normalizedActual = normalize(actual);
-  const normalizedExpected = normalize(expected);
-  return Boolean(
-    normalizedActual &&
-    normalizedActual !== "message" &&
-    normalizedActual.includes(normalizedExpected),
-  );
 }
 
 /** Paste the current Android clipboard into the focused field. */

@@ -21,11 +21,11 @@ When every visible contact is already used or cannot be identified, continue dow
 
 **How to apply:** Derive the swipe path from live contact-row bounds, re-dump after each swipe, re-evaluate against the persisted sent-number index, and cap scrolling with explicit progress diagnostics.
 
-The WhatsApp composer path must tap the live `entry` field and use direct ADB text input, then poll the resulting composer text for a bounded window before attaching media. It must not open the long-press edit menu or attempt clipboard preparation first. If verification still fails, leave WhatsApp on the composer and do not navigate away or close the draft.
+The WhatsApp composer path must tap the live `entry` field, use direct ADB text input, then proceed to Attach and Send without reading the composer back. Do not open the long-press edit menu or attempt clipboard preparation first. Live Attach/Send controls still need to be located before tapping.
 
-**Why:** On the Xiaomi Redmi A5, the long-press path opens Autofill instead of Paste and can waste roughly 20 seconds before the actual direct-entry fallback. A single immediate accessibility read can also lag the successfully typed text, causing the automation to abort before media attachment.
+**Why:** On the Xiaomi Redmi A5, the long-press path opens Autofill instead of Paste and can waste roughly 20 seconds before the actual direct-entry fallback. The user explicitly requires WhatsApp to type, attach, and send without composer readback checks.
 
-**How to apply:** Focus `entry`, call the bulk input path once, poll the live field for up to 10 short checks, and fail closed unless the live field contains the intended message. On failure keep the composer visible for inspection. Keep clipboard helpers isolated from this flow.
+**How to apply:** Focus `entry`, call the bulk input path once, then continue directly to the normal media/send controls. Keep clipboard helpers isolated from this flow.
 
 Image attachments must use WhatsApp's `pickfiletype_gallery_holder`, not the Document picker. Stage them in DCIM/Camera and identify the staged Gallery thumbnail from its MediaStore-indexed timestamp; never assume the first visible thumbnail is the uploaded source.
 
