@@ -1,3 +1,13 @@
+## [1.2.671] — 2026-10-22
+
+### Fixed
+
+- Persist WhatsApp media removal immediately so previously removed files do not return after restart.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.671`.
+
 ## [1.2.670] — 2026-10-19
 
 ### Fixed

@@ -83,7 +83,9 @@ interface AppSlotSettings {
     fileName: string;
     mimeType: string;
     dataUrl: string;
-  };
+  } | null;
+  /** Use the first item already visible in WhatsApp Gallery instead of uploading a file. */
+  useDeviceGalleryMedia?: boolean;
   /** Number-of-scrolls range — used by Chrome and YouTube. */
   scrollMin?: number;
   scrollMax?: number;
@@ -153,7 +155,7 @@ const DEFAULT_SETTINGS: PhoneAppsSettings = {
   chrome:     { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, storyTapMin: 0, storyTapMax: 0, tappedStoryScrollMin: 0, tappedStoryScrollMax: 0, internalLinkPctMin: 0, internalLinkPctMax: 0, manualSearchPctMin: 0, manualSearchPctMax: 0, manualSearchCountMin: 1, manualSearchCountMax: 1, manualSearchScrollMin: 0, manualSearchScrollMax: 0, manualSearchLinkPctMin: 0, manualSearchLinkPctMax: 0, manualSearchDwellMin: 3, manualSearchDwellMax: 8, tapTrendingStoryMin: 0, tapTrendingStoryMax: 0 },
   snapchat:   { ...DEFAULT_APP_SLOT },
   youtube:    { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, clickPctMin: 0, clickPctMax: 0, watchTimeMin: 3, watchTimeMax: 8, clickShortsPctMin: 0, clickShortsPctMax: 0, shortsScrollMin: 0, shortsScrollMax: 0, shortsWatchTimeMin: 3, shortsWatchTimeMax: 8, shortsLikePctMin: 0, shortsLikePctMax: 0 },
-  whatsapp:   { ...DEFAULT_APP_SLOT, userCountMin: 1, userCountMax: 1, message: "", media: undefined },
+  whatsapp:   { ...DEFAULT_APP_SLOT, userCountMin: 1, userCountMax: 1, message: "", media: null, useDeviceGalleryMedia: false },
 };
 
 // ── Card component ─────────────────────────────────────────────────────────────
@@ -461,7 +463,7 @@ function MobilePhoneAppsPanel({
           chrome:      { enabled: d.chrome?.enabled ?? false, activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8, tapTrendingStoryMin: d.chrome?.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: d.chrome?.tapTrendingStoryMax ?? 0 },
           snapchat:    { enabled: d.snapchat?.enabled ?? false, activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
           youtube:     { enabled: d.youtube?.enabled ?? false, activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8, shortsLikePctMin: d.youtube?.shortsLikePctMin ?? 0, shortsLikePctMax: d.youtube?.shortsLikePctMax ?? 0 },
-          whatsapp:    { enabled: d.whatsapp?.enabled ?? false, activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0, userCountMin: d.whatsapp?.userCountMin ?? 1, userCountMax: d.whatsapp?.userCountMax ?? 1, message: d.whatsapp?.message ?? "", media: d.whatsapp?.media },
+          whatsapp:    { enabled: d.whatsapp?.enabled ?? false, activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0, userCountMin: d.whatsapp?.userCountMin ?? 1, userCountMax: d.whatsapp?.userCountMax ?? 1, message: d.whatsapp?.message ?? "", media: d.whatsapp?.media, useDeviceGalleryMedia: d.whatsapp?.useDeviceGalleryMedia ?? false },
         };
         setSettings(merged);
         settingsRef.current = merged;
@@ -487,19 +489,28 @@ function MobilePhoneAppsPanel({
 
   // ── Save settings to API (debounced 600 ms) ───────────────────────────────
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveSettings = useCallback((s: PhoneAppsSettings) => {
+  const saveSettings = useCallback((s: PhoneAppsSettings, immediate = false) => {
     if (!serialRef.current) return;
     if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
-    saveDebounceRef.current = setTimeout(() => {
-      fetch(`/api/mobile/devices/${encodeURIComponent(serialRef.current!)}/phone-apps-settings`, {
+    const persist = () => {
+      const serial = serialRef.current;
+      if (!serial) return;
+      fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/phone-apps-settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        ...(immediate ? { keepalive: true } : {}),
         body: JSON.stringify(s),
       })
         .then(r => r.json())
         .then(d => { setSaveError(d.ok ? null : "Save failed"); })
         .catch(() => setSaveError("Save failed"));
-    }, 600);
+    };
+    if (immediate) {
+      saveDebounceRef.current = null;
+      persist();
+    } else {
+      saveDebounceRef.current = setTimeout(persist, 600);
+    }
   }, []);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -619,7 +630,8 @@ function MobilePhoneAppsPanel({
             userCountMin: s.whatsapp.userCountMin ?? 1,
             userCountMax: s.whatsapp.userCountMax ?? 1,
             message: s.whatsapp.message ?? "",
-            media: s.whatsapp.media ?? null,
+            media: s.whatsapp.useDeviceGalleryMedia ? null : (s.whatsapp.media ?? null),
+            useDeviceGalleryMedia: s.whatsapp.useDeviceGalleryMedia ?? false,
           });
         }
 
@@ -741,7 +753,7 @@ function MobilePhoneAppsPanel({
     };
     setSettings(next);
     settingsRef.current = next;
-    saveSettings(next);
+    saveSettings(next, app === "whatsapp" && partial.media === null);
   };
 
   const handleAddWhatsAppMedia = async () => {
@@ -1303,11 +1315,28 @@ function MobilePhoneAppsPanel({
                     spellCheck={false}
                     className="box-border min-h-[7.5rem] w-full resize-y overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
                   />
-                  <div className="mt-2 flex items-center gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={handleAddWhatsAppMedia}>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={settings.whatsapp.useDeviceGalleryMedia}
+                      onClick={handleAddWhatsAppMedia}
+                    >
                       Add Media
                     </Button>
-                    {settings.whatsapp.media && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Checkbox
+                        checked={settings.whatsapp.useDeviceGalleryMedia ?? false}
+                        onCheckedChange={checked => patchApp("whatsapp", { useDeviceGalleryMedia: checked === true })}
+                        aria-label="Use first media item already on device"
+                      />
+                      Use first media item already on device
+                    </div>
+                    {settings.whatsapp.useDeviceGalleryMedia && (
+                      <span className="text-xs text-muted-foreground">No file upload; selects the first item in WhatsApp Gallery.</span>
+                    )}
+                    {!settings.whatsapp.useDeviceGalleryMedia && settings.whatsapp.media && (
                       <>
                         <span className="max-w-[20rem] truncate text-xs text-muted-foreground" title={settings.whatsapp.media.fileName}>
                           {settings.whatsapp.media.fileName}
@@ -1315,7 +1344,7 @@ function MobilePhoneAppsPanel({
                         <button
                           type="button"
                           className="text-xs text-muted-foreground underline hover:text-foreground"
-                          onClick={() => patchApp("whatsapp", { media: undefined })}
+                          onClick={() => patchApp("whatsapp", { media: null })}
                         >
                           Remove
                         </button>

@@ -12,6 +12,12 @@ The mobile Follow Users flow (`artifacts/api-server/src/routes/mobile.ts`) has T
 
 **How to apply:** Any time a new persisted mobile automation setting is added, add it to ALL THREE places: the frontend `AutomationSettingsData` type + `AUTOMATION_DEFAULTS`, `automationCycleSchema` (execution), and `automationSchema` + its GET-handler `defaults` object (persistence). Missing the third one is the easy mistake — it doesn't error, it just quietly never persists.
 
+When clearing a persisted nested setting, send explicit `null` through JSON and allow it in the save schema. `undefined` is omitted by `JSON.stringify`, so a backend merge can retain the old value and restore it after restart.
+
+**Why:** Removing a previously uploaded WhatsApp attachment only changed the in-memory UI; the omitted field left the stored attachment untouched.
+
+**How to apply:** Use `null` as the explicit clear value for persisted optional objects, preserve it through the frontend type and validation schema, then confirm reload still returns the cleared state.
+
 ## Tab-scoped autosave
 
 Any debounced save owned by a panel that unmounts when the user changes tabs must not cancel its pending timer during unmount. Gate the save on a per-device hydration marker instead, so initial values do not overwrite another device while still allowing the final user edit to flush after navigation.

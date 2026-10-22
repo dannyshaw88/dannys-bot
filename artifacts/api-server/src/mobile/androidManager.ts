@@ -29,18 +29,27 @@ async function getWhatsAppPhonebook(
 ): Promise<Map<string, Set<string>>> {
   const cached = whatsappPhonebookCache.get(serial);
   if (cached && Date.now() - cached.loadedAt < 30 * 60_000) return cached.byName;
-  const { stdout, stderr } = await execFileP(adb, [
-    "-s", serial, "shell", "content", "query",
-    "--uri", "content://com.android.contacts/data/phones",
-    // ContactsContract.CommonDataKinds.Phone stores the normalized number in
-    // data4; "normalized_number" is not a column on the data/phones URI.
-    "--projection", "display_name:data1:data4",
-  ], {
-    encoding: "utf8",
-    timeout: 60_000,
-    maxBuffer: 32 * 1024 * 1024,
-  } as any);
-  const output = String(stdout ?? "");
+  let stdout = "";
+  let stderr = "";
+  try {
+    const query = await execFileP(adb, [
+      "-s", serial, "shell", "content", "query",
+      "--uri", "content://com.android.contacts/data/phones",
+      // ContactsContract.CommonDataKinds.Phone stores the normalized number in
+      // data4; "normalized_number" is not a column on the data/phones URI.
+      "--projection", "display_name:data1:data4",
+    ], {
+      encoding: "utf8",
+      timeout: 15_000,
+      maxBuffer: 32 * 1024 * 1024,
+    } as any);
+    stdout = String(query.stdout ?? "");
+    stderr = String(query.stderr ?? "");
+  } catch (error) {
+    logger.warn({ serial, error: String(error) }, "WhatsApp phonebook lookup failed; continuing with numbers visible in the contact list");
+    return new Map();
+  }
+  const output = stdout;
   const byName = parseAndroidPhonebook(output);
   if (byName.size === 0) {
     const diagnostics = {
@@ -49,15 +58,10 @@ async function getWhatsAppPhonebook(
       outputRows: output.split(/\r?\n/).filter(line => /^\s*Row:/i.test(line)).length,
       hasDisplayNameField: /display_name=/i.test(output),
       hasData1Field: /data1=/i.test(output),
-      stderrPresent: Boolean(String(stderr ?? "").trim()),
+      stderrPresent: Boolean(stderr.trim()),
     };
     logger.warn(diagnostics, "WhatsApp Android phonebook query returned no parseable recipients");
-    throw new Error(
-      "Android contact-number lookup returned no parseable numbers; " +
-      `diagnostics: rows=${diagnostics.outputRows}, bytes=${diagnostics.outputBytes}, ` +
-      `displayNameField=${diagnostics.hasDisplayNameField}, data1Field=${diagnostics.hasData1Field}, ` +
-      `stderrPresent=${diagnostics.stderrPresent}. No message was sent.`,
-    );
+    return byName;
   }
   whatsappPhonebookCache.set(serial, { loadedAt: Date.now(), byName });
   return byName;
@@ -1811,6 +1815,7 @@ export async function runWhatsAppApp(
       mimeType: string;
       dataUrl: string;
     } | null;
+    useDeviceGalleryMedia?: boolean;
   },
 ): Promise<{ ok: boolean; steps: string[]; error?: string; keepScreenOn?: boolean }> {
   const tools = detectToolset();
@@ -1831,7 +1836,8 @@ export async function runWhatsAppApp(
   let remoteMediaReused = false;
   let retainRemoteMediaPath = false;
   let galleryMediaTimestamp: number | null = null;
-  const isImageMedia = Boolean(opts?.media && (
+  const useDeviceGalleryMedia = opts?.useDeviceGalleryMedia === true;
+  const isImageMedia = useDeviceGalleryMedia || Boolean(opts?.media && (
     /^image\//i.test(opts.media.mimeType) ||
     /\.(?:jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i.test(opts.media.fileName)
   ));
@@ -1842,7 +1848,7 @@ export async function runWhatsAppApp(
       return null;
     }
   })();
-  let galleryTapForMedia = calibratedGalleryTap;
+  let galleryTapForMedia = useDeviceGalleryMedia ? null : calibratedGalleryTap;
   const excludedLabels = new Set([
     "new chat", "new conversation", "new contact", "create group",
     "new group", "new community", "broadcast lists", "communities",
@@ -1982,7 +1988,7 @@ export async function runWhatsAppApp(
   };
 
   try {
-    if (opts?.media?.dataUrl) {
+    if (!useDeviceGalleryMedia && opts?.media?.dataUrl) {
       const match = opts.media.dataUrl.match(/^data:[^;]+;base64,(.*)$/s);
       if (!match) throw new Error("WhatsApp attachment is not a valid data URL");
       const safeName = path.basename(opts.media.fileName).replace(/[<>:"/\\|?*\x00-\x1F]/g, "_") || "attachment";
@@ -2107,6 +2113,9 @@ export async function runWhatsAppApp(
         `WhatsApp attachment ${remoteMediaReused ? "reused from device cache" : "staged"}: ` +
         (remoteMediaReused ? path.basename(remoteMediaPath!) : safeName),
       );
+    }
+    if (useDeviceGalleryMedia) {
+      steps.push("WhatsApp will select the first existing Gallery item on the device (no media upload)");
     }
     const launchStartedAt = Date.now();
     logger.info({
@@ -2357,7 +2366,7 @@ export async function runWhatsAppApp(
       }
       xml = typedXml;
 
-      if (remoteMediaPath && opts?.media) {
+      if ((remoteMediaPath && opts?.media) || useDeviceGalleryMedia) {
         xml = await _uiDump(adb, serial);
         const attach = findLiveLabel(xml, ["attach"], ["input_attach_button"]);
         if (!attach) {
@@ -2396,7 +2405,7 @@ export async function runWhatsAppApp(
         xml = await _uiDump(adb, serial);
          let mediaItems: WhatsAppLiveNode[] = [];
          if (isImageMedia) {
-           const galleryDateHints = galleryMediaTimestamp
+            const galleryDateHints = !useDeviceGalleryMedia && galleryMediaTimestamp
              ? getWhatsAppGalleryDateHints(galleryMediaTimestamp)
              : [];
             if (galleryTapForMedia) {
@@ -2471,13 +2480,14 @@ export async function runWhatsAppApp(
                 calibratedTapPerformed = true;
                 whatsappDebug("Gallery already reports selected media before calibrated tap", beforeTap);
               }
-            } else if (galleryDateHints.length === 0) {
+            } else if (galleryDateHints.length === 0 && !useDeviceGalleryMedia) {
               whatsappDebug("Gallery scan aborted — staged image has no MediaStore date identity", {
                 galleryMediaTimestamp,
                 mediaStoreFound: false,
               });
             }
-            for (let galleryPoll = 1; !galleryTapForMedia && galleryPoll <= 4 && galleryDateHints.length > 0; galleryPoll++) {
+            for (let galleryPoll = 1; !galleryTapForMedia && galleryPoll <= 4 &&
+              (galleryDateHints.length > 0 || useDeviceGalleryMedia); galleryPoll++) {
              if (galleryPoll > 1) {
                await _sleep(300);
                galleryReadyXml = await _uiDump(adb, serial);
@@ -2486,6 +2496,16 @@ export async function runWhatsAppApp(
              const candidates = galleryMediaSelector(galleryReadyXml);
              mediaItems = candidates;
              if (selectionState.verified) {
+                if (useDeviceGalleryMedia) {
+                  // A preselected item cannot be proven to be the first item
+                  // requested by this mode, so do not send an unknown selection.
+                  xml = galleryReadyXml;
+                  whatsappDebug("Gallery already had a selected item before first-item selection; refusing unknown media", {
+                    galleryPoll,
+                    ...selectionState,
+                  });
+                  break;
+                }
                // Do not tap again if WhatsApp already reports the complete
                // selected state (for example after a delayed first tap).
                stagedItem = null;
@@ -2506,11 +2526,13 @@ export async function runWhatsAppApp(
                });
                continue;
              }
-              const matches = candidates.filter(node =>
-                galleryDateHints.some(hint =>
-                  node.contentDesc.toLowerCase().includes(hint.toLowerCase()),
-                ),
-              );
+              const matches = useDeviceGalleryMedia
+                ? candidates
+                : candidates.filter(node =>
+                    galleryDateHints.some(hint =>
+                      node.contentDesc.toLowerCase().includes(hint.toLowerCase()),
+                    ),
+                  );
                if (remoteMediaReused && matches.length > 1) {
                  whatsappDebug("reused Gallery image is ambiguous; refusing to tap", {
                    matchingTargetCount: matches.length,
@@ -2546,7 +2568,8 @@ export async function runWhatsAppApp(
                    galleryPoll,
                    stableTargetPolls,
                     matchingTargetCount: matches.length,
-                    selectedNewestVisibleMatch: matches.length > 1,
+                    selectedFirstGalleryItem: useDeviceGalleryMedia,
+                    selectedNewestVisibleMatch: !useDeviceGalleryMedia && matches.length > 1,
                    contentDesc: candidate.contentDesc,
                    x: candidate.x,
                    y: candidate.y,
@@ -2565,7 +2588,7 @@ export async function runWhatsAppApp(
                mediaItemDescriptions: candidates.slice(0, 12).map(node => node.contentDesc),
              });
            }
-           whatsappDebug("Gallery media scan", {
+              whatsappDebug(useDeviceGalleryMedia ? "first on-device Gallery item scan" : "Gallery media scan", {
              galleryMediaTimestamp,
              galleryDateHints,
              mediaItemCount: mediaItems.length,
@@ -2574,8 +2597,10 @@ export async function runWhatsAppApp(
            });
              if (!stagedItem && !calibratedTapPerformed) {
              const alreadySelected = gallerySelectionState(xml).verified;
-             if (!alreadySelected) {
-               steps.push(`WhatsApp skipped "${contact.text}" — staged image was not uniquely identified in Gallery`);
+              if (!alreadySelected || useDeviceGalleryMedia) {
+                steps.push(useDeviceGalleryMedia
+                  ? `WhatsApp skipped "${contact.text}" — no first media item could be selected from Gallery`
+                  : `WhatsApp skipped "${contact.text}" — staged image was not uniquely identified in Gallery`);
                await pressBack();
                break;
              }
@@ -2707,11 +2732,12 @@ export async function runWhatsAppApp(
       }
 
       xml = await _uiDump(adb, serial);
-      const send = remoteMediaPath
+      const expectsMediaSend = Boolean(remoteMediaPath || useDeviceGalleryMedia);
+      const send = expectsMediaSend
         ? findLiveLabel(xml, ["send 1 media", "send media"], ["send_media_btn"])
         : findTextMessageSendControl(xml);
       if (!send) {
-        const textSendCandidates = remoteMediaPath ? undefined : parseWhatsAppLiveNodes(xml)
+        const textSendCandidates = expectsMediaSend ? undefined : parseWhatsAppLiveNodes(xml)
           .filter(node => /send/i.test(`${node.text} ${node.contentDesc} ${node.resourceId}`))
           .map(node => ({
             text: node.text,
@@ -2738,7 +2764,7 @@ export async function runWhatsAppApp(
         enabled: send.enabled,
         x: send.x,
         y: send.y,
-        withAttachment: Boolean(remoteMediaPath),
+        withAttachment: expectsMediaSend,
       });
       // Record before tapping Send. If Android accepts the message but the
       // process is interrupted before the response returns, the next run must
@@ -2748,7 +2774,7 @@ export async function runWhatsAppApp(
       await _adbTapAsync(adb, serial, send.x, send.y);
       await _sleep(700);
       sent++;
-      steps.push(`WhatsApp sent a randomized message${remoteMediaPath ? " with attachment" : ""} to ${contact.text} (${sent}/${targetCount})`);
+      steps.push(`WhatsApp sent a randomized message${expectsMediaSend ? " with attachment" : ""} to ${contact.text} (${sent}/${targetCount})`);
       await pressBack();
     }
     if (sent === 0) {

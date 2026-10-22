@@ -10769,11 +10769,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           userCountMin: z.number().int().min(1).max(100).optional(),
           userCountMax: z.number().int().min(1).max(100).optional(),
           message: z.string().max(10_000).optional(),
+          useDeviceGalleryMedia: z.boolean().optional(),
           media: z.object({
             fileName: z.string().min(1).max(255),
             mimeType: z.string().min(1).max(200),
             dataUrl: z.string().max(100_000_000),
-          }).optional(),
+          }).nullable().optional(),
         }).passthrough().optional(),
       }).passthrough().parse(req.body);
       const merged = {
@@ -10821,7 +10822,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shortsScrollMin, shortsScrollMax,
               shortsWatchTimeMin, shortsWatchTimeMax,
                shortsLikePctMin, shortsLikePctMax,
-               userCountMin, userCountMax, message, media } = z.object({
+                userCountMin, userCountMax, message, media, useDeviceGalleryMedia } = z.object({
         app:                  z.enum(["chrome", "snapchat", "youtube", "whatsapp"]),
         scrollMin:            z.number().min(0).optional(),
         scrollMax:            z.number().min(0).optional(),
@@ -10860,6 +10861,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          userCountMin:         z.number().int().min(1).max(100).optional(),
          userCountMax:         z.number().int().min(1).max(100).optional(),
          message:              z.string().max(10_000).optional(),
+          useDeviceGalleryMedia: z.boolean().optional(),
          media: z.object({
            fileName: z.string().min(1).max(255),
            mimeType: z.string().min(1).max(200),
@@ -10933,6 +10935,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           dismissDirection: dismissDir,
           swipeGesture: devicePrefsPA.swipeGesture,
           media,
+          useDeviceGalleryMedia,
         });
       } else {
         // Snapchat is not implemented yet.
