@@ -1,3 +1,13 @@
+## [1.2.672] — 2026-10-22
+
+### Fixed
+
+- Scroll WhatsApp's contact list when the visible contacts have already been used, and resume from the previously explored depth.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.672`.
+
 ## [1.2.671] — 2026-10-22
 
 ### Fixed

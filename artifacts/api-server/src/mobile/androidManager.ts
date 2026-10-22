@@ -2308,7 +2308,9 @@ export async function runWhatsAppApp(
         const candidates = unselectedCandidates
           .map(node => ({ node, number: resolveRecipientNumber!(node) }))
           .filter((entry): entry is { node: WhatsAppLiveNode; number: string } =>
-            Boolean(entry.number) && !sentNumbers!.has(entry.number),
+            typeof entry.number === "string" &&
+            entry.number.length > 0 &&
+            !sentNumbers!.has(entry.number),
           );
         return {
           unselectedCandidates,
@@ -2318,12 +2320,18 @@ export async function runWhatsAppApp(
       };
       let fresh = identifyFreshCandidates(xml);
       let scrollsThisAttempt = 0;
+      let consecutiveNoProgressSwipes = 0;
       while (fresh.candidates.length === 0 && scrollsThisAttempt < 150) {
         const scrolled = await swipeContactListDown(xml, attempt + 1, contactPickerScrollDepth);
-        if (!scrolled.changed) break;
+        scrollsThisAttempt++;
+        if (!scrolled.changed) {
+          consecutiveNoProgressSwipes++;
+          if (consecutiveNoProgressSwipes >= 2) break;
+          continue;
+        }
+        consecutiveNoProgressSwipes = 0;
         xml = scrolled.xml;
         contactPickerScrollDepth++;
-        scrollsThisAttempt++;
         fresh = identifyFreshCandidates(xml);
       }
       const { unselectedCandidates, candidates } = fresh;

@@ -15,6 +15,12 @@ After tapping WhatsApp's Send message FAB, allow a bounded settle/poll window be
 
 **How to apply:** Keep the wait finite, re-dump on each poll, and include enough live hierarchy summary to distinguish the home screen, picker shell, and populated contact list without falling back to guessed taps.
 
+When every visible contact is already used or cannot be identified, continue down the live contact list before declaring it exhausted. Track the explored depth during the run, restore it only when a reopened picker matches the first-page fingerprint, and stop only after repeated no-progress swipes.
+
+**Why:** The New Chat picker exposes a window of contacts at a time; stopping on the first exhausted page prevents reaching valid contacts farther down.
+
+**How to apply:** Derive the swipe path from live contact-row bounds, re-dump after each swipe, re-evaluate against the persisted sent-number index, and cap scrolling with explicit progress diagnostics.
+
 The WhatsApp composer path must tap the live `entry` field and use direct ADB text input, then verify the resulting composer text. It must not open the long-press edit menu or attempt clipboard preparation first.
 
 **Why:** On the Xiaomi Redmi A5, the long-press path opens Autofill instead of Paste and can waste roughly 20 seconds before the actual direct-entry fallback.
