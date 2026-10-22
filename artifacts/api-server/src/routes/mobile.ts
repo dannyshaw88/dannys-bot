@@ -10868,14 +10868,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
            dataUrl: z.string().max(100_000_000),
          }).nullable().optional(),
        }).parse(req.body);
-      if (app === "whatsapp") {
-        logger.info({
-          serial,
-          userCountMin: userCountMin ?? 1,
-          userCountMax: userCountMax ?? 1,
-        }, "[whatsapp] run request count range");
-      }
-
       // Resolve dismiss direction (used by Chrome recents close).
       // Priority: device-prefs override → model lookup.
       const devicePrefsPA = (() => {

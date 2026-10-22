@@ -626,7 +626,6 @@ function MobilePhoneAppsPanel({
         const whatsappActivated = shouldActivate(s.whatsapp.activatePctMin, s.whatsapp.activatePctMax);
         onLogRef.current?.(`Phone Apps [whatsapp]: ${whatsappActivated ? "activation roll passed" : "activation roll skipped"}`);
         if (s.whatsapp.enabled && whatsappActivated) {
-          onLogRef.current?.(`Phone Apps [whatsapp]: requested random user count ${s.whatsapp.userCountMin ?? 1}–${s.whatsapp.userCountMax ?? 1}`);
           await runApp("whatsapp", {
             userCountMin: s.whatsapp.userCountMin ?? 1,
             userCountMax: s.whatsapp.userCountMax ?? 1,
@@ -754,12 +753,7 @@ function MobilePhoneAppsPanel({
     };
     setSettings(next);
     settingsRef.current = next;
-    const saveImmediately = app === "whatsapp" && (
-      partial.media === null ||
-      Object.prototype.hasOwnProperty.call(partial, "userCountMin") ||
-      Object.prototype.hasOwnProperty.call(partial, "userCountMax")
-    );
-    saveSettings(next, saveImmediately, app === "whatsapp" && partial.media === null);
+    saveSettings(next, app === "whatsapp" && partial.media === null, app === "whatsapp" && partial.media === null);
   };
 
   const handleAddWhatsAppMedia = async () => {

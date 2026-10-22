@@ -1831,8 +1831,6 @@ export async function runWhatsAppApp(
   const min = Math.max(1, Math.round(opts?.userCountMin ?? 1));
   const max = Math.max(min, Math.round(opts?.userCountMax ?? min));
   const targetCount = min + Math.floor(Math.random() * (max - min + 1));
-  steps.push(`WhatsApp count range ${min}–${max}; randomized target ${targetCount}`);
-  logger.info({ serial, min, max, targetCount }, "[whatsapp] target count resolved");
   let tempMediaPath: string | null = null;
   let remoteMediaPath: string | null = null;
   let remoteMediaReused = false;
@@ -2434,26 +2432,38 @@ export async function runWhatsAppApp(
         messageLength: resolvedMessage.length,
         messageFingerprint,
       });
-      await _sleep(350);
-      const typedXml = await _uiDump(adb, serial);
-      const typedComposer = parseWhatsAppLiveNodes(typedXml).find(node =>
-        node.resourceId.toLowerCase().endsWith("/entry") &&
-        node.className === "android.widget.EditText",
-      );
-      const typedText = typedComposer?.text ?? "";
-      const directEntryVerified = textMatchesWhatsAppComposer(typedText, resolvedMessage);
+      let typedXml = "";
+      let typedText = "";
+      let typedComposer: WhatsAppLiveNode | undefined;
+      let directEntryVerified = false;
+      let textVerificationPolls = 0;
+      for (let poll = 1; poll <= 10; poll++) {
+        textVerificationPolls = poll;
+        if (poll > 1) await _sleep(350);
+        typedXml = await _uiDump(adb, serial);
+        typedComposer = parseWhatsAppLiveNodes(typedXml).find(node =>
+          node.resourceId.toLowerCase().endsWith("/entry") &&
+          node.className === "android.widget.EditText",
+        );
+        typedText = typedComposer?.text ?? "";
+        directEntryVerified = textMatchesWhatsAppComposer(typedText, resolvedMessage);
+        if (directEntryVerified) break;
+      }
       whatsappDebug(`direct text entry for "${contact.text}"`, {
         messageLength: resolvedMessage.length,
         messageFingerprint,
         verified: directEntryVerified,
+        verificationPolls: textVerificationPolls,
         composerTextLength: typedText.length,
         composerFocused: Boolean(typedComposer?.focused),
       });
       if (!directEntryVerified) {
-        steps.push(`WhatsApp skipped "${contact.text}" — direct message entry could not be verified`);
-        await pressBack();
+        leaveWhatsAppOpenOnFailure = true;
+        openScreenReason = "typed message could not be verified in the composer";
+        steps.push(`WhatsApp stopped for "${contact.text}" — typed text could not be verified after ${textVerificationPolls} checks; composer left open`);
         break;
       }
+      steps.push(`WhatsApp verified the typed message for "${contact.text}" after ${textVerificationPolls} check${textVerificationPolls === 1 ? "" : "s"}`);
       xml = typedXml;
 
       if ((remoteMediaPath && opts?.media) || useDeviceGalleryMedia) {
