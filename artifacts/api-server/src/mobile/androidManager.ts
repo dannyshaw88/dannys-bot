@@ -1831,6 +1831,8 @@ export async function runWhatsAppApp(
   const min = Math.max(1, Math.round(opts?.userCountMin ?? 1));
   const max = Math.max(min, Math.round(opts?.userCountMax ?? min));
   const targetCount = min + Math.floor(Math.random() * (max - min + 1));
+  steps.push(`WhatsApp count range ${min}–${max}; randomized target ${targetCount}`);
+  logger.info({ serial, min, max, targetCount }, "[whatsapp] target count resolved");
   let tempMediaPath: string | null = null;
   let remoteMediaPath: string | null = null;
   let remoteMediaReused = false;

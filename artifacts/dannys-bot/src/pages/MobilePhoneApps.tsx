@@ -489,7 +489,7 @@ function MobilePhoneAppsPanel({
 
   // ── Save settings to API (debounced 600 ms) ───────────────────────────────
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveSettings = useCallback((s: PhoneAppsSettings, immediate = false) => {
+  const saveSettings = useCallback((s: PhoneAppsSettings, immediate = false, keepalive = immediate) => {
     if (!serialRef.current) return;
     if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
     const persist = () => {
@@ -498,7 +498,7 @@ function MobilePhoneAppsPanel({
       fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/phone-apps-settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        ...(immediate ? { keepalive: true } : {}),
+        ...(keepalive ? { keepalive: true } : {}),
         body: JSON.stringify(s),
       })
         .then(r => r.json())
@@ -626,6 +626,7 @@ function MobilePhoneAppsPanel({
         const whatsappActivated = shouldActivate(s.whatsapp.activatePctMin, s.whatsapp.activatePctMax);
         onLogRef.current?.(`Phone Apps [whatsapp]: ${whatsappActivated ? "activation roll passed" : "activation roll skipped"}`);
         if (s.whatsapp.enabled && whatsappActivated) {
+          onLogRef.current?.(`Phone Apps [whatsapp]: requested random user count ${s.whatsapp.userCountMin ?? 1}–${s.whatsapp.userCountMax ?? 1}`);
           await runApp("whatsapp", {
             userCountMin: s.whatsapp.userCountMin ?? 1,
             userCountMax: s.whatsapp.userCountMax ?? 1,
@@ -753,7 +754,12 @@ function MobilePhoneAppsPanel({
     };
     setSettings(next);
     settingsRef.current = next;
-    saveSettings(next, app === "whatsapp" && partial.media === null);
+    const saveImmediately = app === "whatsapp" && (
+      partial.media === null ||
+      Object.prototype.hasOwnProperty.call(partial, "userCountMin") ||
+      Object.prototype.hasOwnProperty.call(partial, "userCountMax")
+    );
+    saveSettings(next, saveImmediately, app === "whatsapp" && partial.media === null);
   };
 
   const handleAddWhatsAppMedia = async () => {
