@@ -1963,39 +1963,93 @@ export async function runWhatsAppApp(
   const contactPageKey = (xml: string) => getContactCandidates(xml)
     .map(node => `${node.text.trim().toLocaleLowerCase()}\u0000${node.contentDesc.trim().toLocaleLowerCase()}`)
     .join("\u0001");
+  const contactRowIdentity = (node: WhatsAppLiveNode) =>
+    `${node.text.trim().toLocaleLowerCase()}\u0000${node.contentDesc.trim().toLocaleLowerCase()}`;
+  const contactPageOverlapCount = (leftXml: string, rightXml: string) => {
+    const leftRows = new Set(getContactCandidates(leftXml).map(contactRowIdentity));
+    return getContactCandidates(rightXml)
+      .filter(node => leftRows.has(contactRowIdentity(node))).length;
+  };
   const swipeContactListDown = async (
     currentXml: string,
     attempt: number,
     pageNumber: number,
-  ): Promise<{ xml: string; changed: boolean }> => {
+    travelScale = 1,
+    retryCount = 0,
+  ): Promise<{ xml: string; changed: boolean; unsafe: boolean }> => {
     const rows = getContactCandidates(currentXml);
-    if (rows.length < 2) return { xml: currentXml, changed: false };
+    if (rows.length < 2) return { xml: currentXml, changed: false, unsafe: false };
     const top = Math.min(...rows.map(row => row.y1));
     const bottom = Math.max(...rows.map(row => row.y2));
     const x = Math.round(rows.reduce((sum, row) => sum + row.x, 0) / rows.length);
     const startY = bottom - 12;
-    const endY = top + 12;
-    if (startY - endY < 80) return { xml: currentXml, changed: false };
+    const listHeight = bottom - top;
+    const travel = Math.max(60, Math.min(140, Math.round(listHeight * 0.25 * travelScale)));
+    const endY = Math.max(top + 12, startY - travel);
+    const actualTravel = startY - endY;
+    if (actualTravel < 60) return { xml: currentXml, changed: false, unsafe: false };
     const beforeKey = contactPageKey(currentXml);
     whatsappDebug(`scrolling WhatsApp contact list down to page ${pageNumber + 1}`, {
       attempt,
       pageNumber,
+      retryCount,
       visibleRows: rows.length,
-      swipe: { x, startY, endY },
+      swipe: { x, startY, endY, actualTravel, durationMs: 650 },
     });
     await runAdb(adb, [
       "-s", serial, "shell", "input", "swipe",
-      String(x), String(startY), String(x), String(endY), "550",
+      String(x), String(startY), String(x), String(endY), "650",
     ], 7000);
     await _sleep(750);
     const nextXml = await _uiDump(adb, serial);
     const afterKey = contactPageKey(nextXml);
     const changed = Boolean(afterKey && afterKey !== beforeKey);
+    const overlapRows = contactPageOverlapCount(currentXml, nextXml);
+    if (changed && overlapRows === 0) {
+      whatsappDebug("contact scroll exposed no overlapping rows; reversing before trying a shorter swipe", {
+        attempt,
+        pageNumber,
+        retryCount,
+        beforePageKey: beforeKey,
+        afterPageKey: afterKey,
+        actualTravel,
+      });
+      await runAdb(adb, [
+        "-s", serial, "shell", "input", "swipe",
+        String(x), String(endY), String(x), String(startY), "650",
+      ], 7000);
+      await _sleep(750);
+      const recoveredXml = await _uiDump(adb, serial);
+      const recovered = contactPageKey(recoveredXml) === beforeKey;
+      whatsappDebug(
+        recovered
+          ? "contact scroll safely reversed after losing row overlap"
+          : "contact scroll could not be safely reversed after losing row overlap",
+        {
+          attempt,
+          pageNumber,
+          retryCount,
+          recovered,
+          recoveredPageKey: contactPageKey(recoveredXml),
+          beforePageKey: beforeKey,
+        },
+      );
+      if (!recovered || retryCount >= 2) {
+        return { xml: recoveredXml, changed: false, unsafe: true };
+      }
+      return swipeContactListDown(
+        recoveredXml,
+        attempt,
+        pageNumber,
+        travelScale * 0.5,
+        retryCount + 1,
+      );
+    }
     whatsappDebug(
       changed ? "contact list advanced after scroll" : "contact list did not advance after scroll",
-      { attempt, pageNumber, beforePageKey: beforeKey, afterPageKey: afterKey },
+      { attempt, pageNumber, retryCount, beforePageKey: beforeKey, afterPageKey: afterKey, overlapRows },
     );
-    return { xml: nextXml, changed };
+    return { xml: nextXml, changed, unsafe: !changed && retryCount > 0 };
   };
 
   const getWhatsAppGalleryDateHints = (timestamp: number): string[] => {
@@ -2196,6 +2250,7 @@ export async function runWhatsAppApp(
     const usedContactKeys = new Set<string>();
     let contactPickerScrollDepth = 0;
     let firstContactPageKey = "";
+    let lastContactPageXml = "";
     let sentNumbers: Set<string> | null = null;
     let resolveRecipientNumber: ((node: WhatsAppLiveNode) => string | null) | null = null;
     for (let attempt = 0; attempt < targetCount; attempt++) {
@@ -2237,25 +2292,59 @@ export async function runWhatsAppApp(
       steps.push("WhatsApp New Chat opened — checking contacts before selecting a recipient");
       const openedPageKey = contactPageKey(xml);
       if (!firstContactPageKey) firstContactPageKey = openedPageKey;
-      // New Chat normally opens at the top. Restore the last explored depth
-      // only when the live rows confirm that it really reset to the first page;
-      // if WhatsApp preserved its position, do not blindly scroll past it.
-      if (contactPickerScrollDepth > 0 && openedPageKey === firstContactPageKey) {
+      if (!lastContactPageXml) lastContactPageXml = xml;
+      // New Chat may reset to the top between recipients. Restore by matching
+      // the last observed rows, not by replaying a blind count of swipes.
+      if (
+        contactPickerScrollDepth > 0 &&
+        openedPageKey === firstContactPageKey &&
+        contactPageKey(lastContactPageXml) !== firstContactPageKey
+      ) {
+        const anchorPageKey = contactPageKey(lastContactPageXml);
+        const anchorRowCount = getContactCandidates(lastContactPageXml).length;
+        const requiredAnchorOverlap = Math.min(2, Math.max(1, anchorRowCount));
         let restoredPages = 0;
-        while (restoredPages < contactPickerScrollDepth) {
+        let restoredToAnchor = false;
+        while (
+          restoredPages < 150 &&
+          contactPageKey(xml) !== anchorPageKey &&
+          contactPageOverlapCount(xml, lastContactPageXml) < requiredAnchorOverlap
+        ) {
           const restored = await swipeContactListDown(xml, attempt + 1, restoredPages);
+          if (restored.unsafe) {
+            leaveWhatsAppOpenOnFailure = true;
+            openScreenReason = "contact picker could not be safely restored";
+            steps.push("WhatsApp stopped — a small contact-list scroll lost row overlap and could not be safely reversed");
+            break;
+          }
           if (!restored.changed) {
-            contactPickerScrollDepth = restoredPages;
             break;
           }
           xml = restored.xml;
           restoredPages++;
         }
-        whatsappDebug(`restored contact picker to previously exposed depth ${restoredPages}`, {
+        restoredToAnchor =
+          contactPageKey(xml) === anchorPageKey ||
+          contactPageOverlapCount(xml, lastContactPageXml) >= requiredAnchorOverlap;
+        if (!restoredToAnchor) {
+          leaveWhatsAppOpenOnFailure = true;
+          openScreenReason = "contact picker could not return to its last verified page";
+          steps.push(`WhatsApp stopped — could not restore the last verified contact-list position after ${restoredPages} small scrolls`);
+          break;
+        }
+        const restoredOverlapRows = contactPageOverlapCount(xml, lastContactPageXml);
+        const restoredPageKey = contactPageKey(xml);
+        lastContactPageXml = xml;
+        whatsappDebug(`restored contact picker to the last verified rows after ${restoredPages} small scrolls`, {
           attempt: attempt + 1,
           restoredPages,
-          targetDepth: contactPickerScrollDepth,
+          anchorPageKey,
+          actualPageKey: restoredPageKey,
+          overlapRows: restoredOverlapRows,
         });
+      } else if (openedPageKey !== firstContactPageKey) {
+        // If WhatsApp preserved a non-first page, trust that live position.
+        lastContactPageXml = xml;
       }
       if (!sentNumbers || !resolveRecipientNumber) {
         try {
@@ -2321,9 +2410,14 @@ export async function runWhatsAppApp(
       let fresh = identifyFreshCandidates(xml);
       let scrollsThisAttempt = 0;
       let consecutiveNoProgressSwipes = 0;
+      let unsafeScrollDetected = false;
       while (fresh.candidates.length === 0 && scrollsThisAttempt < 150) {
         const scrolled = await swipeContactListDown(xml, attempt + 1, contactPickerScrollDepth);
         scrollsThisAttempt++;
+        if (scrolled.unsafe) {
+          unsafeScrollDetected = true;
+          break;
+        }
         if (!scrolled.changed) {
           consecutiveNoProgressSwipes++;
           if (consecutiveNoProgressSwipes >= 2) break;
@@ -2332,7 +2426,14 @@ export async function runWhatsAppApp(
         consecutiveNoProgressSwipes = 0;
         xml = scrolled.xml;
         contactPickerScrollDepth++;
+        lastContactPageXml = xml;
         fresh = identifyFreshCandidates(xml);
+      }
+      if (unsafeScrollDetected) {
+        leaveWhatsAppOpenOnFailure = true;
+        openScreenReason = "contact list advanced without a safe row overlap";
+        steps.push("WhatsApp stopped — contact-list position became uncertain; WhatsApp left open to avoid skipping contacts");
+        break;
       }
       const { unselectedCandidates, candidates } = fresh;
       if (candidates.length === 0) {
