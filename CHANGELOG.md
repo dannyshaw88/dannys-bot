@@ -1,3 +1,13 @@
+## [1.2.674] — 2026-10-22
+
+### Fixed
+
+- Reduce WhatsApp contact-list swipe distance and restore by observed rows to avoid skipping contacts.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.674`.
+
 ## [1.2.673] — 2026-10-22
 
 ### Fixed
