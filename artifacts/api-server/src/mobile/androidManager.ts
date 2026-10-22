@@ -1960,6 +1960,44 @@ export async function runWhatsAppApp(
     return { xml: currentXml, candidates: getContactCandidates(currentXml) };
   };
 
+  const contactPageKey = (xml: string) => getContactCandidates(xml)
+    .map(node => `${node.text.trim().toLocaleLowerCase()}\u0000${node.contentDesc.trim().toLocaleLowerCase()}`)
+    .join("\u0001");
+  const swipeContactListDown = async (
+    currentXml: string,
+    attempt: number,
+    pageNumber: number,
+  ): Promise<{ xml: string; changed: boolean }> => {
+    const rows = getContactCandidates(currentXml);
+    if (rows.length < 2) return { xml: currentXml, changed: false };
+    const top = Math.min(...rows.map(row => row.y1));
+    const bottom = Math.max(...rows.map(row => row.y2));
+    const x = Math.round(rows.reduce((sum, row) => sum + row.x, 0) / rows.length);
+    const startY = bottom - 12;
+    const endY = top + 12;
+    if (startY - endY < 80) return { xml: currentXml, changed: false };
+    const beforeKey = contactPageKey(currentXml);
+    whatsappDebug(`scrolling WhatsApp contact list down to page ${pageNumber + 1}`, {
+      attempt,
+      pageNumber,
+      visibleRows: rows.length,
+      swipe: { x, startY, endY },
+    });
+    await runAdb(adb, [
+      "-s", serial, "shell", "input", "swipe",
+      String(x), String(startY), String(x), String(endY), "550",
+    ], 7000);
+    await _sleep(750);
+    const nextXml = await _uiDump(adb, serial);
+    const afterKey = contactPageKey(nextXml);
+    const changed = Boolean(afterKey && afterKey !== beforeKey);
+    whatsappDebug(
+      changed ? "contact list advanced after scroll" : "contact list did not advance after scroll",
+      { attempt, pageNumber, beforePageKey: beforeKey, afterPageKey: afterKey },
+    );
+    return { xml: nextXml, changed };
+  };
+
   const getWhatsAppGalleryDateHints = (timestamp: number): string[] => {
     const hints = new Set<string>();
     // WhatsApp exposes only a localized date/time in media_item_view's
@@ -2156,6 +2194,8 @@ export async function runWhatsAppApp(
     // bounds distinguish duplicate rows within this picker view and remain
     // stable when we return to the same list.
     const usedContactKeys = new Set<string>();
+    let contactPickerScrollDepth = 0;
+    let firstContactPageKey = "";
     let sentNumbers: Set<string> | null = null;
     let resolveRecipientNumber: ((node: WhatsAppLiveNode) => string | null) | null = null;
     for (let attempt = 0; attempt < targetCount; attempt++) {
@@ -2195,6 +2235,28 @@ export async function runWhatsAppApp(
       const settled = await waitForContactList(xml, attempt + 1);
       xml = settled.xml;
       steps.push("WhatsApp New Chat opened — checking contacts before selecting a recipient");
+      const openedPageKey = contactPageKey(xml);
+      if (!firstContactPageKey) firstContactPageKey = openedPageKey;
+      // New Chat normally opens at the top. Restore the last explored depth
+      // only when the live rows confirm that it really reset to the first page;
+      // if WhatsApp preserved its position, do not blindly scroll past it.
+      if (contactPickerScrollDepth > 0 && openedPageKey === firstContactPageKey) {
+        let restoredPages = 0;
+        while (restoredPages < contactPickerScrollDepth) {
+          const restored = await swipeContactListDown(xml, attempt + 1, restoredPages);
+          if (!restored.changed) {
+            contactPickerScrollDepth = restoredPages;
+            break;
+          }
+          xml = restored.xml;
+          restoredPages++;
+        }
+        whatsappDebug(`restored contact picker to previously exposed depth ${restoredPages}`, {
+          attempt: attempt + 1,
+          restoredPages,
+          targetDepth: contactPickerScrollDepth,
+        });
+      }
       if (!sentNumbers || !resolveRecipientNumber) {
         try {
           sentNumbers = loadWhatsAppSentNumberIndex(serial);
@@ -2229,28 +2291,44 @@ export async function runWhatsAppApp(
           throw error;
         }
       }
-      const unselectedCandidates = settled.candidates.filter(node => {
-        const key = `${node.text}\u0000${node.contentDesc}\u0000${node.x1},${node.y1},${node.x2},${node.y2}`;
-        return !usedContactKeys.has(key);
-      }).filter((node, index, all) =>
-        all.findIndex(other =>
-          other.text === node.text &&
-          other.contentDesc === node.contentDesc &&
-          other.x1 === node.x1 &&
-          other.y1 === node.y1,
-        ) === index,
-      );
-      // A recipient already in persisted history must never be used as a
-      // fallback. If the visible picker has no fresh recipients, stop rather
-      // than sending another message to someone contacted by a prior run.
-      const candidates = unselectedCandidates
-        .map(node => ({ node, number: resolveRecipientNumber!(node) }))
-        .filter((entry): entry is { node: WhatsAppLiveNode; number: string } =>
-          Boolean(entry.number) && !sentNumbers!.has(entry.number),
+      const identifyFreshCandidates = (sourceXml: string) => {
+        const unselectedCandidates = getContactCandidates(sourceXml).filter(node => {
+          const key = `${node.text}\u0000${node.contentDesc}\u0000${node.x1},${node.y1},${node.x2},${node.y2}`;
+          return !usedContactKeys.has(key);
+        }).filter((node, index, all) =>
+          all.findIndex(other =>
+            other.text === node.text &&
+            other.contentDesc === node.contentDesc &&
+            other.x1 === node.x1 &&
+            other.y1 === node.y1,
+          ) === index,
         );
+        // A recipient already in persisted history must never be used as a
+        // fallback; visible numbers are only candidates when not reserved.
+        const candidates = unselectedCandidates
+          .map(node => ({ node, number: resolveRecipientNumber!(node) }))
+          .filter((entry): entry is { node: WhatsAppLiveNode; number: string } =>
+            Boolean(entry.number) && !sentNumbers!.has(entry.number),
+          );
+        return {
+          unselectedCandidates,
+          candidates,
+          unknownNumberCount: unselectedCandidates.filter(node => !resolveRecipientNumber!(node)).length,
+        };
+      };
+      let fresh = identifyFreshCandidates(xml);
+      let scrollsThisAttempt = 0;
+      while (fresh.candidates.length === 0 && scrollsThisAttempt < 150) {
+        const scrolled = await swipeContactListDown(xml, attempt + 1, contactPickerScrollDepth);
+        if (!scrolled.changed) break;
+        xml = scrolled.xml;
+        contactPickerScrollDepth++;
+        scrollsThisAttempt++;
+        fresh = identifyFreshCandidates(xml);
+      }
+      const { unselectedCandidates, candidates } = fresh;
       if (candidates.length === 0) {
-        const unknownNumberCount = unselectedCandidates
-          .filter(node => !resolveRecipientNumber!(node)).length;
+        const { unknownNumberCount } = fresh;
         whatsappDebug(
           `contact-list has no fresh identifiable number after ${sent} sent`,
           {
@@ -2258,6 +2336,8 @@ export async function runWhatsAppApp(
             sentNumberIndexSize: sentNumbers.size,
             unselectedCandidateCount: unselectedCandidates.length,
             unknownNumberCount,
+            contactPickerScrollDepth,
+            scrollsThisAttempt,
           },
         );
         steps.push(
@@ -2265,7 +2345,7 @@ export async function runWhatsAppApp(
             ? `WhatsApp stopped — ${unknownNumberCount} visible contacts could not be matched to one phone number`
             : unselectedCandidates.length > 0
             ? `WhatsApp stopped — all ${unselectedCandidates.length} visible contacts are already in the sent-number index`
-            : `WhatsApp stopped — no unselected contacts found after ${sent} message${sent === 1 ? "" : "s"}`,
+            : `WhatsApp stopped — no fresh contacts found after ${sent} message${sent === 1 ? "" : "s"} and ${contactPickerScrollDepth} contact-list scrolls`,
         );
         await pressBack();
         break;
