@@ -1,3 +1,13 @@
+## [1.2.675] — 2026-10-22
+
+### Fixed
+
+- Speed up restoration through previously explored WhatsApp contacts while retaining slower, overlap-checked scrolling for new contacts.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.675`.
+
 ## [1.2.674] — 2026-10-22
 
 ### Fixed

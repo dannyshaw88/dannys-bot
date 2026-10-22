@@ -19,7 +19,7 @@ When every visible contact is already used or cannot be identified, continue dow
 
 **Why:** The New Chat picker exposes a window of contacts at a time; stopping on the first exhausted page prevents reaching valid contacts farther down.
 
-**How to apply:** Use short, slow swipes derived from live row bounds; require row overlap between consecutive pages; reverse and retry with a shorter swipe when overlap is lost. Restore to previously observed rows rather than replaying a blind swipe count. Re-dump after each swipe, re-evaluate against the persisted sent-number index, and stop with the picker open if position cannot be restored safely.
+**How to apply:** Use faster, overlap-checked swipes only while returning through already explored rows; switch to short, slow swipes when advancing into new contacts. Reverse and retry with a shorter swipe when overlap is lost. Restore to previously observed rows rather than replaying a blind swipe count. Re-dump after each swipe, re-evaluate against the persisted sent-number index, and stop with the picker open if position cannot be restored safely.
 
 The WhatsApp composer path must tap the live `entry` field, use direct ADB text input, then proceed to Attach and Send without reading the composer back. Do not open the long-press edit menu or attempt clipboard preparation first. Live Attach/Send controls still need to be located before tapping.
 

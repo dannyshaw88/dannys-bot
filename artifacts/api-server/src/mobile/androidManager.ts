@@ -1974,6 +1974,7 @@ export async function runWhatsAppApp(
     currentXml: string,
     attempt: number,
     pageNumber: number,
+    mode: "forward" | "restore" = "forward",
     travelScale = 1,
     retryCount = 0,
   ): Promise<{ xml: string; changed: boolean; unsafe: boolean }> => {
@@ -1984,7 +1985,11 @@ export async function runWhatsAppApp(
     const x = Math.round(rows.reduce((sum, row) => sum + row.x, 0) / rows.length);
     const startY = bottom - 12;
     const listHeight = bottom - top;
-    const travel = Math.max(60, Math.min(140, Math.round(listHeight * 0.25 * travelScale)));
+    const durationMs = mode === "restore" ? 350 : 650;
+    const settleMs = mode === "restore" ? 400 : 750;
+    const travel = mode === "restore"
+      ? Math.max(100, Math.min(240, Math.round(listHeight * 0.48 * travelScale)))
+      : Math.max(60, Math.min(140, Math.round(listHeight * 0.25 * travelScale)));
     const endY = Math.max(top + 12, startY - travel);
     const actualTravel = startY - endY;
     if (actualTravel < 60) return { xml: currentXml, changed: false, unsafe: false };
@@ -1992,15 +1997,16 @@ export async function runWhatsAppApp(
     whatsappDebug(`scrolling WhatsApp contact list down to page ${pageNumber + 1}`, {
       attempt,
       pageNumber,
+      mode,
       retryCount,
       visibleRows: rows.length,
-      swipe: { x, startY, endY, actualTravel, durationMs: 650 },
+      swipe: { x, startY, endY, actualTravel, durationMs },
     });
     await runAdb(adb, [
       "-s", serial, "shell", "input", "swipe",
-      String(x), String(startY), String(x), String(endY), "650",
+      String(x), String(startY), String(x), String(endY), String(durationMs),
     ], 7000);
-    await _sleep(750);
+    await _sleep(settleMs);
     const nextXml = await _uiDump(adb, serial);
     const afterKey = contactPageKey(nextXml);
     const changed = Boolean(afterKey && afterKey !== beforeKey);
@@ -2016,9 +2022,9 @@ export async function runWhatsAppApp(
       });
       await runAdb(adb, [
         "-s", serial, "shell", "input", "swipe",
-        String(x), String(endY), String(x), String(startY), "650",
+        String(x), String(endY), String(x), String(startY), String(durationMs),
       ], 7000);
-      await _sleep(750);
+      await _sleep(settleMs);
       const recoveredXml = await _uiDump(adb, serial);
       const recovered = contactPageKey(recoveredXml) === beforeKey;
       whatsappDebug(
@@ -2041,6 +2047,7 @@ export async function runWhatsAppApp(
         recoveredXml,
         attempt,
         pageNumber,
+        mode,
         travelScale * 0.5,
         retryCount + 1,
       );
@@ -2310,7 +2317,7 @@ export async function runWhatsAppApp(
           contactPageKey(xml) !== anchorPageKey &&
           contactPageOverlapCount(xml, lastContactPageXml) < requiredAnchorOverlap
         ) {
-          const restored = await swipeContactListDown(xml, attempt + 1, restoredPages);
+          const restored = await swipeContactListDown(xml, attempt + 1, restoredPages, "restore");
           if (restored.unsafe) {
             leaveWhatsAppOpenOnFailure = true;
             openScreenReason = "contact picker could not be safely restored";
