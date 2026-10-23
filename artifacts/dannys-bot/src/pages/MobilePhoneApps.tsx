@@ -68,6 +68,33 @@ function WhatsAppIcon({ size = 20 }: { size?: number }) {
 
 const PCT_INPUT = "w-14 text-center h-7 text-sm px-1";
 
+function PixelDistanceInput({ value, onCommit, compact = false }: { value: number; onCommit: (value: number) => void; compact?: boolean }) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+
+  const commit = () => {
+    const parsed = Number(draft);
+    const nextValue = Math.min(1000, Math.max(40, Number.isFinite(parsed) ? Math.round(parsed) : value));
+    setDraft(String(nextValue));
+    if (nextValue !== value) onCommit(nextValue);
+  };
+
+  return (
+    <Input
+      type="number"
+      min={40}
+      max={1000}
+      step={1}
+      className={compact ? "w-12 text-center h-7 text-xs px-0" : "w-20 text-center h-7 text-sm px-1"}
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      aria-label="SMS contact scroll distance in pixels"
+    />
+  );
+}
+
 // ── App tool slot config type ─────────────────────────────────────────────────
 
 interface AppSlotSettings {
@@ -88,6 +115,8 @@ interface AppSlotSettings {
   useDeviceGalleryMedia?: boolean;
   /** Exact number of currently unselected SMS contacts to add. */
   contactCount?: number;
+  /** Vertical swipe distance in pixels between SMS contact selections. */
+  contactScrollPixels?: number;
   /** Number-of-scrolls range — used by Chrome and YouTube. */
   scrollMin?: number;
   scrollMax?: number;
@@ -159,7 +188,7 @@ const DEFAULT_SETTINGS: PhoneAppsSettings = {
   snapchat:   { ...DEFAULT_APP_SLOT },
   youtube:    { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, clickPctMin: 0, clickPctMax: 0, watchTimeMin: 3, watchTimeMax: 8, clickShortsPctMin: 0, clickShortsPctMax: 0, shortsScrollMin: 0, shortsScrollMax: 0, shortsWatchTimeMin: 3, shortsWatchTimeMax: 8, shortsLikePctMin: 0, shortsLikePctMax: 0 },
   whatsapp:   { ...DEFAULT_APP_SLOT, userCountMin: 1, userCountMax: 1, message: "", media: null, useDeviceGalleryMedia: false },
-  sms:        { ...DEFAULT_APP_SLOT, contactCount: 1 },
+  sms:        { ...DEFAULT_APP_SLOT, contactCount: 1, contactScrollPixels: 130 },
 };
 
 // ── Card component ─────────────────────────────────────────────────────────────
@@ -310,19 +339,20 @@ interface AppSlotRowProps {
   onMin:      (v: number) => void;
   onMax:      (v: number) => void;
   labelClassName?: string;
+  compact?: boolean;
   rowExtras?: React.ReactNode; // optional inline fields rendered after the % label on row 1
   row2?:      React.ReactNode; // optional second row rendered below row 1, full width
   row3?:      React.ReactNode; // optional third row rendered below row 2, full width
   row4?:      React.ReactNode; // optional fourth row rendered below row 3, full width
 }
 
-function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMin, onMax, labelClassName, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
+function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMin, onMax, labelClassName, compact, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
   return (
-    <div className={`p-4 ${className ?? ""}`}>
+    <div className={`${compact ? "p-2 overflow-x-auto" : "p-4"} ${className ?? ""}`}>
       {/* First visual row: icon, activation, and the app's primary fields. */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className={compact ? "flex w-max min-w-full flex-nowrap items-center gap-1" : "flex items-center gap-4 flex-wrap"}>
         {/* Icon + label — anchors the left of the first visual row */}
-        <div className={`flex items-center gap-2 ${labelClassName ?? "min-w-[13rem]"}`}>
+        <div className={`flex items-center ${compact ? "gap-1" : "gap-2"} ${labelClassName ?? "min-w-[13rem]"}`}>
           <Checkbox
             checked={enabled}
             onCheckedChange={(checked) => onEnabled(checked === true)}
@@ -346,7 +376,7 @@ function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMi
                 type="number"
                 min={0}
                 max={100}
-                className={PCT_INPUT}
+                className={compact ? "w-8 text-center h-7 text-xs px-0" : PCT_INPUT}
                 value={min}
                 onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
               />
@@ -355,7 +385,7 @@ function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMi
                 type="number"
                 min={0}
                 max={100}
-                className={PCT_INPUT}
+                className={compact ? "w-8 text-center h-7 text-xs px-0" : PCT_INPUT}
                 value={max}
                 onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
               />
@@ -468,7 +498,7 @@ function MobilePhoneAppsPanel({
           snapchat:    { enabled: d.snapchat?.enabled ?? false, activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
           youtube:     { enabled: d.youtube?.enabled ?? false, activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8, shortsLikePctMin: d.youtube?.shortsLikePctMin ?? 0, shortsLikePctMax: d.youtube?.shortsLikePctMax ?? 0 },
            whatsapp:    { enabled: d.whatsapp?.enabled ?? false, activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0, userCountMin: d.whatsapp?.userCountMin ?? 1, userCountMax: d.whatsapp?.userCountMax ?? 1, message: d.whatsapp?.message ?? "", media: d.whatsapp?.media, useDeviceGalleryMedia: d.whatsapp?.useDeviceGalleryMedia ?? false },
-           sms:          { enabled: d.sms?.enabled ?? false, activatePctMin: d.sms?.activatePctMin ?? 0, activatePctMax: d.sms?.activatePctMax ?? 0, contactCount: d.sms?.contactCount ?? 1 },
+            sms:          { enabled: d.sms?.enabled ?? false, activatePctMin: d.sms?.activatePctMin ?? 0, activatePctMax: d.sms?.activatePctMax ?? 0, contactCount: d.sms?.contactCount ?? 1, contactScrollPixels: d.sms?.contactScrollPixels ?? 130 },
         };
         setSettings(merged);
         settingsRef.current = merged;
@@ -648,7 +678,10 @@ function MobilePhoneAppsPanel({
         const smsActivated = shouldActivate(s.sms.activatePctMin, s.sms.activatePctMax);
         onLogRef.current?.(`Phone Apps [sms]: ${smsActivated ? "activation roll passed" : "activation roll skipped"}`);
         if (s.sms.enabled && smsActivated) {
-          await runApp("sms", { contactCount: s.sms.contactCount ?? 1 });
+          await runApp("sms", {
+            contactCount: s.sms.contactCount ?? 1,
+            contactScrollPixels: s.sms.contactScrollPixels ?? 130,
+          });
         }
 
         if (keepScreenAwakeForInspection) {
@@ -1371,27 +1404,38 @@ function MobilePhoneAppsPanel({
                 </div>}
               />
               <AppSlotRow
-                icon={<MessageCircle className="w-5 h-5 text-[#1AD2F2]" />}
+                icon={<MessageCircle className="w-4 h-4 text-[#1AD2F2]" />}
                 label="SMS"
                 enabled={settings.sms.enabled}
                 onEnabled={v => patchApp("sms", { enabled: v })}
                 className="order-6"
+                compact
                 labelClassName="min-w-0 shrink-0"
                 min={settings.sms.activatePctMin}
                 max={settings.sms.activatePctMax}
                 onMin={v => patchApp("sms", { activatePctMin: v })}
                 onMax={v => patchApp("sms", { activatePctMax: v })}
-                rowExtras={<div className="flex flex-col items-center gap-1">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">Contacts to select</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={10000}
-                    className="w-24 text-center h-7 text-sm px-1"
-                    value={settings.sms.contactCount ?? 1}
-                    onChange={e => patchApp("sms", { contactCount: Math.min(10000, Math.max(1, Math.round(Number(e.target.value)))) })}
-                    aria-label="SMS contacts to select"
-                  />
+                rowExtras={<div className="flex shrink-0 items-end gap-1">
+                  <div className="flex shrink-0 flex-col items-center gap-1">
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">Select</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={10000}
+                      className="w-12 text-center h-7 text-xs px-0"
+                      value={settings.sms.contactCount ?? 1}
+                      onChange={e => patchApp("sms", { contactCount: Math.min(10000, Math.max(1, Math.round(Number(e.target.value)))) })}
+                      aria-label="SMS contacts to select"
+                    />
+                  </div>
+                  <div className="flex shrink-0 flex-col items-center gap-1">
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">Swipe (px)</span>
+                    <PixelDistanceInput
+                      value={settings.sms.contactScrollPixels ?? 130}
+                      onCommit={contactScrollPixels => patchApp("sms", { contactScrollPixels })}
+                      compact
+                    />
+                  </div>
                 </div>}
               />
               </div>

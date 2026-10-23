@@ -10701,6 +10701,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           activatePctMin: 0,
           activatePctMax: 0,
           contactCount: 1,
+          contactScrollPixels: 130,
         },
       };
       res.json({
@@ -10788,6 +10789,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           activatePctMin: z.number().int().min(0).max(100).optional(),
           activatePctMax: z.number().int().min(0).max(100).optional(),
           contactCount: z.number().int().min(1).max(10_000).optional(),
+          contactScrollPixels: z.number().int().min(40).max(1_000).optional(),
         }).passthrough().optional(),
       }).passthrough().parse(req.body);
       const merged = {
@@ -10836,7 +10838,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shortsScrollMin, shortsScrollMax,
               shortsWatchTimeMin, shortsWatchTimeMax,
                shortsLikePctMin, shortsLikePctMax,
-                 userCountMin, userCountMax, message, media, useDeviceGalleryMedia, contactCount } = z.object({
+                  userCountMin, userCountMax, message, media, useDeviceGalleryMedia, contactCount, contactScrollPixels } = z.object({
         app:                  z.enum(["chrome", "snapchat", "youtube", "whatsapp", "sms"]),
         scrollMin:            z.number().min(0).optional(),
         scrollMax:            z.number().min(0).optional(),
@@ -10877,6 +10879,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          message:              z.string().max(10_000).optional(),
           useDeviceGalleryMedia: z.boolean().optional(),
          contactCount:         z.number().int().min(1).max(10_000).optional(),
+          contactScrollPixels:  z.number().int().min(40).max(1_000).optional(),
          media: z.object({
            fileName: z.string().min(1).max(255),
            mimeType: z.string().min(1).max(200),
@@ -10958,7 +10961,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         });
       } else if (appId === "sms") {
         result = {
-          ...await android.runSmsContactSelection(serial, { contactCount }),
+          ...await android.runSmsContactSelection(serial, { contactCount, contactScrollPixels }),
           keepScreenOn: true,
         };
       } else {

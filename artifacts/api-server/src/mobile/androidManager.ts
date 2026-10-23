@@ -1788,12 +1788,13 @@ function parseWhatsAppLiveNodes(xml: string): WhatsAppLiveNode[] {
  */
 export async function runSmsContactSelection(
   serial: string,
-  opts?: { contactCount?: number },
+  opts?: { contactCount?: number; contactScrollPixels?: number },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
   const targetCount = Math.max(1, Math.min(10_000, Math.round(opts?.contactCount ?? 1)));
+  const scrollPixels = Math.max(40, Math.min(1_000, Math.round(opts?.contactScrollPixels ?? 130)));
   const describe = (xml: string) => {
     const nodes = parseWhatsAppLiveNodes(xml);
     return {
@@ -1896,17 +1897,17 @@ export async function runSmsContactSelection(
     const contactPageKey = (pageXml: string) => contactRows(pageXml).rows
       .map(row => `${row.resourceId}:${row.text}:${row.y1}:${row.y2}`)
       .join("|");
-    const scrollContactPicker140 = async (pageXml: string) => {
+    const scrollContactPicker = async (pageXml: string) => {
       const page = contactRows(pageXml);
       if (!page.list || page.rows.length === 0) {
         return { xml: pageXml, changed: false, error: "No live contact rows are available to scroll" };
       }
       const x = Math.round((page.list.x1 + page.list.x2) / 2);
       const visibleBottom = Math.max(...page.rows.map(row => row.y2));
-      const startY = Math.min(page.list.y2 - 140, visibleBottom - 24);
-      const endY = startY - 140;
-      if (startY - endY !== 140 || endY <= page.list.y1 + 20) {
-        return { xml: pageXml, changed: false, error: "A safe 140-pixel contact-list scroll is unavailable" };
+      const startY = Math.min(page.list.y2 - scrollPixels, visibleBottom - 24);
+      const endY = startY - scrollPixels;
+      if (startY - endY !== scrollPixels || endY <= page.list.y1 + 20) {
+        return { xml: pageXml, changed: false, error: `A safe ${scrollPixels}-pixel contact-list scroll is unavailable` };
       }
       const beforeKey = contactPageKey(pageXml);
       await runAdb(adb, [
@@ -1916,7 +1917,7 @@ export async function runSmsContactSelection(
       await wait(settleRecheckMs);
       let nextXml = await _uiDump(adb, serial);
       if (!isSmsContactPicker(nextXml)) {
-        return { xml: nextXml, changed: false, error: "Messages left the Add people picker during a 140-pixel scroll" };
+        return { xml: nextXml, changed: false, error: `Messages left the Add people picker during a ${scrollPixels}-pixel scroll` };
       }
       let changed = contactPageKey(nextXml) !== beforeKey;
       if (!changed) {
@@ -1925,7 +1926,7 @@ export async function runSmsContactSelection(
         await wait(settleRecheckMs);
         nextXml = await _uiDump(adb, serial);
         if (!isSmsContactPicker(nextXml)) {
-          return { xml: nextXml, changed: false, error: "Messages left the Add people picker during a 140-pixel scroll" };
+          return { xml: nextXml, changed: false, error: `Messages left the Add people picker during a ${scrollPixels}-pixel scroll` };
         }
         changed = contactPageKey(nextXml) !== beforeKey;
       }
@@ -1991,7 +1992,7 @@ export async function runSmsContactSelection(
       // Progress one small row-like amount after each tap (or whenever every
       // visible row is already selected). The first interaction is always a
       // verified contact tap; never begin with a full-screen swipe.
-      const scroll = await scrollContactPicker140(xml);
+      const scroll = await scrollContactPicker(xml);
       if (scroll.error) {
         steps.push(`SMS stopped — ${scroll.error} after selecting ${selectedThisRun}/${targetCount}`);
         return { ok: false, steps, error: scroll.error };
@@ -2000,8 +2001,8 @@ export async function runSmsContactSelection(
       else noProgressSwipes = 0;
       xml = scroll.xml;
       if (noProgressSwipes >= 2) {
-        steps.push(`SMS stopped — no new contact rows appeared after two 140-pixel scrolls; selected ${selectedThisRun}/${targetCount}`);
-        return { ok: false, steps, error: "No contact-list movement after two 140-pixel scrolls" };
+        steps.push(`SMS stopped — no new contact rows appeared after two ${scrollPixels}-pixel scrolls; selected ${selectedThisRun}/${targetCount}`);
+        return { ok: false, steps, error: `No contact-list movement after two ${scrollPixels}-pixel scrolls` };
       }
     }
 
