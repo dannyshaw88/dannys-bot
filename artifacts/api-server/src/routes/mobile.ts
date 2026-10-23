@@ -10885,14 +10885,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
        }).parse(req.body);
       // Resolve dismiss direction (used by Chrome recents close).
       // Priority: device-prefs override → model lookup.
-      const devicePrefsPA = (() => {
-        try { return loadInstanceConfigs()[serial]?.devicePrefs ?? {}; } catch { return {}; }
-      })();
-      const rawModelPA  = android.getDeviceModel(serial);
-      const dismissDir: "left" | "up" =
-        (devicePrefsPA.dismissDirection && devicePrefsPA.dismissDirection !== "auto")
-          ? devicePrefsPA.dismissDirection
-          : android.getModelDismissDirection(rawModelPA);
+      let devicePrefsPA: any = {};
+      let dismissDir: "left" | "up" = "up";
+      if (appId !== "sms") {
+        devicePrefsPA = (() => {
+          try { return loadInstanceConfigs()[serial]?.devicePrefs ?? {}; } catch { return {}; }
+        })();
+        const rawModelPA = android.getDeviceModel(serial);
+        dismissDir =
+          (devicePrefsPA.dismissDirection && devicePrefsPA.dismissDirection !== "auto")
+            ? devicePrefsPA.dismissDirection
+            : android.getModelDismissDirection(rawModelPA);
+      }
 
       // SMS only works from the live group-recipient picker and must not run
       // any app-launch, wake, or unlock sequence before its contact tap/swipe.

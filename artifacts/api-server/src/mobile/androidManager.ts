@@ -1794,25 +1794,20 @@ export async function runSmsContactSelection(
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
   const targetCount = Math.max(1, Math.min(10_000, Math.round(opts?.contactCount ?? 1)));
-  const describe = (xml: string) => ({
-    addPeople: /\bAdd people\b/i.test(xml),
-    contactList: parseWhatsAppLiveNodes(xml).some(node => /contact_list/i.test(node.resourceId)),
-    rows: parseWhatsAppLiveNodes(xml).filter(node =>
+  const describe = (xml: string) => {
+    const nodes = parseWhatsAppLiveNodes(xml);
+    return {
+    addPeople: /\b(?:Add people|New group MMS)\b/i.test(xml),
+    contactList: nodes.some(node => /contact_list/i.test(node.resourceId)),
+    rows: nodes.filter(node =>
       /contact_row_test_prefix_/i.test(node.resourceId),
     ).length,
-  });
+    };
+  };
   const wait = (ms: number) => _sleep(ms);
-  const findControl = (xml: string, labels: string[]) =>
-    parseWhatsAppLiveNodes(xml).find(node =>
-      node.enabled && node.clickable &&
-      labels.some(label =>
-        node.text.trim().toLowerCase() === label.toLowerCase() ||
-        node.contentDesc.trim().toLowerCase() === label.toLowerCase() ||
-        node.resourceId.toLowerCase().includes(label.toLowerCase().replace(/\s+/g, "_")),
-      ),
-    ) ?? null;
-  const isAddPeopleScreen = (xml: string) =>
-    /\bAdd people\b/i.test(xml) && /contact_list/i.test(xml);
+  const isSmsContactPicker = (xml: string) =>
+    /\b(?:Add people|New group MMS)\b/i.test(xml) &&
+    parseWhatsAppLiveNodes(xml).some(node => /contact_row_test_prefix_/i.test(node.resourceId));
   const topChips = (xml: string, listTop: number) => new Set(
     parseWhatsAppLiveNodes(xml)
       .filter(node => node.y2 <= listTop + 8 && node.text.trim())
@@ -1829,7 +1824,28 @@ export async function runSmsContactSelection(
       .filter(node => /contact_row_test_prefix_/i.test(node.resourceId))
       .filter(node => node.x2 > node.x1 && node.y2 - node.y1 >= 35)
       .sort((a, b) => a.y1 - b.y1);
-    const list = nodes.find(node => /contact_list/i.test(node.resourceId));
+    const list = nodes.find(node => /contact_list/i.test(node.resourceId)) ?? (rows.length
+      ? (() => {
+          const x1 = Math.min(...rows.map(row => row.x1));
+          const y1 = Math.min(...rows.map(row => row.y1));
+          const x2 = Math.max(...rows.map(row => row.x2));
+          const y2 = Math.max(...rows.map(row => row.y2));
+          return {
+            text: "",
+            contentDesc: "",
+            resourceId: "contact_list_inferred_from_live_rows",
+            className: "View",
+            clickable: false,
+            enabled: true,
+            focused: false,
+            checked: false,
+            selected: false,
+            x1, y1, x2, y2,
+            x: Math.round((x1 + x2) / 2),
+            y: Math.round((y1 + y2) / 2),
+          };
+        })()
+      : undefined);
     if (!rows.length || !list) return { rows: [], list, selectedNames: new Set<string>() };
     const selectedNames = topChips(xml, list.y1);
     return {
@@ -1862,37 +1878,12 @@ export async function runSmsContactSelection(
   };
 
   try {
+    // SMS is selection-only on the already-open group-recipient picker. Never
+    // launch Messages or navigate to a group from this action.
     let xml = await _uiDump(adb, serial);
-    if (!isAddPeopleScreen(xml)) {
-      await runAdb(adb, [
-        "-s", serial, "shell", "monkey", "-p", "com.google.android.apps.messaging",
-        "-c", "android.intent.category.LAUNCHER", "1",
-      ], 10000);
-      await wait(1800);
-      xml = await _uiDump(adb, serial);
-    }
-
-    // Only enter the group picker using explicitly named controls. Do not
-    // guess a coordinate or tap a contact while the surface is uncertain.
-    if (!isAddPeopleScreen(xml)) {
-      const startChat = findControl(xml, ["Start chat", "New conversation", "New message"]);
-      if (startChat) {
-        await _adbTapAsync(adb, serial, startChat.x, startChat.y);
-        await wait(900);
-        xml = await _uiDump(adb, serial);
-      }
-    }
-    if (!isAddPeopleScreen(xml)) {
-      const createGroup = findControl(xml, ["Create group", "Create group conversation", "Group conversation"]);
-      if (createGroup) {
-        await _adbTapAsync(adb, serial, createGroup.x, createGroup.y);
-        await wait(900);
-        xml = await _uiDump(adb, serial);
-      }
-    }
-    if (!isAddPeopleScreen(xml)) {
+    if (!isSmsContactPicker(xml)) {
       const surface = describe(xml);
-      steps.push("SMS stopped — could not confirm the Messages Add people contact picker; no contact was tapped");
+      steps.push("SMS stopped — the existing New group MMS/Add people picker was not visible; no contact was tapped");
       return { ok: false, steps, error: `Messages contact picker was not found (${JSON.stringify(surface)})` };
     }
 
@@ -1922,7 +1913,7 @@ export async function runSmsContactSelection(
       ], 7000);
       await wait(350);
       const nextXml = await _uiDump(adb, serial);
-      if (!isAddPeopleScreen(nextXml)) {
+      if (!isSmsContactPicker(nextXml)) {
         return { xml: nextXml, changed: false, error: "Messages left the Add people picker during a 50-pixel scroll" };
       }
       return {
@@ -1948,7 +1939,7 @@ export async function runSmsContactSelection(
         await _adbTapAsync(adb, serial, candidate.x, candidate.y);
         await wait(450);
         const afterXml = await _uiDump(adb, serial);
-        if (!isAddPeopleScreen(afterXml)) {
+        if (!isSmsContactPicker(afterXml)) {
           steps.push("SMS stopped — the Add people screen changed after a contact tap; no further contacts were selected");
           return { ok: false, steps, error: "Messages left the Add people picker after a selection tap" };
         }

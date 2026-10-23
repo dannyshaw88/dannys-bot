@@ -548,6 +548,7 @@ function MobilePhoneAppsPanel({
     let collisionLease: CollisionLease | null = null;
     let cycleOutcomeLogged = false;
     let keepScreenAwakeForInspection = false;
+    let keepScreenAppId: string | null = null;
     try {
       if (requestSlot) {
         collisionLease = await requestSlot(PHONE_APPS_SLOT_IDX, hstTurnAt, () => {
@@ -592,11 +593,16 @@ function MobilePhoneAppsPanel({
               const data: { ok?: boolean; steps?: string[]; error?: string; keepScreenOn?: boolean } = await res.json();
               if (data.keepScreenOn) {
                 keepScreenAwakeForInspection = true;
+                keepScreenAppId = appId;
                 onInspectionHoldRef.current?.(true);
                 const stopStep = [...(data.steps ?? [])].reverse().find(step =>
                   /^WhatsApp (?:skipped|stopped)/i.test(step),
                 );
-                setCompletionDetail(stopStep ?? data.error ?? "No WhatsApp message send was confirmed.");
+                setCompletionDetail(
+                  appId === "sms"
+                    ? data.error ?? data.steps?.at(-1) ?? "SMS picker left open after selection."
+                    : stopStep ?? data.error ?? "No WhatsApp message send was confirmed.",
+                );
               }
               const log = onLogRef.current;
               if (log) {
@@ -647,9 +653,10 @@ function MobilePhoneAppsPanel({
 
         if (keepScreenAwakeForInspection) {
           setCompletionStatus("stopped");
-          onLogRef.current?.("Phone Apps — WhatsApp stopped without a confirmed send; screen left open and awake");
+          const holdLabel = keepScreenAppId === "sms" ? "SMS picker" : "WhatsApp";
+          onLogRef.current?.(`Phone Apps — ${holdLabel} finished; screen left open and awake`);
           cycleOutcomeLogged = true;
-          onLogRef.current?.("Cycle stopped — WhatsApp message was not confirmed");
+          onLogRef.current?.(`Cycle complete — ${holdLabel} left open`);
         } else {
           // A normal completed cycle locks even when every app activation roll misses.
           setCompletionStatus("locking");
@@ -1395,9 +1402,9 @@ function MobilePhoneAppsPanel({
               <div className="flex items-center gap-3 flex-wrap">
                 <LockKeyhole className="w-4 h-4 text-muted-foreground shrink-0" />
                 <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-semibold text-foreground">Close apps and lock phone</span>
+                  <span className="text-sm font-semibold text-foreground">Phone behavior after the cycle</span>
                   <span className="text-xs text-muted-foreground">
-                    Runs after the selected apps finish their close gesture. The phone is locked with the explicit sleep command.
+                    SMS leaves the New group MMS picker open. Other completed app cycles close apps and lock the phone.
                   </span>
                 </div>
                 <div className="ml-auto flex flex-col items-end gap-1 text-xs font-semibold">
@@ -1406,7 +1413,7 @@ function MobilePhoneAppsPanel({
                   {completionStatus === "locked" && <><CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /><span className="text-green-600 dark:text-green-400">Phone locked</span></>}
                   {completionStatus === "stopped" && (
                     <>
-                      <span className="text-amber-600 dark:text-amber-400">WhatsApp stopped — no send confirmed; screen left on</span>
+                      <span className="text-amber-600 dark:text-amber-400">Screen left open</span>
                       {completionDetail && <span className="max-w-[28rem] whitespace-normal text-right font-normal text-muted-foreground">{completionDetail}</span>}
                     </>
                   )}
