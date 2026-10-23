@@ -1793,7 +1793,7 @@ export async function runSmsContactSelection(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const steps: string[] = [];
-  const targetCount = Math.max(1, Math.min(100, Math.round(opts?.contactCount ?? 1)));
+  const targetCount = Math.max(1, Math.min(10_000, Math.round(opts?.contactCount ?? 1)));
   const describe = (xml: string) => ({
     addPeople: /\bAdd people\b/i.test(xml),
     contactList: parseWhatsAppLiveNodes(xml).some(node => /contact_list/i.test(node.resourceId)),
@@ -1834,6 +1834,15 @@ export async function runSmsContactSelection(
     const selectedNames = topChips(xml, list.y1);
     return {
       rows: rows.map(row => {
+        const rowName = nodes.find(node =>
+          node !== row &&
+          node.text.trim() &&
+          node.x1 >= row.x1 && node.x2 <= row.x2 &&
+          node.y1 >= row.y1 && node.y2 <= row.y2 &&
+          node.y1 < row.y1 + (row.y2 - row.y1) * 0.7 &&
+          !/^\+?[\d\s().-]+$/.test(node.text.trim()) &&
+          !/^RCS$/i.test(node.text.trim()),
+        )?.text.trim() ?? "";
         const selectedDescendant = nodes.some(node =>
           node.checked &&
           node.x1 >= row.x1 && node.x2 <= row.x2 &&
@@ -1842,7 +1851,9 @@ export async function runSmsContactSelection(
         const name = row.text.trim().toLocaleLowerCase().replace(/\s+/g, " ");
         return {
           ...row,
-          isSelected: row.checked || row.selected || selectedDescendant || selectedNames.has(name),
+          text: row.text.trim() || rowName,
+          isSelected: row.checked || row.selected || selectedDescendant ||
+            selectedNames.has((row.text.trim() || rowName).toLocaleLowerCase().replace(/\s+/g, " ")),
         };
       }),
       list,
@@ -1888,14 +1899,50 @@ export async function runSmsContactSelection(
     let selectedThisRun = 0;
     const tapped = new Set<string>();
     let noProgressSwipes = 0;
-    for (let turn = 0; selectedThisRun < targetCount && turn < 400; turn++) {
+    const maxTurns = targetCount * 5 + 1_000;
+    const contactPageKey = (pageXml: string) => contactRows(pageXml).rows
+      .map(row => `${row.resourceId}:${row.text}:${row.y1}:${row.y2}`)
+      .join("|");
+    const scrollContactPicker50 = async (pageXml: string) => {
+      const page = contactRows(pageXml);
+      if (!page.list || page.rows.length === 0) {
+        return { xml: pageXml, changed: false, error: "No live contact rows are available to scroll" };
+      }
+      const x = Math.round((page.list.x1 + page.list.x2) / 2);
+      const visibleBottom = Math.max(...page.rows.map(row => row.y2));
+      const startY = Math.min(page.list.y2 - 140, visibleBottom - 24);
+      const endY = startY - 50;
+      if (startY - endY !== 50 || endY <= page.list.y1 + 20) {
+        return { xml: pageXml, changed: false, error: "A safe 50-pixel contact-list scroll is unavailable" };
+      }
+      const beforeKey = contactPageKey(pageXml);
+      await runAdb(adb, [
+        "-s", serial, "shell", "input", "swipe",
+        String(x), String(startY), String(x), String(endY), "300",
+      ], 7000);
+      await wait(350);
+      const nextXml = await _uiDump(adb, serial);
+      if (!isAddPeopleScreen(nextXml)) {
+        return { xml: nextXml, changed: false, error: "Messages left the Add people picker during a 50-pixel scroll" };
+      }
+      return {
+        xml: nextXml,
+        changed: contactPageKey(nextXml) !== beforeKey,
+        error: "",
+      };
+    };
+    for (let turn = 0; selectedThisRun < targetCount && turn < maxTurns; turn++) {
       const current = contactRows(xml);
+      if (!current.list || current.rows.length === 0) {
+        steps.push(`SMS stopped — no live contact rows were parsed after selecting ${selectedThisRun}/${targetCount}`);
+        return { ok: false, steps, error: "The Add people picker contains no safely identifiable contact rows" };
+      }
       const candidate = current.rows.find(row =>
         !row.isSelected &&
-        !tapped.has(`${row.resourceId}|${row.text}|${row.x1},${row.y1},${row.x2},${row.y2}`),
+        !tapped.has(`${row.resourceId}|${row.text.trim().toLocaleLowerCase()}`),
       );
       if (candidate) {
-        const key = `${candidate.resourceId}|${candidate.text}|${candidate.x1},${candidate.y1},${candidate.x2},${candidate.y2}`;
+        const key = `${candidate.resourceId}|${candidate.text.trim().toLocaleLowerCase()}`;
         const beforeNames = current.selectedNames;
         tapped.add(key);
         await _adbTapAsync(adb, serial, candidate.x, candidate.y);
@@ -1918,44 +1965,23 @@ export async function runSmsContactSelection(
         selectedThisRun++;
         steps.push(`SMS selected contact ${selectedThisRun}/${targetCount}: ${candidate.text.trim() || "unnamed contact"}`);
         xml = afterXml;
-        noProgressSwipes = 0;
-        continue;
+        if (selectedThisRun === targetCount) break;
       }
 
-      const rows = current.rows;
-      if (!current.list || rows.length < 2) {
-        steps.push(`SMS stopped — only ${selectedThisRun} of ${targetCount} requested contacts could be selected`);
-        return { ok: false, steps, error: "No more safe contact rows are visible in the Messages picker" };
+      // Progress one small row-like amount after each tap (or whenever every
+      // visible row is already selected). The first interaction is always a
+      // verified contact tap; never begin with a full-screen swipe.
+      const scroll = await scrollContactPicker50(xml);
+      if (scroll.error) {
+        steps.push(`SMS stopped — ${scroll.error} after selecting ${selectedThisRun}/${targetCount}`);
+        return { ok: false, steps, error: scroll.error };
       }
-      const beforeIds = rows.map(row => row.resourceId).join("|");
-      const x = Math.round((current.list.x1 + current.list.x2) / 2);
-      const visibleBottom = Math.max(...rows.map(row => row.y2));
-      const startY = Math.min(current.list.y2 - 140, visibleBottom - 24);
-      const endY = Math.max(
-        current.list.y1 + 80,
-        startY - Math.min(220, Math.round((current.list.y2 - current.list.y1) * 0.22)),
-      );
-      if (startY - endY < 60) {
-        steps.push(`SMS stopped — contact list could not be scrolled safely after selecting ${selectedThisRun}/${targetCount}`);
-        return { ok: false, steps, error: "Messages contact list has insufficient safe scroll area" };
-      }
-      await runAdb(adb, [
-        "-s", serial, "shell", "input", "swipe",
-        String(x), String(startY), String(x), String(endY), "450",
-      ], 7000);
-      await wait(500);
-      const nextXml = await _uiDump(adb, serial);
-      if (!isAddPeopleScreen(nextXml)) {
-        steps.push("SMS stopped — the contact picker changed during scrolling; no further contacts were tapped");
-        return { ok: false, steps, error: "Messages left the Add people picker during a scroll" };
-      }
-      const afterIds = contactRows(nextXml).rows.map(row => row.resourceId).join("|");
-      if (!afterIds || afterIds === beforeIds) noProgressSwipes++;
+      if (!scroll.changed) noProgressSwipes++;
       else noProgressSwipes = 0;
-      xml = nextXml;
+      xml = scroll.xml;
       if (noProgressSwipes >= 2) {
-        steps.push(`SMS stopped — reached the end of the visible contact list after selecting ${selectedThisRun}/${targetCount}`);
-        return { ok: false, steps, error: "No new contact rows appeared after two small scrolls" };
+        steps.push(`SMS stopped — no new contact rows appeared after two 50-pixel scrolls; selected ${selectedThisRun}/${targetCount}`);
+        return { ok: false, steps, error: "No contact-list movement after two 50-pixel scrolls" };
       }
     }
 

@@ -1379,10 +1379,10 @@ function MobilePhoneAppsPanel({
                   <Input
                     type="number"
                     min={1}
-                    max={100}
-                    className={PCT_INPUT}
+                    max={10000}
+                    className="w-24 text-center h-7 text-sm px-1"
                     value={settings.sms.contactCount ?? 1}
-                    onChange={e => patchApp("sms", { contactCount: Math.min(100, Math.max(1, Math.round(Number(e.target.value)))) })}
+                    onChange={e => patchApp("sms", { contactCount: Math.min(10000, Math.max(1, Math.round(Number(e.target.value)))) })}
                     aria-label="SMS contacts to select"
                   />
                 </div>}

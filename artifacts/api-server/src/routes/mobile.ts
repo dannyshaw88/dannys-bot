@@ -10787,7 +10787,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           enabled: z.boolean().optional(),
           activatePctMin: z.number().int().min(0).max(100).optional(),
           activatePctMax: z.number().int().min(0).max(100).optional(),
-          contactCount: z.number().int().min(1).max(100).optional(),
+          contactCount: z.number().int().min(1).max(10_000).optional(),
         }).passthrough().optional(),
       }).passthrough().parse(req.body);
       const merged = {
@@ -10876,7 +10876,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          userCountMax:         z.number().int().min(1).max(100).optional(),
          message:              z.string().max(10_000).optional(),
           useDeviceGalleryMedia: z.boolean().optional(),
-         contactCount:         z.number().int().min(1).max(100).optional(),
+         contactCount:         z.number().int().min(1).max(10_000).optional(),
          media: z.object({
            fileName: z.string().min(1).max(255),
            mimeType: z.string().min(1).max(200),
