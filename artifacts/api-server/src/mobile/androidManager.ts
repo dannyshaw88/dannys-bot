@@ -1743,6 +1743,8 @@ type WhatsAppLiveNode = {
   clickable: boolean;
   enabled: boolean;
   focused: boolean;
+  checked: boolean;
+  selected: boolean;
   x1: number;
   y1: number;
   x2: number;
@@ -1764,17 +1766,209 @@ function parseWhatsAppLiveNodes(xml: string): WhatsAppLiveNode[] {
     nodes.push({
       text: attr("text").trim(),
       contentDesc: attr("content-desc").trim(),
-      resourceId: attr("resource-id").trim(),
+      resourceId: (attr("resource-id") || attr("id")).trim(),
       className: attr("class").trim(),
       clickable: attr("clickable").toLowerCase() === "true",
       enabled: attr("enabled").toLowerCase() !== "false",
       focused: attr("focused").toLowerCase() === "true",
+      checked: attr("checked").toLowerCase() === "true",
+      selected: attr("selected").toLowerCase() === "true",
       x1, y1, x2, y2,
       x: Math.round((x1 + x2) / 2),
       y: Math.round((y1 + y2) / 2),
     });
   }
   return nodes;
+}
+
+/**
+ * Add an exact number of currently unselected contacts to Google Messages'
+ * live "Add people" picker. This deliberately stops on that screen: it never
+ * composes, sends, or confirms an SMS.
+ */
+export async function runSmsContactSelection(
+  serial: string,
+  opts?: { contactCount?: number },
+): Promise<{ ok: boolean; steps: string[]; error?: string }> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const steps: string[] = [];
+  const targetCount = Math.max(1, Math.min(100, Math.round(opts?.contactCount ?? 1)));
+  const describe = (xml: string) => ({
+    addPeople: /\bAdd people\b/i.test(xml),
+    contactList: parseWhatsAppLiveNodes(xml).some(node => /contact_list/i.test(node.resourceId)),
+    rows: parseWhatsAppLiveNodes(xml).filter(node =>
+      /contact_row_test_prefix_/i.test(node.resourceId),
+    ).length,
+  });
+  const wait = (ms: number) => _sleep(ms);
+  const findControl = (xml: string, labels: string[]) =>
+    parseWhatsAppLiveNodes(xml).find(node =>
+      node.enabled && node.clickable &&
+      labels.some(label =>
+        node.text.trim().toLowerCase() === label.toLowerCase() ||
+        node.contentDesc.trim().toLowerCase() === label.toLowerCase() ||
+        node.resourceId.toLowerCase().includes(label.toLowerCase().replace(/\s+/g, "_")),
+      ),
+    ) ?? null;
+  const isAddPeopleScreen = (xml: string) =>
+    /\bAdd people\b/i.test(xml) && /contact_list/i.test(xml);
+  const topChips = (xml: string, listTop: number) => new Set(
+    parseWhatsAppLiveNodes(xml)
+      .filter(node => node.y2 <= listTop + 8 && node.text.trim())
+      .map(node => node.text.trim().toLocaleLowerCase().replace(/\s+/g, " "))
+      .filter(text => !["add people", "to:", "anyone else?", "search", "contacts"].includes(text)),
+  );
+  const contactRows = (xml: string): {
+    rows: Array<WhatsAppLiveNode & { isSelected: boolean }>;
+    list: WhatsAppLiveNode | undefined;
+    selectedNames: Set<string>;
+  } => {
+    const nodes = parseWhatsAppLiveNodes(xml);
+    const rows = nodes
+      .filter(node => /contact_row_test_prefix_/i.test(node.resourceId))
+      .filter(node => node.x2 > node.x1 && node.y2 - node.y1 >= 35)
+      .sort((a, b) => a.y1 - b.y1);
+    const list = nodes.find(node => /contact_list/i.test(node.resourceId));
+    if (!rows.length || !list) return { rows: [], list, selectedNames: new Set<string>() };
+    const selectedNames = topChips(xml, list.y1);
+    return {
+      rows: rows.map(row => {
+        const selectedDescendant = nodes.some(node =>
+          node.checked &&
+          node.x1 >= row.x1 && node.x2 <= row.x2 &&
+          node.y1 >= row.y1 && node.y2 <= row.y2,
+        );
+        const name = row.text.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+        return {
+          ...row,
+          isSelected: row.checked || row.selected || selectedDescendant || selectedNames.has(name),
+        };
+      }),
+      list,
+      selectedNames,
+    };
+  };
+
+  try {
+    let xml = await _uiDump(adb, serial);
+    if (!isAddPeopleScreen(xml)) {
+      await runAdb(adb, [
+        "-s", serial, "shell", "monkey", "-p", "com.google.android.apps.messaging",
+        "-c", "android.intent.category.LAUNCHER", "1",
+      ], 10000);
+      await wait(1800);
+      xml = await _uiDump(adb, serial);
+    }
+
+    // Only enter the group picker using explicitly named controls. Do not
+    // guess a coordinate or tap a contact while the surface is uncertain.
+    if (!isAddPeopleScreen(xml)) {
+      const startChat = findControl(xml, ["Start chat", "New conversation", "New message"]);
+      if (startChat) {
+        await _adbTapAsync(adb, serial, startChat.x, startChat.y);
+        await wait(900);
+        xml = await _uiDump(adb, serial);
+      }
+    }
+    if (!isAddPeopleScreen(xml)) {
+      const createGroup = findControl(xml, ["Create group", "Create group conversation", "Group conversation"]);
+      if (createGroup) {
+        await _adbTapAsync(adb, serial, createGroup.x, createGroup.y);
+        await wait(900);
+        xml = await _uiDump(adb, serial);
+      }
+    }
+    if (!isAddPeopleScreen(xml)) {
+      const surface = describe(xml);
+      steps.push("SMS stopped — could not confirm the Messages Add people contact picker; no contact was tapped");
+      return { ok: false, steps, error: `Messages contact picker was not found (${JSON.stringify(surface)})` };
+    }
+
+    let selectedThisRun = 0;
+    const tapped = new Set<string>();
+    let noProgressSwipes = 0;
+    for (let turn = 0; selectedThisRun < targetCount && turn < 400; turn++) {
+      const current = contactRows(xml);
+      const candidate = current.rows.find(row =>
+        !row.isSelected &&
+        !tapped.has(`${row.resourceId}|${row.text}|${row.x1},${row.y1},${row.x2},${row.y2}`),
+      );
+      if (candidate) {
+        const key = `${candidate.resourceId}|${candidate.text}|${candidate.x1},${candidate.y1},${candidate.x2},${candidate.y2}`;
+        const beforeNames = current.selectedNames;
+        tapped.add(key);
+        await _adbTapAsync(adb, serial, candidate.x, candidate.y);
+        await wait(450);
+        const afterXml = await _uiDump(adb, serial);
+        if (!isAddPeopleScreen(afterXml)) {
+          steps.push("SMS stopped — the Add people screen changed after a contact tap; no further contacts were selected");
+          return { ok: false, steps, error: "Messages left the Add people picker after a selection tap" };
+        }
+        const after = contactRows(afterXml);
+        const selectedByState = after.rows.find(row =>
+          row.resourceId === candidate.resourceId && row.isSelected,
+        );
+        const selectedByChip = after.selectedNames.size > beforeNames.size ||
+          after.selectedNames.has(candidate.text.trim().toLocaleLowerCase().replace(/\s+/g, " "));
+        if (!selectedByState && !selectedByChip) {
+          steps.push(`SMS stopped — selection of "${candidate.text}" was not exposed by the live picker; no additional contacts were tapped`);
+          return { ok: false, steps, error: "Contact selection could not be confirmed from the live Messages UI" };
+        }
+        selectedThisRun++;
+        steps.push(`SMS selected contact ${selectedThisRun}/${targetCount}: ${candidate.text.trim() || "unnamed contact"}`);
+        xml = afterXml;
+        noProgressSwipes = 0;
+        continue;
+      }
+
+      const rows = current.rows;
+      if (!current.list || rows.length < 2) {
+        steps.push(`SMS stopped — only ${selectedThisRun} of ${targetCount} requested contacts could be selected`);
+        return { ok: false, steps, error: "No more safe contact rows are visible in the Messages picker" };
+      }
+      const beforeIds = rows.map(row => row.resourceId).join("|");
+      const x = Math.round((current.list.x1 + current.list.x2) / 2);
+      const visibleBottom = Math.max(...rows.map(row => row.y2));
+      const startY = Math.min(current.list.y2 - 140, visibleBottom - 24);
+      const endY = Math.max(
+        current.list.y1 + 80,
+        startY - Math.min(220, Math.round((current.list.y2 - current.list.y1) * 0.22)),
+      );
+      if (startY - endY < 60) {
+        steps.push(`SMS stopped — contact list could not be scrolled safely after selecting ${selectedThisRun}/${targetCount}`);
+        return { ok: false, steps, error: "Messages contact list has insufficient safe scroll area" };
+      }
+      await runAdb(adb, [
+        "-s", serial, "shell", "input", "swipe",
+        String(x), String(startY), String(x), String(endY), "450",
+      ], 7000);
+      await wait(500);
+      const nextXml = await _uiDump(adb, serial);
+      if (!isAddPeopleScreen(nextXml)) {
+        steps.push("SMS stopped — the contact picker changed during scrolling; no further contacts were tapped");
+        return { ok: false, steps, error: "Messages left the Add people picker during a scroll" };
+      }
+      const afterIds = contactRows(nextXml).rows.map(row => row.resourceId).join("|");
+      if (!afterIds || afterIds === beforeIds) noProgressSwipes++;
+      else noProgressSwipes = 0;
+      xml = nextXml;
+      if (noProgressSwipes >= 2) {
+        steps.push(`SMS stopped — reached the end of the visible contact list after selecting ${selectedThisRun}/${targetCount}`);
+        return { ok: false, steps, error: "No new contact rows appeared after two small scrolls" };
+      }
+    }
+
+    if (selectedThisRun !== targetCount) {
+      steps.push(`SMS stopped — selected ${selectedThisRun} of ${targetCount} requested contacts`);
+      return { ok: false, steps, error: "Reached the SMS contact selection safety limit" };
+    }
+    steps.push(`SMS complete — selected exactly ${selectedThisRun} new contacts; left the Messages group picker open without sending`);
+    return { ok: true, steps };
+  } catch (error: any) {
+    steps.push(`SMS failed — ${error?.message ?? String(error)}`);
+    return { ok: false, steps, error: error?.message ?? String(error) };
+  }
 }
 
 function resolveWhatsAppSpintax(template: string): string {

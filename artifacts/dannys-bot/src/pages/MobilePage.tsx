@@ -1065,7 +1065,7 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
                 try {
                   ctx.drawImage(img, dx, dy, dw, dh);
                   canvasDrawnFrames++;
-                  screenVisible = reportMirrorFrameEvidence(canvas, ctx, img.naturalWidth, img.naturalHeight);
+                  screenVisible = reportMirrorFrameEvidence(canvas, img.naturalWidth, img.naturalHeight);
                 } catch (error: any) {
                   decodeErrors++;
                   addLog(`[mirror] decoded PNG image could not be painted to canvas: ${error?.message ?? String(error)}`);

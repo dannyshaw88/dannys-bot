@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Plane } from "lucide-react";
+import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Plane, MessageCircle } from "lucide-react";
 import type { CollisionLease, CollisionSource } from "@/lib/collisionCoordinator";
 
 // Collision preventer slot index reserved for phone apps (outside Instagram slot range 0..N).
@@ -86,6 +86,8 @@ interface AppSlotSettings {
   } | null;
   /** Use the first item already visible in WhatsApp Gallery instead of uploading a file. */
   useDeviceGalleryMedia?: boolean;
+  /** Exact number of currently unselected SMS contacts to add. */
+  contactCount?: number;
   /** Number-of-scrolls range — used by Chrome and YouTube. */
   scrollMin?: number;
   scrollMax?: number;
@@ -144,6 +146,7 @@ interface PhoneAppsSettings {
   snapchat:     AppSlotSettings;
   youtube:      AppSlotSettings;
   whatsapp:     AppSlotSettings;
+  sms:           AppSlotSettings;
 }
 
 type PhoneAppsCompletionStatus = "idle" | "running" | "locking" | "locked" | "stopped" | "error";
@@ -156,6 +159,7 @@ const DEFAULT_SETTINGS: PhoneAppsSettings = {
   snapchat:   { ...DEFAULT_APP_SLOT },
   youtube:    { ...DEFAULT_APP_SLOT, scrollMin: 1, scrollMax: 5, clickPctMin: 0, clickPctMax: 0, watchTimeMin: 3, watchTimeMax: 8, clickShortsPctMin: 0, clickShortsPctMax: 0, shortsScrollMin: 0, shortsScrollMax: 0, shortsWatchTimeMin: 3, shortsWatchTimeMax: 8, shortsLikePctMin: 0, shortsLikePctMax: 0 },
   whatsapp:   { ...DEFAULT_APP_SLOT, userCountMin: 1, userCountMax: 1, message: "", media: null, useDeviceGalleryMedia: false },
+  sms:        { ...DEFAULT_APP_SLOT, contactCount: 1 },
 };
 
 // ── Card component ─────────────────────────────────────────────────────────────
@@ -463,7 +467,8 @@ function MobilePhoneAppsPanel({
           chrome:      { enabled: d.chrome?.enabled ?? false, activatePctMin: d.chrome?.activatePctMin ?? 0,      activatePctMax: d.chrome?.activatePctMax ?? 0,      scrollMin: d.chrome?.scrollMin ?? 1, scrollMax: d.chrome?.scrollMax ?? 5, storyTapMin: d.chrome?.storyTapMin ?? 0, storyTapMax: d.chrome?.storyTapMax ?? 0, tappedStoryScrollMin: d.chrome?.tappedStoryScrollMin ?? 0, tappedStoryScrollMax: d.chrome?.tappedStoryScrollMax ?? 0, internalLinkPctMin: d.chrome?.internalLinkPctMin ?? 0, internalLinkPctMax: d.chrome?.internalLinkPctMax ?? 0, manualSearchPctMin: d.chrome?.manualSearchPctMin ?? 0, manualSearchPctMax: d.chrome?.manualSearchPctMax ?? 0, manualSearchCountMin: d.chrome?.manualSearchCountMin ?? 1, manualSearchCountMax: d.chrome?.manualSearchCountMax ?? 1, manualSearchScrollMin: d.chrome?.manualSearchScrollMin ?? 0, manualSearchScrollMax: d.chrome?.manualSearchScrollMax ?? 0, manualSearchLinkPctMin: d.chrome?.manualSearchLinkPctMin ?? 0, manualSearchLinkPctMax: d.chrome?.manualSearchLinkPctMax ?? 0, manualSearchDwellMin: d.chrome?.manualSearchDwellMin ?? 3, manualSearchDwellMax: d.chrome?.manualSearchDwellMax ?? 8, tapTrendingStoryMin: d.chrome?.tapTrendingStoryMin ?? 0, tapTrendingStoryMax: d.chrome?.tapTrendingStoryMax ?? 0 },
           snapchat:    { enabled: d.snapchat?.enabled ?? false, activatePctMin: d.snapchat?.activatePctMin ?? 0,     activatePctMax: d.snapchat?.activatePctMax ?? 0 },
           youtube:     { enabled: d.youtube?.enabled ?? false, activatePctMin: d.youtube?.activatePctMin ?? 0, activatePctMax: d.youtube?.activatePctMax ?? 0, scrollMin: d.youtube?.scrollMin ?? 1, scrollMax: d.youtube?.scrollMax ?? 5, clickPctMin: d.youtube?.clickPctMin ?? 0, clickPctMax: d.youtube?.clickPctMax ?? 0, watchTimeMin: d.youtube?.watchTimeMin ?? 3, watchTimeMax: d.youtube?.watchTimeMax ?? 8, clickShortsPctMin: d.youtube?.clickShortsPctMin ?? 0, clickShortsPctMax: d.youtube?.clickShortsPctMax ?? 0, shortsScrollMin: d.youtube?.shortsScrollMin ?? 0, shortsScrollMax: d.youtube?.shortsScrollMax ?? 0, shortsWatchTimeMin: d.youtube?.shortsWatchTimeMin ?? 3, shortsWatchTimeMax: d.youtube?.shortsWatchTimeMax ?? 8, shortsLikePctMin: d.youtube?.shortsLikePctMin ?? 0, shortsLikePctMax: d.youtube?.shortsLikePctMax ?? 0 },
-          whatsapp:    { enabled: d.whatsapp?.enabled ?? false, activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0, userCountMin: d.whatsapp?.userCountMin ?? 1, userCountMax: d.whatsapp?.userCountMax ?? 1, message: d.whatsapp?.message ?? "", media: d.whatsapp?.media, useDeviceGalleryMedia: d.whatsapp?.useDeviceGalleryMedia ?? false },
+           whatsapp:    { enabled: d.whatsapp?.enabled ?? false, activatePctMin: d.whatsapp?.activatePctMin ?? 0,     activatePctMax: d.whatsapp?.activatePctMax ?? 0, userCountMin: d.whatsapp?.userCountMin ?? 1, userCountMax: d.whatsapp?.userCountMax ?? 1, message: d.whatsapp?.message ?? "", media: d.whatsapp?.media, useDeviceGalleryMedia: d.whatsapp?.useDeviceGalleryMedia ?? false },
+           sms:          { enabled: d.sms?.enabled ?? false, activatePctMin: d.sms?.activatePctMin ?? 0, activatePctMax: d.sms?.activatePctMax ?? 0, contactCount: d.sms?.contactCount ?? 1 },
         };
         setSettings(merged);
         settingsRef.current = merged;
@@ -634,6 +639,11 @@ function MobilePhoneAppsPanel({
             useDeviceGalleryMedia: s.whatsapp.useDeviceGalleryMedia ?? false,
           });
         }
+        const smsActivated = shouldActivate(s.sms.activatePctMin, s.sms.activatePctMax);
+        onLogRef.current?.(`Phone Apps [sms]: ${smsActivated ? "activation roll passed" : "activation roll skipped"}`);
+        if (s.sms.enabled && smsActivated) {
+          await runApp("sms", { contactCount: s.sms.contactCount ?? 1 });
+        }
 
         if (keepScreenAwakeForInspection) {
           setCompletionStatus("stopped");
@@ -746,7 +756,7 @@ function MobilePhoneAppsPanel({
     return next;
   };
 
-  const patchApp = (app: keyof Pick<PhoneAppsSettings, 'chrome'|'snapchat'|'youtube'|'whatsapp'>, partial: Partial<AppSlotSettings>) => {
+  const patchApp = (app: keyof Pick<PhoneAppsSettings, 'chrome'|'snapchat'|'youtube'|'whatsapp'|'sms'>, partial: Partial<AppSlotSettings>) => {
     const next: PhoneAppsSettings = {
       ...settingsRef.current,
       [app]: { ...settingsRef.current[app], ...partial },
@@ -1351,6 +1361,30 @@ function MobilePhoneAppsPanel({
                       </>
                     )}
                   </div>
+                </div>}
+              />
+              <AppSlotRow
+                icon={<MessageCircle className="w-5 h-5 text-[#1AD2F2]" />}
+                label="SMS"
+                enabled={settings.sms.enabled}
+                onEnabled={v => patchApp("sms", { enabled: v })}
+                className="order-6"
+                labelClassName="min-w-0 shrink-0"
+                min={settings.sms.activatePctMin}
+                max={settings.sms.activatePctMax}
+                onMin={v => patchApp("sms", { activatePctMin: v })}
+                onMax={v => patchApp("sms", { activatePctMax: v })}
+                rowExtras={<div className="flex flex-col items-center gap-1">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Contacts to select</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    className={PCT_INPUT}
+                    value={settings.sms.contactCount ?? 1}
+                    onChange={e => patchApp("sms", { contactCount: Math.min(100, Math.max(1, Math.round(Number(e.target.value)))) })}
+                    aria-label="SMS contacts to select"
+                  />
                 </div>}
               />
               </div>

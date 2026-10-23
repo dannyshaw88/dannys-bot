@@ -44,7 +44,6 @@
 - [Make a Post image alteration scope](make-a-post-image-alteration-scope.md) — keep alteration controls in the shared caption section for every image source
 - [Ghost Browser UA handoff](ghost-browser-ua-handoff.md) — pass the full embedded browser UA to Electron, never the compact Instagram API device UA
 - [Instagram media-picker default selection](instagram-media-picker-default-selection.md) — newest photo is preselected; detect it and don't retap or it will be deselected
-- [Mirror tap aspect-ratio handling](mobile-mirror-tap-rescale-ar-guard.md) — always rescale taps when video and device aspect ratios differ
 - [Mirror video letterbox tap scaling](mobile-mirror-video-letterbox-tap-scale.md) — map taps through the actual content rectangle to avoid edge drift
 - [Reels action-icon column detection](reels-action-icon-detection.md) — Reels actions form a right-edge column; check diagnostics before changing unverified labels
 - [Share-sheet confirm and scan timing](share-sheet-dump-timing.md) — combine confirmation and recipient scan so the sheet stays open
@@ -157,3 +156,4 @@
 - [Instagram ChallengeActivity white surface](instagram-challenge-white-surface.md) — paired ADB/H.264 evidence can identify a real full-screen Instagram challenge, not a mirror freeze
 - [Windows mirror diagnostics](windows-electron-mirror-diagnostics.md) — diagnose stalls using the packaged Windows Electron logs; Replit API workflow output is not evidence from the affected device
 - [TrustScore assignment autosave isolation](trustscore-assignment-autosave.md) — assigned TrustScore templates alone control tool switches; ignore legacy slot overrides and stale autosaves
+- [SMS contact selection only](sms-contact-selection-only.md) — the Phone Apps SMS action adds only the requested unselected contacts in Google Messages; it never composes or sends

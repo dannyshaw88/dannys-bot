@@ -10696,11 +10696,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           userCountMax: 1,
           message: "",
         },
+        sms: {
+          enabled: false,
+          activatePctMin: 0,
+          activatePctMax: 0,
+          contactCount: 1,
+        },
       };
       res.json({
         ...defaults,
         ...saved,
         chrome: { ...defaults.chrome, ...((saved as any)?.chrome ?? {}) },
+        sms: { ...defaults.sms, ...((saved as any)?.sms ?? {}) },
       });
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
@@ -10776,12 +10783,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             dataUrl: z.string().max(100_000_000),
           }).nullable().optional(),
         }).passthrough().optional(),
+        sms: z.object({
+          enabled: z.boolean().optional(),
+          activatePctMin: z.number().int().min(0).max(100).optional(),
+          activatePctMax: z.number().int().min(0).max(100).optional(),
+          contactCount: z.number().int().min(1).max(100).optional(),
+        }).passthrough().optional(),
       }).passthrough().parse(req.body);
       const merged = {
         ...existing,
         ...input,
         ...(input.chrome ? { chrome: { ...(existing.chrome ?? {}), ...input.chrome } } : {}),
         ...(input.whatsapp ? { whatsapp: { ...(existing.whatsapp ?? {}), ...input.whatsapp } } : {}),
+        ...(input.sms ? { sms: { ...(existing.sms ?? {}), ...input.sms } } : {}),
       };
       (cfg[serial] as any) = { ...cfg[serial], phoneApps: merged };
       saveInstanceConfigs(cfg);
@@ -10822,8 +10836,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               shortsScrollMin, shortsScrollMax,
               shortsWatchTimeMin, shortsWatchTimeMax,
                shortsLikePctMin, shortsLikePctMax,
-                userCountMin, userCountMax, message, media, useDeviceGalleryMedia } = z.object({
-        app:                  z.enum(["chrome", "snapchat", "youtube", "whatsapp"]),
+                 userCountMin, userCountMax, message, media, useDeviceGalleryMedia, contactCount } = z.object({
+        app:                  z.enum(["chrome", "snapchat", "youtube", "whatsapp", "sms"]),
         scrollMin:            z.number().min(0).optional(),
         scrollMax:            z.number().min(0).optional(),
         storyTapMin:          z.number().int().min(0).optional(),
@@ -10862,6 +10876,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          userCountMax:         z.number().int().min(1).max(100).optional(),
          message:              z.string().max(10_000).optional(),
           useDeviceGalleryMedia: z.boolean().optional(),
+         contactCount:         z.number().int().min(1).max(100).optional(),
          media: z.object({
            fileName: z.string().min(1).max(255),
            mimeType: z.string().min(1).max(200),
@@ -10936,6 +10951,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           media,
           useDeviceGalleryMedia,
         });
+      } else if (appId === "sms") {
+        result = await android.runSmsContactSelection(serial, { contactCount });
       } else {
         // Snapchat is not implemented yet.
         result = { ok: true, steps: [`${appId}: not yet implemented`] };
