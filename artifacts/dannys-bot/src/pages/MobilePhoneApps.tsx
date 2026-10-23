@@ -68,7 +68,7 @@ function WhatsAppIcon({ size = 20 }: { size?: number }) {
 
 const PCT_INPUT = "w-14 text-center h-7 text-sm px-1";
 
-function PixelDistanceInput({ value, onCommit, compact = false }: { value: number; onCommit: (value: number) => void; compact?: boolean }) {
+function PixelDistanceInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
 
@@ -85,7 +85,7 @@ function PixelDistanceInput({ value, onCommit, compact = false }: { value: numbe
       min={40}
       max={1000}
       step={1}
-      className={compact ? "w-12 text-center h-7 text-xs px-0" : "w-20 text-center h-7 text-sm px-1"}
+      className="w-20 text-center h-7 text-sm px-1"
       value={draft}
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
@@ -339,20 +339,19 @@ interface AppSlotRowProps {
   onMin:      (v: number) => void;
   onMax:      (v: number) => void;
   labelClassName?: string;
-  compact?: boolean;
   rowExtras?: React.ReactNode; // optional inline fields rendered after the % label on row 1
   row2?:      React.ReactNode; // optional second row rendered below row 1, full width
   row3?:      React.ReactNode; // optional third row rendered below row 2, full width
   row4?:      React.ReactNode; // optional fourth row rendered below row 3, full width
 }
 
-function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMin, onMax, labelClassName, compact, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
+function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMin, onMax, labelClassName, rowExtras, row2, row3, row4 }: AppSlotRowProps) {
   return (
-    <div className={`${compact ? "p-2 overflow-x-auto" : "p-4"} ${className ?? ""}`}>
+    <div className={`p-4 ${className ?? ""}`}>
       {/* First visual row: icon, activation, and the app's primary fields. */}
-      <div className={compact ? "flex w-max min-w-full flex-nowrap items-center gap-1" : "flex items-center gap-4 flex-wrap"}>
+      <div className="flex items-center gap-4 flex-wrap">
         {/* Icon + label — anchors the left of the first visual row */}
-        <div className={`flex items-center ${compact ? "gap-1" : "gap-2"} ${labelClassName ?? "min-w-[13rem]"}`}>
+        <div className={`flex items-center gap-2 ${labelClassName ?? "min-w-[13rem]"}`}>
           <Checkbox
             checked={enabled}
             onCheckedChange={(checked) => onEnabled(checked === true)}
@@ -376,7 +375,7 @@ function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMi
                 type="number"
                 min={0}
                 max={100}
-                className={compact ? "w-8 text-center h-7 text-xs px-0" : PCT_INPUT}
+                className={PCT_INPUT}
                 value={min}
                 onChange={e => onMin(Math.min(100, Math.max(0, Number(e.target.value))))}
               />
@@ -385,7 +384,7 @@ function AppSlotRow({ icon, label, enabled, onEnabled, className, min, max, onMi
                 type="number"
                 min={0}
                 max={100}
-                className={compact ? "w-8 text-center h-7 text-xs px-0" : PCT_INPUT}
+                className={PCT_INPUT}
                 value={max}
                 onChange={e => onMax(Math.min(100, Math.max(0, Number(e.target.value))))}
               />
@@ -1404,36 +1403,34 @@ function MobilePhoneAppsPanel({
                 </div>}
               />
               <AppSlotRow
-                icon={<MessageCircle className="w-4 h-4 text-[#1AD2F2]" />}
+                icon={<MessageCircle className="w-5 h-5 text-[#1AD2F2]" />}
                 label="SMS"
                 enabled={settings.sms.enabled}
                 onEnabled={v => patchApp("sms", { enabled: v })}
                 className="order-6"
-                compact
                 labelClassName="min-w-0 shrink-0"
                 min={settings.sms.activatePctMin}
                 max={settings.sms.activatePctMax}
                 onMin={v => patchApp("sms", { activatePctMin: v })}
                 onMax={v => patchApp("sms", { activatePctMax: v })}
-                rowExtras={<div className="flex shrink-0 items-end gap-1">
-                  <div className="flex shrink-0 flex-col items-center gap-1">
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">Select</span>
+                rowExtras={<div className="flex items-center gap-2 translate-y-1">
+                  <div className="relative flex items-center justify-center">
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-muted-foreground">Select</span>
                     <Input
                       type="number"
                       min={1}
                       max={10000}
-                      className="w-12 text-center h-7 text-xs px-0"
+                      className="w-24 text-center h-7 text-sm px-1"
                       value={settings.sms.contactCount ?? 1}
                       onChange={e => patchApp("sms", { contactCount: Math.min(10000, Math.max(1, Math.round(Number(e.target.value)))) })}
                       aria-label="SMS contacts to select"
                     />
                   </div>
-                  <div className="flex shrink-0 flex-col items-center gap-1">
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">Swipe (px)</span>
+                  <div className="relative flex items-center justify-center">
+                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-muted-foreground">Swipe (px)</span>
                     <PixelDistanceInput
                       value={settings.sms.contactScrollPixels ?? 130}
                       onCommit={contactScrollPixels => patchApp("sms", { contactScrollPixels })}
-                      compact
                     />
                   </div>
                 </div>}
