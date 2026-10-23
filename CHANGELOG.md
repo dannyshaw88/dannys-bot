@@ -2,7 +2,7 @@
 
 ### Fixed
 
-- SMS selection now operates only on the open New group MMS picker, tapping an unselected contact before each roughly 50-pixel list scroll; it does not launch, wake, unlock, close, or lock the phone.
+- SMS selection now operates only on the open New group MMS picker, tapping an unselected contact before each 200-pixel list scroll; it does not launch, wake, unlock, close, or lock the phone.
 - Raised the SMS contact-selection limit to 10,000.
 
 ### Release

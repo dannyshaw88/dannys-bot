@@ -7,4 +7,4 @@ The SMS function in Mobile Phone Apps is intentionally selection-only. It must t
 
 **Why:** The user requested a contact-selection operation, not SMS messaging.
 
-**How to apply:** Operate only on the already-open New group MMS/Add people picker. Do not launch, wake, unlock, close, or lock the phone. Read row names from child text, skip selected rows, tap first, then advance about 50 pixels between selections; stop at the exact count.
+**How to apply:** Operate only on the already-open New group MMS/Add people picker. Do not launch, wake, unlock, close, or lock the phone. Read row names from child text, skip selected rows, tap first, then advance 200 pixels between selections; stop at the exact count.
