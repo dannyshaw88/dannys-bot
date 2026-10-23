@@ -10894,11 +10894,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           ? devicePrefsPA.dismissDirection
           : android.getModelDismissDirection(rawModelPA);
 
-      // Wake and unlock the screen before launching any app.
-      // Without this the device stays dark and am start is a no-op because
-      // the keyguard is in the way.
-      await android.wakeScreen(serial);
-      await android.unlockScreen(serial);
+      // SMS only works from the live group-recipient picker and must not run
+      // any app-launch, wake, or unlock sequence before its contact tap/swipe.
+      if (appId !== "sms") {
+        await android.wakeScreen(serial);
+        await android.unlockScreen(serial);
+      }
 
       let result: { ok: boolean; steps: string[]; error?: string; keepScreenOn?: boolean };
 
@@ -10952,7 +10953,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           useDeviceGalleryMedia,
         });
       } else if (appId === "sms") {
-        result = await android.runSmsContactSelection(serial, { contactCount });
+        result = {
+          ...await android.runSmsContactSelection(serial, { contactCount }),
+          keepScreenOn: true,
+        };
       } else {
         // Snapchat is not implemented yet.
         result = { ok: true, steps: [`${appId}: not yet implemented`] };
