@@ -5712,18 +5712,19 @@ function useCollisionPreventer(serial: string | null) {
 // CopySubSetting, CopySection, and COPY_SECTIONS are imported from mobileShared
 
 type CopyTarget = { serial: string; slotIdx: number };
-type DeviceSlots = { phone: UsbPhone; slots: Array<{ username: string; platform?: AccountPlatform }> };
+type DeviceSlots = { phone: UsbPhone; slots: Array<{ username: string; platform?: AccountPlatform; snapchatTrustScoreLabel?: SnapchatTrustScoreLabel }> };
 
 function deviceLabel(p: UsbPhone): string {
   return [p.manufacturer, p.marketName || p.model].filter(Boolean).join(" ") || p.serial;
 }
 
 function CopySettingsDialog({
-  open, onClose, currentSlotIdx, settings, phone, onCopied,
+  open, onClose, currentSlotIdx, settings, phone, slotPlatform, onCopied,
 }: {
   open: boolean;
   onClose: () => void;
   currentSlotIdx: number;
+  slotPlatform: AccountPlatform;
   slotUsernames?: string[]; // kept for API compat but no longer used directly
   settings: AutomationSettingsData;
   phone: UsbPhone | null;
@@ -5734,6 +5735,7 @@ function CopySettingsDialog({
   const [farmSlotMap, setFarmSlotMap] = useState<Map<string, number>>(new Map());
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set());
+  const [snapchatToolsSelected, setSnapchatToolsSelected] = useState(true);
   const [copying, setCopying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const displayCopySections = (() => {
@@ -5792,6 +5794,9 @@ function CopySettingsDialog({
               const slots: DeviceSlots["slots"] = (data?.slots ?? []).map((s: any) => ({
                 username: s?.username ?? "",
                 platform: s?.platform === "snapchat" ? "snapchat" : "instagram",
+                snapchatTrustScoreLabel: s?.platform === "snapchat" && SNAPCHAT_TRUST_SCORE_LABELS.includes(s?.snapchatTrustScoreLabel)
+                  ? s.snapchatTrustScoreLabel
+                  : s?.platform === "snapchat" ? "WARMUP" : undefined,
               }));
               return { phone: p, slots };
             } catch {
@@ -5819,6 +5824,7 @@ function CopySettingsDialog({
           setSelectedTargets(
             restoredTargets.filter(t =>
               validSet.has(`${t.serial}:${t.slotIdx}`) &&
+              sorted.find(ds => ds.phone.serial === t.serial)?.slots[t.slotIdx]?.platform === slotPlatform &&
               !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx)
             )
           );
@@ -5829,7 +5835,7 @@ function CopySettingsDialog({
       .catch(() => {})
       .finally(() => setLoadingDevices(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, slotPlatform, phone?.serial, currentSlotIdx]);
 
   const isSelected = (serial: string, slotIdx: number) =>
     selectedTargets.some(t => t.serial === serial && t.slotIdx === slotIdx);
@@ -5851,7 +5857,8 @@ function CopySettingsDialog({
         return rest;
       }
       const add: CopyTarget[] = ds.slots
-        .map((_, i) => ({ serial: ds.phone.serial, slotIdx: i }))
+        .map((slot, i) => ({ serial: ds.phone.serial, slotIdx: i, platform: slot.platform }))
+        .filter(t => t.platform === slotPlatform)
         .filter(t => !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx));
       const next = [...rest, ...add];
       sessionStorage.setItem("copySettings_targets", JSON.stringify(next));
@@ -5859,9 +5866,13 @@ function CopySettingsDialog({
     });
 
   const deviceCheckedState = (ds: DeviceSlots): "all" | "some" | "none" => {
-    const eligible = ds.slots.filter((_, i) => !(ds.phone.serial === phone?.serial && i === currentSlotIdx));
+    const eligible = ds.slots
+      .map((slot, slotIdx) => ({ slot, slotIdx }))
+      .filter(({ slot, slotIdx }) =>
+        slot.platform === slotPlatform && !(ds.phone.serial === phone?.serial && slotIdx === currentSlotIdx)
+      );
     if (eligible.length === 0) return "none";
-    const sel = eligible.filter((_, i) => isSelected(ds.phone.serial, i)).length;
+    const sel = eligible.filter(({ slotIdx }) => isSelected(ds.phone.serial, slotIdx)).length;
     if (sel === 0) return "none";
     if (sel === eligible.length) return "all";
     return "some";
@@ -5869,7 +5880,8 @@ function CopySettingsDialog({
 
   const allTargets: CopyTarget[] = deviceSlots.flatMap(ds =>
     ds.slots
-      .map((_, i) => ({ serial: ds.phone.serial, slotIdx: i }))
+      .map((slot, i) => ({ serial: ds.phone.serial, slotIdx: i, platform: slot.platform }))
+      .filter(t => t.platform === slotPlatform)
       .filter(t => !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx))
   );
 
@@ -5908,7 +5920,11 @@ function CopySettingsDialog({
   };
 
   const handleCopy = async () => {
-    const effectiveTargets = selectedTargets.length > 0 ? selectedTargets : allTargets;
+    const effectiveTargets = selectedTargets.length > 0
+      ? selectedTargets.filter(target =>
+          deviceSlots.find(ds => ds.phone.serial === target.serial)?.slots[target.slotIdx]?.platform === slotPlatform,
+        )
+      : allTargets;
     if (effectiveTargets.length === 0) return;
     setCopying(true);
     setResult(null);
@@ -5922,16 +5938,29 @@ function CopySettingsDialog({
             .map(sub => sub.key),
         ),
       );
-    for (const section of COPY_SECTIONS) {
-      for (const sub of section.sub) {
-        if (effectiveSelectedSubKeys.has(sub.key)) {
-          for (const field of sub.fields) {
-            if (COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field)) {
-              partial[field] = (settings as unknown as Record<string, unknown>)[field];
+    if (slotPlatform === "snapchat") {
+      if (snapchatToolsSelected) {
+        partial.enabled = settings.enabled;
+        partial.cycleIntervalMin = settings.cycleIntervalMin;
+        partial.cycleIntervalMax = settings.cycleIntervalMax;
+        partial.snapchatTools = settings.snapchatTools;
+      }
+    } else {
+      for (const section of COPY_SECTIONS) {
+        for (const sub of section.sub) {
+          if (effectiveSelectedSubKeys.has(sub.key)) {
+            for (const field of sub.fields) {
+              if (COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field)) {
+                partial[field] = (settings as unknown as Record<string, unknown>)[field];
+              }
             }
           }
         }
       }
+    }
+    if (Object.keys(partial).length === 0) {
+      setCopying(false);
+      return;
     }
     let ok = 0, fail = 0;
     const localSucceeded: number[] = [];
@@ -5984,13 +6013,18 @@ function CopySettingsDialog({
               {!loadingDevices && deviceSlots.length === 0 && (
                 <p className="text-xs text-muted-foreground italic pt-1">No devices found.</p>
               )}
+              {!loadingDevices && deviceSlots.length > 0 && allTargets.length === 0 && (
+                <p className="text-xs text-muted-foreground italic pt-1">
+                  No other {slotPlatform === "snapchat" ? "Snapchat" : "Instagram"} slots are available to copy to.
+                </p>
+              )}
               {deviceSlots.map(ds => {
                 const devState = deviceCheckedState(ds);
                 const isCurrentDevice = ds.phone.serial === phone?.serial;
-                const eligibleSlots = ds.slots.filter((_, i) =>
-                  !(isCurrentDevice && i === currentSlotIdx)
+                const eligibleSlots = ds.slots.filter((slot, i) =>
+                  slot.platform === slotPlatform && !(isCurrentDevice && i === currentSlotIdx)
                 );
-                if (eligibleSlots.length === 0 && isCurrentDevice && ds.slots.length <= 1) return null;
+                if (eligibleSlots.length === 0) return null;
                 return (
                   <div key={ds.phone.serial} className="rounded-md border border-border/50 overflow-hidden">
                     {/* Device header row */}
@@ -6015,7 +6049,7 @@ function CopySettingsDialog({
                     </label>
                     {/* Slot rows */}
                     <div className="divide-y divide-border/30">
-                      {ds.slots.map(({ username, platform }, i) => {
+                      {ds.slots.map((slot, i) => ({ ...slot, i })).filter(slot => slot.platform === slotPlatform).map(({ username, platform, snapchatTrustScoreLabel, i }) => {
                         const isSelf = isCurrentDevice && i === currentSlotIdx;
                         return (
                           <label key={i}
@@ -6038,7 +6072,7 @@ function CopySettingsDialog({
                               {isSelf && <span className="text-muted-foreground ml-1">(source)</span>}
                             </span>
                             {platform === "snapchat"
-                              ? <StaticTrustScoreLabel width={65} />
+                              ? <SnapchatTrustScoreLabelBadge label={snapchatTrustScoreLabel ?? "WARMUP"} width={65} />
                               : <SlotTrustScoreBadge serial={ds.phone.serial} slotIdx={i} width={65} hideIcon />}
                           </label>
                         );
@@ -6055,6 +6089,28 @@ function CopySettingsDialog({
 
           {/* Right: settings with sub-items */}
           <div className="flex-1 min-w-0 flex flex-col min-h-0">
+            {slotPlatform === "snapchat" ? (
+              <div className="rounded-md border border-border/50 overflow-hidden">
+                <label className="flex items-center gap-2 px-2.5 py-2 bg-muted/40 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="w-3.5 h-3.5 accent-primary shrink-0"
+                    checked={snapchatToolsSelected}
+                    onChange={event => setSnapchatToolsSelected(event.target.checked)}
+                  />
+                  <span className="text-xs font-bold text-foreground">Snapchat settings</span>
+                </label>
+                <div className="space-y-1 px-3 py-2">
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    Copies only to Snapchat account slots. Instagram slots are excluded.
+                  </p>
+                  {["Step 1 enabled state and interval", "Add Friends", "Accept Friends", "Reply to Unread Chats", "View Snaps"].map(tool => (
+                    <p key={tool} className="text-xs text-muted-foreground">• {tool}</p>
+                  ))}
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="flex items-center justify-between mb-2 shrink-0">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Settings</span>
               <div className="flex gap-1">
@@ -6130,6 +6186,8 @@ function CopySettingsDialog({
                 );
               })}
             </div>
+            </>
+            )}
           </div>
         </div>
 
@@ -6139,7 +6197,7 @@ function CopySettingsDialog({
           )}
           <Button variant="secondary" onClick={onClose} disabled={copying}>Cancel</Button>
           <Button onClick={handleCopy}
-            disabled={copying || allTargets.length === 0}
+            disabled={copying || allTargets.length === 0 || (slotPlatform === "snapchat" && !snapchatToolsSelected)}
             style={result === "ok" ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}>
             {result === "ok"
               ? <CheckCircle2 className="w-4 h-4 text-white" />
@@ -6153,7 +6211,7 @@ function CopySettingsDialog({
 
 export function AutomationSettingsPanel({
   phone, settings: baseSettings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
-  slotIdx, slotUsername, slotUsernames, slotPlatform, onCopied, showCopyDialog, setShowCopyDialog,
+  slotIdx, slotUsername, slotUsernames, slotPlatform, snapchatTrustScoreLabel, onCopied, showCopyDialog, setShowCopyDialog,
   templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile, onOpenGestures, settingsScrollRef, sharedScrollTopRef, isActive, personality,
 }: {
   phone: UsbPhone | null;
@@ -6168,6 +6226,7 @@ export function AutomationSettingsPanel({
   slotUsername?: string;
   slotUsernames?: string[];
   slotPlatform: AccountPlatform;
+  snapchatTrustScoreLabel?: SnapchatTrustScoreLabel;
   onCopied?: (targetSlotIdxs: number[]) => void;
   showCopyDialog?: boolean;
   setShowCopyDialog?: (v: boolean) => void;
@@ -6194,6 +6253,16 @@ export function AutomationSettingsPanel({
   const trustScoreActive = slotPlatform !== "snapchat" && (
     trustScoreAssigned === true || Boolean(settings.trustScoreId)
   );
+  const updateSnapchatTool = (
+    tool: keyof AutomationSettingsData["snapchatTools"],
+    patch: Record<string, unknown>,
+  ) => setSettings(s => ({
+    ...s,
+    snapchatTools: {
+      ...s.snapchatTools,
+      [tool]: { ...s.snapchatTools[tool], ...patch },
+    },
+  }));
   const isTrustScoreTemplateEditor = templateLockedFields !== undefined;
   const personalityInputClass = (field: keyof AutomationSettingsData) => {
     const adjusted = personality && Number(baseSettings[field]) !== Number(settings[field]);
@@ -6627,7 +6696,7 @@ export function AutomationSettingsPanel({
           )}
           {slotIdx !== undefined && (
             slotPlatform === "snapchat"
-              ? <StaticTrustScoreLabel width={121} />
+              ? <SnapchatTrustScoreLabelBadge label={snapchatTrustScoreLabel ?? "WARMUP"} width={121} />
               : <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
           )}
           {slotIdx !== undefined && onOpenGestures && (
@@ -6725,9 +6794,83 @@ export function AutomationSettingsPanel({
       </div>
 
       {slotPlatform === "snapchat" ? (
-      <div className="bg-card border border-border rounded-xl p-5 space-y-2">
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
-        <p className="text-sm text-muted-foreground">Snapchat tools are being defined separately from Instagram.</p>
+      <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+        <div>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
+          <p className="text-sm text-muted-foreground mt-1">Snapchat tools. These controls are separate from Instagram.</p>
+        </div>
+        {([
+          ["addFriends", "Add Friends"],
+          ["acceptFriends", "Accept Friends"],
+          ["replyUnreadChats", "Reply to Unread Chats"],
+          ["viewStories", "View Snaps"],
+        ] as const).map(([key, title]) => {
+          const tool = settings.snapchatTools[key];
+          return (
+            <div key={key} className="rounded-lg border border-border/70 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3 min-w-[190px]">
+                  <Switch
+                    checked={tool.enabled}
+                    onCheckedChange={enabled => updateSnapchatTool(key, { enabled })}
+                    disabled={loading}
+                  />
+                  <span className="text-sm font-semibold text-foreground">{title}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                <Label className="text-sm text-muted-foreground">Per cycle</Label>
+                <Input
+                  type="number" min={0} max={10} className={NUM_INPUT_CLASS}
+                  value={tool.min}
+                  onChange={e => updateSnapchatTool(key, { min: Math.max(0, Math.min(10, clamp4(Number(e.target.value)))) })}
+                  disabled={loading || !tool.enabled}
+                />
+                <span className="text-sm text-muted-foreground">to</span>
+                <Input
+                  type="number" min={0} max={10} className={NUM_INPUT_CLASS}
+                  value={tool.max}
+                  onChange={e => updateSnapchatTool(key, { max: Math.max(0, Math.min(10, clamp4(Number(e.target.value)))) })}
+                  disabled={loading || !tool.enabled}
+                />
+                {key === "viewStories" && (
+                  <>
+                    <Label className="text-sm text-muted-foreground ml-2">Watch each (seconds)</Label>
+                    <Input
+                      type="number" min={1} max={60} className={NUM_INPUT_CLASS}
+                      value={settings.snapchatTools.viewStories.watchSecondsMin}
+                      onChange={e => updateSnapchatTool("viewStories", { watchSecondsMin: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
+                      disabled={loading || !tool.enabled}
+                    />
+                    <span className="text-sm text-muted-foreground">to</span>
+                    <Input
+                      type="number" min={1} max={60} className={NUM_INPUT_CLASS}
+                      value={settings.snapchatTools.viewStories.watchSecondsMax}
+                      onChange={e => updateSnapchatTool("viewStories", { watchSecondsMax: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
+                      disabled={loading || !tool.enabled}
+                    />
+                  </>
+                )}
+                </div>
+              </div>
+              {key === "replyUnreadChats" && (
+                <div className="space-y-1">
+                    <Label className="text-sm text-muted-foreground">Conversation goal and purpose</Label>
+                  <textarea
+                    maxLength={1200}
+                    value={settings.snapchatTools.replyUnreadChats.replyGoal}
+                    onChange={e => updateSnapchatTool("replyUnreadChats", { replyGoal: e.target.value })}
+                    disabled={loading || !tool.enabled}
+                    className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+                    placeholder="Describe the goal and timing, e.g. build rapport, then share the provided link on message 3."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Recent visible chat content is sent to OpenAI to draft replies from this goal. Configure the OpenAI key in Settings → Security.
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       ) : (
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
@@ -9032,11 +9175,12 @@ export function AutomationSettingsPanel({
       )}
 
       {/* Copy Settings dialog — Dialog renders as a portal outside the scroll div */}
-      {slotPlatform !== "snapchat" && slotIdx !== undefined && slotUsernames && (
+      {slotIdx !== undefined && slotUsernames && (
         <CopySettingsDialog
           open={showCopyDialogResolved}
           onClose={() => setShowCopyDialogResolved(false)}
           currentSlotIdx={slotIdx}
+          slotPlatform={slotPlatform}
           slotUsernames={slotUsernames}
           settings={settings}
           phone={phone}
@@ -9116,16 +9260,30 @@ export function AutomationSettingsPanel({
 const ROW_H = 30; // px per dropdown row
 const MAX_VISIBLE_ROWS = 5;
 
-function StaticTrustScoreLabel({ width = 114 }: { width?: number }) {
+function SnapchatTrustScoreLabelBadge({ label, width = 114 }: { label: SnapchatTrustScoreLabel; width?: number }) {
   return (
     <div
-      className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-slate-400 px-2 text-[11px] font-semibold text-slate-500"
+      className="inline-flex shrink-0 items-center justify-center rounded-md border border-yellow-500 bg-yellow-300 px-2 text-center text-[11px] font-extrabold tracking-wide text-black"
       style={{ width, minWidth: width, height: "100%" }}
-      title="Display-only Snapchat label"
-      aria-label="TrustScore label"
+      title="Snapchat display-only label"
+      aria-label={`Snapchat TrustScore label: ${label}`}
     >
-      TrustScore
+      {label}
     </div>
+  );
+}
+
+function SnapchatTrustScoreLabelSelect({ value, onChange }: { value: SnapchatTrustScoreLabel; onChange: (value: SnapchatTrustScoreLabel) => void }) {
+  return (
+    <select
+      aria-label="Snapchat TrustScore label"
+      value={value}
+      onChange={event => onChange(event.target.value as SnapchatTrustScoreLabel)}
+      className="h-9 w-[114px] shrink-0 rounded-md border border-yellow-500 bg-yellow-300 px-2 text-center text-[11px] font-extrabold tracking-wide text-black"
+      style={{ textAlign: "center", textAlignLast: "center" }}
+    >
+      {SNAPCHAT_TRUST_SCORE_LABELS.map(label => <option key={label} value={label}>{label}</option>)}
+    </select>
   );
 }
 
@@ -9296,7 +9454,9 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
 
 const ACCT_SLOT_COUNT = 5;
 type AccountPlatform = "instagram" | "snapchat";
-const emptySlot = (platform: AccountPlatform = "instagram") => ({ slotId: crypto.randomUUID(), platform, username: "", password: "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" });
+type SnapchatTrustScoreLabel = "WARMUP" | "SLOW" | "MODERATE" | "SUPER" | "GOD";
+const SNAPCHAT_TRUST_SCORE_LABELS: SnapchatTrustScoreLabel[] = ["WARMUP", "SLOW", "MODERATE", "SUPER", "GOD"];
+const emptySlot = (platform: AccountPlatform = "instagram") => ({ slotId: crypto.randomUUID(), platform, username: "", password: "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "", ...(platform === "snapchat" ? { snapchatTrustScoreLabel: "WARMUP" as const } : {}) });
 type SlotPersonality = {
   engagement: number;
   consumption: number;
@@ -9304,7 +9464,7 @@ type SlotPersonality = {
   discovery: number;
   actionVariety: number;
 };
-type AccountSlot = { slotId: string; platform: AccountPlatform; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string; personality?: SlotPersonality; personalityOverrides?: Partial<SlotPersonality> };
+type AccountSlot = { slotId: string; platform: AccountPlatform; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string; snapchatTrustScoreLabel?: SnapchatTrustScoreLabel; personality?: SlotPersonality; personalityOverrides?: Partial<SlotPersonality> };
 const SLOT_PERSONALITY_TRAITS = [
   { key: "engagement", label: "Engagement", options: ["Reserved", "Selective", "Balanced", "Open", "Generous"], icon: Heart, color: "text-rose-500 border-rose-200 bg-rose-50 dark:bg-rose-950/30" },
   { key: "consumption", label: "Consumption", options: ["Light", "Moderate", "Balanced", "Active", "High volume"], icon: BarChart3, color: "text-cyan-600 border-cyan-200 bg-cyan-50 dark:bg-cyan-950/30" },
@@ -9474,6 +9634,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   slotId: string;
   slotUsername: string;
   slotPlatform: AccountPlatform;
+  snapchatTrustScoreLabel?: SnapchatTrustScoreLabel;
   slotPersonality?: SlotPersonality;
   slotUsernames?: string[];
   addLog: (msg: string) => void;
@@ -9492,7 +9653,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   isActive?: boolean;
   sharedScrollTopRef?: React.MutableRefObject<number>;
 }>(function SlotHumanSessionView(
-  { phone, slotIdx, slotId, slotUsername, slotPlatform, slotPersonality, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
+  { phone, slotIdx, slotId, slotUsername, slotPlatform, snapchatTrustScoreLabel, slotPersonality, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
   ref,
 ) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig, isActive, slotId);
@@ -9568,7 +9729,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   // Keep the entry point visible for every slot.  The dialog discovers
   // targets across the farm, so hiding this based on the current device's
   // username count made Copy Settings disappear for single-slot devices.
-  const canCopy = slotIdx !== undefined && slotPlatform !== "snapchat";
+  const canCopy = slotIdx !== undefined;
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
@@ -9596,6 +9757,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
             slotIdx={slotIdx}
             slotUsername={slotUsername}
              slotPlatform={slotPlatform}
+            snapchatTrustScoreLabel={snapchatTrustScoreLabel}
             slotUsernames={slotUsernames}
             personality={slotPersonality}
             onCopied={onCopied}
@@ -9897,6 +10059,9 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           loaded = d.slots.map((s: any) => ({
             slotId: typeof s?.slotId === "string" && s.slotId.length >= 8 ? s.slotId : crypto.randomUUID(),
             platform: s?.platform === "snapchat" ? "snapchat" : "instagram",
+            snapchatTrustScoreLabel: s?.platform === "snapchat" && SNAPCHAT_TRUST_SCORE_LABELS.includes(s?.snapchatTrustScoreLabel)
+              ? s.snapchatTrustScoreLabel
+              : s?.platform === "snapchat" ? "WARMUP" : undefined,
             username: s?.username ?? "",
             password: s?.password ?? "",
             totpSecret: s?.totpSecret ?? "",
@@ -10274,6 +10439,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             slotId={slot.slotId}
             slotUsername={slots[i]?.username ?? ""}
             slotPlatform={slot.platform}
+            snapchatTrustScoreLabel={slot.snapchatTrustScoreLabel ?? "WARMUP"}
             slotPersonality={slot.platform === "snapchat" ? undefined : slot.personality ? { ...slot.personality, ...slot.personalityOverrides } : undefined}
             slotUsernames={slots.map(s => s.username)}
             addLog={addLog}
@@ -10623,7 +10789,10 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     so styling changes here don't affect other badge placements */}
                 <div style={{ display: "flex", alignSelf: "flex-end", height: "36px", gap: "8px" }}>
                   {slot.platform === "snapchat" ? (
-                    <StaticTrustScoreLabel width={114} />
+                    <SnapchatTrustScoreLabelSelect
+                      value={slot.snapchatTrustScoreLabel ?? "WARMUP"}
+                      onChange={snapchatTrustScoreLabel => updateSlot(i, { snapchatTrustScoreLabel })}
+                    />
                   ) : (
                     <>
                       <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />

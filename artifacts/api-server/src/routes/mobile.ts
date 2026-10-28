@@ -64,6 +64,7 @@ import { appendReelSourceToAllAccountSlots } from "../mobile/shareReelSourceImpo
 import { runUpdateProfilePicture as runUpdateProfilePictureOperation } from "../mobile/hst/operations/updateProfilePicture";
 import { runUpdateBio as runUpdateBioOperation } from "../mobile/hst/operations/updateBio";
 import { runRandomActionsStep, type RandomActionsOperationContext } from "../mobile/hst/operations/randomActions";
+import { runSnapchatTools } from "../mobile/hst/operations/snapchatTools";
 import { finishSpreadFollowSearch, runFollowUsersStep } from "../mobile/hst/operations/follow";
 import {
   startSlotCycleNotebook,
@@ -528,6 +529,12 @@ const p = (req: Request, key: string): string => String((req.params as any)[key]
 type AutomationSettings = {
   cycleIntervalMin?: number;
   cycleIntervalMax?: number;
+  snapchatTools?: {
+    addFriends: { enabled: boolean; min: number; max: number };
+    acceptFriends: { enabled: boolean; min: number; max: number };
+    replyUnreadChats: { enabled: boolean; min: number; max: number; replyGoal: string };
+    viewStories: { enabled: boolean; min: number; max: number; watchSecondsMin: number; watchSecondsMax: number };
+  };
   enabled: boolean;
   trustScoreId?: string | null;
   trustScoreDisabledTools?: string[];
@@ -791,7 +798,7 @@ type AutomationSettings = {
   // 'left' / 'up' = manual override stored per device.
   dismissDirection?: "auto" | "left" | "up";
 };
-type DeviceSlot = { slotId?: string; platform?: "instagram" | "snapchat"; username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string; personality?: DevicePersonality; personalityOverrides?: Partial<DevicePersonality> };
+type DeviceSlot = { slotId?: string; platform?: "instagram" | "snapchat"; snapchatTrustScoreLabel?: "WARMUP" | "SLOW" | "MODERATE" | "SUPER" | "GOD"; username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string; personality?: DevicePersonality; personalityOverrides?: Partial<DevicePersonality> };
 type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number; simPhoneNumbers?: Record<string, string> };
 type DevicePrefs = {
@@ -2767,11 +2774,49 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     //    windows app switcher. 'auto' = look up the model in DEVICE_PROFILES on
     //    the server; 'left'/'up' = manual override stored per device.
     dismissDirection: z.enum(["auto", "left", "up"]).default("auto"),
+    // Snapchat's tools are a separate suite from Instagram. Keep all controls
+    // nested so they cannot accidentally alter Instagram's existing settings.
+    snapchatTools: z.object({
+      addFriends: z.object({
+        enabled: z.boolean().default(false),
+        min: z.number().int().min(0).max(10).default(1),
+        max: z.number().int().min(0).max(10).default(2),
+      }).default({ enabled: false, min: 1, max: 2 }),
+      acceptFriends: z.object({
+        enabled: z.boolean().default(false),
+        min: z.number().int().min(0).max(10).default(1),
+        max: z.number().int().min(0).max(10).default(3),
+      }).default({ enabled: false, min: 1, max: 3 }),
+      replyUnreadChats: z.object({
+        enabled: z.boolean().default(false),
+        min: z.number().int().min(0).max(10).default(1),
+        max: z.number().int().min(0).max(10).default(1),
+        replyGoal: z.string().max(1200).default(""),
+      }).default({ enabled: false, min: 1, max: 1, replyGoal: "" }),
+      viewStories: z.object({
+        enabled: z.boolean().default(false),
+        min: z.number().int().min(0).max(10).default(1),
+        max: z.number().int().min(0).max(10).default(3),
+        watchSecondsMin: z.number().int().min(1).max(60).default(5),
+        watchSecondsMax: z.number().int().min(1).max(60).default(10),
+      }).default({ enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 }),
+    }).default({
+      addFriends: { enabled: false, min: 1, max: 2 },
+      acceptFriends: { enabled: false, min: 1, max: 3 },
+      replyUnreadChats: { enabled: false, min: 1, max: 1, replyGoal: "" },
+      viewStories: { enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 },
+    }),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
     const defaults: AutomationSettings = {
       enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+      snapchatTools: {
+        addFriends: { enabled: false, min: 1, max: 2 },
+        acceptFriends: { enabled: false, min: 1, max: 3 },
+        replyUnreadChats: { enabled: false, min: 1, max: 1, replyGoal: "" },
+        viewStories: { enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 },
+      },
       feedEnabled: true, storiesEnabled: true,
       actionDelayMin: 5, actionDelayMax: 10,
       likePercentMin: 3, likePercentMax: 5,
@@ -3469,6 +3514,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId : undefined;
       const defaults: AutomationSettings = {
         enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+        snapchatTools: {
+          addFriends: { enabled: false, min: 1, max: 2 },
+          acceptFriends: { enabled: false, min: 1, max: 3 },
+          replyUnreadChats: { enabled: false, min: 1, max: 1, replyGoal: "" },
+          viewStories: { enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 },
+        },
         feedEnabled: true, storiesEnabled: true,
         actionDelayMin: 5, actionDelayMax: 10,
         likePercentMin: 3, likePercentMax: 5,
@@ -3629,7 +3680,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (dedicatedStoryFolderPath) merged.postStoryLocalFolderPath = dedicatedStoryFolderPath;
       const dedicatedProfilePicPath = getProfilePicFolderPath(serial, slotIdx);
       if (dedicatedProfilePicPath) merged.updateProfilePicFolderPath = dedicatedProfilePicPath;
-      const resolved = await resolveTrustScoreSettings(serial, slotIdx, merged);
+      const isSnapchatSlot = cfg[serial]?.account?.slots?.[slotIdx]?.platform === "snapchat";
+      if (isSnapchatSlot) {
+        merged.trustScoreId = null;
+        merged.trustScoreToolOverrides = {};
+        merged.trustScoreDisabledTools = [];
+        merged.trustScoreTemplateDisabledTools = [];
+      }
+      const resolved = isSnapchatSlot
+        ? { settings: merged, scoreId: null, configured: false }
+        : await resolveTrustScoreSettings(serial, slotIdx, merged);
       // My Computer is the implicit and always-enabled Make a Post source.
       resolved.settings.makePostLocalFolderEnabled = true;
       logger.info(`[TOGGLE-DBG] GET slot settings  serial=${serial} slotIdx=${slotIdx} enabled=${resolved.settings.enabled} trustScore=${resolved.scoreId ?? "manual"}`);
@@ -3688,7 +3748,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
       if (body.makePostLocalFolderPath === "") delete body.makePostLocalFolderPath;
       if (body.postStoryLocalFolderPath === "") delete body.postStoryLocalFolderPath;
-      const assignment = await loadTrustScoreAssignment(serial, slotIdx);
+      const isSnapchatSlot = cfg[serial]?.account?.slots?.[slotIdx]?.platform === "snapchat";
+      const assignment = isSnapchatSlot
+        ? { scoreId: null }
+        : await loadTrustScoreAssignment(serial, slotIdx);
+      if (isSnapchatSlot) {
+        body.trustScoreId = null;
+        body.trustScoreToolOverrides = {};
+        body.trustScoreDisabledTools = [];
+      }
       const isTrustScoreCopy = body.trustScoreCopy === true;
       // Ignore effective tool values from a settings snapshot that belongs to
       // the previous TrustScore assignment. A label change can race the
@@ -4402,6 +4470,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // array index because deleting a slot renumbers every later account.
     slotId: z.string().min(8).max(100).optional(),
     platform: z.enum(["instagram", "snapchat"]).optional(),
+    snapchatTrustScoreLabel: z.enum(["WARMUP", "SLOW", "MODERATE", "SUPER", "GOD"]).optional(),
     username: z.string(),
     password: z.string(),
     totpSecret: z.string().optional(),
@@ -6826,10 +6895,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         loadInstanceConfigs()[serial]?.slotAutomation?.[slotAutomationKey(serial, incomingSlotIdx, slotId)]
         ?? loadInstanceConfigs()[serial]?.slotAutomation?.[String(incomingSlotIdx)]
         ?? {};
-      const effectiveCycle = await resolveTrustScoreSettings(serial, incomingSlotIdx, {
-        ...savedSlotSettings,
-        ...parsedCycle,
-      });
+      const effectiveCycle = configuredSlot?.platform === "snapchat"
+        ? { settings: { ...savedSlotSettings, ...parsedCycle }, scoreId: null, configured: false }
+        : await resolveTrustScoreSettings(serial, incomingSlotIdx, {
+            ...savedSlotSettings,
+            ...parsedCycle,
+          });
       // Make a Post is slot-owned in the HST.  The cycle request can be
       // in-flight while the autosave request is catching up, so do not let a
       // stale parsed checkbox value override the persisted slot decision.
@@ -7085,6 +7156,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          tLog("▶ Opening Snapchat account app…");
          await android.launchSnapchat(serial);
          steps.push("launch-snapchat");
+          const snapchatTools = automationSchema.shape.snapchatTools.parse(
+            effectiveSettings.snapchatTools ?? {},
+          );
+          await runSnapchatTools({
+            serial,
+            tools: snapchatTools,
+            onLog: tLog,
+            isAborted: () => isCycleAborted(serial),
+            sleep: milliseconds => sleepOrAbort(serial, milliseconds, "navigation", "static"),
+          });
          return res.json({ ok: true, steps });
        }
 

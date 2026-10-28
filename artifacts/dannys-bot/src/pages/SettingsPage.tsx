@@ -1043,7 +1043,7 @@ export function SettingsPage() {
             <h3 className="text-base font-semibold">OpenAI API Key (ChatGPT)</h3>
           </div>
           <p className="text-sm text-muted-foreground mb-5">
-            Used by the Repost tool's "Use ChatGPT" caption feature — the caption text becomes the prompt sent to ChatGPT.
+            Used by the Repost caption feature and Snapchat's context-aware unread-chat replies.
             Get your key at <span className="font-medium">platform.openai.com</span> → API Keys.
             If both Gemini and OpenAI keys are set, Gemini is preferred for the AI Bot chat.
           </p>

@@ -84,10 +84,18 @@ export interface UsbPhone {
 
 // ─── AutomationSettingsData ───────────────────────────────────────────────────
 
+export interface SnapchatToolSettings {
+  addFriends: { enabled: boolean; min: number; max: number };
+  acceptFriends: { enabled: boolean; min: number; max: number };
+  replyUnreadChats: { enabled: boolean; min: number; max: number; replyGoal: string };
+  viewStories: { enabled: boolean; min: number; max: number; watchSecondsMin: number; watchSecondsMax: number };
+}
+
 export interface AutomationSettingsData {
   enabled: boolean;
   cycleIntervalMin: number;
   cycleIntervalMax: number;
+  snapchatTools: SnapchatToolSettings;
   feedEnabled: boolean;
   storiesEnabled: boolean;
   shuffleToolOrder: boolean;
@@ -292,6 +300,12 @@ export interface AutomationSettingsData {
 
 export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+  snapchatTools: {
+    addFriends: { enabled: false, min: 1, max: 2 },
+    acceptFriends: { enabled: false, min: 1, max: 3 },
+    replyUnreadChats: { enabled: false, min: 1, max: 1, replyGoal: "" },
+    viewStories: { enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 },
+  },
   feedEnabled: true, storiesEnabled: true, shuffleToolOrder: false,
   actionDelayMin: 5, actionDelayMax: 10,
   likePercentMin: 3, likePercentMax: 5,

@@ -3,8 +3,14 @@ name: Mobile platform account slots
 description: Cross-platform account-slot storage and execution rules for the Phone Farm.
 ---
 
-Keep Instagram and Snapchat accounts in one ordered device slot list, using a per-slot platform marker to choose the app launched for a cycle. Keep each platform's automation settings and tool suite separate; Snapchat's TrustScore chip is a display-only label, never a tier assignment or timer.
+Keep Instagram and Snapchat accounts in one ordered device slot list, using a per-slot platform marker to choose the app launched for a cycle. Snapchat Step 2 is Add Friends, Accept Friends, Reply to Unread Chats, and View Snaps; Copy Settings must target only slots of the source platform.
 
-**Why:** The Human Session Tool timer and device collision coordinator already key off the device's account slots, so scheduling stays shared. The user explicitly requires Snapchat tools to be separate from Instagram tools and says Snapchat TrustScore labels have no connection to Settings > TrustScores.
+**Why:** The Human Session Tool timer and device collision coordinator already key off the device's account slots, so scheduling stays shared. The user requires Snapchat tools and labels to remain separate from Instagram automation and Settings > TrustScores, and requested same-platform copy only.
 
-**How to apply:** Extend the platform discriminator and app-launch branch, but use platform-specific settings UI and tool dispatch. Skip Snapchat in TrustScore profile hydration, assignments, and timers; render only a static label. Do not split shared HST scheduling or collision queues into platform-specific collections.
+**How to apply:** Extend the platform discriminator and app-launch branch, but keep Snapchat settings, copy targets, and dispatch platform-specific. Store the display label on that Snapchat account slot only; never resolve it through TrustScore APIs, templates, timers, or automation settings. Do not split shared HST scheduling or collision queues into platform-specific collections.
+
+For Snapchat unread-chat replies, use the OpenAI key managed in Settings > Security and send only the user's goal plus bounded visible thread context to the model. Treat chat text as untrusted, never log credentials, and do not send unless the thread and composer are still verified.
+
+**Why:** The user wants replies to follow a conversation goal and timing instructions, while keeping Snapchat behavior independent from Instagram.
+
+**How to apply:** Fail closed when the key, readable context, generated reply, or live-thread confirmation is missing; make clear in the UI that visible chat content is sent to OpenAI.
