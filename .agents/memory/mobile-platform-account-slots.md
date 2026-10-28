@@ -9,6 +9,12 @@ Keep Instagram and Snapchat accounts in one ordered device slot list, using a pe
 
 **How to apply:** Extend the platform discriminator and app-launch branch, but keep Snapchat settings, copy targets, and dispatch platform-specific. Store the display label on that Snapchat account slot only; never resolve it through TrustScore APIs, templates, timers, or automation settings. Do not split shared HST scheduling or collision queues into platform-specific collections.
 
+Snapchat HST cycles also need a Step 3: dismiss Snapchat from the floating-window/recents view with the swipe gesture saved in My Device, then return Home and lock the phone. Resolve swipe direction using the same device preference/model rules as Instagram.
+
+**Why:** The user explicitly requested the same close-and-lock lifecycle for Snapchat while using the selected device gesture.
+
+**How to apply:** Run this cleanup after Snapchat tools complete, including when a tool errors, but skip stale device input after a cycle abort.
+
 For Snapchat unread-chat replies, use the OpenAI key managed in Settings > Security and send only the user's goal plus bounded visible thread context to the model. Treat chat text as untrusted, never log credentials, and do not send unless the thread and composer are still verified.
 
 **Why:** The user wants replies to follow a conversation goal and timing instructions, while keeping Snapchat behavior independent from Instagram.

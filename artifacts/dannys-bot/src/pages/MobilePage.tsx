@@ -9262,6 +9262,14 @@ export function AutomationSettingsPanel({
         </p>
       </div>
       )}
+      {slotPlatform === "snapchat" && (
+        <div className="bg-card border border-border rounded-xl p-5 space-y-2">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP3)</p>
+          <p className="text-sm text-foreground">
+            Open Snapchat in the floating-window view, swipe it away using the gesture selected in My Device, then lock the phone.
+          </p>
+        </div>
+      )}
 
       {/* Copy Settings dialog — Dialog renders as a portal outside the scroll div */}
       {slotIdx !== undefined && slotUsernames && (

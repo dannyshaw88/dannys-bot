@@ -3,9 +3,10 @@ name: Automation-cycle real-phone lifecycle
 description: The master toggle runs a full power/open-app/run/close-app/lock sequence each cycle; closing no longer toggles airplane mode.
 ---
 
-Each Human Session Tool automation-cycle "tick" must wake the phone, open
-Instagram, run the configured tools, close Instagram, and lock the phone.
-Do not cycle airplane mode during the closing stage.
+Each Human Session Tool automation-cycle "tick" must wake the phone, open the
+app assigned to the active slot (Instagram or Snapchat), run that platform's
+configured tools, close that same app, and lock the phone. Do not cycle
+airplane mode during the closing stage.
 
 **Why:** the user clarified that airplane mode is not needed at the end of the
 Human Session Tool cycle.

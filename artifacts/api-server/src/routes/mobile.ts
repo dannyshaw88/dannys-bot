@@ -7210,8 +7210,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          await sleepOrAbort(serial, 600);
        }
 
-       // Snapchat account slots share the same timer and collision path, but
-       // their cycle intentionally stops after opening Snapchat.
+       // Snapchat account slots share the same timer and collision path, then
+       // run their own tools and Step 3 app-dismissal lifecycle.
        if (configuredSlot?.platform === "snapchat") {
          tLog("▶ Opening Snapchat account app…");
          await android.launchSnapchat(serial);
@@ -7219,13 +7219,53 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const snapchatTools = automationSchema.shape.snapchatTools.parse(
             effectiveSettings.snapchatTools ?? {},
           );
-          await runSnapchatTools({
-            serial,
-            tools: snapchatTools,
-            onLog: tLog,
-            isAborted: () => isCycleAborted(serial),
-            sleep: milliseconds => sleepOrAbort(serial, milliseconds, "navigation", "static"),
-          });
+          try {
+            await runSnapchatTools({
+              serial,
+              tools: snapchatTools,
+              onLog: tLog,
+              isAborted: () => isCycleAborted(serial),
+              sleep: milliseconds => sleepOrAbort(serial, milliseconds, "navigation", "static"),
+            });
+          } finally {
+            if (!isCycleAborted(serial)) {
+              tLog("▶ Step 3: Opening Snapchat in the floating-window view and dismissing it…");
+              const devicePrefsForDismiss = (() => {
+                try { return loadInstanceConfigs()[serial]?.devicePrefs ?? {}; } catch { return {}; }
+              })();
+              const effectiveDismiss = dismissDirection !== "auto"
+                ? dismissDirection
+                : (devicePrefsForDismiss.dismissDirection && devicePrefsForDismiss.dismissDirection !== "auto")
+                  ? devicePrefsForDismiss.dismissDirection
+                  : "auto";
+              const rawModel = android.getDeviceModel(serial);
+              const resolvedDismissDir: "left" | "up" = effectiveDismiss !== "auto"
+                ? effectiveDismiss
+                : android.getModelDismissDirection(rawModel);
+              tLog(`  dismiss direction: ${resolvedDismissDir} (slot: ${dismissDirection}, device-pref: ${devicePrefsForDismiss.dismissDirection ?? "none"}, model: "${rawModel}")`);
+              await android.closeInstagramViaRecents(
+                serial,
+                resolvedDismissDir,
+                message => tLog(`  ${message}`),
+                devicePrefsForDismiss.swipeGesture,
+                "com.snapchat.android",
+                "Snapchat",
+              );
+              steps.push("closed-snapchat");
+              tLog("  ✓ Snapchat closed");
+              await android.keyevent(serial, 3 /* KEYCODE_HOME */);
+              await new Promise(resolve => setTimeout(resolve, 600));
+              automationCurrentTool.set(serial, "FINALISING");
+              tLog("▶ Finalising — locking the phone…");
+              await android.swipeUpFromBottom(serial);
+              steps.push("swipe-up");
+              logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_SLEEP(223)" }, "[mobile-screen-state] intentional command");
+              await android.sleepScreen(serial);
+              await logScreenState("after-intentional-sleep");
+              steps.push("power-off");
+            }
+          }
+          if (isCycleAborted(serial)) throw new Error("cycle-aborted");
          return res.json({ ok: true, steps });
        }
 
