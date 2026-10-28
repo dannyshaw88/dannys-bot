@@ -5740,6 +5740,7 @@ const SNAPCHAT_COPY_OPTIONS = [
   { key: "step1", label: "Step 1 enabled state and interval" },
   { key: "shuffleToolOrder", label: "Shuffle tool order" },
   { key: "addFriends", label: "Add Friends" },
+  { key: "massSnap", label: "Mass Snap" },
   { key: "acceptFriends", label: "Accept Friends" },
   { key: "replyUnreadChats", label: "Reply to Unread Chats" },
   { key: "viewStories", label: "View Snaps" },
@@ -5982,7 +5983,7 @@ function CopySettingsDialog({
       if (selectedSnapchatCopyKeys.has("shuffleToolOrder")) {
         snapchatTools.shuffleToolOrder = settings.snapchatTools.shuffleToolOrder;
       }
-      for (const key of ["addFriends", "acceptFriends", "replyUnreadChats", "viewStories"] as const) {
+      for (const key of ["addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories"] as const) {
         if (selectedSnapchatCopyKeys.has(key)) snapchatTools[key] = settings.snapchatTools[key];
       }
       if (Object.keys(snapchatTools).length > 0) partial.snapchatTools = snapchatTools;
@@ -6874,12 +6875,13 @@ export function AutomationSettingsPanel({
         </div>
         {([
           ["addFriends", "Add Friends"],
+          ["massSnap", "Mass Snap"],
           ["acceptFriends", "Accept Friends"],
           ["replyUnreadChats", "Reply to Unread Chats"],
           ["viewStories", "View Snaps"],
         ] as const).map(([key, title]) => {
           const tool = settings.snapchatTools[key];
-          const countFloor = key === "viewStories" ? 1 : 0;
+          const countFloor = key === "viewStories" || key === "massSnap" ? 1 : 0;
           return (
             <div key={key} className="rounded-lg border border-border/70 p-4 space-y-3">
               <div className="flex min-w-0 flex-nowrap items-center gap-2">
@@ -6909,7 +6911,9 @@ export function AutomationSettingsPanel({
                     />
                   </div>
                   <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
-                    <Label className="text-[11px] text-muted-foreground">{key === "viewStories" ? "Swipes" : "Count"}</Label>
+                    <Label className="text-[11px] text-muted-foreground">
+                      {key === "viewStories" ? "Swipes" : key === "massSnap" ? "Select" : "Count"}
+                    </Label>
                     <Input
                       type="number" min={countFloor} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
                       value={key === "viewStories" ? Math.max(1, tool.min) : tool.min}
@@ -6960,8 +6964,26 @@ export function AutomationSettingsPanel({
                     </div>
                   </>
                 )}
+                {key === "massSnap" && (
+                  <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+                    <Label className="text-[11px] text-muted-foreground">Swipe (px)</Label>
+                    <Input
+                      type="number" min={40} max={1000} className="w-14 h-7 px-0.5 text-center text-xs"
+                      value={settings.snapchatTools.massSnap.contactScrollPixels}
+                      onChange={e => updateSnapchatTool("massSnap", {
+                        contactScrollPixels: Math.max(40, Math.min(1000, clamp4(Number(e.target.value)))),
+                      })}
+                      disabled={loading || !tool.enabled}
+                    />
+                  </div>
+                )}
                 </div>
               </div>
+              {key === "massSnap" && (
+                <p className="text-xs text-muted-foreground">
+                  Configuration only; Snapchat recipient selection and sending are not connected yet.
+                </p>
+              )}
               {key === "replyUnreadChats" && (
                 <div className="space-y-1">
                     <Label className="text-sm text-muted-foreground">Conversation goal and purpose</Label>

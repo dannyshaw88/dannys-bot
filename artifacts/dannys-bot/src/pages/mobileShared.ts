@@ -87,6 +87,7 @@ export interface UsbPhone {
 export interface SnapchatToolSettings {
   shuffleToolOrder: boolean;
   addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
+  massSnap: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; contactScrollPixels: number };
   acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
   replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
   viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; likePercentMin: number; likePercentMax: number; watchSecondsMin: number; watchSecondsMax: number };
@@ -304,6 +305,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   snapchatTools: {
     shuffleToolOrder: false,
     addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
+    massSnap: { enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 },
     acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
     replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
     viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },

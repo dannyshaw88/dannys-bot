@@ -37,6 +37,7 @@ type Context = {
   swipeGesture?: DeviceSwipeGesture;
 };
 
+const shortResourceId = (node: UiNode) => node.resourceId.split("/").pop() ?? node.resourceId;
 const decodeXml = (value: string) => value
   .replace(/&quot;/g, '"')
   .replace(/&apos;/g, "'")
@@ -94,7 +95,9 @@ function exactClickable(nodes: UiNode[], labels: string[]): UiNode | undefined {
 }
 
 function isAddFriendsPage(xml: string): boolean {
-  return /added me|quick add|find friends/i.test(xml);
+  return /add_friends_root/i.test(xml) &&
+    /add_friends_title/i.test(xml) &&
+    /find friends/i.test(xml);
 }
 
 async function tapExact(context: Context, labels: string[], reason: string): Promise<boolean> {
@@ -104,17 +107,18 @@ async function tapExact(context: Context, labels: string[], reason: string): Pro
 }
 
 async function openAddFriends(context: Context): Promise<boolean> {
-  let state = await dump(context.serial);
+  const state = await dump(context.serial);
   if (isAddFriendsPage(state.xml)) return true;
-  if (await tapExact(context, ["My Profile", "Profile"], "open profile")) {
-    state = await dump(context.serial);
-    if (isAddFriendsPage(state.xml)) return true;
+  const addFriendsIcon = state.nodes.find(node =>
+    shortResourceId(node) === "neon_add_friend_button_container",
+  );
+  if (!/camera_page/i.test(state.xml) || !addFriendsIcon) {
+    context.onLog("Add Friends stopped: the live camera screen's top-right Add Friends icon was not confirmed.");
+    return false;
   }
-  if (await tapExact(context, ["Add Friends", "Find Friends"], "open Add Friends")) {
-    state = await dump(context.serial);
-    return isAddFriendsPage(state.xml);
-  }
-  return false;
+  if (!await tapNode(context, addFriendsIcon, "open Add Friends from the top-right person-plus icon")) return false;
+  const afterTap = await dump(context.serial);
+  return isAddFriendsPage(afterTap.xml);
 }
 
 function randomCount(min: number, max: number): number {
@@ -275,14 +279,81 @@ async function runAddFriends(context: Context) {
   let added = 0;
   while (added < requested && !context.isAborted()) {
     const { xml, nodes } = await dump(context.serial);
-    if (!isAddFriendsPage(xml)) break;
-    const candidate = nodes.find(node =>
-      node.clickable && [node.text, node.desc].some(value => /^(add|add friend)$/i.test(value.trim())),
+    if (!isAddFriendsPage(xml)) {
+      context.onLog("Add Friends stopped: the verified Add Friends page is no longer open.");
+      break;
+    }
+    const findFriendsStart = nodes.findIndex(node =>
+      shortResourceId(node) === "section-title" &&
+      [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
     );
-    if (!candidate || !await tapNode(context, candidate, "add the visible friend suggestion")) break;
+    if (findFriendsStart < 0) {
+      context.onLog("Add Friends stopped: the Find Friends section title was not found.");
+      break;
+    }
+    const findFriendsTitle = nodes[findFriendsStart];
+    const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    const acceptFriendsStart = nodes.findIndex((node, index) =>
+      index > findFriendsStart &&
+      shortResourceId(node) === "section-title" &&
+      [node.text, node.desc].some(value => /^accept friends$/i.test(value.trim())),
+    );
+    const sectionEnd = acceptFriendsStart < 0 ? nodes.length : acceptFriendsStart;
+    const addButtons = nodes.slice(findFriendsStart + 1, sectionEnd).filter(node =>
+      shortResourceId(node) === "scu_search_action_button" &&
+      [node.text, node.desc].some(value => /^add$/i.test(value.trim())) &&
+      node.bounds[2] > node.bounds[0] && node.bounds[3] > node.bounds[1] &&
+      node.bounds[1] >= findFriendsTitle.bounds[3] &&
+      node.bounds[3] < screenHeight * 0.95,
+    );
+    const candidate = addButtons[0];
+    if (!candidate) {
+      context.onLog("Add Friends stopped: no Add button was found under Find Friends.");
+      break;
+    }
+    const candidateY = center(candidate).y;
+    const row = nodes.find(node =>
+      shortResourceId(node) === "scu_search_friend_cell" &&
+      candidateY >= node.bounds[1] && candidateY <= node.bounds[3],
+    );
+    const username = row && nodes.find(node =>
+      shortResourceId(node) === "result-title" &&
+      node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
+    );
+    const friendName = username ? nodeLabel(username) : "";
+    if (!friendName) {
+      context.onLog("Add Friends stopped: the selected Add button could not be matched to a visible friend row.");
+      break;
+    }
+    if (!await tapNode(context, candidate, `tap Add for ${friendName} under Find Friends`)) break;
+    const confirmation = await dump(context.serial);
+    if (!isAddFriendsPage(confirmation.xml)) {
+      context.onLog("Add Friends stopped: the Add Friends page changed before the request could be confirmed.");
+      break;
+    }
+    const sameRowStillAdd = confirmation.nodes.some(node => {
+      if (shortResourceId(node) !== "scu_search_action_button" ||
+          ![node.text, node.desc].some(value => /^add$/i.test(value.trim()))) return false;
+      const y = center(node).y;
+      const matchingRow = confirmation.nodes.find(candidateRow =>
+        shortResourceId(candidateRow) === "scu_search_friend_cell" &&
+        y >= candidateRow.bounds[1] && y <= candidateRow.bounds[3],
+      );
+      if (!matchingRow) return false;
+      const matchingName = confirmation.nodes.find(candidateName =>
+        shortResourceId(candidateName) === "result-title" &&
+        candidateName.bounds[1] >= matchingRow.bounds[1] &&
+        candidateName.bounds[3] <= matchingRow.bounds[3],
+      );
+      return Boolean(matchingName && nodeLabel(matchingName) === friendName);
+    });
+    if (sameRowStillAdd) {
+      context.onLog(`Add Friends stopped: Snapchat still shows Add for ${friendName}; the request was not confirmed.`);
+      break;
+    }
     added++;
   }
-  context.onLog(`Add Friends: sent ${added}/${requested} friend requests from visible Add buttons.`);
+  context.onLog(`Add Friends: confirmed ${added}/${requested} friend request(s) from the Find Friends section.`);
 }
 
 async function runAcceptFriends(context: Context) {
