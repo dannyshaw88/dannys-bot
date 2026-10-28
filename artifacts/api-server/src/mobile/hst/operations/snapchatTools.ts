@@ -363,25 +363,150 @@ async function runAcceptFriends(context: Context) {
     context.onLog("Accept Friends skipped: could not confirm the Snapchat Add Friends screen.");
     return;
   }
-  const currentRequestsPage = await dump(context.serial);
-  if (
-    !/added me/i.test(currentRequestsPage.xml) &&
-    !await tapExact(context, ["Added Me"], "open incoming friend requests")
-  ) {
-    context.onLog("Accept Friends skipped: Added Me was not found.");
+
+  const getAddedMeSection = (nodes: UiNode[]) => {
+    const start = nodes.findIndex(node =>
+      shortResourceId(node) === "section-title" &&
+      [node.text, node.desc].some(value => /^added me$/i.test(value.trim())),
+    );
+    if (start < 0) return null;
+    const nextSection = nodes.findIndex((node, index) =>
+      index > start &&
+      shortResourceId(node) === "section-title" &&
+      [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
+    );
+    return { start, end: nextSection < 0 ? nodes.length : nextSection };
+  };
+  const getAcceptRows = (nodes: UiNode[], section: { start: number; end: number }, screenHeight: number) => {
+    const sectionNodes = nodes.slice(section.start + 1, section.end);
+    return sectionNodes
+      .filter(node =>
+        shortResourceId(node) === "scu_search_action_button" &&
+        [node.text, node.desc].some(value => /^accept$/i.test(value.trim())) &&
+        node.bounds[3] < screenHeight * 0.95,
+      )
+      .flatMap(button => {
+        const y = center(button).y;
+        const row = sectionNodes.find(node =>
+          shortResourceId(node) === "scu_search_friend_cell" &&
+          y >= node.bounds[1] && y <= node.bounds[3],
+        );
+        const name = row && sectionNodes.find(node =>
+          shortResourceId(node) === "result-title" &&
+          node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
+        );
+        return row && name ? [{ button, name: nodeLabel(name) }] : [];
+      });
+  };
+
+  let state = await dump(context.serial);
+  if (!isAddFriendsPage(state.xml)) {
+    context.onLog("Accept Friends stopped: the live Add Friends screen was not confirmed.");
     return;
   }
+
+  // Expand each optional Added Me batch while the View More control remains.
+  // The exact resource ID plus its changing label prevents tapping View Less.
+  for (let expansion = 0; expansion < 10 && !context.isAborted(); expansion++) {
+    const section = getAddedMeSection(state.nodes);
+    if (!section) {
+      context.onLog("Accept Friends stopped: the Added Me section was not found.");
+      return;
+    }
+    const moreButton = state.nodes.slice(section.start + 1, section.end).find(node =>
+      shortResourceId(node) === "add_friends_view_more_cell" &&
+      [node.text, node.desc].some(value => /^view\s+\d+\s+more$/i.test(value.trim())),
+    );
+    if (!moreButton) break;
+    const beforeLabel = nodeLabel(moreButton);
+    const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    const beforeCount = getAcceptRows(state.nodes, section, screenHeight).length;
+    if (!await tapNode(context, moreButton, `expand Added Me (${beforeLabel})`)) return;
+    const expanded = await dump(context.serial);
+    if (!isAddFriendsPage(expanded.xml)) {
+      context.onLog("Accept Friends stopped: Snapchat left the Add Friends screen while expanding requests.");
+      return;
+    }
+    const expandedSection = getAddedMeSection(expanded.nodes);
+    if (!expandedSection) {
+      context.onLog("Accept Friends stopped: Added Me disappeared after tapping View More.");
+      return;
+    }
+    const expandedMore = expanded.nodes.slice(expandedSection.start + 1, expandedSection.end).find(node =>
+      shortResourceId(node) === "add_friends_view_more_cell" &&
+      [node.text, node.desc].some(value => /^view\s+\d+\s+more$/i.test(value.trim())),
+    );
+    const afterCount = getAcceptRows(expanded.nodes, expandedSection, screenHeight).length;
+    const afterLabel = expandedMore ? nodeLabel(expandedMore) : "";
+    if (afterCount <= beforeCount && afterLabel === beforeLabel) {
+      context.onLog("Accept Friends stopped: View More did not reveal additional request rows.");
+      return;
+    }
+    state = expanded;
+  }
+
   let accepted = 0;
   while (accepted < requested && !context.isAborted()) {
-    const { xml, nodes } = await dump(context.serial);
-    if (!/added me/i.test(xml)) break;
-    const candidate = nodes.find(node =>
-      node.clickable && [node.text, node.desc].some(value => /^accept$/i.test(value.trim())),
-    );
-    if (!candidate || !await tapNode(context, candidate, "accept the visible incoming request")) break;
+    state = await dump(context.serial);
+    if (!isAddFriendsPage(state.xml)) {
+      context.onLog("Accept Friends stopped: Snapchat left the verified Add Friends screen.");
+      break;
+    }
+    const section = getAddedMeSection(state.nodes);
+    if (!section) {
+      context.onLog("Accept Friends stopped: the Added Me section is no longer visible.");
+      break;
+    }
+    const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    const candidate = getAcceptRows(state.nodes, section, screenHeight)[0];
+    if (!candidate) {
+      context.onLog("Accept Friends stopped: no labeled Accept badge was found under Added Me.");
+      break;
+    }
+    if (!await tapNode(context, candidate.button, `accept ${candidate.name} under Added Me`)) break;
+    const confirmation = await dump(context.serial);
+    if (!isAddFriendsPage(confirmation.xml)) {
+      context.onLog("Accept Friends stopped: the Add Friends page changed before the acceptance could be confirmed.");
+      break;
+    }
+    const confirmedSection = getAddedMeSection(confirmation.nodes);
+    if (!confirmedSection) {
+      context.onLog("Accept Friends stopped: Added Me could not be confirmed after tapping Accept.");
+      break;
+    }
+    const sameRequestStillAccept = getAcceptRows(
+      confirmation.nodes,
+      confirmedSection,
+      (await android.getScreenSizeAsync(context.serial)).h,
+    ).some(row => row.name === candidate.name);
+    if (sameRequestStillAccept) {
+      context.onLog(`Accept Friends stopped: Snapchat still shows Accept for ${candidate.name}.`);
+      break;
+    }
     accepted++;
   }
   context.onLog(`Accept Friends: accepted ${accepted}/${requested} visible incoming requests.`);
+}
+
+async function collapseAddFriendsBeforeNextTool(context: Context): Promise<boolean> {
+  const current = await dump(context.serial);
+  if (!/add_friends_root/i.test(current.xml)) {
+    if (/camera_page/i.test(current.xml)) return true;
+    context.onLog("Snapchat stopped before the next tool: neither the Add Friends list nor the camera screen was confirmed.");
+    return false;
+  }
+  const dismiss = current.nodes.find(node => shortResourceId(node) === "add_friends_dismiss");
+  if (!dismiss) {
+    context.onLog("Snapchat stopped before the next tool: the Add Friends collapse chevron was not found.");
+    return false;
+  }
+  if (!await tapNode(context, dismiss, "collapse the Add Friends list before the next tool")) return false;
+  const after = await dump(context.serial);
+  if (!/camera_page/i.test(after.xml) || /add_friends_root/i.test(after.xml)) {
+    context.onLog("Snapchat stopped before the next tool: the Add Friends list did not collapse to the camera screen.");
+    return false;
+  }
+  return true;
 }
 
 async function runReplyUnreadChats(context: Context) {
@@ -555,8 +680,14 @@ export async function runSnapchatTools(context: Context): Promise<void> {
     context.onLog(`Snapchat tool order shuffled: ${orderedTools.length ? orderedTools.map(tool => tool.name).join(" → ") : "(no tools activated)"}`);
   }
 
-  for (const tool of orderedTools) {
+  for (let index = 0; index < orderedTools.length; index++) {
+    const tool = orderedTools[index];
     if (context.isAborted()) return;
     await tool.run();
+    if (index < orderedTools.length - 1 &&
+        (tool.name === "Add Friends" || tool.name === "Accept Friends")) {
+      if (context.isAborted()) return;
+      if (!await collapseAddFriendsBeforeNextTool(context)) return;
+    }
   }
 }

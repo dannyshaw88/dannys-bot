@@ -21,11 +21,11 @@ View Snaps means Snapchat Spotlight, not Stories: tap the bottom-right Spotlight
 
 **How to apply:** Keep these controls and execution Snapchat-only; fail closed if Spotlight or the configured swipe profile cannot be confirmed.
 
-Snapchat Add Friends must open from the live top-right person-plus control and only act on Add buttons inside the Find Friends section, never the separate Accept Friends section. Mass Snap currently has only a Snapchat Step 2 configuration scaffold modeled on SMS Select count and Swipe (px); do not send or select recipients until the user asks to build that behavior.
+Snapchat Add Friends and Accept Friends open through the live top-right person-plus control. Add Friends acts only on Add buttons under Find Friends; Accept Friends expands optional View More batches and accepts only labeled Accept badges under Added Me. If another activated tool follows either list tool, tap the top-left dismiss chevron and confirm the camera screen before continuing. Mass Snap currently has only a Snapchat Step 2 configuration scaffold modeled on SMS Select count and Swipe (px); do not send or select recipients until the user asks to build that behavior.
 
-**Why:** The user supplied device inspection dumps to define the exact Add Friends path and asked for Mass Snap controls to be placed now, with its behavior to be built later.
+**Why:** The user supplied device inspection dumps to define Snapchat's friend-list paths and asked for a minimized list before any following tool. Mass Snap controls were requested as setup only, with behavior to be built later.
 
-**How to apply:** Confirm the page and section from live UI nodes before tapping. Preserve Mass Snap settings independently from SMS and Instagram.
+**How to apply:** Confirm the page, section, and exact labeled action from live UI nodes before tapping. Stop the dispatcher if a list cannot be safely collapsed. Preserve Mass Snap settings independently from SMS and Instagram.
 
 For Snapchat unread-chat replies, use the OpenAI key managed in Settings > Security and send only the user's goal plus bounded visible thread context to the model. Treat chat text as untrusted, never log credentials, and do not send unless the thread and composer are still verified.
 
