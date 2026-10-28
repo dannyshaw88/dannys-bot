@@ -85,10 +85,11 @@ export interface UsbPhone {
 // ─── AutomationSettingsData ───────────────────────────────────────────────────
 
 export interface SnapchatToolSettings {
-  addFriends: { enabled: boolean; min: number; max: number };
-  acceptFriends: { enabled: boolean; min: number; max: number };
-  replyUnreadChats: { enabled: boolean; min: number; max: number; replyGoal: string };
-  viewStories: { enabled: boolean; min: number; max: number; watchSecondsMin: number; watchSecondsMax: number };
+  shuffleToolOrder: boolean;
+  addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
+  acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
+  replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
+  viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
 }
 
 export interface AutomationSettingsData {
@@ -301,10 +302,11 @@ export interface AutomationSettingsData {
 export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
   snapchatTools: {
-    addFriends: { enabled: false, min: 1, max: 2 },
-    acceptFriends: { enabled: false, min: 1, max: 3 },
-    replyUnreadChats: { enabled: false, min: 1, max: 1, replyGoal: "" },
-    viewStories: { enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 },
+    shuffleToolOrder: false,
+    addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
+    acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
+    replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
+    viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
   },
   feedEnabled: true, storiesEnabled: true, shuffleToolOrder: false,
   actionDelayMin: 5, actionDelayMax: 10,

@@ -2,10 +2,11 @@ import * as android from "../../androidManager";
 import { storage } from "../../../storage";
 
 type SnapchatTools = {
-  addFriends: { enabled: boolean; min: number; max: number };
-  acceptFriends: { enabled: boolean; min: number; max: number };
-  replyUnreadChats: { enabled: boolean; min: number; max: number; replyGoal: string };
-  viewStories: { enabled: boolean; min: number; max: number; watchSecondsMin: number; watchSecondsMax: number };
+  shuffleToolOrder: boolean;
+  addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
+  acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
+  replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
+  viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
 };
 
 type UiNode = {
@@ -353,11 +354,33 @@ async function runViewStories(context: Context) {
 }
 
 export async function runSnapchatTools(context: Context): Promise<void> {
-  await runAddFriends(context);
-  if (context.isAborted()) return;
-  await runAcceptFriends(context);
-  if (context.isAborted()) return;
-  await runReplyUnreadChats(context);
-  if (context.isAborted()) return;
-  await runViewStories(context);
+  const orderedTools = [
+    { name: "Add Friends", settings: context.tools.addFriends, run: () => runAddFriends(context) },
+    { name: "Accept Friends", settings: context.tools.acceptFriends, run: () => runAcceptFriends(context) },
+    { name: "Reply to Unread Chats", settings: context.tools.replyUnreadChats, run: () => runReplyUnreadChats(context) },
+    { name: "View Snaps", settings: context.tools.viewStories, run: () => runViewStories(context) },
+  ].filter(tool => {
+    if (!tool.settings.enabled) return false;
+    const min = Math.max(0, Math.min(100, Math.round(tool.settings.activatePctMin)));
+    const max = Math.max(0, Math.min(100, Math.round(tool.settings.activatePctMax)));
+    const low = Math.min(min, max);
+    const high = Math.max(min, max);
+    const chance = Math.round(low + Math.random() * (high - low));
+    const activated = Math.random() * 100 < chance;
+    context.onLog(`[Snapchat activation] ${tool.name}: ${activated ? "activated" : "skipped"} (${chance}%)`);
+    return activated;
+  });
+
+  if (context.tools.shuffleToolOrder) {
+    for (let i = orderedTools.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [orderedTools[i], orderedTools[j]] = [orderedTools[j], orderedTools[i]];
+    }
+    context.onLog(`Snapchat tool order shuffled: ${orderedTools.length ? orderedTools.map(tool => tool.name).join(" → ") : "(no tools activated)"}`);
+  }
+
+  for (const tool of orderedTools) {
+    if (context.isAborted()) return;
+    await tool.run();
+  }
 }

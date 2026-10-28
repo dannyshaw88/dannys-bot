@@ -530,10 +530,11 @@ type AutomationSettings = {
   cycleIntervalMin?: number;
   cycleIntervalMax?: number;
   snapchatTools?: {
-    addFriends: { enabled: boolean; min: number; max: number };
-    acceptFriends: { enabled: boolean; min: number; max: number };
-    replyUnreadChats: { enabled: boolean; min: number; max: number; replyGoal: string };
-    viewStories: { enabled: boolean; min: number; max: number; watchSecondsMin: number; watchSecondsMax: number };
+    shuffleToolOrder: boolean;
+    addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
+    acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
+    replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
+    viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
   };
   enabled: boolean;
   trustScoreId?: string | null;
@@ -2777,34 +2778,44 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Snapchat's tools are a separate suite from Instagram. Keep all controls
     // nested so they cannot accidentally alter Instagram's existing settings.
     snapchatTools: z.object({
+      shuffleToolOrder: z.boolean().default(false),
       addFriends: z.object({
         enabled: z.boolean().default(false),
         min: z.number().int().min(0).max(10).default(1),
         max: z.number().int().min(0).max(10).default(2),
-      }).default({ enabled: false, min: 1, max: 2 }),
+        activatePctMin: z.number().int().min(0).max(100).default(100),
+        activatePctMax: z.number().int().min(0).max(100).default(100),
+      }).default({ enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 }),
       acceptFriends: z.object({
         enabled: z.boolean().default(false),
         min: z.number().int().min(0).max(10).default(1),
         max: z.number().int().min(0).max(10).default(3),
-      }).default({ enabled: false, min: 1, max: 3 }),
+        activatePctMin: z.number().int().min(0).max(100).default(100),
+        activatePctMax: z.number().int().min(0).max(100).default(100),
+      }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 }),
       replyUnreadChats: z.object({
         enabled: z.boolean().default(false),
         min: z.number().int().min(0).max(10).default(1),
         max: z.number().int().min(0).max(10).default(1),
+        activatePctMin: z.number().int().min(0).max(100).default(100),
+        activatePctMax: z.number().int().min(0).max(100).default(100),
         replyGoal: z.string().max(1200).default(""),
-      }).default({ enabled: false, min: 1, max: 1, replyGoal: "" }),
+      }).default({ enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" }),
       viewStories: z.object({
         enabled: z.boolean().default(false),
         min: z.number().int().min(0).max(10).default(1),
         max: z.number().int().min(0).max(10).default(3),
+        activatePctMin: z.number().int().min(0).max(100).default(100),
+        activatePctMax: z.number().int().min(0).max(100).default(100),
         watchSecondsMin: z.number().int().min(1).max(60).default(5),
         watchSecondsMax: z.number().int().min(1).max(60).default(10),
-      }).default({ enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 }),
+      }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 }),
     }).default({
-      addFriends: { enabled: false, min: 1, max: 2 },
-      acceptFriends: { enabled: false, min: 1, max: 3 },
-      replyUnreadChats: { enabled: false, min: 1, max: 1, replyGoal: "" },
-      viewStories: { enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 },
+      shuffleToolOrder: false,
+      addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
+      acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
+      replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
+      viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
     }),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
@@ -2812,10 +2823,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const defaults: AutomationSettings = {
       enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
       snapchatTools: {
-        addFriends: { enabled: false, min: 1, max: 2 },
-        acceptFriends: { enabled: false, min: 1, max: 3 },
-        replyUnreadChats: { enabled: false, min: 1, max: 1, replyGoal: "" },
-        viewStories: { enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 },
+        shuffleToolOrder: false,
+        addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
+        acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
+        replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
+        viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
       },
       feedEnabled: true, storiesEnabled: true,
       actionDelayMin: 5, actionDelayMax: 10,
@@ -3515,10 +3527,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const defaults: AutomationSettings = {
         enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
         snapchatTools: {
-          addFriends: { enabled: false, min: 1, max: 2 },
-          acceptFriends: { enabled: false, min: 1, max: 3 },
-          replyUnreadChats: { enabled: false, min: 1, max: 1, replyGoal: "" },
-          viewStories: { enabled: false, min: 1, max: 3, watchSecondsMin: 5, watchSecondsMax: 10 },
+          shuffleToolOrder: false,
+          addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
+          acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
+          replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
+          viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
         },
         feedEnabled: true, storiesEnabled: true,
         actionDelayMin: 5, actionDelayMax: 10,
@@ -3670,6 +3683,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         slotId: cfg[serial]?.account?.slots?.[slotIdx]?.slotId ?? "",
         slotUsername: cfg[serial]?.account?.slots?.[slotIdx]?.username ?? "",
       };
+      // Normalize nested Snapchat settings too: old slots only have the
+      // original per-tool fields, so the top-level merge alone would omit
+      // new activation chances and shuffle state from the response.
+      merged.snapchatTools = automationSchema.shape.snapchatTools.parse(merged.snapchatTools ?? {});
       // The dedicated folder-path file is the authoritative source for
       // makePostLocalFolderPath.  It is written directly when the user assigns
       // a folder, so it survives Copy Settings, schema drift, and any autosave

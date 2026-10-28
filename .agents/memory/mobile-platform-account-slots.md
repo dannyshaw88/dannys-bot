@@ -14,3 +14,9 @@ For Snapchat unread-chat replies, use the OpenAI key managed in Settings > Secur
 **Why:** The user wants replies to follow a conversation goal and timing instructions, while keeping Snapchat behavior independent from Instagram.
 
 **How to apply:** Fail closed when the key, readable context, generated reply, or live-thread confirmation is missing; make clear in the UI that visible chat content is sent to OpenAI.
+
+Snapchat tool activation chances and shuffle order belong inside `snapchatTools`, not Instagram's shared settings. Roll each enabled tool once per cycle, then Fisher–Yates shuffle only the activated tools when Snapchat shuffle is on. Default activation ranges to 100/100 and shuffle to off for existing slots.
+
+**Why:** The user wants Snapchat tools to stop running on every cycle without changing Instagram's behavior.
+
+**How to apply:** Keep the controls and saved values Snapchat-specific, and normalize nested settings on load so older slots receive the defaults.

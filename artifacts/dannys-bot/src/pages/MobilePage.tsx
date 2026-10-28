@@ -6796,8 +6796,23 @@ export function AutomationSettingsPanel({
       {slotPlatform === "snapchat" ? (
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
         <div>
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
-          <p className="text-sm text-muted-foreground mt-1">Snapchat tools. These controls are separate from Instagram.</p>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                id={`snapchat-shuffle-tool-order-${slotIdx ?? 0}`}
+                checked={settings.snapchatTools.shuffleToolOrder}
+                onChange={e => setSettings(s => ({
+                  ...s,
+                  snapchatTools: { ...s.snapchatTools, shuffleToolOrder: e.target.checked },
+                }))}
+                disabled={loading}
+                className="w-4 h-4 accent-primary cursor-pointer"
+              />
+              <span className="text-sm text-muted-foreground">Shuffle tool order</span>
+            </label>
+          </div>
         </div>
         {([
           ["addFriends", "Add Friends"],
@@ -6808,46 +6823,66 @@ export function AutomationSettingsPanel({
           const tool = settings.snapchatTools[key];
           return (
             <div key={key} className="rounded-lg border border-border/70 p-4 space-y-3">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-3 min-w-[190px]">
+              <div className="flex min-w-0 flex-nowrap items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2 min-w-[155px]">
                   <Switch
                     checked={tool.enabled}
                     onCheckedChange={enabled => updateSnapchatTool(key, { enabled })}
                     disabled={loading}
                   />
-                  <span className="text-sm font-semibold text-foreground">{title}</span>
+                  <span className="whitespace-nowrap text-[11px] font-semibold text-foreground">{title}</span>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                <Label className="text-sm text-muted-foreground">Per cycle</Label>
-                <Input
-                  type="number" min={0} max={10} className={NUM_INPUT_CLASS}
-                  value={tool.min}
-                  onChange={e => updateSnapchatTool(key, { min: Math.max(0, Math.min(10, clamp4(Number(e.target.value)))) })}
-                  disabled={loading || !tool.enabled}
-                />
-                <span className="text-sm text-muted-foreground">to</span>
-                <Input
-                  type="number" min={0} max={10} className={NUM_INPUT_CLASS}
-                  value={tool.max}
-                  onChange={e => updateSnapchatTool(key, { max: Math.max(0, Math.min(10, clamp4(Number(e.target.value)))) })}
-                  disabled={loading || !tool.enabled}
-                />
+                <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap">
+                  <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+                    <Label className="text-[11px] text-muted-foreground">Chance %</Label>
+                    <Input
+                      type="number" min={0} max={100} className="w-10 h-7 px-0.5 text-center text-xs"
+                      value={tool.activatePctMin}
+                      onChange={e => updateSnapchatTool(key, { activatePctMin: Math.max(0, Math.min(100, clamp4(Number(e.target.value)))) })}
+                      disabled={loading || !tool.enabled}
+                    />
+                    <span className="text-xs text-muted-foreground">–</span>
+                    <Input
+                      type="number" min={0} max={100} className="w-10 h-7 px-0.5 text-center text-xs"
+                      value={tool.activatePctMax}
+                      onChange={e => updateSnapchatTool(key, { activatePctMax: Math.max(0, Math.min(100, clamp4(Number(e.target.value)))) })}
+                      disabled={loading || !tool.enabled}
+                    />
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+                    <Label className="text-[11px] text-muted-foreground">Count</Label>
+                    <Input
+                      type="number" min={0} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
+                      value={tool.min}
+                      onChange={e => updateSnapchatTool(key, { min: Math.max(0, Math.min(10, clamp4(Number(e.target.value)))) })}
+                      disabled={loading || !tool.enabled}
+                    />
+                    <span className="text-xs text-muted-foreground">–</span>
+                    <Input
+                      type="number" min={0} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
+                      value={tool.max}
+                      onChange={e => updateSnapchatTool(key, { max: Math.max(0, Math.min(10, clamp4(Number(e.target.value)))) })}
+                      disabled={loading || !tool.enabled}
+                    />
+                  </div>
                 {key === "viewStories" && (
                   <>
-                    <Label className="text-sm text-muted-foreground ml-2">Watch each (seconds)</Label>
-                    <Input
-                      type="number" min={1} max={60} className={NUM_INPUT_CLASS}
-                      value={settings.snapchatTools.viewStories.watchSecondsMin}
-                      onChange={e => updateSnapchatTool("viewStories", { watchSecondsMin: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
-                      disabled={loading || !tool.enabled}
-                    />
-                    <span className="text-sm text-muted-foreground">to</span>
-                    <Input
-                      type="number" min={1} max={60} className={NUM_INPUT_CLASS}
-                      value={settings.snapchatTools.viewStories.watchSecondsMax}
-                      onChange={e => updateSnapchatTool("viewStories", { watchSecondsMax: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
-                      disabled={loading || !tool.enabled}
-                    />
+                    <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+                      <Label className="text-[11px] text-muted-foreground">Watch (s)</Label>
+                      <Input
+                        type="number" min={1} max={60} className="w-10 h-7 px-0.5 text-center text-xs"
+                        value={settings.snapchatTools.viewStories.watchSecondsMin}
+                        onChange={e => updateSnapchatTool("viewStories", { watchSecondsMin: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
+                        disabled={loading || !tool.enabled}
+                      />
+                      <span className="text-xs text-muted-foreground">–</span>
+                      <Input
+                        type="number" min={1} max={60} className="w-10 h-7 px-0.5 text-center text-xs"
+                        value={settings.snapchatTools.viewStories.watchSecondsMax}
+                        onChange={e => updateSnapchatTool("viewStories", { watchSecondsMax: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
+                        disabled={loading || !tool.enabled}
+                      />
+                    </div>
                   </>
                 )}
                 </div>
@@ -6861,11 +6896,7 @@ export function AutomationSettingsPanel({
                     onChange={e => updateSnapchatTool("replyUnreadChats", { replyGoal: e.target.value })}
                     disabled={loading || !tool.enabled}
                     className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
-                    placeholder="Describe the goal and timing, e.g. build rapport, then share the provided link on message 3."
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Recent visible chat content is sent to OpenAI to draft replies from this goal. Configure the OpenAI key in Settings → Security.
-                  </p>
                 </div>
               )}
             </div>
