@@ -823,7 +823,7 @@ type DevicePersonality = {
   discovery: number;
   actionVariety: number;
 };
-type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
+type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; accountTabPreferences?: { order: ("instagram" | "snapchat")[]; landing: "instagram" | "snapchat" }; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
@@ -4513,6 +4513,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // No upper-bound cap — users can add as many slots as they need via the UI
     slots: z.array(deviceSlotSchema).min(0),
   });
+  const accountTabPreferencesSchema = z.object({
+    order: z.array(z.enum(["instagram", "snapchat"])).length(2),
+    landing: z.enum(["instagram", "snapchat"]),
+  }).refine(value => new Set(value.order).size === 2, "Platform tabs must be unique");
   const slotPersonalityKey = (serial: string, slotId: string) =>
     `mobile_slot_personality_${serial}_${slotId}`;
   const slotPersonalityOverridesKey = (serial: string, slotId: string) =>
@@ -4620,6 +4624,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       saveInstanceConfigs(cfg);
     }
     res.json(hydrated);
+  });
+  app.get("/api/mobile/devices/:serial/account-tab-preferences", (req: Request, res: Response) => {
+    const config = loadInstanceConfigs();
+    const saved = config[p(req, "serial")]?.accountTabPreferences;
+    const parsed = accountTabPreferencesSchema.safeParse(saved);
+    res.json(parsed.success
+      ? parsed.data
+      : { order: ["instagram", "snapchat"], landing: "instagram" });
+  });
+  app.post("/api/mobile/devices/:serial/account-tab-preferences", (req: Request, res: Response) => {
+    const parsed = accountTabPreferencesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid account tab preferences" });
+      return;
+    }
+    const config = loadInstanceConfigs();
+    const serial = p(req, "serial");
+    config[serial] = { ...config[serial], accountTabPreferences: parsed.data };
+    saveInstanceConfigs(config);
+    res.json({ ok: true, ...parsed.data });
   });
   app.post("/api/mobile/devices/:serial/account", async (req: Request, res: Response) => {
     try {

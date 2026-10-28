@@ -20,3 +20,9 @@ Snapchat tool activation chances and shuffle order belong inside `snapchatTools`
 **Why:** The user wants Snapchat tools to stop running on every cycle without changing Instagram's behavior.
 
 **How to apply:** Keep the controls and saved values Snapchat-specific, and normalize nested settings on load so older slots receive the defaults.
+
+Per-device Instagram/Snapchat tab order and last-selected landing tab must survive app restarts and remain isolated by device serial.
+
+**Why:** The user wants each Farm device to reopen on its chosen platform tab with its preferred tab order.
+
+**How to apply:** Persist tab preferences as device-level configuration, separate from account-slot records, and hydrate them when that device is opened.

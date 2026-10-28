@@ -4403,7 +4403,7 @@ const MAX_HST_ACCOUNT_SLOTS = 10;
 // the Human Session Tool tab never unmounts this and interrupts an
 // in-progress automation cycle — the loop must keep running in the
 // background regardless of which tab is currently visible.
-function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string, manualOverride?: boolean) => Promise<CollisionLease>, releaseSlot?: (lease: CollisionLease, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig, isActive = false, slotId?: string) {
+function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => void, slotIdx?: number, slotUsername?: string, requestSlot?: (idx: number, readyAt: number, onQueued?: () => void, source?: CollisionSource, owner?: string, manualOverride?: boolean) => Promise<CollisionLease>, releaseSlot?: (lease: CollisionLease, skipRest?: boolean) => void, cancelQueuedSlot?: (idx: number) => void, refreshKey?: number, collisionPreventerConfig?: CollisionPreventerConfig, isActive = false, slotId?: string, slotPlatform: AccountPlatform = "instagram") {
   const [settings, setSettings] = useState<AutomationSettingsData>(AUTOMATION_DEFAULTS);
   const [loading,  setLoading]  = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -4435,6 +4435,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // captured when the run-loop effect was last set up.
   const phoneRef = useRef<UsbPhone | null>(phone);
   phoneRef.current = phone;
+  const slotPlatformRef = useRef<AccountPlatform>(slotPlatform);
+  slotPlatformRef.current = slotPlatform;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   // Abort controller for the currently in-flight automation-cycle fetch.
@@ -5192,7 +5194,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const max = Math.max(s.feedScrollMin, s.feedScrollMax);
       const count = Math.floor(Math.random() * (max - min + 1)) + min;
       setRunning(true);
-      onLog?.(`Cycle starting → power on, open Instagram, ${count} downward scrolls`);
+      const appName = slotPlatformRef.current === "snapchat" ? "Snapchat" : "Instagram";
+      onLog?.(slotPlatformRef.current === "snapchat"
+        ? "Cycle starting → wake screen, swipe to unlock, launch Snapchat"
+        : `Cycle starting → wake screen, swipe to unlock, launch Instagram, ${count} downward scrolls`);
       // Generate a unique ID for this cycle.  Both the cycle POST and the abort
       // POST carry it so the server can ignore stale aborts from a previous
       // cycle that race with the start of this new one.
@@ -9687,7 +9692,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   { phone, slotIdx, slotId, slotUsername, slotPlatform, snapchatTrustScoreLabel, slotPersonality, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
   ref,
 ) {
-  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig, isActive, slotId);
+  const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig, isActive, slotId, slotPlatform);
   const isFirst = slotIdx === 0;
   const isLast = slotIdx === (slotCount ?? 1) - 1;
 
@@ -9892,6 +9897,77 @@ async function hydrateAccountTrustScoreAssignments(
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
 function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning, onPhoneAppsInspectionHold, onOpenBrowserProfile }, ref) {
   const [activeAccountPlatform, setActiveAccountPlatform] = useState<AccountPlatform>("instagram");
+  const [accountPlatformOrder, setAccountPlatformOrder] = useState<AccountPlatform[]>(["instagram", "snapchat"]);
+  const [platformPreferencesReadySerial, setPlatformPreferencesReadySerial] = useState<string | null>(null);
+  const [platformPreferencesError, setPlatformPreferencesError] = useState<string | null>(null);
+  const platformTabDragRef = useRef<AccountPlatform | null>(null);
+  const accountPlatformPreferencesReady = Boolean(phone?.serial && platformPreferencesReadySerial === phone.serial);
+  const persistAccountPlatformPreferences = useCallback(async (
+    order: AccountPlatform[],
+    landing: AccountPlatform,
+  ) => {
+    const serial = phone?.serial;
+    if (!serial) return;
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account-tab-preferences`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order, landing }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.ok) throw new Error(body?.error ?? `Server error (${response.status})`);
+      setPlatformPreferencesError(null);
+    } catch (error: any) {
+      setPlatformPreferencesError(error?.message ?? "Couldn't save account tab preferences");
+    }
+  }, [phone?.serial]);
+  useEffect(() => {
+    const serial = phone?.serial;
+    setPlatformPreferencesReadySerial(null);
+    setPlatformPreferencesError(null);
+    setActiveAccountPlatform("instagram");
+    setAccountPlatformOrder(["instagram", "snapchat"]);
+    if (!serial) return;
+    let active = true;
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account-tab-preferences`)
+      .then(async response => {
+        if (!response.ok) throw new Error(`Server error (${response.status})`);
+        return response.json();
+      })
+      .then(preferences => {
+        if (!active) return;
+        const order = Array.isArray(preferences?.order)
+          && preferences.order.length === 2
+          && preferences.order.includes("instagram")
+          && preferences.order.includes("snapchat")
+          ? preferences.order as AccountPlatform[]
+          : ["instagram", "snapchat"] as AccountPlatform[];
+        const landing: AccountPlatform = preferences?.landing === "snapchat" ? "snapchat" : "instagram";
+        setAccountPlatformOrder(order);
+        setActiveAccountPlatform(landing);
+      })
+      .catch((error: any) => {
+        if (active) setPlatformPreferencesError(error?.message ?? "Couldn't load account tab preferences");
+      })
+      .finally(() => {
+        if (active) setPlatformPreferencesReadySerial(serial);
+      });
+    return () => { active = false; };
+  }, [phone?.serial]);
+  const selectAccountPlatform = (platform: AccountPlatform) => {
+    setActiveAccountPlatform(platform);
+    if (accountPlatformPreferencesReady) {
+      void persistAccountPlatformPreferences(accountPlatformOrder, platform);
+    }
+  };
+  const reorderAccountPlatformTabs = (source: AccountPlatform, target: AccountPlatform) => {
+    if (!accountPlatformPreferencesReady || source === target) return;
+    const nextOrder = [...accountPlatformOrder];
+    const [moved] = nextOrder.splice(nextOrder.indexOf(source), 1);
+    nextOrder.splice(nextOrder.indexOf(target), 0, moved);
+    setAccountPlatformOrder(nextOrder);
+    void persistAccountPlatformPreferences(nextOrder, activeAccountPlatform);
+  };
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
   const [randomisingSlot, setRandomisingSlot] = useState<number | null>(null);
   const [randomisedSlot, setRandomisedSlot] = useState<number | null>(null);
@@ -10548,23 +10624,47 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         {/* Platform tabs share one persisted slot list so timers and device
             collision prevention remain common across both account types. */}
         <div className="flex items-center gap-2 border-b border-border">
-          <button
-            type="button"
-            onClick={() => setActiveAccountPlatform("instagram")}
-            aria-pressed={activeAccountPlatform === "instagram"}
-            className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${activeAccountPlatform === "instagram" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          >
-            <FaInstagram className="h-4 w-4" aria-hidden="true" /> Instagram
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveAccountPlatform("snapchat")}
-            aria-pressed={activeAccountPlatform === "snapchat"}
-            className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${activeAccountPlatform === "snapchat" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          >
-            <FaSnapchatGhost className="h-4 w-4" aria-hidden="true" /> Snapchat
-          </button>
+          {accountPlatformOrder.map(platform => {
+            const isInstagram = platform === "instagram";
+            const label = isInstagram ? "Instagram" : "Snapchat";
+            return (
+              <button
+                key={platform}
+                type="button"
+                draggable={accountPlatformPreferencesReady}
+                disabled={!accountPlatformPreferencesReady}
+                onClick={() => selectAccountPlatform(platform)}
+                onDragStart={event => {
+                  platformTabDragRef.current = platform;
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", platform);
+                }}
+                onDragOver={event => event.preventDefault()}
+                onDrop={event => {
+                  event.preventDefault();
+                  const source = platformTabDragRef.current ?? event.dataTransfer.getData("text/plain");
+                  if (source === "instagram" || source === "snapchat") {
+                    reorderAccountPlatformTabs(source, platform);
+                  }
+                  platformTabDragRef.current = null;
+                }}
+                onDragEnd={() => { platformTabDragRef.current = null; }}
+                aria-pressed={activeAccountPlatform === platform}
+                aria-label={`${label} tab. Drag to change tab order.`}
+                title="Drag to change tab order"
+                className={`inline-flex cursor-grab items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition-colors active:cursor-grabbing disabled:cursor-default ${activeAccountPlatform === platform ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+              >
+                {isInstagram
+                  ? <FaInstagram className="h-4 w-4" aria-hidden="true" />
+                  : <FaSnapchatGhost className="h-4 w-4" aria-hidden="true" />}
+                {label}
+              </button>
+            );
+          })}
         </div>
+        {platformPreferencesError && (
+          <p role="alert" className="text-xs text-destructive">{platformPreferencesError}</p>
+        )}
 
         <div className="space-y-4">
           {slots.map((slot, i) => ({ slot, i }))
