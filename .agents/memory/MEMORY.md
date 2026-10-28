@@ -150,3 +150,4 @@
 - [TrustScore assignment autosave isolation](trustscore-assignment-autosave.md) — assigned TrustScore templates alone control tool switches; ignore legacy slot overrides and stale autosaves
 - [SMS contact selection only](sms-contact-selection-only.md) — the Phone Apps SMS action adds only the requested unselected contacts in Google Messages; it never composes or sends
 - [Additional focused project pointers](additional-memory-pointers.md) — less frequently used UI, manual-search, camera, and tooling notes remain indexed separately
+- [Replit preview API routing](replit-preview-api-routing.md) — when the public preview routes `/api` through the `/__mockup` server, proxy it to the top-level API

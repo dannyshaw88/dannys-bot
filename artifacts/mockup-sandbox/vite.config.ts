@@ -62,6 +62,16 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // The Replit preview host can route /api requests through this server even
+    // when the main app is served from another workflow. Forward those requests
+    // to the top-level API instead of letting the /__mockup base reject them.
+    proxy: {
+      "/api": {
+        target: `http://127.0.0.1:${process.env.API_PORT ?? "3000"}`,
+        changeOrigin: true,
+        ws: true,
+      },
+    },
   },
   preview: {
     port,
