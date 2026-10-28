@@ -534,7 +534,7 @@ type AutomationSettings = {
     addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
     acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
     replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
-    viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
+    viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; likePercentMin: number; likePercentMax: number; watchSecondsMin: number; watchSecondsMax: number };
   };
   enabled: boolean;
   trustScoreId?: string | null;
@@ -2807,15 +2807,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         max: z.number().int().min(0).max(10).default(3),
         activatePctMin: z.number().int().min(0).max(100).default(100),
         activatePctMax: z.number().int().min(0).max(100).default(100),
+        likePercentMin: z.number().int().min(0).max(100).default(0),
+        likePercentMax: z.number().int().min(0).max(100).default(0),
         watchSecondsMin: z.number().int().min(1).max(60).default(5),
         watchSecondsMax: z.number().int().min(1).max(60).default(10),
-      }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 }),
+      }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 }),
     }).default({
       shuffleToolOrder: false,
       addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
       acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
       replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
-      viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
+      viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
     }),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
@@ -2827,7 +2829,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
         acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
         replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
-        viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
+          viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
       },
       feedEnabled: true, storiesEnabled: true,
       actionDelayMin: 5, actionDelayMax: 10,
@@ -3531,7 +3533,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
           acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
           replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
-          viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
+        viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
         },
         feedEnabled: true, storiesEnabled: true,
         actionDelayMin: 5, actionDelayMax: 10,
@@ -7216,6 +7218,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          tLog("▶ Opening Snapchat account app…");
          await android.launchSnapchat(serial);
          steps.push("launch-snapchat");
+          const devicePrefsForSnapchat = (() => {
+            try { return loadInstanceConfigs()[serial]?.devicePrefs ?? {}; } catch { return {}; }
+          })();
           const snapchatTools = automationSchema.shape.snapchatTools.parse(
             effectiveSettings.snapchatTools ?? {},
           );
@@ -7226,13 +7231,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               onLog: tLog,
               isAborted: () => isCycleAborted(serial),
               sleep: milliseconds => sleepOrAbort(serial, milliseconds, "navigation", "static"),
+              swipeGesture: devicePrefsForSnapchat.swipeGesture,
             });
           } finally {
             if (!isCycleAborted(serial)) {
               tLog("▶ Step 3: Opening Snapchat in the floating-window view and dismissing it…");
-              const devicePrefsForDismiss = (() => {
-                try { return loadInstanceConfigs()[serial]?.devicePrefs ?? {}; } catch { return {}; }
-              })();
+              const devicePrefsForDismiss = devicePrefsForSnapchat;
               const effectiveDismiss = dismissDirection !== "auto"
                 ? dismissDirection
                 : (devicePrefsForDismiss.dismissDirection && devicePrefsForDismiss.dismissDirection !== "auto")

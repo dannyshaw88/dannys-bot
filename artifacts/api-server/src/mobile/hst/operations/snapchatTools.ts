@@ -6,7 +6,16 @@ type SnapchatTools = {
   addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
   acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
   replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
-  viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
+  viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; likePercentMin: number; likePercentMax: number; watchSecondsMin: number; watchSecondsMax: number };
+};
+
+type DeviceSwipeGesture = {
+  x1: number; y1: number; x2: number; y2: number;
+  durationMinMs: number; durationMaxMs: number;
+  jitterX: number; jitterY: number;
+  startJitterMinY?: number; startJitterMaxY?: number;
+  pauseMinMs?: number; pauseMaxMs?: number;
+  settleMinMs?: number; settleMaxMs?: number;
 };
 
 type UiNode = {
@@ -15,6 +24,7 @@ type UiNode = {
   resourceId: string;
   className: string;
   clickable: boolean;
+  selected: boolean;
   bounds: [number, number, number, number];
 };
 
@@ -24,6 +34,7 @@ type Context = {
   onLog: (message: string) => void;
   isAborted: () => boolean;
   sleep: (milliseconds: number) => Promise<void>;
+  swipeGesture?: DeviceSwipeGesture;
 };
 
 const decodeXml = (value: string) => value
@@ -48,6 +59,7 @@ function parseNodes(xml: string): UiNode[] {
       resourceId: get("resource-id"),
       className: get("class"),
       clickable: get("clickable") === "true",
+      selected: get("selected") === "true",
       bounds: boundsMatch.slice(1).map(Number) as [number, number, number, number],
     });
   }
@@ -115,6 +127,81 @@ function randomSeconds(min: number, max: number): number {
   const low = Math.max(1, Math.min(60, Math.min(min, max)));
   const high = Math.max(low, Math.min(60, Math.max(min, max)));
   return low + Math.floor(Math.random() * (high - low + 1));
+}
+
+function randomPercent(min: number, max: number): number {
+  const low = Math.max(0, Math.min(100, Math.min(min, max)));
+  const high = Math.max(low, Math.min(100, Math.max(min, max)));
+  return low + Math.floor(Math.random() * (high - low + 1));
+}
+
+function isSpotlightSurface(xml: string, nodes: UiNode[]): boolean {
+  return /spotlight_container/i.test(xml) &&
+    nodes.some(node => node.text.trim().toLowerCase() === "spotlight" && node.bounds[1] < 400);
+}
+
+async function openSpotlight(context: Context): Promise<boolean> {
+  const { nodes } = await dump(context.serial);
+  const button = nodes.find(node =>
+    node.clickable && node.resourceId.split("/").pop() === "ngs_spotlight_icon_container",
+  );
+  if (!button) {
+    context.onLog("View Snaps stopped: Spotlight button was not found in Snapchat's bottom navigation.");
+    return false;
+  }
+  if (!await tapNode(context, button, "open Spotlight from the bottom navigation")) return false;
+  const state = await dump(context.serial);
+  if (!isSpotlightSurface(state.xml, state.nodes)) {
+    context.onLog("View Snaps stopped: the Spotlight screen could not be confirmed after tapping its navigation icon.");
+    return false;
+  }
+  return true;
+}
+
+async function swipeByDeviceGesture(context: Context): Promise<boolean> {
+  const gesture = context.swipeGesture;
+  if (!gesture) {
+    context.onLog("View Snaps stopped: configure a swipe gesture in My Device before scrolling Spotlight.");
+    return false;
+  }
+  const points = [gesture.x1, gesture.y1, gesture.x2, gesture.y2];
+  if (points.some(value => !Number.isFinite(value) || value <= 0) ||
+      (gesture.x1 === gesture.x2 && gesture.y1 === gesture.y2) ||
+      !Number.isFinite(gesture.durationMinMs) || !Number.isFinite(gesture.durationMaxMs)) {
+    context.onLog("View Snaps stopped: the saved My Device swipe gesture is incomplete or invalid.");
+    return false;
+  }
+  const durationMin = Math.max(1, Math.min(gesture.durationMinMs, gesture.durationMaxMs));
+  const durationMax = Math.max(durationMin, Math.max(gesture.durationMinMs, gesture.durationMaxMs));
+  const duration = Math.round(durationMin + Math.random() * (durationMax - durationMin));
+  const jitter = (first: number, second: number) => {
+    const low = Math.min(first, second);
+    const high = Math.max(first, second);
+    return Math.round(low + Math.random() * (high - low));
+  };
+  const jitterX = Number.isFinite(gesture.jitterX) ? Math.abs(gesture.jitterX) : 0;
+  const jitterY = Number.isFinite(gesture.jitterY) ? Math.abs(gesture.jitterY) : 0;
+  const startJitterMinY = Number.isFinite(gesture.startJitterMinY) ? gesture.startJitterMinY! : 0;
+  const startJitterMaxY = Number.isFinite(gesture.startJitterMaxY) ? gesture.startJitterMaxY! : startJitterMinY;
+  const dx = jitter(-jitterX, jitterX);
+  const dy1 = jitter(startJitterMinY, startJitterMaxY);
+  const dy2 = jitter(-jitterY, jitterY);
+  const pauseMin = Number.isFinite(gesture.pauseMinMs) ? Math.max(0, gesture.pauseMinMs!) : 0;
+  const pauseMax = Number.isFinite(gesture.pauseMaxMs) ? Math.max(pauseMin, gesture.pauseMaxMs!) : pauseMin;
+  const settleMin = Number.isFinite(gesture.settleMinMs) ? Math.max(0, gesture.settleMinMs!) : 0;
+  const settleMax = Number.isFinite(gesture.settleMaxMs) ? Math.max(settleMin, gesture.settleMaxMs!) : settleMin;
+  if (pauseMax > 0) await context.sleep(jitter(pauseMin, pauseMax));
+  await android.swipe(
+    context.serial,
+    gesture.x1 + dx,
+    gesture.y1 + dy1,
+    gesture.x2 + dx,
+    gesture.y2 + dy1 + dy2,
+    duration,
+    false,
+  );
+  if (settleMax > 0) await context.sleep(jitter(settleMin, settleMax));
+  return !context.isAborted();
 }
 
 function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
@@ -323,34 +410,52 @@ async function runReplyUnreadChats(context: Context) {
 
 async function runViewStories(context: Context) {
   const settings = context.tools.viewStories;
-  const requested = randomCount(settings.min, settings.max);
-  if (!settings.enabled || requested === 0) return;
-  if (!await tapExact(context, ["Stories"], "open Stories")) {
-    context.onLog("View Snaps skipped: Snapchat Stories tab was not found.");
-    return;
+  if (!settings.enabled) return;
+  const requested = randomCount(Math.max(1, settings.min), Math.max(1, settings.max));
+  if (!await openSpotlight(context)) return;
+
+  let swiped = 0;
+  for (let index = 0; index < requested && !context.isAborted(); index++) {
+    const state = await dump(context.serial);
+    if (!isSpotlightSurface(state.xml, state.nodes)) {
+      context.onLog("View Snaps stopped: Spotlight was no longer the active screen.");
+      break;
+    }
+
+    const likeChance = randomPercent(settings.likePercentMin, settings.likePercentMax);
+    const roll = Math.random() * 100;
+    if (roll < likeChance) {
+      const favorite = state.nodes.find(node =>
+        node.clickable && node.resourceId.split("/").pop() === "favorite",
+      );
+      if (!favorite) {
+        context.onLog("View Snaps: like chance passed, but the current media's heart button was not found.");
+      } else if (favorite.selected || /\b(unlike|remove favorite)\b/i.test(nodeLabel(favorite))) {
+        context.onLog("View Snaps: current Spotlight media is already liked; leaving it unchanged.");
+      } else if (!context.isAborted()) {
+        const x = Math.round((favorite.bounds[0] + favorite.bounds[2]) / 2);
+        const y = Math.round(favorite.bounds[1] + (favorite.bounds[3] - favorite.bounds[1]) * 0.37);
+        await android.tap(context.serial, x, y, "bot", "Snapchat: like current Spotlight media", "automation");
+        await context.sleep(500);
+        context.onLog(`View Snaps: liked current media (roll ${roll.toFixed(1)} < ${likeChance}%).`);
+      }
+    } else {
+      context.onLog(`View Snaps: skipped like on current media (roll ${roll.toFixed(1)} ≥ ${likeChance}%).`);
+    }
+
+    const seconds = randomSeconds(settings.watchSecondsMin, settings.watchSecondsMax);
+    context.onLog(`View Snaps: waiting ${seconds}s before the next Spotlight swipe.`);
+    await context.sleep(seconds * 1000);
+    if (context.isAborted() || !await swipeByDeviceGesture(context)) break;
+    await context.sleep(900);
+    const afterSwipe = await dump(context.serial);
+    if (!isSpotlightSurface(afterSwipe.xml, afterSwipe.nodes)) {
+      context.onLog("View Snaps stopped: the screen left Spotlight after the swipe.");
+      break;
+    }
+    swiped++;
   }
-  let viewed = 0;
-  const visited = new Set<string>();
-  while (viewed < requested && !context.isAborted()) {
-    const { xml, nodes } = await dump(context.serial);
-    if (!/stories/i.test(xml)) break;
-    const candidate = nodes.find(node => {
-      const label = nodeLabel(node);
-      return node.clickable &&
-        /\bstories?\b/i.test(label) &&
-        !/\b(my stories?|your stories?|add to story|create story)\b/i.test(label) &&
-        !visited.has(label.toLowerCase());
-    });
-    if (!candidate) break;
-    const identity = nodeLabel(candidate).toLowerCase();
-    visited.add(identity);
-    if (!await tapNode(context, candidate, "open a visible friend story")) break;
-    await context.sleep(randomSeconds(settings.watchSecondsMin, settings.watchSecondsMax) * 1000);
-    await android.pressBack(context.serial).catch(() => {});
-    await context.sleep(500);
-    viewed++;
-  }
-  context.onLog(`View Snaps: viewed ${viewed}/${requested} visible friend stories.`);
+  context.onLog(`View Snaps: completed ${swiped}/${requested} Spotlight swipe(s).`);
 }
 
 export async function runSnapchatTools(context: Context): Promise<void> {

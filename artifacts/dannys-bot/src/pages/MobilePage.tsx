@@ -6879,6 +6879,7 @@ export function AutomationSettingsPanel({
           ["viewStories", "View Snaps"],
         ] as const).map(([key, title]) => {
           const tool = settings.snapchatTools[key];
+          const countFloor = key === "viewStories" ? 1 : 0;
           return (
             <div key={key} className="rounded-lg border border-border/70 p-4 space-y-3">
               <div className="flex min-w-0 flex-nowrap items-center gap-2">
@@ -6908,25 +6909,41 @@ export function AutomationSettingsPanel({
                     />
                   </div>
                   <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
-                    <Label className="text-[11px] text-muted-foreground">Count</Label>
+                    <Label className="text-[11px] text-muted-foreground">{key === "viewStories" ? "Swipes" : "Count"}</Label>
                     <Input
-                      type="number" min={0} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
-                      value={tool.min}
-                      onChange={e => updateSnapchatTool(key, { min: Math.max(0, Math.min(10, clamp4(Number(e.target.value)))) })}
+                      type="number" min={countFloor} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
+                      value={key === "viewStories" ? Math.max(1, tool.min) : tool.min}
+                      onChange={e => updateSnapchatTool(key, { min: Math.max(countFloor, Math.min(10, clamp4(Number(e.target.value)))) })}
                       disabled={loading || !tool.enabled}
                     />
                     <span className="text-xs text-muted-foreground">–</span>
                     <Input
-                      type="number" min={0} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
-                      value={tool.max}
-                      onChange={e => updateSnapchatTool(key, { max: Math.max(0, Math.min(10, clamp4(Number(e.target.value)))) })}
+                      type="number" min={countFloor} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
+                      value={key === "viewStories" ? Math.max(1, tool.max) : tool.max}
+                      onChange={e => updateSnapchatTool(key, { max: Math.max(countFloor, Math.min(10, clamp4(Number(e.target.value)))) })}
                       disabled={loading || !tool.enabled}
                     />
                   </div>
                 {key === "viewStories" && (
                   <>
                     <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
-                      <Label className="text-[11px] text-muted-foreground">Watch (s)</Label>
+                      <Label className="text-[11px] text-muted-foreground">Like %</Label>
+                      <Input
+                        type="number" min={0} max={100} className="w-10 h-7 px-0.5 text-center text-xs"
+                        value={settings.snapchatTools.viewStories.likePercentMin}
+                        onChange={e => updateSnapchatTool("viewStories", { likePercentMin: Math.max(0, Math.min(100, clamp4(Number(e.target.value)))) })}
+                        disabled={loading || !tool.enabled}
+                      />
+                      <span className="text-xs text-muted-foreground">–</span>
+                      <Input
+                        type="number" min={0} max={100} className="w-10 h-7 px-0.5 text-center text-xs"
+                        value={settings.snapchatTools.viewStories.likePercentMax}
+                        onChange={e => updateSnapchatTool("viewStories", { likePercentMax: Math.max(0, Math.min(100, clamp4(Number(e.target.value)))) })}
+                        disabled={loading || !tool.enabled}
+                      />
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+                      <Label className="text-[11px] text-muted-foreground">Seconds</Label>
                       <Input
                         type="number" min={1} max={60} className="w-10 h-7 px-0.5 text-center text-xs"
                         value={settings.snapchatTools.viewStories.watchSecondsMin}

@@ -15,6 +15,12 @@ Snapchat HST cycles also need a Step 3: dismiss Snapchat from the floating-windo
 
 **How to apply:** Run this cleanup after Snapchat tools complete, including when a tool errors, but skip stale device input after a cycle abort.
 
+View Snaps means Snapchat Spotlight, not Stories: tap the bottom-right Spotlight tab, treat Count as the number of vertical swipes, wait the configured seconds on each media before the next swipe, and roll a separate per-media Like % for its heart. Use the saved My Device swipe gesture for feed scrolling.
+
+**Why:** The user specified Spotlight navigation, swipe-count semantics, per-view like probability, dwell time, and use of the calibrated device gesture.
+
+**How to apply:** Keep these controls and execution Snapchat-only; fail closed if Spotlight or the configured swipe profile cannot be confirmed.
+
 For Snapchat unread-chat replies, use the OpenAI key managed in Settings > Security and send only the user's goal plus bounded visible thread context to the model. Treat chat text as untrusted, never log credentials, and do not send unless the thread and composer are still verified.
 
 **Why:** The user wants replies to follow a conversation goal and timing instructions, while keeping Snapchat behavior independent from Instagram.
