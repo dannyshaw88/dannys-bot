@@ -5712,7 +5712,7 @@ function useCollisionPreventer(serial: string | null) {
 // CopySubSetting, CopySection, and COPY_SECTIONS are imported from mobileShared
 
 type CopyTarget = { serial: string; slotIdx: number };
-type DeviceSlots = { phone: UsbPhone; slots: string[] /* username per slot index */ };
+type DeviceSlots = { phone: UsbPhone; slots: Array<{ username: string; platform?: AccountPlatform }> };
 
 function deviceLabel(p: UsbPhone): string {
   return [p.manufacturer, p.marketName || p.model].filter(Boolean).join(" ") || p.serial;
@@ -5789,7 +5789,10 @@ function CopySettingsDialog({
             try {
               const r = await fetch(`/api/mobile/devices/${encodeURIComponent(p.serial)}/account`);
               const data = await r.json();
-              const slots: string[] = (data?.slots ?? []).map((s: any) => s?.username ?? "");
+              const slots: DeviceSlots["slots"] = (data?.slots ?? []).map((s: any) => ({
+                username: s?.username ?? "",
+                platform: s?.platform === "snapchat" ? "snapchat" : "instagram",
+              }));
               return { phone: p, slots };
             } catch {
               return { phone: p, slots: [] };
@@ -6012,7 +6015,7 @@ function CopySettingsDialog({
                     </label>
                     {/* Slot rows */}
                     <div className="divide-y divide-border/30">
-                      {ds.slots.map((username, i) => {
+                      {ds.slots.map(({ username, platform }, i) => {
                         const isSelf = isCurrentDevice && i === currentSlotIdx;
                         return (
                           <label key={i}
@@ -6034,7 +6037,9 @@ function CopySettingsDialog({
                               {username ? `@${username}` : `Slot ${i + 1}`}
                               {isSelf && <span className="text-muted-foreground ml-1">(source)</span>}
                             </span>
-                            <SlotTrustScoreBadge serial={ds.phone.serial} slotIdx={i} width={65} hideIcon />
+                            {platform === "snapchat"
+                              ? <StaticTrustScoreLabel width={65} />
+                              : <SlotTrustScoreBadge serial={ds.phone.serial} slotIdx={i} width={65} hideIcon />}
                           </label>
                         );
                       })}
@@ -6148,7 +6153,7 @@ function CopySettingsDialog({
 
 export function AutomationSettingsPanel({
   phone, settings: baseSettings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
-  slotIdx, slotUsername, slotUsernames, onCopied, showCopyDialog, setShowCopyDialog,
+  slotIdx, slotUsername, slotUsernames, slotPlatform, onCopied, showCopyDialog, setShowCopyDialog,
   templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile, onOpenGestures, settingsScrollRef, sharedScrollTopRef, isActive, personality,
 }: {
   phone: UsbPhone | null;
@@ -6162,6 +6167,7 @@ export function AutomationSettingsPanel({
   slotIdx?: number;
   slotUsername?: string;
   slotUsernames?: string[];
+  slotPlatform: AccountPlatform;
   onCopied?: (targetSlotIdxs: number[]) => void;
   showCopyDialog?: boolean;
   setShowCopyDialog?: (v: boolean) => void;
@@ -6185,7 +6191,9 @@ export function AutomationSettingsPanel({
   personality?: SlotPersonality;
 }) {
   const settings = React.useMemo(() => applySlotPersonalityToSettings(baseSettings, personality), [baseSettings, personality]);
-  const trustScoreActive = trustScoreAssigned === true || Boolean(settings.trustScoreId);
+  const trustScoreActive = slotPlatform !== "snapchat" && (
+    trustScoreAssigned === true || Boolean(settings.trustScoreId)
+  );
   const isTrustScoreTemplateEditor = templateLockedFields !== undefined;
   const personalityInputClass = (field: keyof AutomationSettingsData) => {
     const adjusted = personality && Number(baseSettings[field]) !== Number(settings[field]);
@@ -6598,7 +6606,7 @@ export function AutomationSettingsPanel({
         <div className="flex items-center gap-2 flex-wrap">
           <Fingerprint className="w-4 h-4 shrink-0" style={{ color: "#1AD2F2" }} />
           <h2 className="text-lg font-bold text-foreground whitespace-nowrap">Human Session Tool</h2>
-          {trustScoreLabel && (
+          {slotPlatform !== "snapchat" && trustScoreLabel && (
             <div
               className="inline-flex items-center gap-1.5 rounded-full px-3 py-1"
               style={{ background: trustScoreLabel.bg, border: `1px solid ${trustScoreLabel.border}` }}
@@ -6618,7 +6626,9 @@ export function AutomationSettingsPanel({
             <span className="text-lg font-bold text-foreground whitespace-nowrap">for @{slotUsername}</span>
           )}
           {slotIdx !== undefined && (
-            <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
+            slotPlatform === "snapchat"
+              ? <StaticTrustScoreLabel width={121} />
+              : <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
           )}
           {slotIdx !== undefined && onOpenGestures && (
             <Button type="button" variant="outline" size="sm" onClick={onOpenGestures}
@@ -6671,6 +6681,8 @@ export function AutomationSettingsPanel({
           />
           <Label className="text-sm text-muted-foreground whitespace-nowrap">minutes</Label>
         </div>
+      {slotPlatform !== "snapchat" && (
+      <>
       {/* Step 1 pre-switch controls belong directly under the Step 1
           description so they are visible before the tool settings begin. */}
       <div>
@@ -6708,8 +6720,16 @@ export function AutomationSettingsPanel({
           </div>
         </div>
       </div>
+      </>
+      )}
       </div>
 
+      {slotPlatform === "snapchat" ? (
+      <div className="bg-card border border-border rounded-xl p-5 space-y-2">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
+        <p className="text-sm text-muted-foreground">Snapchat tools are being defined separately from Instagram.</p>
+      </div>
+      ) : (
       <div className="bg-card border border-border rounded-xl p-5 space-y-5">
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -8999,17 +9019,20 @@ export function AutomationSettingsPanel({
         />
 
       </div>
+      )}
 
       {/* Final Step */}
+      {slotPlatform !== "snapchat" && (
       <div className="bg-card border border-border rounded-xl p-5 space-y-2">
         <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(FINAL STEP)</p>
         <p className="text-sm text-foreground">
           Close the Instagram app, then lock the phone ready for the next session.
         </p>
       </div>
+      )}
 
       {/* Copy Settings dialog — Dialog renders as a portal outside the scroll div */}
-      {slotIdx !== undefined && slotUsernames && (
+      {slotPlatform !== "snapchat" && slotIdx !== undefined && slotUsernames && (
         <CopySettingsDialog
           open={showCopyDialogResolved}
           onClose={() => setShowCopyDialogResolved(false)}
@@ -9022,7 +9045,7 @@ export function AutomationSettingsPanel({
       )}
 
       {/* Bio Spin editor — keep the spin text out of the normal Random Actions row. */}
-      <Dialog open={bioSpinEditorOpen} onOpenChange={setBioSpinEditorOpen}>
+      {slotPlatform !== "snapchat" && <Dialog open={bioSpinEditorOpen} onOpenChange={setBioSpinEditorOpen}>
           <DialogContent className="w-[calc(100%-2rem)] max-w-[35rem] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Bio Spin</DialogTitle>
@@ -9082,7 +9105,7 @@ export function AutomationSettingsPanel({
             )}
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
     </div>
   );
 }
@@ -9092,6 +9115,19 @@ export function AutomationSettingsPanel({
 // compatibility cache for offline rendering and migration from older builds.
 const ROW_H = 30; // px per dropdown row
 const MAX_VISIBLE_ROWS = 5;
+
+function StaticTrustScoreLabel({ width = 114 }: { width?: number }) {
+  return (
+    <div
+      className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-slate-400 px-2 text-[11px] font-semibold text-slate-500"
+      style={{ width, minWidth: width, height: "100%" }}
+      title="Display-only Snapchat label"
+      aria-label="TrustScore label"
+    >
+      TrustScore
+    </div>
+  );
+}
 
 function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIcon = false }: { serial: string; slotIdx: number; width?: number; hideIcon?: boolean }) {
   const lsKey = slotTrustScoreKey(serial, slotIdx);
@@ -9437,6 +9473,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   slotIdx: number;
   slotId: string;
   slotUsername: string;
+  slotPlatform: AccountPlatform;
   slotPersonality?: SlotPersonality;
   slotUsernames?: string[];
   addLog: (msg: string) => void;
@@ -9455,7 +9492,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   isActive?: boolean;
   sharedScrollTopRef?: React.MutableRefObject<number>;
 }>(function SlotHumanSessionView(
-  { phone, slotIdx, slotId, slotUsername, slotPersonality, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
+  { phone, slotIdx, slotId, slotUsername, slotPlatform, slotPersonality, slotUsernames, addLog, onBack, onPrevSlot, onNextSlot, slotCount, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, onCopied, onAutomationState, collisionConfig, onOpenBrowserProfile, isActive = false, sharedScrollTopRef },
   ref,
 ) {
   const automation = useAutomationSettings(phone, addLog, slotIdx, slotUsername, requestSlot, releaseSlot, cancelQueuedSlot, refreshKey, collisionConfig, isActive, slotId);
@@ -9479,10 +9516,14 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   // payload is template-resolved and may be cached, so it must not be the
   // authority for whether this editor is allowed to be changed.
   const [trustScoreAssigned, setTrustScoreAssigned] = useState(
-    Boolean(automation.settings.trustScoreId),
+    slotPlatform !== "snapchat" && Boolean(automation.settings.trustScoreId),
   );
   useEffect(() => {
     let active = true;
+    if (slotPlatform === "snapchat") {
+      setTrustScoreAssigned(false);
+      return () => { active = false; };
+    }
     // The slot list has its own Trust Score badge. Background HST runtimes
     // only need the assignment when their editor is actually visible.
     if (!phone?.serial || !isActive) {
@@ -9502,7 +9543,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
         if (active) setTrustScoreAssigned(Boolean(automation.settings.trustScoreId));
       });
     return () => { active = false; };
-  }, [phone?.serial, slotIdx, refreshKey, automation.settings.trustScoreId, isActive]);
+  }, [phone?.serial, slotIdx, refreshKey, automation.settings.trustScoreId, isActive, slotPlatform]);
 
   // Expose setEnabled so the parent can toggle THIS slot directly by calling
   // slotHandleRefs.current[i]?.setEnabled(v).  Because the ref is bound to
@@ -9527,7 +9568,7 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
   // Keep the entry point visible for every slot.  The dialog discovers
   // targets across the farm, so hiding this based on the current device's
   // username count made Copy Settings disappear for single-slot devices.
-  const canCopy = slotIdx !== undefined;
+  const canCopy = slotIdx !== undefined && slotPlatform !== "snapchat";
   return (
     <div className="h-full flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30">
@@ -9554,16 +9595,19 @@ const SlotHumanSessionView = React.forwardRef<SlotHumanSessionHandle, {
             {...automation}
             slotIdx={slotIdx}
             slotUsername={slotUsername}
+             slotPlatform={slotPlatform}
             slotUsernames={slotUsernames}
             personality={slotPersonality}
             onCopied={onCopied}
             showCopyDialog={showCopyDialog}
             setShowCopyDialog={setShowCopyDialog}
-            onOpenGestures={() => {
+            onOpenGestures={slotPlatform === "snapchat" ? undefined : () => {
               const event = new CustomEvent("mobile-open-account-gestures", { detail: { slotIdx } });
               window.dispatchEvent(event);
             }}
-            trustScoreAssigned={trustScoreAssigned || Boolean(automation.settings.trustScoreId)}
+            trustScoreAssigned={slotPlatform !== "snapchat" && (
+              trustScoreAssigned || Boolean(automation.settings.trustScoreId)
+            )}
             onOpenBrowserProfile={onOpenBrowserProfile}
             settingsScrollRef={settingsScrollRef}
             sharedScrollTopRef={sharedScrollTopRef}
@@ -9614,6 +9658,7 @@ async function hydrateAccountTrustScoreAssignments(
     }
 
     await Promise.all(accountSlots.map(async (slot, slotIdx) => {
+      if (slot.platform === "snapchat") return;
       const username = normalizeUsername(slot.username);
       if (!username) return;
       const profile = profileByUsername.get(username);
@@ -9745,6 +9790,8 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   const [slots, setSlots] = useState<AccountSlot[]>(
     Array.from({ length: ACCT_SLOT_COUNT }, emptySlot)
   );
+  const slotsRef = useRef<AccountSlot[]>(slots);
+  slotsRef.current = slots;
   // A Trust Score template can be edited while this Phone Farm panel remains
   // mounted. Refresh every slot's effective settings after the save; the API
   // decides which slots are assigned to that template, and unassigned slots
@@ -9784,11 +9831,12 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   useEffect(() => {
     const onOpenGestures = (event: Event) => {
       const slotIdx = (event as CustomEvent<{ slotIdx?: number }>).detail?.slotIdx;
-      if (typeof slotIdx === "number") {
-        setOpenSlotTool(null);
-        setOpenPhoneAppsTool(false);
-        setOpenGesturesSlot(slotIdx);
-      }
+      if (typeof slotIdx !== "number" || !Number.isInteger(slotIdx) || slotIdx < 0) return;
+      const slot = slotsRef.current[slotIdx];
+      if (!slot || slot.platform === "snapchat") return;
+      setOpenSlotTool(null);
+      setOpenPhoneAppsTool(false);
+      setOpenGesturesSlot(slotIdx);
     };
     window.addEventListener("mobile-open-account-gestures", onOpenGestures);
     return () => window.removeEventListener("mobile-open-account-gestures", onOpenGestures);
@@ -9855,7 +9903,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             emailAddress: s?.emailAddress ?? "",
             emailPassword: s?.emailPassword ?? "",
             phoneNumber: s?.phoneNumber ?? "",
-             personality: s?.personality && typeof s.personality === "object"
+             personality: s?.platform !== "snapchat" && s?.personality && typeof s.personality === "object"
                ? {
                    engagement: Number(s.personality.engagement),
                    consumption: Number(s.personality.consumption),
@@ -9864,7 +9912,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                    actionVariety: Number(s.personality.actionVariety),
                  }
                : undefined,
-             personalityOverrides: s?.personalityOverrides && typeof s.personalityOverrides === "object"
+             personalityOverrides: s?.platform !== "snapchat" && s?.personalityOverrides && typeof s.personalityOverrides === "object"
                ? Object.fromEntries(
                    Object.entries(s.personalityOverrides)
                      .filter(([, value]) => Number.isInteger(value) && Number(value) >= 0 && Number(value) <= 4)
@@ -9970,7 +10018,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     setSlots(s => s.map((slot, idx) => idx === i ? { ...slot, ...patch } : slot));
 
   const randomiseSlotPersonality = async (slotIdx: number) => {
-    if (!phone?.serial || !slots[slotIdx]) return;
+    if (!phone?.serial || !slots[slotIdx] || slots[slotIdx].platform === "snapchat") return;
     setRandomisingSlot(slotIdx);
     setRandomisedSlot(null);
     try {
@@ -10225,7 +10273,8 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
             slotIdx={i}
             slotId={slot.slotId}
             slotUsername={slots[i]?.username ?? ""}
-            slotPersonality={slot.personality ? { ...slot.personality, ...slot.personalityOverrides } : undefined}
+            slotPlatform={slot.platform}
+            slotPersonality={slot.platform === "snapchat" ? undefined : slot.personality ? { ...slot.personality, ...slot.personalityOverrides } : undefined}
             slotUsernames={slots.map(s => s.username)}
             addLog={addLog}
             onBack={() => setOpenSlotTool(null)}
@@ -10246,7 +10295,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         </div>
       ))}
 
-      {phone && openGesturesSlot !== null && slots[openGesturesSlot] && (
+      {phone && openGesturesSlot !== null && slots[openGesturesSlot] && slots[openGesturesSlot].platform !== "snapchat" && (
         <AccountGesturesPanel
           serial={phone.serial}
           username={slots[openGesturesSlot].username}
@@ -10573,14 +10622,19 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 {/* Trust Score — independent instance (mobile_ts_<serial>_<slotIdx>)
                     so styling changes here don't affect other badge placements */}
                 <div style={{ display: "flex", alignSelf: "flex-end", height: "36px", gap: "8px" }}>
-                  <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />
-                   <TrustScoreCountdown serial={phone?.serial ?? ""} slotIdx={i} slotId={slot.slotId} />
+                  {slot.platform === "snapchat" ? (
+                    <StaticTrustScoreLabel width={114} />
+                  ) : (
+                    <>
+                      <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={i} width={114} />
+                      <TrustScoreCountdown serial={phone?.serial ?? ""} slotIdx={i} slotId={slot.slotId} />
+                    </>
+                  )}
                 </div>
               </div>
 
-              {/* Unique per-account slot personality, derived from the
-                  device and Trust Score baselines. */}
-              <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto rounded-md border border-border/60 bg-muted/20 px-2 py-2">
+              {/* Account-slot personality is an Instagram-only feature. */}
+              {slot.platform !== "snapchat" && <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto rounded-md border border-border/60 bg-muted/20 px-2 py-2">
                 <span className="text-xs font-semibold text-muted-foreground mr-1">Personality:</span>
                 {SLOT_PERSONALITY_TRAITS.map(({ key, label, options, icon: TraitIcon, color }) => {
                   const override = slot.personalityOverrides?.[key as keyof SlotPersonality];
@@ -10629,7 +10683,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                 >
                   {randomisingSlot === i ? "…" : randomisedSlot === i ? "✓" : <Shuffle className="h-3.5 w-3.5" />}
                 </Button>
-              </div>
+              </div>}
           </div>
         ))}
 

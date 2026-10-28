@@ -3918,6 +3918,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     discovery: Math.floor(Math.random() * 5),
     actionVariety: Math.floor(Math.random() * 5),
   });
+  const neutralSlotPersonality = (): DevicePersonality => ({
+    engagement: 2,
+    consumption: 2,
+    attention: 2,
+    discovery: 2,
+    actionVariety: 2,
+  });
   const ensureDevicePersonality = (serial: string, regenerate = false): DevicePersonality => {
     const cfg = loadInstanceConfigs();
     const current = cfg[serial]?.devicePrefs?.devicePersonality;
@@ -3934,6 +3941,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const ensureSlotPersonality = (serial: string, slotIdx: number, regenerate = false): DevicePersonality => {
     const cfg = loadInstanceConfigs();
     const slot = cfg[serial]?.account?.slots?.[slotIdx];
+    if (slot?.platform === "snapchat") return neutralSlotPersonality();
     const current = slot?.personality;
     if (!regenerate && isDevicePersonality(current)) return current;
     const next = randomDevicePersonality();
@@ -4109,6 +4117,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // from Phone Farm (or using another browser) made the badge appear to reset.
   // Keep them in the existing SQLite global_settings store, keyed by device and
   // slot. `configured` distinguishes an explicit "clear score" from a first load.
+  const rejectSnapchatTrustScore = (serial: string, slotIdx: number, res: Response) => {
+    if (loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx]?.platform !== "snapchat") return false;
+    res.status(409).json({ error: "Snapchat TrustScore is a display-only label" });
+    return true;
+  };
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/trust-score", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
@@ -4117,6 +4130,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         res.status(400).json({ error: "Invalid slot index" });
         return;
       }
+      if (rejectSnapchatTrustScore(serial, slotIdx, res)) return;
       const { configured, scoreId } = await loadTrustScoreAssignment(serial, slotIdx);
       res.json({ configured, scoreId });
     } catch (e: any) {
@@ -4132,6 +4146,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         res.status(400).json({ error: "Invalid slot index" });
         return;
       }
+      if (rejectSnapchatTrustScore(serial, slotIdx, res)) return;
       const { scoreId, hasNextScore } = z.object({
         scoreId: z.string().min(1).max(100).nullable(),
         hasNextScore: z.boolean().default(true),
@@ -4234,6 +4249,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         res.status(400).json({ error: "Invalid slot index" });
         return;
       }
+      if (rejectSnapchatTrustScore(serial, slotIdx, res)) return;
       const loaded = await loadTrustScoreAssignment(serial, slotIdx);
       const all = loaded.all;
       const scoreId = loaded.scoreId;
@@ -4322,6 +4338,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         res.status(400).json({ error: "Invalid slot index" });
         return;
       }
+      if (rejectSnapchatTrustScore(serial, slotIdx, res)) return;
       const { expectedScoreId, nextScoreId, hasNextScore } = z.object({
         expectedScoreId: z.string().min(1).max(100),
         nextScoreId: z.string().min(1).max(100).nullable(),
@@ -4440,6 +4457,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const settings = await storage.getGlobalSettings();
     return slots.map(slot => {
       if (!slot.slotId) return slot;
+      if (slot.platform === "snapchat") {
+        const snapchatSlot = { ...slot };
+        delete snapchatSlot.personality;
+        delete snapchatSlot.personalityOverrides;
+        return snapchatSlot;
+      }
       const personality = parseStoredPersonality(settings[slotPersonalityKey(serial, slot.slotId)]);
       const personalityOverrides = parseStoredPersonalityOverrides(
         settings[slotPersonalityOverridesKey(serial, slot.slotId)],
@@ -4453,6 +4476,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   };
   const persistSlotPersonalityToDatabase = async (serial: string, slot: DeviceSlot): Promise<void> => {
     if (!slot.slotId) return;
+    if (slot.platform === "snapchat") {
+      await deleteSlotPersonalityFromDatabase(serial, slot.slotId);
+      return;
+    }
     if (slot.personality && isDevicePersonality(slot.personality)) {
       await storage.setGlobalSetting(slotPersonalityKey(serial, slot.slotId), JSON.stringify(slot.personality));
     }
@@ -4544,7 +4571,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             ?? previousByUsername.get(`${slot.platform === "snapchat" ? "snapchat" : "instagram"}:${normalizeUsername(slot.username)}`)
             ?? incomingSlotId
             ?? crypto.randomUUID();
-          return { ...slot, platform: slot.platform ?? "instagram", slotId };
+          const normalizedSlot = { ...slot, platform: slot.platform ?? "instagram", slotId };
+          if (normalizedSlot.platform === "snapchat") {
+            delete normalizedSlot.personality;
+            delete normalizedSlot.personalityOverrides;
+          }
+          return normalizedSlot;
         }),
       };
       // Previously forced a minimum of SLOT_COUNT (5) slots, padding with
@@ -4652,6 +4684,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (requestedSlotIdx < 0 || !slots[requestedSlotIdx]) {
         logger.warn({ serial, slotIdx, requestedSlotId: parsed.slotId, savedSlotCount: slots.length }, "[slot-personality] account slot unavailable");
         res.status(404).json({ error: "Account slot not found; save the account slot first and try again" });
+        return;
+      }
+      if (slots[requestedSlotIdx].platform === "snapchat") {
+        if (slots[requestedSlotIdx].slotId) {
+          await deleteSlotPersonalityFromDatabase(serial, slots[requestedSlotIdx].slotId!);
+        }
+        res.status(409).json({ error: "Account-slot personality is not available for Snapchat" });
         return;
       }
       const personality = parsed.regenerate
@@ -5334,7 +5373,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     automationCycleAbortedId.get(serial) === automationCycleCurrentId.get(serial);
 
   const applyDevicePersonality = <T extends Record<string, any>>(serial: string, input: T): T => {
-    const profile = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+    const slotIdx = automationCycleActiveSlot.get(serial) ?? 0;
+    const activeSlot = loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx];
+    if (activeSlot?.platform === "snapchat") return input;
+    const profile = ensureSlotPersonality(serial, slotIdx);
     const result = { ...input };
     const clampPct = (value: number) => Math.max(0, Math.min(100, value));
     const adjustRange = (minKey: string, maxKey: string, scale: number) => {
