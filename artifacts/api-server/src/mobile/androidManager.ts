@@ -1237,6 +1237,22 @@ export async function launchInstagram(
   start();
 }
 
+export async function launchSnapchat(serial: string): Promise<void> {
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const result = spawnSync(adb, [
+    "-s", serial, "shell", "am", "start",
+    "-a", "android.intent.action.MAIN",
+    "-c", "android.intent.category.LAUNCHER",
+    "-p", "com.snapchat.android",
+    "--activity-clear-top",
+  ], { encoding: "utf8", timeout: 10000 });
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  if (result.error || result.status !== 0 || /\b(?:Error:|No activity found|unable to resolve)\b/i.test(output)) {
+    throw new Error(`Could not launch Snapchat${output.trim() ? `: ${output.trim().slice(0, 240)}` : ""}`);
+  }
+}
+
 /**
  * Open a validated web URL with Android's explicit Instagram package
  * constraint. This is separate from launchInstagram(): the Share Reel tool

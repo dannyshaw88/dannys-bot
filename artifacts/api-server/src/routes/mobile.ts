@@ -791,7 +791,7 @@ type AutomationSettings = {
   // 'left' / 'up' = manual override stored per device.
   dismissDirection?: "auto" | "left" | "up";
 };
-type DeviceSlot = { slotId?: string; username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string; personality?: DevicePersonality; personalityOverrides?: Partial<DevicePersonality> };
+type DeviceSlot = { slotId?: string; platform?: "instagram" | "snapchat"; username: string; password: string; totpSecret?: string; emailAddress?: string; emailPassword?: string; phoneNumber?: string; personality?: DevicePersonality; personalityOverrides?: Partial<DevicePersonality> };
 type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number; simPhoneNumbers?: Record<string, string> };
 type DevicePrefs = {
@@ -3385,7 +3385,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // ── Per-slot Human Session Tool automation settings ─────────────────────────
   // Each Instagram account slot stores its own independent copy of all
   // automation settings. Settings are keyed by slot index in slotAutomation.
-  const MAX_MOBILE_ACCOUNT_SLOTS = 10;
+  const MAX_MOBILE_ACCOUNT_SLOTS = 1000;
   const parseMobileSlotIndex = (value: unknown): number | null => {
     const raw = String(value ?? "");
     if (!/^(?:0|[1-9]\d*)$/.test(raw)) return null;
@@ -4384,6 +4384,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // Stable identity: never derive account-owned state from the visible
     // array index because deleting a slot renumbers every later account.
     slotId: z.string().min(8).max(100).optional(),
+    platform: z.enum(["instagram", "snapchat"]).optional(),
     username: z.string(),
     password: z.string(),
     totpSecret: z.string().optional(),
@@ -4477,6 +4478,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         ...raw,
         slots: raw.slots.map((slot: any) => ({
           ...slot,
+          platform: slot?.platform === "snapchat" ? "snapchat" : "instagram",
           slotId: typeof slot?.slotId === "string" && slot.slotId.length >= 8
             ? slot.slotId
             : crypto.randomUUID(),
@@ -4520,7 +4522,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const previousByUsername = new Map(
         previousSlots
           .filter(slot => typeof slot?.slotId === "string" && slot.slotId.length >= 8)
-          .map(slot => [normalizeUsername(slot.username), slot.slotId!] as const)
+          .map(slot => [`${slot.platform === "snapchat" ? "snapchat" : "instagram"}:${normalizeUsername(slot.username)}`, slot.slotId!] as const)
           .filter(([username]) => username.length > 0),
       );
       const previousBySlotId = new Map(
@@ -4539,10 +4541,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             ? slot.slotId
             : undefined;
           const slotId = (incomingSlotId && previousBySlotId.get(incomingSlotId))
-            ?? previousByUsername.get(normalizeUsername(slot.username))
+            ?? previousByUsername.get(`${slot.platform === "snapchat" ? "snapchat" : "instagram"}:${normalizeUsername(slot.username)}`)
             ?? incomingSlotId
             ?? crypto.randomUUID();
-          return { ...slot, slotId };
+          return { ...slot, platform: slot.platform ?? "instagram", slotId };
         }),
       };
       // Previously forced a minimum of SLOT_COUNT (5) slots, padding with
@@ -7035,7 +7037,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          await sleepOrAbort(serial, 600);
        }
 
-      // 2. Open Instagram.
+       // Snapchat account slots share the same timer and collision path, but
+       // their cycle intentionally stops after opening Snapchat.
+       if (configuredSlot?.platform === "snapchat") {
+         tLog("▶ Opening Snapchat account app…");
+         await android.launchSnapchat(serial);
+         steps.push("launch-snapchat");
+         return res.json({ ok: true, steps });
+       }
+
+       // 2. Open Instagram.
       tLog("▶ Opening Instagram…");
       await android.launchInstagram(serial);
       steps.push("launch-instagram");

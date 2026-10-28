@@ -36,6 +36,7 @@ import {
   Palette, Plus, X, Keyboard, Heart, BarChart3, Eye, Compass, Sparkles, Shuffle,
   Users, Globe, BarChart2, ClipboardList, Bug, ImagePlus, Tablet, MonitorSmartphone, Settings2,
 } from "lucide-react";
+import { FaInstagram, FaSnapchatGhost } from "react-icons/fa";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
@@ -9258,7 +9259,8 @@ function SlotTrustScoreBadge({ serial, slotIdx, width: badgeWidth = 142, hideIco
 }
 
 const ACCT_SLOT_COUNT = 5;
-const emptySlot = () => ({ slotId: crypto.randomUUID(), username: "", password: "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" });
+type AccountPlatform = "instagram" | "snapchat";
+const emptySlot = (platform: AccountPlatform = "instagram") => ({ slotId: crypto.randomUUID(), platform, username: "", password: "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" });
 type SlotPersonality = {
   engagement: number;
   consumption: number;
@@ -9266,7 +9268,7 @@ type SlotPersonality = {
   discovery: number;
   actionVariety: number;
 };
-type AccountSlot = { slotId: string; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string; personality?: SlotPersonality; personalityOverrides?: Partial<SlotPersonality> };
+type AccountSlot = { slotId: string; platform: AccountPlatform; username: string; password: string; totpSecret: string; emailAddress: string; emailPassword: string; phoneNumber: string; personality?: SlotPersonality; personalityOverrides?: Partial<SlotPersonality> };
 const SLOT_PERSONALITY_TRAITS = [
   { key: "engagement", label: "Engagement", options: ["Reserved", "Selective", "Balanced", "Open", "Generous"], icon: Heart, color: "text-rose-500 border-rose-200 bg-rose-50 dark:bg-rose-950/30" },
   { key: "consumption", label: "Consumption", options: ["Light", "Moderate", "Balanced", "Active", "High volume"], icon: BarChart3, color: "text-cyan-600 border-cyan-200 bg-cyan-50 dark:bg-cyan-950/30" },
@@ -9651,6 +9653,7 @@ async function hydrateAccountTrustScoreAssignments(
 
 const AccountSettingsPanel = React.forwardRef<AccountSettingsPanelHandle, AccountSettingsPanelProps>(
 function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyEnabled, onPhoneAppsRunning, onPhoneAppsInspectionHold, onOpenBrowserProfile }, ref) {
+  const [activeAccountPlatform, setActiveAccountPlatform] = useState<AccountPlatform>("instagram");
   const [slotRefreshKeys, setSlotRefreshKeys] = useState<Record<number, number>>({});
   const [randomisingSlot, setRandomisingSlot] = useState<number | null>(null);
   const [randomisedSlot, setRandomisedSlot] = useState<number | null>(null);
@@ -9666,6 +9669,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   // Mirror of each slot's live automation state (enabled / running / nextRunAt),
   // populated by SlotHumanSessionView via onAutomationState for display only.
   const [slotAutomationStates, setSlotAutomationStates] = useState<Record<number, SlotAutomationState>>({});
+  const [platformSavePendingIds, setPlatformSavePendingIds] = useState<Set<string>>(() => new Set());
   const handleSlotAutomationState = useCallback((slotIdx: number, state: SlotAutomationState) => {
     const navStarted = Number(sessionStorage.getItem("mobile_device_nav_started_at"));
     writeUiSpeedLog("device-account-slot-automation-state", {
@@ -9844,6 +9848,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           // Padding caused deleted slots to reappear every time the panel reloaded.
           loaded = d.slots.map((s: any) => ({
             slotId: typeof s?.slotId === "string" && s.slotId.length >= 8 ? s.slotId : crypto.randomUUID(),
+            platform: s?.platform === "snapchat" ? "snapchat" : "instagram",
             username: s?.username ?? "",
             password: s?.password ?? "",
             totpSecret: s?.totpSecret ?? "",
@@ -9868,7 +9873,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                : undefined,
           }));
         } else if (d && d.username) {
-          loaded = [{ slotId: crypto.randomUUID(), username: d.username, password: d.password ?? "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" }];
+          loaded = [{ slotId: crypto.randomUUID(), platform: "instagram", username: d.username, password: d.password ?? "", totpSecret: "", emailAddress: "", emailPassword: "", phoneNumber: "" }];
         } else {
           loaded = Array.from({ length: ACCT_SLOT_COUNT }, emptySlot);
         }
@@ -9946,6 +9951,12 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           const body = await r.json().catch(() => null);
           if (!r.ok || !body?.ok) { setSaveError(body?.error ?? `Server error (${r.status})`); return; }
           lastSavedRef.current = toSaveStr;
+          const savedSlotIds = new Set(slots.map(slot => slot.slotId));
+          setPlatformSavePendingIds(current => {
+            const next = new Set(current);
+            for (const id of savedSlotIds) next.delete(id);
+            return next;
+          });
           setSaveError(null);
           setSaved(true);
           setTimeout(() => setSaved(false), 1500);
@@ -10046,7 +10057,25 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
   };
 
   const addSlot = () => {
-    setSlots(s => [...s, emptySlot()]);
+    const newSlot = emptySlot(activeAccountPlatform);
+    const nextSlots = [...slots, newSlot];
+    setSlots(nextSlots);
+    setPlatformSavePendingIds(current => new Set(current).add(newSlot.slotId));
+    if (phone?.serial) {
+      void fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slots: nextSlots }),
+      }).then(async response => {
+        const body = await response.json().catch(() => null);
+        if (!response.ok || !body?.ok) throw new Error(body?.error ?? `Server error (${response.status})`);
+        setPlatformSavePendingIds(current => {
+          const next = new Set(current);
+          next.delete(newSlot.slotId);
+          return next;
+        });
+      }).catch(error => setSaveError(error?.message ?? "Couldn't save the new account slot"));
+    }
     setShowPassword(s => [...s, false]);
     setShowEmailPassword(s => [...s, false]);
     setTotpCode(c => [...c, null]);
@@ -10270,16 +10299,36 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           onToggle={(v) => phoneAppsPanelRef.current?.setEnabled(v)}
         />
 
-        {/* ── Instagram Accounts ────────────────────────────────────────── */}
-        <h2 className="text-lg font-bold text-foreground">Instagram Accounts</h2>
+        {/* Platform tabs share one persisted slot list so timers and device
+            collision prevention remain common across both account types. */}
+        <div className="flex items-center gap-2 border-b border-border">
+          <button
+            type="button"
+            onClick={() => setActiveAccountPlatform("instagram")}
+            aria-pressed={activeAccountPlatform === "instagram"}
+            className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${activeAccountPlatform === "instagram" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            <FaInstagram className="h-4 w-4" aria-hidden="true" /> Instagram
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveAccountPlatform("snapchat")}
+            aria-pressed={activeAccountPlatform === "snapchat"}
+            className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${activeAccountPlatform === "snapchat" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            <FaSnapchatGhost className="h-4 w-4" aria-hidden="true" /> Snapchat
+          </button>
+        </div>
 
         <div className="space-y-4">
-          {slots.map((slot, i) => (
+          {slots.map((slot, i) => ({ slot, i }))
+            .filter(({ slot }) => (slot.platform ?? "instagram") === activeAccountPlatform)
+            .map(({ slot, i }, platformIndex) => (
             <div key={slot.slotId} className="bg-card border border-border rounded-xl p-5 space-y-3">
               {/* Slot header: title + Human Session Tool button + mirror toggle + Delete */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-bold text-black uppercase tracking-wider min-w-[200px] shrink-0">Instagram Account Slot {i + 1}</p>
+                  <p className="text-xs font-bold text-black uppercase tracking-wider min-w-[200px] shrink-0">{activeAccountPlatform === "instagram" ? "Instagram" : "Snapchat"} Account Slot {platformIndex + 1}</p>
                   <Button
                     type="button"
                     size="sm"
@@ -10300,6 +10349,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                       <div className="flex items-center gap-2 pl-2 border-l border-border">
                         <Switch
                           checked={as.enabled}
+                          disabled={platformSavePendingIds.has(slot.slotId)}
                           onCheckedChange={v => { slotHandleRefs.current[i]?.setEnabled(v); }}
                         />
                         <div className="flex flex-col min-w-0">
@@ -10332,7 +10382,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     disabled={loading}
                     onClick={() => void openNotebook(i)}
                     className="h-6 w-6 p-0 text-black hover:bg-black/10 hover:text-black"
-                    aria-label={`Export cycle debugging notebook for Instagram Account Slot ${i + 1}`}
+                    aria-label={`Export cycle debugging notebook for ${activeAccountPlatform} Account Slot ${platformIndex + 1}`}
                     title="Export cycle debugging notebook as .txt"
                   >
                     <NotebookPen className="w-3.5 h-3.5" />
@@ -10344,7 +10394,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                     disabled={loading}
                     onClick={() => setConfirmDeleteSlot(i)}
                     className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    aria-label={`Delete Instagram Account Slot ${i + 1}`}
+                    aria-label={`Delete ${activeAccountPlatform} Account Slot ${platformIndex + 1}`}
                     title="Delete account slot"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -10624,7 +10674,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               disabled={loading}
               className="w-fit"
             >
-              + Add Instagram Account Slot
+              + Add {activeAccountPlatform === "instagram" ? "Instagram" : "Snapchat"} Account Slot
             </Button>
           </div>
 
@@ -10634,7 +10684,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete this slot?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Are you sure you want to delete Instagram Account Slot {confirmDeleteSlot !== null ? confirmDeleteSlot + 1 : ""}? This will remove all credentials stored in this slot.
+                  Are you sure you want to delete this {activeAccountPlatform === "instagram" ? "Instagram" : "Snapchat"} account slot? This will remove all credentials stored in this slot.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

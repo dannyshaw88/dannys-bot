@@ -4,7 +4,6 @@
 - [Device profile system — dismiss direction](device-profile-system.md) — DEVICE_PROFILES lookup table + dismissDirection field wired through all 3 schema layers + UI dropdown
 - [Already-active account switch](account-switcher-already-active.md) — detect the unlabeled active account in XML, then verify the post-tap state
 - [Account-switch handoff safety](account-switch-handoff-safety.md) — an unverified post-row surface must stop the remaining tool dispatcher, never trigger a second account tap
-- [Edit tool regex safety](edit-tool-regex-corruption.md) — avoid regex backslash corruption in templates; use xml.includes() instead of new RegExp()
 - [Mobile mirror pillarboxing](mobile-mirror-shell-pillarbox.md) — constrain aspect-ratio to the screen box so tap coordinates stay aligned
 - [Ban dataset interpretation rules](ban-analysis-corrections.md) — timestamp clustering = Danny manually marking, SLOW = user label, re-added = prior ban history, not server sweeps
 - [Verify bootstrap timing & call-order bugs](verify-bootstrap-bugs.md) — Phase 0 anonymous calls REMOVED (EB always provides cookies); sequence now starts at Phase 1 (load cookies)
@@ -32,7 +31,6 @@
 - [Git remote history and runtime-state cleanup](git-remote-runtime-state.md) — merge unrelated history; never force-push or track cookies, databases, or device tools
 - [Instagram Stories safety pointers](instagram-stories-safety.md) — consult the detailed notes for viewer timing/exits, action identity, dialog handling, tray markers, and composers
 - [Retired Story publisher](standalone-post-story-settings.md) — preserve legacy settings, but keep the unused publisher out of UI, Copy Settings, and automation dispatch
-- [Floating-windows recents close gesture](floating-windows-recents-close.md) — use a left-drag on the left-most card; repeat per app and poll pidof
 - [HST toggle self-echo](hst-toggle-self-echo.md) — mark locally accepted toggles before same-window broadcast so the originating runtime does not replay its own immediate ON
 - [DM share sheet blind-tap risk](dm-share-sheet-blind-tap.md) — confirm a modal sheet before coordinate-tapping; absence of a side effect does not prove it opened
 - [Share-sheet label-scan exclusions](share-sheet-label-scan-exclusions.md) — exclude feed hashtags and counts so underlying nodes cannot pass as recipients
@@ -71,22 +69,16 @@
 - [Story exit confirmation](stories-exit-before-next-tool.md) — verify the Story viewer closed before starting another phone tool; Back once, then fail closed
 - [Instagram Home tab icon detector](home-tab-icon-detector.md) — use the live house-icon screenshot with polarity-invariant matching; no Home accessibility or coordinate fallback
 - [Home icon packaging](home-icon-packaging.md) — packaged Windows builds must bundle a self-contained Home reference; never depend on workspace attached_assets
-- [GitHub PAT push fallback](github-pat-push-fallback.md) — project GITHUB_TOKEN secrets work with GIT_ASKPASS HTTPS pushes, but not the gitPush source-control helper
 - [Actions source validation](actions-source-validation.md) — CI checks must inspect active assignments, not raw text, because comments documenting disabled settings can trigger false failures
-- [Chrome manual search sequencing](chrome-manual-search-sequencing.md) — run optional Google history searches after normal Chrome feed work and target live EditText nodes, not toolbar coordinates
-- [Phone filter camera runtime](phone-filter-camera-chrome-launch.md) — use the native CameraX APK; browser camera pages are not an acceptable phone-filter runtime
-- [Native filter camera build environment](native-filter-camera-build.md) — Gradle APK validation needs an Android SDK; API/web builds remain independently verifiable
 - [Mobile Phone Apps explicit rows](mobile-phone-apps-explicit-rows.md) — row props need full-width wrappers; flex wrapping alone makes Google Chrome fields land in width-dependent visual rows
 - [Mobile Phone Apps toggle parity](mobile-phone-apps-toggle-parity.md) — main-page toggle must call the mounted Step 1 panel handler so scheduler state and persisted settings stay in sync
 - [Mobile Phone Apps debugging log parity](mobile-phone-apps-debug-log-parity.md) — emit lifecycle, app decisions, results, lock, and cycle markers through the device log callback
-- [Google manual search variety](google-manual-search-variety.md) — manual Chrome searches should be mostly natural multi-word queries, with isolated one-word terms limited to an occasional 5% path
 - [Synthetic browser startup path](synthetic-browser-startup.md) — device Browser sessions must bypass Instagram bootstrap, blank-page recovery, and self-waiting screencast queues
 - [Mobile account posted-media history](mobile-posted-media-history.md) — keep confirmed profile posts per account/slot separate from the device-wide no-repeat cache
+- [Mobile platform account slots](mobile-platform-account-slots.md) — keep Instagram and Snapchat in one platform-tagged slot list so HST timers and collision control stay shared
 - [Manual PC-to-phone media transfer](manual-pc-phone-media-transfer.md) — native PC picker, temporary DCIM copy, manual Instagram post, and explicit phone-side deletion
 - [Random settings single-action flow](random-settings-single-action.md) — tap one validated settings row, optionally scroll once, then Back once; never tap a subsetting
 - [Phone Farm local wallpapers](phone-farm-local-wallpapers.md) — native Electron/browser picker stores a resized image data URL in shared slot customizations
-- [Images workspace local processing](images-workspace-local-processing.md) — reuse Make a Post processing and export copies; Electron should process native-selected paths locally
-- [Dashboard cycle summary icons](dashboard-cycle-summary-icons.md) — use Statistics action icons in cycle activity details, but keep eye-based metrics text-only
 - [Mobile cycle cross-tool metrics](mobile-cycle-all-likes.md) — aggregate likes, shares, DMs, and saves across every tool; keep pre-switch metrics with the previous account
 - [Accounts Trust Score interaction isolation](accounts-trustscore-no-row-drag.md) — Trust Score badge clicks must not trigger Accounts row drag-to-select or browser focus movement
 - [TrustScore HST lock policy](trustscore-hst-lock-policy.md) — assigned slots need explicit field-level locks; keep Copy Settings visible independently of username count
@@ -157,3 +149,4 @@
 - [Windows mirror diagnostics](windows-electron-mirror-diagnostics.md) — diagnose stalls using the packaged Windows Electron logs; Replit API workflow output is not evidence from the affected device
 - [TrustScore assignment autosave isolation](trustscore-assignment-autosave.md) — assigned TrustScore templates alone control tool switches; ignore legacy slot overrides and stale autosaves
 - [SMS contact selection only](sms-contact-selection-only.md) — the Phone Apps SMS action adds only the requested unselected contacts in Google Messages; it never composes or sends
+- [Additional focused project pointers](additional-memory-pointers.md) — less frequently used UI, manual-search, camera, and tooling notes remain indexed separately
