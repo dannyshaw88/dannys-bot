@@ -9279,7 +9279,7 @@ function SnapchatTrustScoreLabelSelect({ value, onChange }: { value: SnapchatTru
       aria-label="Snapchat TrustScore label"
       value={value}
       onChange={event => onChange(event.target.value as SnapchatTrustScoreLabel)}
-      className="h-9 w-[114px] shrink-0 rounded-md border border-yellow-500 bg-yellow-300 px-2 text-center text-[11px] font-extrabold tracking-wide text-black"
+      className="h-9 w-[114px] shrink-0 appearance-none rounded-md border border-yellow-500 bg-yellow-300 px-2 text-center text-[11px] font-extrabold tracking-wide text-black"
       style={{ textAlign: "center", textAlignLast: "center" }}
     >
       {SNAPCHAT_TRUST_SCORE_LABELS.map(label => <option key={label} value={label}>{label}</option>)}
