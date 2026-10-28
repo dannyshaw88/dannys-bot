@@ -3749,6 +3749,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // wipe, etc.).  Stripping the empty value here means the existing saved
       // path in `base` (from mobile-instances.json) is preserved instead.
       const body = { ...req.body };
+      if (body.snapchatTools && typeof body.snapchatTools === "object" && !Array.isArray(body.snapchatTools)) {
+        const existingTools = base.snapchatTools && typeof base.snapchatTools === "object"
+          ? base.snapchatTools
+          : {};
+        const incomingTools = body.snapchatTools;
+        const mergedTools: Record<string, any> = { ...existingTools, ...incomingTools };
+        for (const toolKey of ["addFriends", "acceptFriends", "replyUnreadChats", "viewStories"]) {
+          const incomingTool = incomingTools[toolKey];
+          if (incomingTool && typeof incomingTool === "object" && !Array.isArray(incomingTool)) {
+            const existingTool = existingTools[toolKey] && typeof existingTools[toolKey] === "object"
+              ? existingTools[toolKey]
+              : {};
+            mergedTools[toolKey] = { ...existingTool, ...incomingTool };
+          }
+        }
+        body.snapchatTools = mergedTools;
+      }
       const currentReenableToken = Number(existing.makePostPostCountManualReenableToken ?? 0);
       const incomingReenableToken = Number(body.makePostPostCountManualReenableToken ?? currentReenableToken);
       const explicitReenable = Number.isSafeInteger(incomingReenableToken) && incomingReenableToken > currentReenableToken;
@@ -3801,10 +3818,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
         delete body.trustScoreCopy;
       } else if (body.trustScoreCopy === true) {
+        const snapchatCopyFields = new Set(["enabled", "cycleIntervalMin", "cycleIntervalMax", "snapchatTools"]);
         for (const field of Object.keys(body)) {
           if (
             field !== "trustScoreCopy" &&
-            !COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field)
+            !COPYABLE_ACCOUNT_SPECIFIC_FIELDS.has(field) &&
+            !(isSnapchatSlot && snapchatCopyFields.has(field))
           ) delete body[field];
         }
         delete body.trustScoreCopy;

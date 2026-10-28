@@ -25,3 +25,9 @@ Any debounced save owned by a panel that unmounts when the user changes tabs mus
 **Why:** The Phone Settings panel is tab-scoped. Its cleanup used to cancel a pending collision-preventer save, making edits disappear specifically when the user clicked to another tab.
 
 **How to apply:** Keep the timer in a ref, clear it only when a newer edit for the same device arrives, and track the hydrated serial separately from the panel lifecycle.
+
+When a dedicated endpoint saves only the HST enabled flag, update only that field in the autosave snapshot. Marking the whole current settings object saved can suppress pending nested Snapchat tool changes.
+
+**Why:** A Step 1 toggle can race a Step 2 edit; the enabled-only endpoint does not persist the nested tool settings.
+
+**How to apply:** Preserve dirty fields when reconciling dedicated toggle writes, and autosave Snapchat tool changes promptly with keepalive for navigation.

@@ -26,3 +26,9 @@ Per-device Instagram/Snapchat tab order and last-selected landing tab must survi
 **Why:** The user wants each Farm device to reopen on its chosen platform tab with its preferred tab order.
 
 **How to apply:** Persist tab preferences as device-level configuration, separate from account-slot records, and hydrate them when that device is opened.
+
+The frontend HST slot-index guard must match the API's 1,000-slot limit; otherwise appended Snapchat slots can display a toggle but silently skip persistence and scheduling.
+
+**Why:** The user added Snapchat account slots alongside existing Instagram slots, and an HST cap of ten made later slots appear usable while preventing their cycles from starting.
+
+**How to apply:** Keep all frontend slot-index validation aligned with the API's account-slot range.

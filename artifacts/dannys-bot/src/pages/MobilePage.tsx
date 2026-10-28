@@ -4383,7 +4383,10 @@ const clamp4 = (n: number) => Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math
 // ten physical account positions 0..9. Keep rendering any server-provided
 // account data intact, but never let a corrupt legacy index become an HST/API
 // scheduler identity.
-const MAX_HST_ACCOUNT_SLOTS = 10;
+// The API and account-slot editor support up to 1,000 device slots. Keep the
+// HST guard aligned so Snapchat slots appended after ten Instagram accounts
+// still hydrate, persist their toggle, and start the phone cycle.
+const MAX_HST_ACCOUNT_SLOTS = 1000;
 
 // ── Module-level HST timer registry ─────────────────────────────────────────
 // Timers live here, OUTSIDE React, so component cleanup, dep changes, and
@@ -4451,6 +4454,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // firing a no-op POST right after hydration (when `settings` merely
   // mirrors what was just loaded) and only save on real user edits.
   const lastSavedRef = useRef<string>(JSON.stringify(AUTOMATION_DEFAULTS));
+  const lastSavedSnapchatToolsRef = useRef<string>(JSON.stringify(AUTOMATION_DEFAULTS.snapchatTools));
+  const markOnlyEnabledAsSaved = (enabled: boolean) => {
+    try {
+      const saved = JSON.parse(lastSavedRef.current);
+      saved.enabled = enabled;
+      lastSavedRef.current = JSON.stringify(saved);
+    } catch {
+      lastSavedRef.current = JSON.stringify({ ...AUTOMATION_DEFAULTS, enabled });
+    }
+  };
   // Distinguishes "user just flipped the master toggle on" from "the
   // effect re-ran because settings loaded from the server with enabled
   // already true" (e.g. on app restart). Only the former should run the
@@ -4548,10 +4561,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const editRevision = enabledEditRevisionRef.current + 1;
     enabledEditRevisionRef.current = editRevision;
     const nextSettings = { ...settingsRef.current, enabled };
-    // The dedicated toggle endpoint owns this field. Mark the full snapshot
-    // as saved so the generic settings autosave cannot immediately send a
-    // second, stale full-settings POST.
-    lastSavedRef.current = JSON.stringify(nextSettings);
+    // The dedicated toggle endpoint owns only this field. Mark only `enabled`
+    // as saved; otherwise a pending Snapchat-tool edit could be incorrectly
+    // treated as saved and skipped by the full-settings autosave.
+    markOnlyEnabledAsSaved(enabled);
     if (enabled) {
       // A rapid off→on toggle can run the old effect cleanup after the new
       // enabled state has already rendered. Clear the stale explicit-stop
@@ -4608,7 +4621,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // never compare them with this component's local edit counter.
     enabledEditRevisionRef.current += 1;
     const nextSettings = { ...settingsRef.current, enabled: event.enabled };
-    lastSavedRef.current = JSON.stringify(nextSettings);
+    markOnlyEnabledAsSaved(event.enabled);
     explicitToggleOffRef.current = !event.enabled;
     if (!event.enabled) manualCollisionOverrideRef.current = false;
     if (event.enabled) {
@@ -4754,6 +4767,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         merged.enabled = settingsRef.current.enabled;
       }
       lastSavedRef.current = JSON.stringify(merged);
+      lastSavedSnapchatToolsRef.current = JSON.stringify(merged.snapchatTools ?? AUTOMATION_DEFAULTS.snapchatTools);
       // Set settings AND hydrated in the same React batch so the run-loop
       // fires exactly once with the correct loaded values.
       setSettings(merged);
@@ -4924,6 +4938,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
      const toSave = settings;
      const toSaveStr = JSON.stringify(toSave);
     if (toSaveStr === lastSavedRef.current) return; // nothing actually changed
+    const snapchatToolsSnapshot = JSON.stringify(toSave.snapchatTools);
+    const snapchatToolsChanged = snapchatToolsSnapshot !== lastSavedSnapchatToolsRef.current;
     const t = setTimeout(() => {
       const slotIdentityQuery = slotId ? `?slotId=${encodeURIComponent(slotId)}` : "";
       const saveUrl = slotIdx !== undefined
@@ -4939,16 +4955,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
        fetch(saveUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-         body: payload,
+         keepalive: true,
+          body: payload,
       })
         .then(async r => {
           const body = await r.json().catch(() => null);
           if (!r.ok || !body?.ok) { setSaveError(body?.error ?? `Server rejected the settings (${r.status})`); return; }
           lastSavedRef.current = toSaveStr;
+          lastSavedSnapchatToolsRef.current = snapchatToolsSnapshot;
           setSaveError(null);
         })
         .catch((e: any) => setSaveError(e?.message ?? "Couldn't reach the server"));
-    }, 500);
+    }, snapchatToolsChanged ? 100 : 500);
     return () => clearTimeout(t);
   }, [settings, phone?.serial, slotIdx, slotId]);
 
@@ -5718,6 +5736,15 @@ function useCollisionPreventer(serial: string | null) {
 
 type CopyTarget = { serial: string; slotIdx: number };
 type DeviceSlots = { phone: UsbPhone; slots: Array<{ username: string; platform?: AccountPlatform; snapchatTrustScoreLabel?: SnapchatTrustScoreLabel }> };
+const SNAPCHAT_COPY_OPTIONS = [
+  { key: "step1", label: "Step 1 enabled state and interval" },
+  { key: "shuffleToolOrder", label: "Shuffle tool order" },
+  { key: "addFriends", label: "Add Friends" },
+  { key: "acceptFriends", label: "Accept Friends" },
+  { key: "replyUnreadChats", label: "Reply to Unread Chats" },
+  { key: "viewStories", label: "View Snaps" },
+] as const;
+type SnapchatCopyKey = typeof SNAPCHAT_COPY_OPTIONS[number]["key"];
 
 function deviceLabel(p: UsbPhone): string {
   return [p.manufacturer, p.marketName || p.model].filter(Boolean).join(" ") || p.serial;
@@ -5740,7 +5767,9 @@ function CopySettingsDialog({
   const [farmSlotMap, setFarmSlotMap] = useState<Map<string, number>>(new Map());
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set());
-  const [snapchatToolsSelected, setSnapchatToolsSelected] = useState(true);
+  const [selectedSnapchatCopyKeys, setSelectedSnapchatCopyKeys] = useState<Set<SnapchatCopyKey>>(
+    () => new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key)),
+  );
   const [copying, setCopying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const displayCopySections = (() => {
@@ -5944,12 +5973,19 @@ function CopySettingsDialog({
         ),
       );
     if (slotPlatform === "snapchat") {
-      if (snapchatToolsSelected) {
+      if (selectedSnapchatCopyKeys.has("step1")) {
         partial.enabled = settings.enabled;
         partial.cycleIntervalMin = settings.cycleIntervalMin;
         partial.cycleIntervalMax = settings.cycleIntervalMax;
-        partial.snapchatTools = settings.snapchatTools;
       }
+      const snapchatTools: Record<string, unknown> = {};
+      if (selectedSnapchatCopyKeys.has("shuffleToolOrder")) {
+        snapchatTools.shuffleToolOrder = settings.snapchatTools.shuffleToolOrder;
+      }
+      for (const key of ["addFriends", "acceptFriends", "replyUnreadChats", "viewStories"] as const) {
+        if (selectedSnapchatCopyKeys.has(key)) snapchatTools[key] = settings.snapchatTools[key];
+      }
+      if (Object.keys(snapchatTools).length > 0) partial.snapchatTools = snapchatTools;
     } else {
       for (const section of COPY_SECTIONS) {
         for (const sub of section.sub) {
@@ -6096,21 +6132,38 @@ function CopySettingsDialog({
           <div className="flex-1 min-w-0 flex flex-col min-h-0">
             {slotPlatform === "snapchat" ? (
               <div className="rounded-md border border-border/50 overflow-hidden">
-                <label className="flex items-center gap-2 px-2.5 py-2 bg-muted/40 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    className="w-3.5 h-3.5 accent-primary shrink-0"
-                    checked={snapchatToolsSelected}
-                    onChange={event => setSnapchatToolsSelected(event.target.checked)}
-                  />
+                <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-muted/40">
                   <span className="text-xs font-bold text-foreground">Snapchat settings</span>
-                </label>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
+                      onClick={() => setSelectedSnapchatCopyKeys(new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key)))}>
+                      All
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
+                      onClick={() => setSelectedSnapchatCopyKeys(new Set())}>
+                      None
+                    </Button>
+                  </div>
+                </div>
                 <div className="space-y-1 px-3 py-2">
                   <p className="text-[11px] leading-snug text-muted-foreground">
                     Copies only to Snapchat account slots. Instagram slots are excluded.
                   </p>
-                  {["Step 1 enabled state and interval", "Add Friends", "Accept Friends", "Reply to Unread Chats", "View Snaps"].map(tool => (
-                    <p key={tool} className="text-xs text-muted-foreground">• {tool}</p>
+                  {SNAPCHAT_COPY_OPTIONS.map(option => (
+                    <label key={option.key} className="flex items-center gap-2 py-0.5 text-xs text-muted-foreground cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 accent-primary shrink-0"
+                        checked={selectedSnapchatCopyKeys.has(option.key)}
+                        onChange={event => setSelectedSnapchatCopyKeys(previous => {
+                          const next = new Set(previous);
+                          if (event.target.checked) next.add(option.key);
+                          else next.delete(option.key);
+                          return next;
+                        })}
+                      />
+                      {option.label}
+                    </label>
                   ))}
                 </div>
               </div>
@@ -6202,7 +6255,7 @@ function CopySettingsDialog({
           )}
           <Button variant="secondary" onClick={onClose} disabled={copying}>Cancel</Button>
           <Button onClick={handleCopy}
-            disabled={copying || allTargets.length === 0 || (slotPlatform === "snapchat" && !snapchatToolsSelected)}
+            disabled={copying || allTargets.length === 0 || (slotPlatform === "snapchat" && selectedSnapchatCopyKeys.size === 0)}
             style={result === "ok" ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}>
             {result === "ok"
               ? <CheckCircle2 className="w-4 h-4 text-white" />
@@ -9929,7 +9982,9 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
     setAccountPlatformOrder(["instagram", "snapchat"]);
     if (!serial) return;
     let active = true;
-    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account-tab-preferences`)
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/account-tab-preferences?tabPrefs=${Date.now()}`, {
+      cache: "no-store",
+    })
       .then(async response => {
         if (!response.ok) throw new Error(`Server error (${response.status})`);
         return response.json();
