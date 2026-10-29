@@ -5,7 +5,7 @@ description: Cross-platform account-slot storage and execution rules for the Pho
 
 Keep Instagram and Snapchat accounts in one ordered device slot list, using a per-slot platform marker to choose the app launched for a cycle. Snapchat Step 2 is Add Friends, Accept Friends, Reply to Unread Chats, and View Snaps; Copy Settings must target only slots of the source platform.
 
-Reply to Unread Chats must accept either Snapchat chat-list filter label, “Unread” or “Unreplied,” and validate either when returning to the list.
+Reply to Unread Chats must tap and validate only Snapchat's “Unread” chat-list filter; never use “Unreplied.”
 
 The user wants five individual accounts on each device. Keep their settings, prompts, contacts, and reply history isolated by persisted slot identity.
 
