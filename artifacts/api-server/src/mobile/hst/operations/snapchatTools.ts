@@ -831,10 +831,17 @@ async function runReplyUnreadChats(context: Context) {
       break;
     }
     const sendState = await dump(context.serial);
-    const currentSend = exactClickable(sendState.nodes, ["Send"]);
     const typedReply = sendState.nodes.some(node => normalizedText(node.text).includes(normalizedText(reply)));
-    if (!currentSend || !typedReply || !await tapNode(context, currentSend, "send the configured unread-chat reply")) {
-      context.onLog("Reply to Unread Chats stopped: the reply text and Send control were not both confirmed.");
+    if (!typedReply) {
+      context.onLog("Reply to Unread Chats stopped: the pasted reply text was not confirmed in the composer.");
+      await exitSnapchatConversation(context).catch(() => false);
+      break;
+    }
+    context.onLog("Reply to Unread Chats: pasted reply confirmed; pressing Enter to send.");
+    try {
+      await android.keyevent(context.serial, 66); // Android KEYCODE_ENTER; no per-device key mapping required.
+    } catch {
+      context.onLog("Reply to Unread Chats stopped: Android Enter could not be sent; the reply was not confirmed sent.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
