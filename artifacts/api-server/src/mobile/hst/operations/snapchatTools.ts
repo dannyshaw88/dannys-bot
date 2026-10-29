@@ -79,11 +79,11 @@ async function dump(serial: string): Promise<{ xml: string; nodes: UiNode[] }> {
   return { xml, nodes: parseNodes(xml) };
 }
 
-async function tapNode(context: Context, node: UiNode, reason: string) {
+async function tapNode(context: Context, node: UiNode, reason: string, settleMs = 700) {
   if (context.isAborted()) return false;
   const { x, y } = center(node);
   await android.tap(context.serial, x, y, "bot", `Snapchat: ${reason}`, "automation");
-  await context.sleep(700);
+  await context.sleep(settleMs);
   return !context.isAborted();
 }
 
@@ -551,11 +551,35 @@ async function runAcceptFriends(context: Context) {
   }
 
   let accepted = 0;
+  let pendingAcceptance: string | null = null;
   while (accepted < requested && !context.isAborted()) {
-    state = await dump(context.serial);
-    if (!isAddFriendsPage(state.xml)) {
-      context.onLog("Accept Friends stopped: Snapchat left the verified Add Friends screen.");
-      break;
+    if (pendingAcceptance) {
+      const seconds = randomSeconds(1, 3);
+      context.onLog(`Accept Friends: waiting ${seconds}s between accepts.`);
+      await context.sleep(seconds * 1000);
+      if (context.isAborted()) break;
+      state = await dump(context.serial);
+      if (!isAddFriendsPage(state.xml)) {
+        context.onLog("Accept Friends stopped: Snapchat left the verified Add Friends screen.");
+        break;
+      }
+      const pendingSection = getAddedMeSection(state.nodes);
+      if (!pendingSection) {
+        context.onLog("Accept Friends stopped: Added Me could not be confirmed after tapping Accept.");
+        break;
+      }
+      const pendingStillVisible = getAcceptRows(
+        state.nodes,
+        pendingSection,
+        (await android.getScreenSizeAsync(context.serial)).h,
+      ).some(row => row.name === pendingAcceptance);
+      if (pendingStillVisible) {
+        context.onLog(`Accept Friends stopped: Snapchat still shows Accept for ${pendingAcceptance}.`);
+        break;
+      }
+      accepted++;
+      pendingAcceptance = null;
+      if (accepted >= requested) break;
     }
     const section = getAddedMeSection(state.nodes);
     if (!section) {
@@ -568,50 +592,50 @@ async function runAcceptFriends(context: Context) {
       context.onLog("Accept Friends stopped: no labeled Accept badge was found under Added Me.");
       break;
     }
-    if (!await tapNode(context, candidate.button, `accept ${candidate.name} under Added Me`)) break;
-    const confirmation = await dump(context.serial);
-    if (!isAddFriendsPage(confirmation.xml)) {
-      context.onLog("Accept Friends stopped: the Add Friends page changed before the acceptance could be confirmed.");
-      break;
-    }
-    const confirmedSection = getAddedMeSection(confirmation.nodes);
-    if (!confirmedSection) {
-      context.onLog("Accept Friends stopped: Added Me could not be confirmed after tapping Accept.");
-      break;
-    }
-    const sameRequestStillAccept = getAcceptRows(
-      confirmation.nodes,
-      confirmedSection,
-      (await android.getScreenSizeAsync(context.serial)).h,
-    ).some(row => row.name === candidate.name);
-    if (sameRequestStillAccept) {
-      context.onLog(`Accept Friends stopped: Snapchat still shows Accept for ${candidate.name}.`);
-      break;
-    }
-    accepted++;
+    if (!await tapNode(context, candidate.button, `accept ${candidate.name} under Added Me`, 250)) break;
+    pendingAcceptance = candidate.name;
   }
   context.onLog(`Accept Friends: accepted ${accepted}/${requested} visible incoming requests.`);
 }
 
 async function collapseAddFriendsBeforeNextTool(context: Context): Promise<boolean> {
-  const current = await dump(context.serial);
-  if (!/add_friends_root/i.test(current.xml)) {
-    if (/camera_page/i.test(current.xml)) return true;
-    context.onLog("Snapchat stopped before the next tool: neither the Add Friends list nor the camera screen was confirmed.");
-    return false;
+  let attempt = 0;
+  while (!context.isAborted()) {
+    attempt++;
+    const current = await dump(context.serial);
+    if (/camera_page/i.test(current.xml) && !/add_friends_root/i.test(current.xml)) return true;
+
+    if (/add_friends_root/i.test(current.xml)) {
+      const dismiss = current.nodes.find(node => shortResourceId(node) === "add_friends_dismiss");
+      if (dismiss) {
+        const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+        const occludingBanner = findOccludingBanner(current.nodes, dismiss, screenWidth, screenHeight);
+        if (occludingBanner) {
+          if (attempt === 1 || attempt % 6 === 0) {
+            context.onLog("Snapchat: a possible top overlay covers the collapse chevron; waiting and retrying.");
+          }
+          await context.sleep(900);
+          continue;
+        }
+        if (!await tapNode(context, dismiss, "collapse the Add Friends list before the next tool")) return false;
+        const after = await dump(context.serial);
+        if (/camera_page/i.test(after.xml) && !/add_friends_root/i.test(after.xml)) return true;
+      } else if (attempt === 1 || attempt % 6 === 0) {
+        context.onLog("Snapchat: waiting for the Add Friends collapse chevron; will retry.");
+      }
+    } else {
+      const cameraTab = current.nodes.find(node =>
+        node.clickable && shortResourceId(node) === "ngs_camera_icon_container",
+      );
+      if (cameraTab) {
+        if (!await tapNode(context, cameraTab, "return to Camera before continuing")) return false;
+      } else if (attempt === 1 || attempt % 6 === 0) {
+        context.onLog("Snapchat: waiting for Camera or the Add Friends list; will retry.");
+      }
+    }
+    await context.sleep(900);
   }
-  const dismiss = current.nodes.find(node => shortResourceId(node) === "add_friends_dismiss");
-  if (!dismiss) {
-    context.onLog("Snapchat stopped before the next tool: the Add Friends collapse chevron was not found.");
-    return false;
-  }
-  if (!await tapNode(context, dismiss, "collapse the Add Friends list before the next tool")) return false;
-  const after = await dump(context.serial);
-  if (!/camera_page/i.test(after.xml) || /add_friends_root/i.test(after.xml)) {
-    context.onLog("Snapchat stopped before the next tool: the Add Friends list did not collapse to the camera screen.");
-    return false;
-  }
-  return true;
+  return false;
 }
 
 async function runReplyUnreadChats(context: Context) {

@@ -5740,11 +5740,11 @@ const SNAPCHAT_COPY_OPTIONS = [
   { key: "step1", label: "Step 1 enabled state and interval" },
   { key: "shuffleToolOrder", label: "Shuffle tool order" },
   { key: "addFriends", label: "Add Friends" },
-  { key: "massSnap", label: "Mass Snap" },
   { key: "acceptFriends", label: "Accept Friends" },
-  { key: "replyUnreadChats", label: "Reply to Unread Chats" },
   { key: "viewStories", label: "View Spotlights" },
   { key: "viewSnaps", label: "View Snaps" },
+  { key: "massSnap", label: "Mass Snap" },
+  { key: "replyUnreadChats", label: "Reply to Unread Chats" },
 ] as const;
 type SnapchatCopyKey = typeof SNAPCHAT_COPY_OPTIONS[number]["key"];
 
@@ -6876,11 +6876,11 @@ export function AutomationSettingsPanel({
         </div>
         {([
           ["addFriends", "Add Friends"],
-          ["massSnap", "Mass Snap"],
           ["acceptFriends", "Accept Friends"],
-          ["replyUnreadChats", "Reply to Unread Chats"],
           ["viewStories", "View Spotlights"],
           ["viewSnaps", "View Snaps"],
+          ["massSnap", "Mass Snap"],
+          ["replyUnreadChats", "Reply to Unread Chats"],
         ] as const).map(([key, title]) => {
           const tool = settings.snapchatTools[key];
           const countFloor = key === "viewStories" || key === "viewSnaps" || key === "massSnap" ? 1 : 0;
