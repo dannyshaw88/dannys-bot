@@ -36,7 +36,7 @@ type Context = {
   tools: SnapchatTools;
   onLog: (message: string) => void;
   isAborted: () => boolean;
-  sleep: (milliseconds: number) => Promise<void>;
+  sleep: (milliseconds: number, timingMode?: "static" | "exact") => Promise<void>;
   swipeGesture?: DeviceSwipeGesture;
 };
 
@@ -727,6 +727,8 @@ async function runReplyUnreadChats(context: Context) {
     context.onLog("Reply to Unread Chats skipped: Chat tab was not found.");
     return;
   }
+  context.onLog("Reply to Unread Chats: waiting 5 seconds for the chat filters to load…");
+  await context.sleep(5_000, "exact");
   let list = await dump(context.serial);
   const unreadFilter = findUnreadChatFilter(list.nodes);
   if (!unreadFilter || !await tapNode(context, unreadFilter, "show Snapchat's Unread chat filter")) {
