@@ -126,30 +126,54 @@ async function tapExact(context: Context, labels: string[], reason: string): Pro
 }
 
 async function openAddFriends(context: Context): Promise<boolean> {
-  for (let attempt = 0; attempt < 5 && !context.isAborted(); attempt++) {
+  let attempt = 0;
+  while (!context.isAborted()) {
+    attempt++;
     const state = await dump(context.serial);
     if (isAddFriendsPage(state.xml)) return true;
+
+    // Other tools can leave Snapchat on a different tab (or a transient
+    // loading surface). Return to Camera before retrying the person-plus
+    // control; never turn a temporary navigation miss into a skipped tool.
+    if (!/camera_page/i.test(state.xml)) {
+      const cameraTab = state.nodes.find(node =>
+        node.clickable && shortResourceId(node) === "ngs_camera_icon_container",
+      );
+      if (cameraTab) {
+        if (!await tapNode(context, cameraTab, "return to Camera before retrying Add Friends")) return false;
+      } else if (attempt === 1 || attempt % 6 === 0) {
+        context.onLog("Add Friends: waiting for Snapchat's Camera tab to become available; will retry.");
+      }
+      await context.sleep(900);
+      continue;
+    }
+
     const addFriendsIcon = state.nodes.find(node =>
       shortResourceId(node) === "neon_add_friend_button_container",
     );
-    if (!/camera_page/i.test(state.xml) || !addFriendsIcon) {
-      context.onLog("Add Friends stopped: the live camera screen's top-right Add Friends icon was not confirmed.");
-      return false;
+    if (!addFriendsIcon) {
+      if (attempt === 1 || attempt % 6 === 0) {
+        context.onLog("Add Friends: waiting for the top-right person-plus icon; will retry.");
+      }
+      await context.sleep(900);
+      continue;
     }
     const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
     const occludingBanner = findOccludingBanner(state.nodes, addFriendsIcon, screenWidth, screenHeight);
     if (occludingBanner) {
-      if (attempt === 4) {
-        context.onLog("Add Friends skipped: a top overlay still covers the icon's tap area; no tap was sent.");
-        return false;
+      if (attempt === 1 || attempt % 6 === 0) {
+        context.onLog("Add Friends: a possible top overlay covers the person-plus tap area; waiting and retrying.");
       }
-      context.onLog("Add Friends: top overlay overlaps the icon's tap area; checking briefly for it to clear.");
-      await context.sleep(400);
+      await context.sleep(900);
       continue;
     }
     if (!await tapNode(context, addFriendsIcon, "open Add Friends from the top-right person-plus icon")) return false;
     const afterTap = await dump(context.serial);
-    return isAddFriendsPage(afterTap.xml);
+    if (isAddFriendsPage(afterTap.xml)) return true;
+    if (attempt === 1 || attempt % 6 === 0) {
+      context.onLog("Add Friends: the page did not open yet; checking the live screen and retrying.");
+    }
+    await context.sleep(900);
   }
   return false;
 }
@@ -359,10 +383,7 @@ async function generateContextualReply(goal: string, peer: string, transcript: s
 async function runAddFriends(context: Context) {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
   if (!context.tools.addFriends.enabled || requested === 0) return;
-  if (!await openAddFriends(context)) {
-    context.onLog("Add Friends skipped: could not confirm the Snapchat Add Friends screen.");
-    return;
-  }
+  if (!await openAddFriends(context)) return;
   let added = 0;
   while (added < requested && !context.isAborted()) {
     const { xml, nodes } = await dump(context.serial);
@@ -446,10 +467,7 @@ async function runAddFriends(context: Context) {
 async function runAcceptFriends(context: Context) {
   const requested = randomCount(context.tools.acceptFriends.min, context.tools.acceptFriends.max);
   if (!context.tools.acceptFriends.enabled || requested === 0) return;
-  if (!await openAddFriends(context)) {
-    context.onLog("Accept Friends skipped: could not confirm the Snapchat Add Friends screen.");
-    return;
-  }
+  if (!await openAddFriends(context)) return;
 
   const getAddedMeSection = (nodes: UiNode[]) => {
     const start = nodes.findIndex(node =>
