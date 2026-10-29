@@ -41,6 +41,27 @@ function readEntries(): SnapchatReplyHistoryEntry[] {
   }
 }
 
+export function getSnapchatReplyHistory(slotId: string, username: string): {
+  previousReplyCount: number;
+  sentReplies: Array<{ replyNumber: number; capturedMessages: string[]; sentText: string }>;
+} {
+  const normalizedUsername = username.replace(/^@/, "").toLowerCase();
+  const entries = readEntries()
+    .filter(entry =>
+      entry.slotId === slotId &&
+      entry.username.replace(/^@/, "").toLowerCase() === normalizedUsername,
+    )
+    .sort((a, b) => a.replyNumber - b.replyNumber);
+  return {
+    previousReplyCount: entries.reduce((count, entry) => Math.max(count, entry.replyNumber), 0),
+    sentReplies: entries.slice(-10).map(({ replyNumber, capturedMessages, sentText }) => ({
+      replyNumber,
+      capturedMessages,
+      sentText,
+    })),
+  };
+}
+
 export function hasSentSnapchatBoundlusLink(slotId: string, username: string): boolean {
   const normalizedUsername = username.replace(/^@/, "").toLowerCase();
   return readEntries().some(entry =>

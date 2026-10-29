@@ -151,7 +151,7 @@
 - [SMS contact selection only](sms-contact-selection-only.md) — the Phone Apps SMS action adds only the requested unselected contacts in Google Messages; it never composes or sends
 - [Additional focused project pointers](additional-memory-pointers.md) — less frequently used UI, manual-search, camera, and tooling notes remain indexed separately
 - [Replit preview API routing](replit-preview-api-routing.md) — when the public preview routes `/api` through the `/__mockup` server, proxy it to the top-level API
-- [Snapchat reply history identity](snapchat-reply-history-identity.md) — key local reply logs by stable slot ID and verified profile username; retain them until the user clears that slot
+- [Snapchat reply history identity](snapchat-reply-history-identity.md) — key retained per-contact history by slot and username, and provide it to Luna to prevent repetitive replies
 - [Manual Android diagnostics across USB disconnects](manual-android-disconnect-diagnostics.md) — persist minimal state on-device while unplugged, then retrieve after reconnect; host-only ADB capture cannot observe the disconnected interval
 - [Idle phone-mirror log volume](idle-phone-mirror-log-volume.md) — suppress routine mirror heartbeats and restart chatter while automation is idle; preserve active-cycle diagnostics and real errors
-- [Snapchat Luna reply typing](snapchat-luna-reply-typing.md) — skip unmapped keys; refresh Chat only when another reply is pending
+- [Snapchat Luna reply typing](snapchat-luna-reply-typing.md) — skip unmapped keys; banner-check and refresh Chat only when another reply is pending
