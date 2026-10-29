@@ -41,6 +41,10 @@ type Context = {
 };
 
 const shortResourceId = (node: UiNode) => node.resourceId.split("/").pop() ?? node.resourceId;
+const findReplyableChatFilter = (nodes: UiNode[]) =>
+  nodes.find(node =>
+    ["list-picker-pill-Unread", "list-picker-pill-Unreplied"].includes(shortResourceId(node)),
+  );
 const decodeXml = (value: string) => value
   .replace(/&quot;/g, '"')
   .replace(/&apos;/g, "'")
@@ -393,7 +397,7 @@ async function exitSnapchatConversation(context: Context): Promise<boolean> {
     .sort((a, b) => (a.bounds[2] - a.bounds[0]) - (b.bounds[2] - b.bounds[0]))[0];
   if (!chevron || !await tapNode(context, chevron, "exit the conversation with its top-left chevron")) return false;
   const after = await dump(context.serial);
-  return after.nodes.some(node => shortResourceId(node) === "list-picker-pill-Unread") &&
+  return Boolean(findReplyableChatFilter(after.nodes)) &&
     !after.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
 }
 
@@ -726,14 +730,21 @@ async function runReplyUnreadChats(context: Context) {
     return;
   }
   let list = await dump(context.serial);
-  const unreadFilter = list.nodes.find(node => shortResourceId(node) === "list-picker-pill-Unread");
-  if (!unreadFilter || !await tapNode(context, unreadFilter, "show Snapchat's Unread chat filter")) {
-    context.onLog("Reply to Unread Chats stopped: Snapchat's Unread filter was not confirmed.");
+  const replyableFilter = findReplyableChatFilter(list.nodes);
+  const replyableFilterLabel = replyableFilter
+    ? shortResourceId(replyableFilter).replace("list-picker-pill-", "")
+    : "";
+  if (!replyableFilter || !await tapNode(
+    context,
+    replyableFilter,
+    `show Snapchat's ${replyableFilterLabel} chat filter`,
+  )) {
+    context.onLog("Reply to Unread Chats stopped: neither Snapchat's Unread nor Unreplied filter was confirmed.");
     return;
   }
   list = await dump(context.serial);
-  if (!list.nodes.some(node => shortResourceId(node) === "list-picker-pill-Unread")) {
-    context.onLog("Reply to Unread Chats stopped: Snapchat left the chat list before unread rows were confirmed.");
+  if (!findReplyableChatFilter(list.nodes)) {
+    context.onLog("Reply to Unread Chats stopped: Snapchat left the chat list before replyable rows were confirmed.");
     return;
   }
 
