@@ -5,6 +5,10 @@ description: Cross-platform account-slot storage and execution rules for the Pho
 
 Keep Instagram and Snapchat accounts in one ordered device slot list, using a per-slot platform marker to choose the app launched for a cycle. Snapchat Step 2 is Add Friends, Accept Friends, Reply to Unread Chats, and View Snaps; Copy Settings must target only slots of the source platform.
 
+The user wants five individual accounts on each device. Keep their settings, prompts, contacts, and reply history isolated by persisted slot identity.
+
+**Why:** the user explicitly wants five independent accounts on every device.
+
 **Why:** The Human Session Tool timer and device collision coordinator already key off the device's account slots, so scheduling stays shared. The user requires Snapchat tools and labels to remain separate from Instagram automation and Settings > TrustScores, and requested same-platform copy only.
 
 **How to apply:** Extend the platform discriminator and app-launch branch, but keep Snapchat settings, copy targets, and dispatch platform-specific. Store the display label on that Snapchat account slot only; never resolve it through TrustScore APIs, templates, timers, or automation settings. Do not split shared HST scheduling or collision queues into platform-specific collections.

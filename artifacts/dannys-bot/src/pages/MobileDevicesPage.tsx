@@ -18,7 +18,8 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, UserRound, RotateCcw, Download, ChevronDown, Check, Sun } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check, Sun } from "lucide-react";
+import { FaInstagram, FaSnapchatGhost } from "react-icons/fa";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
 
@@ -33,6 +34,8 @@ interface FarmDevice {
   androidVersion: string;
   addedAt:        string;
 }
+
+type PlatformSlotCounts = { instagram: number; snapchat: number };
 
 function toolVisual(tool: string): { label: string; icon: React.ReactNode } {
   const iconClass = "w-3.5 h-3.5 shrink-0";
@@ -488,22 +491,32 @@ function SimCardSelector({
 }
 
 function AccountSlotCounter({
-  active,
-  total,
+  instagramActive,
+  instagramTotal,
+  snapchatActive,
+  snapchatTotal,
   centerX,
 }: {
-  active: number;
-  total: number;
+  instagramActive: number;
+  instagramTotal: number;
+  snapchatActive: number;
+  snapchatTotal: number;
   centerX: number | null;
 }) {
   return (
     <div
       style={{ left: centerX === null ? "82%" : `${centerX}px` }}
-      className="absolute top-[calc(50%+1.15rem)] z-20 flex -translate-x-1/2 items-center gap-1 text-[11px] font-medium text-muted-foreground"
-      aria-label={`${active} of ${total} account slots have Human Session Tool enabled`}
+      className="absolute top-[calc(50%+0.75rem)] z-20 flex -translate-x-1/2 flex-col gap-1 text-[11px] font-medium text-muted-foreground"
+      aria-label={`Instagram: ${instagramActive} of ${instagramTotal} slots active. Snapchat: ${snapchatActive} of ${snapchatTotal} slots active.`}
     >
-      <UserRound className="h-3.5 w-3.5 shrink-0 text-green-500" aria-hidden="true" />
-      <span className="text-black">{active}/{total}</span>
+      <span className="inline-flex items-center justify-center gap-1">
+        <FaInstagram className="h-3.5 w-3.5 shrink-0 text-[#E1306C]" aria-hidden="true" />
+        <span className="text-black">{instagramActive}/{instagramTotal}</span>
+      </span>
+      <span className="inline-flex items-center justify-center gap-1">
+        <FaSnapchatGhost className="h-3.5 w-3.5 shrink-0 rounded-full bg-[#FFFC00] p-[1px] text-black" aria-hidden="true" />
+        <span className="text-black">{snapchatActive}/{snapchatTotal}</span>
+      </span>
     </div>
   );
 }
@@ -1136,8 +1149,8 @@ function DeviceCard({
   active,
   isStreaming,
   currentTool,
-  accountSlotCount,
-  activeHstSlotCount,
+  accountSlotCounts,
+  activeHstSlotCounts,
   onClick,
   onPower,
   powered,
@@ -1151,8 +1164,8 @@ function DeviceCard({
   active:      boolean;
   isStreaming: boolean;
   currentTool: string | null;
-  accountSlotCount: number;
-  activeHstSlotCount: number;
+  accountSlotCounts: PlatformSlotCounts;
+  activeHstSlotCounts: PlatformSlotCounts;
   onClick:     () => void;
   onPower:     () => void;
   powered:     boolean;
@@ -1341,8 +1354,10 @@ function DeviceCard({
             centerX={simCenterX}
           />
           <AccountSlotCounter
-            active={Math.min(activeHstSlotCount, accountSlotCount)}
-            total={accountSlotCount}
+            instagramActive={Math.min(activeHstSlotCounts.instagram, accountSlotCounts.instagram)}
+            instagramTotal={accountSlotCounts.instagram}
+            snapchatActive={Math.min(activeHstSlotCounts.snapchat, accountSlotCounts.snapchat)}
+            snapchatTotal={accountSlotCounts.snapchat}
             centerX={simCenterX}
           />
         </div>
@@ -1503,8 +1518,8 @@ export function MobileDevicesPage() {
   const [streamingSerials, setStreamingSerials] = useState<Set<string>>(new Set());
   const [manualPowerSerials, setManualPowerSerials] = useState<Set<string>>(new Set());
   const [currentTools, setCurrentTools] = useState<Map<string, string>>(new Map());
-  const [accountSlotCounts, setAccountSlotCounts] = useState<Record<string, number>>({});
-  const [activeHstSlotCounts, setActiveHstSlotCounts] = useState<Record<string, number>>({});
+  const [accountSlotCounts, setAccountSlotCounts] = useState<Record<string, PlatformSlotCounts>>({});
+  const [activeHstSlotCounts, setActiveHstSlotCounts] = useState<Record<string, PlatformSlotCounts>>({});
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -1531,7 +1546,10 @@ export function MobileDevicesPage() {
         const response = await fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/account`);
         if (!response.ok) return null;
         const data = await response.json();
-        return [device.serial, Array.isArray(data?.slots) ? data.slots.length : 0] as const;
+        return {
+          serial: device.serial,
+          slots: Array.isArray(data?.slots) ? data.slots : [],
+        };
       } catch {
         return null;
       }
@@ -1540,7 +1558,13 @@ export function MobileDevicesPage() {
     setAccountSlotCounts(previous => {
       const next = { ...previous };
       for (const result of accountResults) {
-        if (result) next[result[0]] = result[1];
+        if (!result) continue;
+        const counts: PlatformSlotCounts = { instagram: 0, snapchat: 0 };
+        for (const slot of result.slots) {
+          if (slot?.platform === "snapchat") counts.snapchat++;
+          else counts.instagram++;
+        }
+        next[result.serial] = counts;
       }
       return next;
     });
@@ -1549,12 +1573,24 @@ export function MobileDevicesPage() {
       const response = await fetch("/api/mobile/enabled-hst-slots");
       if (!response.ok) return;
       const data = await response.json();
-      const next: Record<string, number> = {};
-      for (const slot of Array.isArray(data?.slots) ? data.slots : []) {
-        if (typeof slot?.serial !== "string") continue;
-        next[slot.serial] = (next[slot.serial] ?? 0) + 1;
+      const slotsBySerial = new Map<string, any[]>();
+      for (const result of accountResults) {
+        if (result) slotsBySerial.set(result.serial, result.slots);
       }
-      setActiveHstSlotCounts(next);
+      const next: Record<string, PlatformSlotCounts> = {};
+      for (const result of accountResults) {
+        if (result) next[result.serial] = { instagram: 0, snapchat: 0 };
+      }
+      for (const slot of Array.isArray(data?.slots) ? data.slots : []) {
+        if (typeof slot?.serial !== "string" || !Number.isInteger(slot?.slotIdx)) continue;
+        const accountSlot = slotsBySerial.get(slot.serial)?.[slot.slotIdx];
+        if (!accountSlot) continue;
+        const platform = accountSlot.platform === "snapchat" ? "snapchat" : "instagram";
+        const counts = next[slot.serial] ?? { instagram: 0, snapchat: 0 };
+        counts[platform]++;
+        next[slot.serial] = counts;
+      }
+      setActiveHstSlotCounts(previous => ({ ...previous, ...next }));
     } catch {
       // Keep the last known active counts while the API is temporarily unavailable.
     }
@@ -1751,8 +1787,8 @@ export function MobileDevicesPage() {
                       active={activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial)}
                       isStreaming={streamingSerials.has(device.serial) || (activeCycleSerials.has(device.serial) && onlineSerials.has(device.serial))}
                       currentTool={currentTools.get(device.serial) ?? null}
-                      accountSlotCount={accountSlotCounts[device.serial] ?? 0}
-                      activeHstSlotCount={activeHstSlotCounts[device.serial] ?? 0}
+                      accountSlotCounts={accountSlotCounts[device.serial] ?? { instagram: 0, snapchat: 0 }}
+                      activeHstSlotCounts={activeHstSlotCounts[device.serial] ?? { instagram: 0, snapchat: 0 }}
                        onClick={() => void openDeviceMirror(device)}
                        powered={manualPowerSerials.has(device.serial) || streamingSerials.has(device.serial)}
                        onPower={() => void toggleDevicePower(device.serial)}

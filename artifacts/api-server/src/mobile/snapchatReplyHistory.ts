@@ -13,6 +13,20 @@ export type SnapchatReplyHistoryEntry = {
   replyNumber: number;
 };
 
+function containsBoundlusTarget(text: string): boolean {
+  let decoded = text;
+  for (let pass = 0; pass < 2; pass++) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+  return /(?:^|[^a-z0-9.-])(?:www\.)?boundlus\.com(?:$|[/?#\s.)\]},!?;:])/i.test(decoded);
+}
+
 function historyPath() {
   return path.join(path.dirname(sqlite.name), "snapchat-reply-history.jsonl");
 }
@@ -27,12 +41,22 @@ function readEntries(): SnapchatReplyHistoryEntry[] {
   }
 }
 
+export function hasSentSnapchatBoundlusLink(slotId: string, username: string): boolean {
+  const normalizedUsername = username.replace(/^@/, "").toLowerCase();
+  return readEntries().some(entry =>
+    entry.slotId === slotId &&
+    entry.username.replace(/^@/, "").toLowerCase() === normalizedUsername &&
+    containsBoundlusTarget(entry.sentText),
+  );
+}
+
 export function exportSnapchatReplyHistory(slotId: string): string {
   const entries = readEntries().filter(entry => entry.slotId === slotId);
   if (!entries.length) return "No Snapchat reply history recorded for this account slot.\n";
   return entries.map(entry => [
     `Contact: @${entry.username} (${entry.displayName})`,
     `Reply number: ${entry.replyNumber}`,
+    `Boundlus link sent: ${containsBoundlusTarget(entry.sentText) ? "Yes" : "No"}`,
     `Sent at: ${entry.sentAt}`,
     "Captured conversation:",
     ...entry.capturedMessages.map(message => `  ${message}`),

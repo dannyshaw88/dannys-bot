@@ -1,6 +1,6 @@
 import * as android from "../../androidManager";
 import { storage } from "../../../storage";
-import { appendSnapchatReplyHistory } from "../../snapchatReplyHistory";
+import { appendSnapchatReplyHistory, hasSentSnapchatBoundlusLink } from "../../snapchatReplyHistory";
 
 type SnapchatTools = {
   shuffleToolOrder: boolean;
@@ -775,6 +775,12 @@ async function runReplyUnreadChats(context: Context) {
     if (!username) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
+    }
+    if (hasSentSnapchatBoundlusLink(context.slotId, username)) {
+      context.onLog(`Reply to Unread Chats skipped for @${username}: the Boundlus link was already sent for this Snapchat slot.`);
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
     }
     let reply: string;
     try {

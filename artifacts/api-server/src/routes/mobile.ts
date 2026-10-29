@@ -6946,9 +6946,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Push into the rolling buffer BEFORE capturing so the composite always
       // includes the current line in the log panel on the right.
       pushDebugLogLine(serial, fullLine);
-      // Keep every row in the rolling text log, but sample the phone + log
-      // composite at a bounded rate instead of capturing once per row/timestamp.
-      queueDebugScreenshot(serial, fullLine);
+      // Keep Snapchat's full text diagnostics, but skip the expensive phone +
+      // log composites for Snapchat account cycles.
+      if (configuredSlot?.platform !== "snapchat") {
+        queueDebugScreenshot(serial, fullLine);
+      }
       if (notebookStarted) {
         try { appendSlotCycleNotebook(serial, slotId, incomingCycleId, fullLine); }
         catch (error) { logger.warn({ err: error, serial, slotId }, "[mobile-cycle] notebook append failed"); }
@@ -7179,8 +7181,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         timestamp: new Date().toISOString(),
       }).catch(() => {});
 
-      // Clear debug screenshots from the previous account's cycle so the new
-      // account starts fresh with its own screenshot sequence.
+      const isSnapchatCycle = configuredSlot?.platform === "snapchat";
+      // Invalidate any queued frame from the previous cycle. Snapchat does not
+      // generate debug composites, and must not erase the previous Instagram
+      // evidence folder when it starts.
       debugScreenshotGenerations.set(
         serial,
         (debugScreenshotGenerations.get(serial) ?? 0) + 1,
@@ -7193,10 +7197,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       debugScreenshotPendingFinal.delete(serial);
       debugLogBuffer.delete(serial);
       debugLogContextBySerial.delete(serial);
-      await fsPromises.rm(
-        path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial)),
-        { recursive: true, force: true },
-      ).catch(() => {});
+      if (!isSnapchatCycle) {
+        await fsPromises.rm(
+          path.join(SCREENSHOTS_DIR, getDebugScreenshotFolderName(serial)),
+          { recursive: true, force: true },
+        ).catch(() => {});
+      }
 
       // 1. Power on the phone.
       // Apply the temporary timeout hold BEFORE waking. On devices with a
