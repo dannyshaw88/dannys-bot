@@ -9,7 +9,7 @@ Reply to Unread Chats must tap and validate only Snapchat's “Unread” chat-li
 
 After launching Snapchat, wait five seconds before starting its first tool so the app can finish loading its Chat screen.
 
-After tapping the Snapchat Chat tab for Reply to Unread Chats, wait another five seconds before looking for the Unread filter.
+After tapping the Snapchat Chat tab for Reply to Unread Chats, wait ten seconds before looking for the Unread filter.
 
 The user wants five individual accounts on each device. Keep their settings, prompts, contacts, and reply history isolated by persisted slot identity.
 
