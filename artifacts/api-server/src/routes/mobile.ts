@@ -8,7 +8,7 @@ import path from "path";
 import * as http from "http";
 import * as os from "os";
 import sharp from "sharp";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import { getDebugScreenshotFolderName } from "../mobile/debugScreenshotPaths";
@@ -10162,6 +10162,109 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) {
       logger.error({ err: e }, "[usb-diagnostics] export failed");
       res.status(500).json({ ok: false, error: e?.message ?? "Could not export USB diagnostics" });
+    }
+  });
+
+  // ── Manual signup diagnostic capture ─────────────────────────────────────
+  // This is deliberately separate from automation and does not capture app
+  // content or network payloads. A bounded sampler runs on the phone itself,
+  // so it continues recording USB/network/system state while ADB is unplugged.
+  const signupDiagSerialPattern = /^[A-Za-z0-9._:-]{1,100}$/;
+  const signupDiagSessionPattern = /^[0-9a-f-]{36}$/i;
+  const signupDiagRoot = "/sdcard/Download/AuraManualSignupDiagnostics";
+  const signupDiagScript = (sessionId: string) => `#!/system/bin/sh
+OUT="${signupDiagRoot}/${sessionId}/state.log"
+echo "Aura manual signup diagnostic; session=${sessionId}; started_epoch=$(date +%s)" >> "$OUT"
+i=0
+while [ "$i" -lt 1800 ]; do
+  {
+    echo
+    echo "=== SAMPLE epoch=$(date +%s) ==="
+    echo "usb_state=$(getprop sys.usb.state | tr '\\n' ' ')"
+    echo "usb_config=$(getprop sys.usb.config | tr '\\n' ' ')"
+    echo "adb_enabled=$(settings get global adb_enabled 2>/dev/null | tr '\\n' ' ')"
+    echo "developer_options=$(settings get global development_settings_enabled 2>/dev/null | tr '\\n' ' ')"
+    proxy="$(settings get global http_proxy 2>/dev/null)"
+    case "$proxy" in ""|"null") echo "global_proxy=unset";; *) echo "global_proxy=configured";; esac
+    dumpsys battery 2>/dev/null | grep -E '(^  AC powered:|^  USB powered:|^  Wireless powered:|^  status:|^  level:)' | head -n 5
+    ip route show 2>/dev/null | grep '^default ' | head -n 1
+    dumpsys connectivity 2>/dev/null | grep -E 'NetworkAgentInfo|Transports:|InterfaceName:' | head -n 8
+    echo "snapchat_pid=$(pidof com.snapchat.android 2>/dev/null | tr '\\n' ' ')"
+  } >> "$OUT"
+  sleep 3
+  i=$((i + 3))
+done
+echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
+`;
+
+  app.post("/api/mobile/devices/:serial/manual-signup-diagnostics/start", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      if (!signupDiagSerialPattern.test(serial)) return res.status(400).json({ error: "Invalid device identifier" });
+      const tools = await android.detectToolsetAsync();
+      if (!tools.adb.found || !tools.adb.path) return res.status(503).json({ error: "ADB is unavailable" });
+
+      const sessionId = randomUUID();
+      const remoteDir = `${signupDiagRoot}/${sessionId}`;
+      const script = Buffer.from(signupDiagScript(sessionId), "utf8").toString("base64");
+      const command = [
+        `mkdir -p '${remoteDir}'`,
+        `echo '${script}' | base64 -d > '${remoteDir}/capture.sh'`,
+        `chmod 700 '${remoteDir}/capture.sh'`,
+        `(nohup sh '${remoteDir}/capture.sh' >/dev/null 2>&1 </dev/null & echo $! > '${remoteDir}/pid')`,
+        `echo started`,
+      ].join(" && ");
+      const { stdout, stderr } = await execFileP(
+        tools.adb.path,
+        ["-s", serial, "shell", command],
+        { encoding: "utf8", timeout: 12000, maxBuffer: 1024 * 1024 } as any,
+      );
+      if (!String(stdout ?? "").includes("started")) {
+        throw new Error(String(stderr || stdout || "The phone did not confirm the diagnostic capture"));
+      }
+      return res.json({
+        ok: true,
+        sessionId,
+        maxDurationMinutes: 30,
+        note: "Phone-side state capture started. It continues while USB is disconnected.",
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Could not start manual signup diagnostics" });
+    }
+  });
+
+  app.post("/api/mobile/devices/:serial/manual-signup-diagnostics/collect", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const sessionId = String(req.body?.sessionId ?? "");
+      if (!signupDiagSerialPattern.test(serial)) return res.status(400).json({ error: "Invalid device identifier" });
+      if (!signupDiagSessionPattern.test(sessionId)) return res.status(400).json({ error: "Invalid diagnostic session" });
+      const tools = await android.detectToolsetAsync();
+      if (!tools.adb.found || !tools.adb.path) return res.status(503).json({ error: "ADB is unavailable" });
+
+      const remoteDir = `${signupDiagRoot}/${sessionId}`;
+      const command = `if [ -f '${remoteDir}/pid' ]; then kill "$(cat '${remoteDir}/pid')" 2>/dev/null || true; fi; sleep 1; cat '${remoteDir}/state.log'`;
+      const { stdout } = await execFileP(
+        tools.adb.path,
+        ["-s", serial, "shell", command],
+        { encoding: "utf8", timeout: 15000, maxBuffer: 2 * 1024 * 1024 } as any,
+      );
+      const log = String(stdout ?? "");
+      if (!log.trim()) return res.status(404).json({ error: "No diagnostic data found. Confirm this is the same phone and reconnect it by USB." });
+
+      // Delete the temporary on-device capture after successful retrieval.
+      await execFileP(
+        tools.adb.path,
+        ["-s", serial, "shell", `rm -rf '${remoteDir}'`],
+        { encoding: "utf8", timeout: 8000, maxBuffer: 256 * 1024 } as any,
+      ).catch(() => undefined);
+      return res
+        .status(200)
+        .setHeader("Content-Type", "text/plain; charset=utf-8")
+        .setHeader("Content-Disposition", `attachment; filename="aura-manual-signup-diagnostic-${sessionId}.txt"`)
+        .send(log);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message ?? "Could not collect manual signup diagnostics" });
     }
   });
 

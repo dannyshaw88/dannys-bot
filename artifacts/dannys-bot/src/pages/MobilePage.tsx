@@ -12380,11 +12380,15 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
   const [exportingUsbDiagnostics, setExportingUsbDiagnostics] = React.useState(false);
+  const [manualDiagSessionId, setManualDiagSessionId] = React.useState<string | null>(null);
+  const [startingManualDiag, setStartingManualDiag] = React.useState(false);
+  const [collectingManualDiag, setCollectingManualDiag] = React.useState(false);
   const [expandedLogGroups, setExpandedLogGroups] = React.useState<Set<string>>(() => new Set());
   const debugLogContextRef = useRef<DebugLogContext | null>(null);
 
   useEffect(() => {
     debugLogContextRef.current = null;
+    setManualDiagSessionId(serial ? window.localStorage.getItem(`aura-manual-signup-diagnostic:${serial}`) : null);
   }, [serial]);
 
   // Only auto-scroll when the user is currently at (or near) the bottom.
@@ -12550,6 +12554,61 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
     }
   };
 
+  const handleStartManualSignupCapture = async () => {
+    if (!serial) return;
+    setStartingManualDiag(true);
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/manual-signup-diagnostics/start`, {
+        method: "POST",
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.sessionId) {
+        addLog?.(`Manual signup capture failed to start: ${body?.error ?? response.status}`);
+        return;
+      }
+      setManualDiagSessionId(body.sessionId);
+      window.localStorage.setItem(`aura-manual-signup-diagnostic:${serial}`, body.sessionId);
+      addLog?.("Manual signup diagnostic started on the phone. Unplug it, perform the manual signup test, reconnect this same phone, then collect the capture.");
+    } catch (e: any) {
+      addLog?.(`Manual signup capture error: ${e?.message ?? "network error"}`);
+    } finally {
+      setStartingManualDiag(false);
+    }
+  };
+
+  const handleCollectManualSignupCapture = async () => {
+    if (!serial || !manualDiagSessionId) return;
+    setCollectingManualDiag(true);
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/manual-signup-diagnostics/collect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: manualDiagSessionId }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        addLog?.(`Manual signup diagnostic collection failed: ${body?.error ?? response.status}`);
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aura-manual-signup-diagnostic-${serial}-${Date.now()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      window.localStorage.removeItem(`aura-manual-signup-diagnostic:${serial}`);
+      setManualDiagSessionId(null);
+      addLog?.("Manual signup diagnostic collected and exported. The temporary capture was deleted from the phone.");
+    } catch (e: any) {
+      addLog?.(`Manual signup diagnostic collection error: ${e?.message ?? "network error"}`);
+    } finally {
+      setCollectingManualDiag(false);
+    }
+  };
+
   const handleCopyCapture = async () => {
     if (!lastCapture) return;
     await writeToClipboard(lastCapture.join("\n"));
@@ -12611,11 +12670,34 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
             >
               {exportingUsbDiagnostics ? "USB Log…" : "USB Log"}
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void handleStartManualSignupCapture()}
+              disabled={!serial || startingManualDiag || !!manualDiagSessionId}
+              title="Start a private, phone-side system-state capture for a manual signup test"
+            >
+              {startingManualDiag ? "Starting…" : "Manual Signup Capture"}
+            </Button>
+            {manualDiagSessionId && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handleCollectManualSignupCapture()}
+                disabled={!serial || collectingManualDiag}
+                title="Reconnect the same phone, then stop and export its local capture"
+              >
+                {collectingManualDiag ? "Collecting…" : "Collect Capture"}
+              </Button>
+            )}
             <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
               Clear
             </Button>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Manual test only: starts a 30-minute phone-side capture that continues while unplugged. Reconnect the same phone to export it. Records USB, battery, proxy, and network state only—not Snapchat messages or traffic contents.
+        </p>
 
       </div>
 

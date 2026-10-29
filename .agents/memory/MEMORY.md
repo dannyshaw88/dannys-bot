@@ -152,3 +152,4 @@
 - [Additional focused project pointers](additional-memory-pointers.md) — less frequently used UI, manual-search, camera, and tooling notes remain indexed separately
 - [Replit preview API routing](replit-preview-api-routing.md) — when the public preview routes `/api` through the `/__mockup` server, proxy it to the top-level API
 - [Snapchat reply history identity](snapchat-reply-history-identity.md) — key local reply logs by stable slot ID and verified profile username; retain them until the user clears that slot
+- [Manual Android diagnostics across USB disconnects](manual-android-disconnect-diagnostics.md) — persist minimal state on-device while unplugged, then retrieve after reconnect; host-only ADB capture cannot observe the disconnected interval

@@ -506,17 +506,17 @@ function AccountSlotCounter({
   return (
     <div
       style={{ left: centerX === null ? "82%" : `${centerX}px` }}
-      className="absolute top-[calc(50%+0.75rem)] z-20 flex -translate-x-1/2 flex-col gap-1 text-[11px] font-medium text-muted-foreground"
+      className="absolute top-[calc(50%+0.75rem)] z-20 grid w-fit -translate-x-1/2 grid-cols-[14px_auto] items-center gap-x-1 gap-y-1 text-[11px] font-medium text-muted-foreground"
       aria-label={`Instagram: ${instagramActive} of ${instagramTotal} slots active. Snapchat: ${snapchatActive} of ${snapchatTotal} slots active.`}
     >
-      <span className="inline-flex items-center justify-center gap-1">
+      <span className="flex items-center justify-center">
         <FaInstagram className="h-3.5 w-3.5 shrink-0 text-[#E1306C]" aria-hidden="true" />
-        <span className="text-black">{instagramActive}/{instagramTotal}</span>
       </span>
-      <span className="inline-flex items-center justify-center gap-1">
+      <span className="text-left text-black">{instagramActive}/{instagramTotal}</span>
+      <span className="flex items-center justify-center">
         <FaSnapchatGhost className="h-3.5 w-3.5 shrink-0 rounded-full bg-[#FFFC00] p-[1px] text-black" aria-hidden="true" />
-        <span className="text-black">{snapchatActive}/{snapchatTotal}</span>
       </span>
+      <span className="text-left text-black">{snapchatActive}/{snapchatTotal}</span>
     </div>
   );
 }
