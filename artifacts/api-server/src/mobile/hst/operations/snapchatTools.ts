@@ -877,17 +877,17 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    const { x, y } = center(verifiedComposer);
-    await android.tap(context.serial, x, y, "bot", "Snapchat: focus confirmed unread-chat composer", "automation");
-    let sendState = await dump(context.serial);
     const replyIsInComposer = (state: Awaited<ReturnType<typeof dump>>) =>
       state.nodes.some(node =>
         /edittext/i.test(node.className) &&
         /chat_input_text_field/i.test(node.resourceId) &&
         node.text === reply,
       );
+    let sendState: Awaited<ReturnType<typeof dump>> | undefined;
+    context.onLog(`Reply to Unread Chats: typing ${reply.length} characters with this device's calibrated keyboard.`);
+    const { x, y } = center(verifiedComposer);
+    await android.tap(context.serial, x, y, "bot", "Snapchat: focus confirmed unread-chat composer", "automation");
     try {
-      context.onLog(`Reply to Unread Chats: typing ${reply.length} characters with this device's calibrated keyboard.`);
       const typed = await android.typeViaSavedCalibrationMap(
         context.serial,
         reply,
@@ -910,7 +910,7 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    if (!replyIsInComposer(sendState)) {
+    if (!sendState || !replyIsInComposer(sendState)) {
       context.onLog("Reply to Unread Chats stopped: the exact typed reply was not confirmed in the composer.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
