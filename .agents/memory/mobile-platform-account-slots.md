@@ -27,11 +27,11 @@ Snapchat Add Friends and Accept Friends open through the live top-right person-p
 
 **How to apply:** Confirm the page, section, and exact labeled action from live UI nodes before tapping. Keep retries abortable and rate-limit progress logs. Stop the dispatcher if a list cannot be safely collapsed. Preserve Mass Snap settings independently from SMS and Instagram.
 
-For Snapchat unread-chat replies, use the OpenAI key managed in Settings > Security and send only the user's goal plus bounded visible thread context to the model. Treat chat text as untrusted, never log credentials, and do not send unless the thread and composer are still verified.
+For Snapchat unread-chat replies, use OpenAI GPT-6 Luna with reasoning effort set to none and a bounded output-token limit. Read the OpenAI key from Settings > Security and send only the user's goal plus bounded visible thread context. Treat chat text as untrusted, never log credentials, and do not send unless the thread and composer are still verified.
 
-**Why:** The user wants replies to follow a conversation goal and timing instructions, while keeping Snapchat behavior independent from Instagram.
+**Why:** The user chose GPT-6 Luna as the low-cost reply model and wants goal-aware replies without coupling Snapchat to Instagram.
 
-**How to apply:** Fail closed when the key, readable context, generated reply, or live-thread confirmation is missing; make clear in the UI that visible chat content is sent to OpenAI.
+**How to apply:** Fail closed when the key, readable context, generated reply, or live-thread confirmation is missing; make clear in the UI that visible chat content is sent to OpenAI. Recheck API parameter support before switching models.
 
 Snapchat tool activation chances and shuffle order belong inside `snapchatTools`, not Instagram's shared settings. Roll each enabled tool once per cycle, then Fisher–Yates shuffle only the activated tools when Snapchat shuffle is on. Default activation ranges to 100/100 and shuffle to off for existing slots.
 

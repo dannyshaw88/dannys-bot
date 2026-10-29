@@ -351,9 +351,9 @@ async function generateContextualReply(goal: string, peer: string, transcript: s
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
-      max_tokens: 180,
-      temperature: 0.65,
+      model: "gpt-6-luna",
+      max_completion_tokens: 180,
+      reasoning_effort: "none",
       messages: [
         {
           role: "system",
@@ -373,7 +373,7 @@ async function generateContextualReply(goal: string, peer: string, transcript: s
     }),
     signal: AbortSignal.timeout(25_000),
   });
-  if (!response.ok) throw new Error(`ChatGPT request failed (${response.status}).`);
+  if (!response.ok) throw new Error(`OpenAI reply request failed (${response.status}).`);
   const result = await response.json() as any;
   const reply = String(result?.choices?.[0]?.message?.content ?? "").trim();
   if (!reply || /^SKIP\b/i.test(reply)) return "";
