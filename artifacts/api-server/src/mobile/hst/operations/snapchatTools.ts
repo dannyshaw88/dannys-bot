@@ -807,6 +807,7 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
+    context.onLog(`GPT-6 Luna drafted a reply (${reply.length} characters); it has not been sent yet.`);
     const verifiedThread = await dump(context.serial);
     const verifiedComposer = verifiedThread.nodes.find(node =>
       /edittext/i.test(node.className) && /message|chat|send/i.test(`${node.resourceId} ${node.desc}`),
@@ -821,7 +822,14 @@ async function runReplyUnreadChats(context: Context) {
     }
     const { x, y } = center(verifiedComposer);
     await android.tap(context.serial, x, y, "bot", "Snapchat: focus confirmed unread-chat composer", "automation");
-    await android.inputTextHumanized(context.serial, reply);
+    try {
+      await android.setClipboard(context.serial, reply);
+      await android.pasteClipboard(context.serial);
+    } catch {
+      context.onLog("Reply to Unread Chats stopped: Android clipboard paste failed; the reply was not sent.");
+      await exitSnapchatConversation(context).catch(() => false);
+      break;
+    }
     const sendState = await dump(context.serial);
     const currentSend = exactClickable(sendState.nodes, ["Send"]);
     const typedReply = sendState.nodes.some(node => normalizedText(node.text).includes(normalizedText(reply)));
