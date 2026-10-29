@@ -1,6 +1,6 @@
 import * as android from "../../androidManager";
 import { storage } from "../../../storage";
-import { appendSnapchatReplyHistory } from "../snapchatReplyHistory";
+import { appendSnapchatReplyHistory } from "../../snapchatReplyHistory";
 
 type SnapchatTools = {
   shuffleToolOrder: boolean;
@@ -814,9 +814,16 @@ async function runReplyUnreadChats(context: Context) {
       break;
     }
     const sentState = await dump(context.serial);
-    const sentTextConfirmed = sentState.nodes.some(node =>
-      normalizedText(node.text).includes(normalizedText(reply)),
+    const afterConversation = visibleConversation(sentState.nodes, composer.bounds[1])
+      .map(normalizedText).join(" ");
+    const beforeConversation = transcript.map(normalizedText).join(" ");
+    const composerAfterSend = sentState.nodes.find(node =>
+      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
     );
+    const sentTextConfirmed =
+      afterConversation.includes(normalizedText(reply)) &&
+      !beforeConversation.includes(normalizedText(reply)) &&
+      (!composerAfterSend?.text.trim() || normalizedText(composerAfterSend.text) === "send chat");
     if (!sentTextConfirmed) {
       context.onLog(`Reply to Unread Chats: send could not be confirmed for ${username}; it was not added to the sent count.`);
       await exitSnapchatConversation(context).catch(() => false);

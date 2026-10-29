@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import { getDebugScreenshotFolderName } from "../mobile/debugScreenshotPaths";
+import { clearSnapchatReplyHistory, exportSnapchatReplyHistory } from "../mobile/snapchatReplyHistory";
 import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
 import { getDeviceLabel } from "./usb-phones";
@@ -2840,6 +2841,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
       viewSnaps: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
     }),
+  });
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/snapchat/reply-history", (req: Request, res: Response) => {
+    const serial = String(req.params.serial);
+    const slotIdx = Number(req.params.slotIdx);
+    const slot = loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx];
+    if (!Number.isInteger(slotIdx) || !slot?.slotId || slot.platform !== "snapchat") {
+      return res.status(404).json({ error: "Snapchat account slot not found" });
+    }
+    return res.type("text/plain").attachment("snapchat-reply-history.txt")
+      .send(exportSnapchatReplyHistory(slot.slotId));
+  });
+  app.delete("/api/mobile/devices/:serial/slots/:slotIdx/snapchat/reply-history", (req: Request, res: Response) => {
+    const serial = String(req.params.serial);
+    const slotIdx = Number(req.params.slotIdx);
+    const slot = loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx];
+    if (!Number.isInteger(slotIdx) || !slot?.slotId || slot.platform !== "snapchat") {
+      return res.status(404).json({ error: "Snapchat account slot not found" });
+    }
+    clearSnapchatReplyHistory(slot.slotId);
+    return res.json({ ok: true });
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();

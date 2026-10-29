@@ -7006,7 +7006,7 @@ export function AutomationSettingsPanel({
               )}
               {key === "replyUnreadChats" && (
                 <div className="space-y-1">
-                    <Label className="text-sm text-muted-foreground">Conversation goal and purpose</Label>
+                  <Label className="text-sm text-muted-foreground">Conversation goal and purpose</Label>
                   <textarea
                     maxLength={1200}
                     value={settings.snapchatTools.replyUnreadChats.replyGoal}
@@ -7014,6 +7014,51 @@ export function AutomationSettingsPanel({
                     disabled={loading || !tool.enabled}
                     className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
                   />
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={loading || !phone?.serial}
+                      onClick={async () => {
+                        if (!phone?.serial) return;
+                        const response = await fetch(
+                          `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/snapchat/reply-history`,
+                        );
+                        if (!response.ok) {
+                          window.alert("Could not download this slot's Snapchat reply history.");
+                          return;
+                        }
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement("a");
+                        link.href = url;
+                        link.download = "snapchat-reply-history.txt";
+                        link.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      Download reply history
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={loading || !phone?.serial}
+                      onClick={async () => {
+                        if (!phone?.serial || !window.confirm("Clear the saved reply history for this Snapchat slot?")) return;
+                        const response = await fetch(
+                          `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/snapchat/reply-history`,
+                          { method: "DELETE" },
+                        );
+                        window.alert(response.ok
+                          ? "Saved reply history cleared for this slot."
+                          : "Could not clear this slot's Snapchat reply history.");
+                      }}
+                    >
+                      Clear reply history
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

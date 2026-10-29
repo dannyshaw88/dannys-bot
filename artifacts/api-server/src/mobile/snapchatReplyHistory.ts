@@ -17,6 +17,41 @@ function historyPath() {
   return path.join(path.dirname(sqlite.name), "snapchat-reply-history.jsonl");
 }
 
+function readEntries(): SnapchatReplyHistoryEntry[] {
+  try {
+    return fs.readFileSync(historyPath(), "utf8").split(/\r?\n/).flatMap(line => {
+      try { return [JSON.parse(line) as SnapchatReplyHistoryEntry]; } catch { return []; }
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function exportSnapchatReplyHistory(slotId: string): string {
+  const entries = readEntries().filter(entry => entry.slotId === slotId);
+  if (!entries.length) return "No Snapchat reply history recorded for this account slot.\n";
+  return entries.map(entry => [
+    `Contact: @${entry.username} (${entry.displayName})`,
+    `Reply number: ${entry.replyNumber}`,
+    `Sent at: ${entry.sentAt}`,
+    "Captured conversation:",
+    ...entry.capturedMessages.map(message => `  ${message}`),
+    "GPT-6 Luna sent:",
+    `  ${entry.sentText}`,
+    "",
+    "------------------------------------------------------------",
+    "",
+  ].join("\n")).join("\n");
+}
+
+export function clearSnapchatReplyHistory(slotId: string): void {
+  const remaining = readEntries().filter(entry => entry.slotId !== slotId);
+  const filePath = historyPath();
+  const tempPath = `${filePath}.tmp`;
+  fs.writeFileSync(tempPath, remaining.map(entry => JSON.stringify(entry)).join("\n") + (remaining.length ? "\n" : ""), "utf8");
+  fs.renameSync(tempPath, filePath);
+}
+
 export function appendSnapchatReplyHistory(
   entry: Omit<SnapchatReplyHistoryEntry, "replyNumber">,
 ): SnapchatReplyHistoryEntry {
