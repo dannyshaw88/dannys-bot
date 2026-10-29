@@ -1547,12 +1547,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   };
 
   // Mirror diagnostics go to both the per-device Debugging Log and the
-  // Windows Electron aura-farming-debug.log. Log state changes, not frame data.
+  // Windows Electron aura-farming-debug.log. Once automation is idle, omit
+  // routine stream heartbeats/restarts: a sleeping phone can return only codec
+  // headers, causing screenrecord to restart rapidly without useful new data.
+  const idleMirrorNoiseEvents = new Set([
+    "client health",
+    "screenrecord process starting",
+    "screenrecord emitted first stdout bytes",
+    "screenrecord emitted first large video chunk",
+    "screenrecord stdout stalled",
+    "screenrecord process exited",
+    "screenrecord exited after streaming; starting replacement",
+  ]);
   const mirrorDiagnostic = (
     serial: string,
     event: string,
     details: Record<string, unknown> = {},
   ): void => {
+    if (!automationCycleInProgress.has(serial) && idleMirrorNoiseEvents.has(event)) return;
     const summary = Object.entries(details)
       .map(([key, value]) => `${key}=${JSON.stringify(value) ?? String(value)}`)
       .join(" ");
@@ -2002,7 +2014,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               restartCount,
               stderrTail: stderrOut.slice(-1200),
             });
-            logger.warn({ serial, bytesTotal, sawRealFrame }, `[mobile-video] stream stalled — no data for ${ms / 1000}s, forcing restart`);
+            if (automationCycleInProgress.has(serial)) {
+              logger.warn({ serial, bytesTotal, sawRealFrame }, `[mobile-video] stream stalled — no data for ${ms / 1000}s, forcing restart`);
+            }
             if (!stallNotified) {
               stallNotified = true;
               // Only notify the client for DRM blocks — the generic "screen may
@@ -2148,7 +2162,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             sessionSourceChunks: sourceChunksTotal,
             stderrTail: stderrOut.slice(-1200),
           });
-          logger.info({ serial, restartCount, code, bytesTotal }, "[mobile-video] screenrecord cycle ended — restarting");
+          if (automationCycleInProgress.has(serial)) {
+            logger.info({ serial, restartCount, code, bytesTotal }, "[mobile-video] screenrecord cycle ended — restarting");
+          }
           spawnStream();
         });
       };
