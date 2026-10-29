@@ -536,6 +536,7 @@ type AutomationSettings = {
     acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
     replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
     viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; likePercentMin: number; likePercentMax: number; watchSecondsMin: number; watchSecondsMax: number };
+    viewSnaps: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
   };
   enabled: boolean;
   trustScoreId?: string | null;
@@ -2821,6 +2822,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         watchSecondsMin: z.number().int().min(1).max(60).default(5),
         watchSecondsMax: z.number().int().min(1).max(60).default(10),
       }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 }),
+      viewSnaps: z.object({
+        enabled: z.boolean().default(false),
+        min: z.number().int().min(1).max(10).default(1),
+        max: z.number().int().min(1).max(10).default(3),
+        activatePctMin: z.number().int().min(0).max(100).default(100),
+        activatePctMax: z.number().int().min(0).max(100).default(100),
+        watchSecondsMin: z.number().int().min(1).max(60).default(5),
+        watchSecondsMax: z.number().int().min(1).max(60).default(10),
+      }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 }),
     }).default({
       shuffleToolOrder: false,
       addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
@@ -2828,6 +2838,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
       replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
       viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
+      viewSnaps: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
     }),
   });
   app.get("/api/mobile/devices/:serial/automation-settings", (req: Request, res: Response) => {
@@ -2841,6 +2852,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
         replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
         viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
+        viewSnaps: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
       },
       feedEnabled: true, storiesEnabled: true,
       actionDelayMin: 5, actionDelayMax: 10,
@@ -3546,6 +3558,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
           replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
           viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
+          viewSnaps: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
         },
         feedEnabled: true, storiesEnabled: true,
         actionDelayMin: 5, actionDelayMax: 10,
@@ -3769,7 +3782,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           : {};
         const incomingTools = body.snapchatTools;
         const mergedTools: Record<string, any> = { ...existingTools, ...incomingTools };
-        for (const toolKey of ["addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories"]) {
+        for (const toolKey of ["addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"]) {
           const incomingTool = incomingTools[toolKey];
           if (incomingTool && typeof incomingTool === "object" && !Array.isArray(incomingTool)) {
             const existingTool = existingTools[toolKey] && typeof existingTools[toolKey] === "object"

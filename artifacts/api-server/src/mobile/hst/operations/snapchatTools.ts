@@ -7,6 +7,7 @@ type SnapchatTools = {
   acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
   replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
   viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; likePercentMin: number; likePercentMax: number; watchSecondsMin: number; watchSecondsMax: number };
+  viewSnaps: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
 };
 
 type DeviceSwipeGesture = {
@@ -182,16 +183,70 @@ async function openSpotlight(context: Context): Promise<boolean> {
     node.clickable && node.resourceId.split("/").pop() === "ngs_spotlight_icon_container",
   );
   if (!button) {
-    context.onLog("View Snaps stopped: Spotlight button was not found in Snapchat's bottom navigation.");
+    context.onLog("View Spotlights stopped: Spotlight button was not found in Snapchat's bottom navigation.");
     return false;
   }
   if (!await tapNode(context, button, "open Spotlight from the bottom navigation")) return false;
   const state = await dump(context.serial);
   if (!isSpotlightSurface(state.xml, state.nodes)) {
-    context.onLog("View Snaps stopped: the Spotlight screen could not be confirmed after tapping its navigation icon.");
+    context.onLog("View Spotlights stopped: the Spotlight screen could not be confirmed after tapping its navigation icon.");
     return false;
   }
   return true;
+}
+
+function isStoriesListSurface(nodes: UiNode[]): boolean {
+  const friendsIndex = nodes.findIndex(node =>
+    [node.text, node.desc].some(value => /^friends$/i.test(value.trim())),
+  );
+  const discoverIndex = nodes.findIndex((node, index) =>
+    index > friendsIndex && [node.text, node.desc].some(value => /^discover$/i.test(value.trim())),
+  );
+  return friendsIndex >= 0 && discoverIndex > friendsIndex &&
+    nodes.slice(friendsIndex + 1, discoverIndex).some(node =>
+      node.text.trim().toLowerCase() === "friend_story_circle_thumbnail",
+    );
+}
+
+function isSnapStoryViewer(xml: string, nodes: UiNode[]): boolean {
+  return /opera_viewer/i.test(xml) &&
+    nodes.some(node => shortResourceId(node) === "chrome_title") &&
+    nodes.some(node => shortResourceId(node) === "base_image_layer_container");
+}
+
+async function openStories(context: Context): Promise<boolean> {
+  let state = await dump(context.serial);
+  if (isStoriesListSurface(state.nodes)) return true;
+  const storiesButton = state.nodes.find(node =>
+    node.clickable && shortResourceId(node) === "ngs_community_icon_container",
+  );
+  if (!storiesButton) {
+    context.onLog("View Snaps stopped: Snapchat's Stories tab was not found.");
+    return false;
+  }
+  if (!await tapNode(context, storiesButton, "open Stories from the bottom navigation")) return false;
+  state = await dump(context.serial);
+  if (!isStoriesListSurface(state.nodes)) {
+    context.onLog("View Snaps stopped: the Stories list and circular friend stories were not confirmed.");
+    return false;
+  }
+  return true;
+}
+
+function findStoryCircles(nodes: UiNode[], screenHeight: number): UiNode[] {
+  const friendsIndex = nodes.findIndex(node =>
+    [node.text, node.desc].some(value => /^friends$/i.test(value.trim())),
+  );
+  if (friendsIndex < 0) return [];
+  const discoverIndex = nodes.findIndex((node, index) =>
+    index > friendsIndex &&
+    [node.text, node.desc].some(value => /^discover$/i.test(value.trim())),
+  );
+  if (discoverIndex < 0) return [];
+  return nodes.slice(friendsIndex + 1, discoverIndex).filter(node =>
+    node.text.trim().toLowerCase() === "friend_story_circle_thumbnail" &&
+    node.bounds[3] < screenHeight * 0.9,
+  );
 }
 
 async function swipeByDeviceGesture(context: Context): Promise<boolean> {
@@ -636,7 +691,7 @@ async function runReplyUnreadChats(context: Context) {
   context.onLog(`Reply to Unread Chats: sent ${replied}/${requested} ChatGPT-generated replies.`);
 }
 
-async function runViewStories(context: Context) {
+async function runViewSpotlights(context: Context) {
   const settings = context.tools.viewStories;
   if (!settings.enabled) return;
   const requested = randomCount(Math.max(1, settings.min), Math.max(1, settings.max));
@@ -646,7 +701,7 @@ async function runViewStories(context: Context) {
   for (let index = 0; index < requested && !context.isAborted(); index++) {
     const state = await dump(context.serial);
     if (!isSpotlightSurface(state.xml, state.nodes)) {
-      context.onLog("View Snaps stopped: Spotlight was no longer the active screen.");
+      context.onLog("View Spotlights stopped: Spotlight was no longer the active screen.");
       break;
     }
 
@@ -657,33 +712,100 @@ async function runViewStories(context: Context) {
         node.clickable && node.resourceId.split("/").pop() === "favorite",
       );
       if (!favorite) {
-        context.onLog("View Snaps: like chance passed, but the current media's heart button was not found.");
+        context.onLog("View Spotlights: like chance passed, but the current media's heart button was not found.");
       } else if (favorite.selected || /\b(unlike|remove favorite)\b/i.test(nodeLabel(favorite))) {
-        context.onLog("View Snaps: current Spotlight media is already liked; leaving it unchanged.");
+        context.onLog("View Spotlights: current Spotlight media is already liked; leaving it unchanged.");
       } else if (!context.isAborted()) {
         const x = Math.round((favorite.bounds[0] + favorite.bounds[2]) / 2);
         const y = Math.round(favorite.bounds[1] + (favorite.bounds[3] - favorite.bounds[1]) * 0.37);
         await android.tap(context.serial, x, y, "bot", "Snapchat: like current Spotlight media", "automation");
         await context.sleep(500);
-        context.onLog(`View Snaps: liked current media (roll ${roll.toFixed(1)} < ${likeChance}%).`);
+        context.onLog(`View Spotlights: liked current media (roll ${roll.toFixed(1)} < ${likeChance}%).`);
       }
     } else {
-      context.onLog(`View Snaps: skipped like on current media (roll ${roll.toFixed(1)} ≥ ${likeChance}%).`);
+      context.onLog(`View Spotlights: skipped like on current media (roll ${roll.toFixed(1)} ≥ ${likeChance}%).`);
     }
 
     const seconds = randomSeconds(settings.watchSecondsMin, settings.watchSecondsMax);
-    context.onLog(`View Snaps: waiting ${seconds}s before the next Spotlight swipe.`);
+    context.onLog(`View Spotlights: waiting ${seconds}s before the next Spotlight swipe.`);
     await context.sleep(seconds * 1000);
     if (context.isAborted() || !await swipeByDeviceGesture(context)) break;
     await context.sleep(900);
     const afterSwipe = await dump(context.serial);
     if (!isSpotlightSurface(afterSwipe.xml, afterSwipe.nodes)) {
-      context.onLog("View Snaps stopped: the screen left Spotlight after the swipe.");
+      context.onLog("View Spotlights stopped: the screen left Spotlight after the swipe.");
       break;
     }
     swiped++;
   }
-  context.onLog(`View Snaps: completed ${swiped}/${requested} Spotlight swipe(s).`);
+  context.onLog(`View Spotlights: completed ${swiped}/${requested} Spotlight swipe(s).`);
+}
+
+async function runViewSnaps(context: Context) {
+  const settings = context.tools.viewSnaps;
+  if (!settings.enabled) return;
+  const requested = randomCount(Math.max(1, settings.min), Math.max(1, settings.max));
+  if (!await openStories(context)) return;
+
+  const stories = await dump(context.serial);
+  const { h: screenHeight, w: screenWidth } = await android.getScreenSizeAsync(context.serial);
+  const circles = findStoryCircles(stories.nodes, screenHeight);
+  if (circles.length === 0) {
+    context.onLog("View Snaps stopped: no circular stories were found under Friends.");
+    return;
+  }
+  const story = circles[Math.floor(Math.random() * circles.length)];
+  if (!await tapNode(context, story, "open a circular story")) return;
+
+  let state = await dump(context.serial);
+  if (!isSnapStoryViewer(state.xml, state.nodes)) {
+    context.onLog("View Snaps stopped: Snapchat's story viewer was not confirmed after opening a story.");
+    return;
+  }
+
+  let viewed = 1;
+  for (let index = 1; index < requested && !context.isAborted(); index++) {
+    const seconds = randomSeconds(settings.watchSecondsMin, settings.watchSecondsMax);
+    context.onLog(`View Snaps: waiting ${seconds}s before the next Snap tap.`);
+    await context.sleep(seconds * 1000);
+    if (context.isAborted()) break;
+
+    state = await dump(context.serial);
+    if (!isSnapStoryViewer(state.xml, state.nodes)) {
+      context.onLog("View Snaps stopped: the Snapchat story viewer was no longer active.");
+      break;
+    }
+    const x = Math.round(screenWidth * 0.86);
+    const y = Math.round(screenHeight * 0.5);
+    await android.tap(context.serial, x, y, "bot", "Snapchat: advance to next Snap on right side", "automation");
+    await context.sleep(700);
+    state = await dump(context.serial);
+    if (!isSnapStoryViewer(state.xml, state.nodes)) {
+      context.onLog("View Snaps stopped: the story viewer closed after the right-side tap.");
+      break;
+    }
+    viewed++;
+  }
+  context.onLog(`View Snaps: viewed ${viewed}/${requested} Snap(s).`);
+}
+
+async function returnToCameraBeforeNextTool(context: Context): Promise<boolean> {
+  const state = await dump(context.serial);
+  if (/camera_page/i.test(state.xml)) return true;
+  const cameraButton = state.nodes.find(node =>
+    node.clickable && shortResourceId(node) === "ngs_camera_icon_container",
+  );
+  if (!cameraButton) {
+    context.onLog("Snapchat stopped before the next tool: the Camera tab was not available to restore the starting surface.");
+    return false;
+  }
+  if (!await tapNode(context, cameraButton, "return to Camera before the next tool")) return false;
+  const after = await dump(context.serial);
+  if (!/camera_page/i.test(after.xml)) {
+    context.onLog("Snapchat stopped before the next tool: the Camera screen was not confirmed.");
+    return false;
+  }
+  return true;
 }
 
 export async function runSnapchatTools(context: Context): Promise<void> {
@@ -691,7 +813,8 @@ export async function runSnapchatTools(context: Context): Promise<void> {
     { name: "Add Friends", settings: context.tools.addFriends, run: () => runAddFriends(context) },
     { name: "Accept Friends", settings: context.tools.acceptFriends, run: () => runAcceptFriends(context) },
     { name: "Reply to Unread Chats", settings: context.tools.replyUnreadChats, run: () => runReplyUnreadChats(context) },
-    { name: "View Snaps", settings: context.tools.viewStories, run: () => runViewStories(context) },
+    { name: "View Spotlights", settings: context.tools.viewStories, run: () => runViewSpotlights(context) },
+    { name: "View Snaps", settings: context.tools.viewSnaps, run: () => runViewSnaps(context) },
   ].filter(tool => {
     if (!tool.settings.enabled) return false;
     const min = Math.max(0, Math.min(100, Math.round(tool.settings.activatePctMin)));
@@ -720,6 +843,11 @@ export async function runSnapchatTools(context: Context): Promise<void> {
         (tool.name === "Add Friends" || tool.name === "Accept Friends")) {
       if (context.isAborted()) return;
       if (!await collapseAddFriendsBeforeNextTool(context)) return;
+    }
+    if (index < orderedTools.length - 1 &&
+        (tool.name === "View Spotlights" || tool.name === "View Snaps")) {
+      if (context.isAborted()) return;
+      if (!await returnToCameraBeforeNextTool(context)) return;
     }
   }
 }

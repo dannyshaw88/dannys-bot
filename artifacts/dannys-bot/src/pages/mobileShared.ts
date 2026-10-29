@@ -91,6 +91,7 @@ export interface SnapchatToolSettings {
   acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
   replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
   viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; likePercentMin: number; likePercentMax: number; watchSecondsMin: number; watchSecondsMax: number };
+  viewSnaps: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
 }
 
 export interface AutomationSettingsData {
@@ -309,6 +310,7 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
     acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
     replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
     viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
+    viewSnaps: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
   },
   feedEnabled: true, storiesEnabled: true, shuffleToolOrder: false,
   actionDelayMin: 5, actionDelayMax: 10,

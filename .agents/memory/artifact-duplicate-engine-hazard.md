@@ -16,3 +16,9 @@ When the platform auto-registers artifacts for an existing project, it creates i
 - Guard the *actual work-launching entry point* (e.g. a `reconcile()` that spawns runners) with the lock-owned check, not just the top-level `start()` — HTTP-triggered manual-action routes on the non-owner process can otherwise bypass the lock via callback methods that also launch work.
 - For any fixed-port subprocess (e.g. a Go/C sidecar for TLS fingerprinting) started by both duplicate processes, replace the fixed port with a dynamically-probed free port (bind to port 0, read back kernel-assigned port) instead of assuming exclusive use of the library's default port.
 - Manual automation-cycle requests must wait through a short lock handoff before returning a conflict; otherwise a toggle during API startup can persist as enabled while its first cycle is silently discarded.
+
+A managed workflow restart can leave an older API process alive and renewing the singleton lock while the replacement reports that it cannot own automation. Do not infer that the newly restarted process owns device execution from its workflow status alone.
+
+**Why:** Restarting the visible API workflows did not dislodge the still-live older owner; blindly stopping it could interrupt a phone cycle.
+
+**How to apply:** Check the lock owner and process lifetime after API restarts. If another live process still owns device execution, identify it before stopping anything.

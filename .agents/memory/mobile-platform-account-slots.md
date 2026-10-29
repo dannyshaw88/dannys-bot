@@ -15,11 +15,11 @@ Snapchat HST cycles also need a Step 3: dismiss Snapchat from the floating-windo
 
 **How to apply:** Run this cleanup after Snapchat tools complete, including when a tool errors, but skip stale device input after a cycle abort.
 
-View Snaps means Snapchat Spotlight, not Stories: tap the bottom-right Spotlight tab, treat Count as the number of vertical swipes, wait the configured seconds on each media before the next swipe, and roll a separate per-media Like % for its heart. Use the saved My Device swipe gesture for feed scrolling.
+Keep Snapchat's two viewers distinct: View Spotlights uses the Spotlight tab, counts vertical swipes, waits on each item, and may like with its own Like %; View Snaps opens a circular Story, counts the initial Snap plus each successful right-side advance, and waits only between advances. View Snaps has no Like control.
 
-**Why:** The user specified Spotlight navigation, swipe-count semantics, per-view like probability, dwell time, and use of the calibrated device gesture.
+**Why:** The user explicitly separated Spotlight browsing from Stories and defined Snap-count and right-side-tap behavior.
 
-**How to apply:** Keep these controls and execution Snapchat-only; fail closed if Spotlight or the configured swipe profile cannot be confirmed.
+**How to apply:** Keep both Snapchat-only with independent activation/settings; fail closed unless the Stories list, circular Story, and Story viewer are confirmed. View Spotlights retains the configured My Device swipe gesture and Like controls.
 
 Snapchat Add Friends and Accept Friends open through the live top-right person-plus control. Add Friends acts only on Add buttons under Find Friends; Accept Friends expands optional View More batches and accepts only labeled Accept badges under Added Me. Before tapping the icon, detect any banner-sized clickable hitbox geometrically covering its tap point; allow only a short bounded recheck, never wait for chats to clear or tap through an overlay. If another activated tool follows either list tool, tap the top-left dismiss chevron and confirm the camera screen before continuing. Mass Snap currently has only a Snapchat Step 2 configuration scaffold modeled on SMS Select count and Swipe (px); do not send or select recipients until the user asks to build that behavior.
 
