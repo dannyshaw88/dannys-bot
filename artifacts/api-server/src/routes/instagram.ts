@@ -5960,12 +5960,37 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     try {
       const r = await fetch("https://api.openai.com/v1/models", {
         headers: { "Authorization": `Bearer ${key}` },
+        signal: AbortSignal.timeout(12_000),
       });
       if (r.ok) return res.json({ ok: true });
-      const j = await r.json() as any;
+      const j = await r.json().catch(() => null) as any;
       return res.json({ ok: false, error: j?.error?.message ?? `HTTP ${r.status}` });
     } catch (e: any) {
-      return res.status(500).json({ ok: false, error: e?.message ?? "Request failed" });
+      const timedOut = e?.name === "TimeoutError";
+      return res.status(502).json({
+        ok: false,
+        error: timedOut ? "OpenAI request timed out." : "Could not connect to OpenAI.",
+      });
+    }
+  });
+
+  app.post("/api/settings/test-openai", async (req, res) => {
+    const key = typeof req.body?.apiKey === "string" ? req.body.apiKey.trim() : "";
+    if (!key) return res.status(400).json({ ok: false, error: "Enter an API key first." });
+    try {
+      const r = await fetch("https://api.openai.com/v1/models", {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (r.ok) return res.json({ ok: true });
+      const j = await r.json().catch(() => null) as any;
+      return res.json({ ok: false, error: j?.error?.message ?? `OpenAI returned HTTP ${r.status}.` });
+    } catch (e: any) {
+      const timedOut = e?.name === "TimeoutError";
+      return res.status(502).json({
+        ok: false,
+        error: timedOut ? "OpenAI request timed out." : "Could not connect to OpenAI.",
+      });
     }
   });
 

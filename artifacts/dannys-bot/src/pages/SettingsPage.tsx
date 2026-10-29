@@ -448,6 +448,8 @@ export function SettingsPage() {
   const [geminiTestResult, setGeminiTestResult] = useState<string>("");
   const [openaiKeyDraft, setOpenaiKeyDraft] = useState<string | null>(null);
   const [openaiKeyInitialized, setOpenaiKeyInitialized] = useState(false);
+  const [openaiTestState, setOpenaiTestState] = useState<"idle" | "loading" | "ok" | "fail">("idle");
+  const [openaiTestResult, setOpenaiTestResult] = useState("");
   const [waveSpeedKeyDraft, setWaveSpeedKeyDraft] = useState<string | null>(null);
   const [waveSpeedKeyInitialized, setWaveSpeedKeyInitialized] = useState(false);
   const [settingsTab, setSettingsTab] = useState(() => {
@@ -1049,20 +1051,66 @@ export function SettingsPage() {
           </p>
           <div className="space-y-3">
             <Label className="text-sm font-medium">API Key</Label>
-            <Input
-              type="password"
-              placeholder="sk-..."
-              value={openaiKeyDraft ?? ""}
-              onChange={(e) => setOpenaiKeyDraft(e.target.value)}
-              onBlur={(e) => {
-                const v = e.target.value;
-                if (v !== ((settings as any)?.openaiApiKey ?? "")) {
-                  mutation.mutate({ openaiApiKey: v } as any);
-                }
-              }}
-              className="font-mono text-sm w-[50ch] max-w-full"
-              disabled={isLoading}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="password"
+                placeholder="sk-..."
+                value={openaiKeyDraft ?? ""}
+                onChange={(e) => {
+                  setOpenaiKeyDraft(e.target.value);
+                  setOpenaiTestState("idle");
+                  setOpenaiTestResult("");
+                }}
+                onBlur={(e) => {
+                  const v = e.target.value;
+                  if (v !== ((settings as any)?.openaiApiKey ?? "")) {
+                    mutation.mutate({ openaiApiKey: v } as any);
+                  }
+                }}
+                className="font-mono text-sm w-[50ch] max-w-full"
+                disabled={isLoading}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={openaiTestState === "loading" || !openaiKeyDraft?.trim()}
+                onClick={async () => {
+                  const apiKey = openaiKeyDraft?.trim() ?? "";
+                  if (!apiKey) return;
+                  setOpenaiTestState("loading");
+                  setOpenaiTestResult("");
+                  try {
+                    const response = await fetch("/api/settings/test-openai", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({ apiKey }),
+                    });
+                    const result = await response.json();
+                    if (response.ok && result.ok) {
+                      setOpenaiTestResult("API key is valid and OpenAI is reachable.");
+                      setOpenaiTestState("ok");
+                    } else {
+                      setOpenaiTestResult(result.error ?? `Test failed (${response.status}).`);
+                      setOpenaiTestState("fail");
+                    }
+                  } catch {
+                    setOpenaiTestResult("Could not reach the API server.");
+                    setOpenaiTestState("fail");
+                  }
+                }}
+                className="shrink-0"
+              >
+                {openaiTestState === "loading" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Test"}
+              </Button>
+            </div>
+            {openaiTestState !== "idle" && openaiTestState !== "loading" && (
+              <p className={`text-xs flex items-center gap-1.5 ${openaiTestState === "ok" ? "text-green-600" : "text-destructive"}`}>
+                {openaiTestState === "ok" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                {openaiTestResult}
+              </p>
+            )}
           </div>
         </div>
 
