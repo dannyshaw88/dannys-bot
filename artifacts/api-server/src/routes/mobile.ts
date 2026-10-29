@@ -7301,6 +7301,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               tools: snapchatTools,
               onLog: tLog,
               isAborted: () => isCycleAborted(serial),
+              effectiveTypingProfile,
               sleep: (milliseconds, timingMode = "static") =>
                 sleepOrAbort(serial, milliseconds, "navigation", timingMode),
               swipeGesture: devicePrefsForSnapchat.swipeGesture,

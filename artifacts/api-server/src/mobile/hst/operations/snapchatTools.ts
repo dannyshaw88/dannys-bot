@@ -36,6 +36,7 @@ type Context = {
   tools: SnapchatTools;
   onLog: (message: string) => void;
   isAborted: () => boolean;
+  effectiveTypingProfile: (serial: string) => any;
   sleep: (milliseconds: number, timingMode?: "static" | "exact") => Promise<void>;
   swipeGesture?: DeviceSwipeGesture;
 };
@@ -823,39 +824,38 @@ async function runReplyUnreadChats(context: Context) {
       state.nodes.some(node =>
         /edittext/i.test(node.className) &&
         /chat_input_text_field/i.test(node.resourceId) &&
-        normalizedText(node.text).includes(normalizedText(reply)),
+        node.text === reply,
       );
     try {
-      await android.setClipboard(context.serial, reply);
-      await android.pasteClipboard(context.serial, "ctrl-v");
+      context.onLog(`Reply to Unread Chats: typing ${reply.length} characters with this device's calibrated keyboard.`);
+      const typed = await android.typeViaSavedCalibrationMap(
+        context.serial,
+        reply,
+        context.effectiveTypingProfile(context.serial),
+        message => context.onLog(`Reply to Unread Chats: ${message}`),
+        { debugLabel: "Snapchat reply", disableHumanErrors: true },
+      );
+      if (!typed.ok) {
+        context.onLog(
+          `Reply to Unread Chats stopped: calibrated typing could not enter the full reply` +
+          `${typed.missing.length ? `; missing keys: ${typed.missing.join(", ")}` : ""}.`,
+        );
+        await exitSnapchatConversation(context).catch(() => false);
+        break;
+      }
       await context.sleep(450, "exact");
       sendState = await dump(context.serial);
-      if (!replyIsInComposer(sendState)) {
-        context.onLog("Reply to Unread Chats: Ctrl+V did not appear in the composer; retrying Android Paste.");
-        const currentComposer = sendState.nodes.find(node =>
-          /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-        );
-        const fallbackComposer = currentComposer ?? verifiedComposer;
-        const { x: composerX, y: composerY } = center(fallbackComposer);
-        await android.tap(context.serial, composerX, composerY, "bot", "Snapchat: refocus reply composer for paste retry", "automation");
-        if (currentComposer?.text.trim()) {
-          await android.clearFocusedTextField(context.serial);
-        }
-        await android.pasteClipboard(context.serial, "paste-key");
-        await context.sleep(450, "exact");
-        sendState = await dump(context.serial);
-      }
     } catch {
-      context.onLog("Reply to Unread Chats stopped: Android clipboard paste failed; the reply was not sent.");
+      context.onLog("Reply to Unread Chats stopped: calibrated keyboard typing failed; the reply was not sent.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
     if (!replyIsInComposer(sendState)) {
-      context.onLog("Reply to Unread Chats stopped: the pasted reply text was not confirmed in the composer.");
+      context.onLog("Reply to Unread Chats stopped: the exact typed reply was not confirmed in the composer.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    context.onLog("Reply to Unread Chats: pasted reply confirmed; pressing Enter to send.");
+    context.onLog("Reply to Unread Chats: exact typed reply confirmed; pressing Enter to send.");
     try {
       await android.keyevent(context.serial, 66); // Android KEYCODE_ENTER; no per-device key mapping required.
     } catch {
