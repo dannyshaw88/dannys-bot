@@ -877,13 +877,14 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    const replyIsInComposer = (state: Awaited<ReturnType<typeof dump>>) =>
-      state.nodes.some(node =>
-        /edittext/i.test(node.className) &&
-        /chat_input_text_field/i.test(node.resourceId) &&
-        node.text === reply,
-      );
     let sendState: Awaited<ReturnType<typeof dump>> | undefined;
+    let enteredReply = "";
+    const initialComposerText = verifiedComposer.text.trim();
+    if (initialComposerText && !/^send chat$/i.test(initialComposerText)) {
+      context.onLog("Reply to Unread Chats stopped: the reply field already contains a draft.");
+      await exitSnapchatConversation(context).catch(() => false);
+      break;
+    }
     context.onLog(`Reply to Unread Chats: typing ${reply.length} characters with this device's calibrated keyboard.`);
     const { x, y } = center(verifiedComposer);
     await android.tap(context.serial, x, y, "bot", "Snapchat: focus confirmed unread-chat composer", "automation");
@@ -893,29 +894,42 @@ async function runReplyUnreadChats(context: Context) {
         reply,
         context.effectiveTypingProfile(context.serial),
         message => context.onLog(`Reply to Unread Chats: ${message}`),
-        { debugLabel: "Snapchat reply", disableHumanErrors: true },
+        { debugLabel: "Snapchat reply", disableHumanErrors: true, skipMissingKeys: true },
       );
-      if (!typed.ok) {
+      if (!typed.available) {
         context.onLog(
-          `Reply to Unread Chats stopped: calibrated typing could not enter the full reply` +
+          `Reply to Unread Chats stopped: this device has no saved keyboard calibration map` +
           `${typed.missing.length ? `; missing keys: ${typed.missing.join(", ")}` : ""}.`,
         );
         await exitSnapchatConversation(context).catch(() => false);
         break;
       }
+      if (typed.missing.length) {
+        context.onLog(
+          `Reply to Unread Chats: skipped unmapped key(s) ${[...new Set(typed.missing)].join(", ")}; continuing with the remaining calibrated keys.`,
+        );
+      }
       await context.sleep(450, "exact");
       sendState = await dump(context.serial);
+      const composerAfterTyping = sendState.nodes.find(node =>
+        /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+      );
+      enteredReply = composerAfterTyping?.text.trim() ?? "";
+      if (
+        !enteredReply ||
+        /^send chat$/i.test(enteredReply) ||
+        enteredReply === initialComposerText
+      ) {
+        context.onLog("Reply to Unread Chats stopped: no new reply text appeared in the composer.");
+        await exitSnapchatConversation(context).catch(() => false);
+        break;
+      }
     } catch {
       context.onLog("Reply to Unread Chats stopped: calibrated keyboard typing failed; the reply was not sent.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    if (!sendState || !replyIsInComposer(sendState)) {
-      context.onLog("Reply to Unread Chats stopped: the exact typed reply was not confirmed in the composer.");
-      await exitSnapchatConversation(context).catch(() => false);
-      break;
-    }
-    context.onLog("Reply to Unread Chats: exact typed reply confirmed; pressing Enter to send.");
+    context.onLog(`Reply to Unread Chats: confirmed ${enteredReply.length} characters in the composer; pressing Enter to send.`);
     try {
       await android.keyevent(context.serial, 66); // Android KEYCODE_ENTER; no per-device key mapping required.
     } catch {
@@ -931,8 +945,8 @@ async function runReplyUnreadChats(context: Context) {
       /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
     );
     const sentTextConfirmed =
-      afterConversation.includes(normalizedText(reply)) &&
-      !beforeConversation.includes(normalizedText(reply)) &&
+      afterConversation.includes(normalizedText(enteredReply)) &&
+      !beforeConversation.includes(normalizedText(enteredReply)) &&
       (!composerAfterSend?.text.trim() || normalizedText(composerAfterSend.text) === "send chat");
     if (!sentTextConfirmed) {
       context.onLog(`Reply to Unread Chats: send could not be confirmed for ${username}; it was not added to the sent count.`);
@@ -947,7 +961,7 @@ async function runReplyUnreadChats(context: Context) {
         username,
         displayName: row.displayName,
         capturedMessages: transcript,
-        sentText: reply,
+        sentText: enteredReply,
         sentAt: new Date().toISOString(),
       });
       context.onLog(`Reply log saved for @${username}; confirmed sent reply #${record.replyNumber}.`);

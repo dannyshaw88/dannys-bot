@@ -15256,7 +15256,7 @@ export async function typeViaSavedCalibrationMap(
   text: string,
   typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
-  options?: { disableHumanErrors?: boolean; debugLabel?: string },
+  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean },
 ): Promise<{ ok: boolean; available: boolean; missing: string[] }> {
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
@@ -15285,9 +15285,9 @@ export async function typeViaSavedCalibrationMap(
     return { ok: false, available: false, missing: [...text] };
   }
 
-  // Preflight every key before the first tap. Without this guard the lower
-  // level typing loop could enter part of a string, then discover a missing
-  // punctuation/shift/layer key and return with a half-written field.
+  // By default, preflight every key before the first tap so strict callers
+  // cannot leave a partial string. Snapchat replies can opt into per-character
+  // skipping and continue with the calibrated keys that are available.
   const moreSymbolChars = new Set([
     "~", "`", "|", "•", "√", "π", "÷", "×", "§", "∆", "£", "€", "¥",
     "^", "°", "{", "}", "[", "]", "\\", "<", ">",
@@ -15325,9 +15325,10 @@ export async function typeViaSavedCalibrationMap(
   if (missing.length) {
     onLog?.(
       `[cal-keyboard] calibration preflight missing: ${missing.join(", ")} ` +
-      `(serial=${serial}, mappedKeys=${Object.keys(map).length})`,
+      `(serial=${serial}, mappedKeys=${Object.keys(map).length}` +
+      `${options?.skipMissingKeys ? "; unmapped characters will be skipped" : ""})`,
     );
-    return { ok: false, available: true, missing };
+    if (!options?.skipMissingKeys) return { ok: false, available: true, missing };
   }
 
   const result = await typeViaCalibrationMap(serial, text, map, onLog, typingProfile, {
