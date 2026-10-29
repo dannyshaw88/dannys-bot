@@ -969,8 +969,30 @@ async function runReplyUnreadChats(context: Context) {
       context.onLog(`Reply to Unread Chats warning: the message was sent, but the local log could not be saved (${error instanceof Error ? error.message : "write failed"}).`);
     }
     replied++;
-    await exitSnapchatConversation(context).catch(() => false);
+    const exitedToChatSurface = await exitSnapchatConversation(context).catch(() => false);
+    if (!exitedToChatSurface) {
+      context.onLog("Reply to Unread Chats stopped: could not return to Snapchat after sending the reply.");
+      break;
+    }
     list = await dump(context.serial);
+    const anotherUnreadWasListed = rows.some(item =>
+      !visited.has(normalizedText(item.displayName)),
+    );
+    if (replied < requested && anotherUnreadWasListed) {
+      context.onLog("Reply to Unread Chats: another unread reply is pending; tapping Chat to refresh the list.");
+      if (!await tapExact(context, ["Chat"], "refresh the chat list before the next reply")) {
+        context.onLog("Reply to Unread Chats stopped: Chat tab was unavailable before the next reply.");
+        break;
+      }
+      list = await dump(context.serial);
+      if (!exactClickable(list.nodes, ["Chat"]) ||
+          list.nodes.some(node =>
+            /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+          )) {
+        context.onLog("Reply to Unread Chats stopped: the chat list was not confirmed after refreshing it.");
+        break;
+      }
+    }
   }
   context.onLog(`Reply to Unread Chats: confirmed ${replied}/${requested} GPT-6 Luna replies.`);
 }

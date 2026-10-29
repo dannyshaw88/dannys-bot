@@ -154,4 +154,4 @@
 - [Snapchat reply history identity](snapchat-reply-history-identity.md) — key local reply logs by stable slot ID and verified profile username; retain them until the user clears that slot
 - [Manual Android diagnostics across USB disconnects](manual-android-disconnect-diagnostics.md) — persist minimal state on-device while unplugged, then retrieve after reconnect; host-only ADB capture cannot observe the disconnected interval
 - [Idle phone-mirror log volume](idle-phone-mirror-log-volume.md) — suppress routine mirror heartbeats and restart chatter while automation is idle; preserve active-cycle diagnostics and real errors
-- [Snapchat Luna reply typing](snapchat-luna-reply-typing.md) — skip unmapped characters, keep typing calibrated keys, and verify/send the text actually entered
+- [Snapchat Luna reply typing](snapchat-luna-reply-typing.md) — skip unmapped keys; refresh Chat only when another reply is pending
