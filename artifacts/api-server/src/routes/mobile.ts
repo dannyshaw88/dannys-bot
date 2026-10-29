@@ -7252,6 +7252,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           try {
             await runSnapchatTools({
               serial,
+              slotId: configuredSlot?.slotId,
               tools: snapchatTools,
               onLog: tLog,
               isAborted: () => isCycleAborted(serial),

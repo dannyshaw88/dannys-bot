@@ -1,5 +1,6 @@
 import * as android from "../../androidManager";
 import { storage } from "../../../storage";
+import { appendSnapchatReplyHistory } from "../snapchatReplyHistory";
 
 type SnapchatTools = {
   shuffleToolOrder: boolean;
@@ -31,6 +32,7 @@ type UiNode = {
 
 type Context = {
   serial: string;
+  slotId?: string;
   tools: SnapchatTools;
   onLog: (message: string) => void;
   isAborted: () => boolean;
@@ -343,6 +345,75 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
     .slice(-25);
 }
 
+const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+
+async function readVerifiedSnapchatUsername(context: Context, displayName: string): Promise<string | null> {
+  const thread = await dump(context.serial);
+  const nameNode = thread.nodes.find(node =>
+    node.clickable &&
+    node.bounds[1] < 400 &&
+    node.bounds[0] > 140 &&
+    normalizedText(node.text) === normalizedText(displayName),
+  );
+  if (!nameNode || !await tapNode(context, nameNode, `open ${displayName}'s name to verify username`)) return null;
+
+  const profile = await dump(context.serial);
+  const profileName = profile.nodes.find(node => shortResourceId(node) === "profile_identity_section_display_name");
+  const usernameNode = profile.nodes.find(node => shortResourceId(node) === "profile_identity_section_username");
+  const profileOpen = profile.nodes.some(node => shortResourceId(node) === "unified_profile_3d_bitmoji");
+  const verifiedUsername = usernameNode?.text.trim().replace(/^@/, "");
+  if (!profileOpen || !profileName || normalizedText(profileName.text) !== normalizedText(displayName) ||
+      !verifiedUsername || !/^[a-z0-9._]{2,40}$/i.test(verifiedUsername)) {
+    context.onLog(`Reply to Unread Chats stopped: Snapchat profile identity could not be verified for ${displayName}.`);
+    return null;
+  }
+
+  const dismiss = profile.nodes.find(node => shortResourceId(node) === "unified_profile_dismiss_button");
+  if (!dismiss || !await tapNode(context, dismiss, "return from the verified contact profile")) return null;
+  const returned = await dump(context.serial);
+  const returnedToThread = returned.nodes.some(node =>
+    node.bounds[1] < 400 && normalizedText(node.text) === normalizedText(displayName),
+  ) && returned.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
+  if (!returnedToThread) {
+    context.onLog("Reply to Unread Chats stopped: the verified contact conversation did not reopen after profile lookup.");
+    return null;
+  }
+  return verifiedUsername.toLowerCase();
+}
+
+async function exitSnapchatConversation(context: Context): Promise<boolean> {
+  let state = await dump(context.serial);
+  if (state.nodes.some(node => shortResourceId(node) === "unified_profile_3d_bitmoji")) {
+    const dismiss = state.nodes.find(node => shortResourceId(node) === "unified_profile_dismiss_button");
+    if (!dismiss || !await tapNode(context, dismiss, "leave the contact profile")) return false;
+    state = await dump(context.serial);
+  }
+  const chevron = state.nodes
+    .filter(node => node.bounds[0] <= 20 && node.bounds[2] <= 145 && node.bounds[1] >= 100 && node.bounds[1] <= 260)
+    .sort((a, b) => (a.bounds[2] - a.bounds[0]) - (b.bounds[2] - b.bounds[0]))[0];
+  if (!chevron || !await tapNode(context, chevron, "exit the conversation with its top-left chevron")) return false;
+  const after = await dump(context.serial);
+  return after.nodes.some(node => shortResourceId(node) === "list-picker-pill-Unread") &&
+    !after.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
+}
+
+function unreadChatRows(nodes: UiNode[]) {
+  return nodes.flatMap(marker => {
+    if (!/ff_item/i.test(shortResourceId(marker)) ||
+        !/\bnew\s+(chats?|snaps?|messages?)\b/i.test(marker.desc)) return [];
+    const rowHeight = marker.bounds[3] - marker.bounds[1];
+    const names = nodes.filter(node =>
+      node.text.trim() &&
+      node.bounds[1] >= marker.bounds[1] &&
+      node.bounds[3] <= marker.bounds[3] &&
+      node.bounds[1] < marker.bounds[1] + rowHeight * 0.48 &&
+      !/^(unread|received|sent|opened|new|camera|chat)$/i.test(node.text.trim()),
+    ).sort((a, b) => a.bounds[1] - b.bounds[1]);
+    const displayName = names[0]?.text.trim();
+    return displayName ? [{ marker, displayName }] : [];
+  });
+}
+
 async function generateContextualReply(goal: string, peer: string, transcript: string[]): Promise<string> {
   const settings = await storage.getGlobalSettings();
   const apiKey = String((settings as any).openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
@@ -642,6 +713,10 @@ async function runReplyUnreadChats(context: Context) {
   const { enabled, replyGoal } = context.tools.replyUnreadChats;
   const requested = randomCount(context.tools.replyUnreadChats.min, context.tools.replyUnreadChats.max);
   if (!enabled || requested === 0) return;
+  if (!context.slotId) {
+    context.onLog("Reply to Unread Chats stopped: this Snapchat slot has no stable saved ID for private history.");
+    return;
+  }
   if (!replyGoal.trim()) {
     context.onLog("Reply to Unread Chats skipped: add a conversation goal in Snapchat Step 2 first.");
     return;
@@ -650,58 +725,68 @@ async function runReplyUnreadChats(context: Context) {
     context.onLog("Reply to Unread Chats skipped: Chat tab was not found.");
     return;
   }
+  let list = await dump(context.serial);
+  const unreadFilter = list.nodes.find(node => shortResourceId(node) === "list-picker-pill-Unread");
+  if (!unreadFilter || !await tapNode(context, unreadFilter, "show Snapchat's Unread chat filter")) {
+    context.onLog("Reply to Unread Chats stopped: Snapchat's Unread filter was not confirmed.");
+    return;
+  }
+  list = await dump(context.serial);
+  if (!list.nodes.some(node => shortResourceId(node) === "list-picker-pill-Unread")) {
+    context.onLog("Reply to Unread Chats stopped: Snapchat left the chat list before unread rows were confirmed.");
+    return;
+  }
+
   let replied = 0;
   const visited = new Set<string>();
   while (replied < requested && !context.isAborted()) {
-    const { xml, nodes } = await dump(context.serial);
-    if (!/\bchat\b/i.test(xml)) break;
-    // Only act on a row with an explicit unread marker. A merely visible chat
-    // row is not enough to trigger a message.
-    const unread = nodes.find(node =>
-      node.clickable && /\b(unread|new snap|new chat)\b/i.test(nodeLabel(node)),
-    );
-    if (!unread) break;
-    const identity = nodeLabel(unread).toLowerCase();
-    if (visited.has(identity)) break;
-    const peer = /\b(?:from|with)\s+([a-z0-9._]{2,40})/i.exec(identity)?.[1];
-    if (!peer) {
-      context.onLog("Reply to Unread Chats skipped: the unread row did not expose a verifiable sender name.");
+    const rows = unreadChatRows(list.nodes);
+    const row = rows.find(item => !visited.has(normalizedText(item.displayName)));
+    if (!row) {
+      context.onLog("Reply to Unread Chats: no clearly marked unread chat row remains.");
       break;
     }
+    const identity = normalizedText(row.displayName);
+    if (visited.has(identity)) break;
     visited.add(identity);
-    if (!await tapNode(context, unread, "open an explicitly unread chat")) break;
+    if (!await tapNode(context, row.marker, `open unread chat for ${row.displayName}`)) break;
     const thread = await dump(context.serial);
     const headerConfirmsPeer = thread.nodes.some(node =>
       node.bounds[1] < 400 &&
       !/edittext/i.test(node.className) &&
-      nodeLabel(node).toLowerCase().includes(peer),
+      normalizedText(node.text) === identity,
     );
     const composer = thread.nodes.find(node =>
-      /edittext/i.test(node.className) && /message|chat|send/i.test(`${node.resourceId} ${node.desc}`),
+      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
     );
     const send = exactClickable(thread.nodes, ["Send"]);
     if (!headerConfirmsPeer || !composer || !send || !/\b(chat|message)\b/i.test(thread.xml)) {
-      context.onLog("Reply to Unread Chats stopped: sender, chat composer, and Send button were not all confirmed.");
-      await android.pressBack(context.serial);
+      context.onLog("Reply to Unread Chats stopped: contact name, chat composer, and Send button were not all confirmed.");
+      await exitSnapchatConversation(context).catch(() => false);
       break;
     }
     const transcript = visibleConversation(thread.nodes, composer.bounds[1]);
     if (transcript.length === 0) {
       context.onLog("Reply to Unread Chats skipped: no readable conversation context was found.");
-      await android.pressBack(context.serial);
+      await exitSnapchatConversation(context).catch(() => false);
+      break;
+    }
+    const username = await readVerifiedSnapchatUsername(context, row.displayName);
+    if (!username) {
+      await exitSnapchatConversation(context).catch(() => false);
       break;
     }
     let reply: string;
     try {
-      reply = await generateContextualReply(replyGoal, peer, transcript);
+      reply = await generateContextualReply(replyGoal, username, transcript);
     } catch (error) {
-      context.onLog(`Reply to Unread Chats skipped: ${error instanceof Error ? error.message : "ChatGPT could not draft a reply."}`);
-      await android.pressBack(context.serial).catch(() => {});
+      context.onLog(`Reply to Unread Chats skipped: ${error instanceof Error ? error.message : "GPT-6 Luna could not draft a reply."}`);
+      await exitSnapchatConversation(context).catch(() => false);
       break;
     }
     if (!reply) {
-      context.onLog(`Reply to Unread Chats: ChatGPT deferred the reply for ${peer}.`);
-      await android.pressBack(context.serial).catch(() => {});
+      context.onLog(`Reply to Unread Chats: GPT-6 Luna deferred the reply for ${username}.`);
+      await exitSnapchatConversation(context).catch(() => false);
       break;
     }
     const verifiedThread = await dump(context.serial);
@@ -710,11 +795,11 @@ async function runReplyUnreadChats(context: Context) {
     );
     const verifiedSend = exactClickable(verifiedThread.nodes, ["Send"]);
     const verifiedPeer = verifiedThread.nodes.some(node =>
-      node.bounds[1] < 400 && nodeLabel(node).toLowerCase().includes(peer),
+      node.bounds[1] < 400 && normalizedText(node.text) === identity,
     );
     if (!verifiedPeer || !verifiedComposer || !verifiedSend) {
       context.onLog("Reply to Unread Chats stopped: the conversation changed while ChatGPT was drafting.");
-      await android.pressBack(context.serial).catch(() => {});
+      await exitSnapchatConversation(context).catch(() => false);
       break;
     }
     const { x, y } = center(verifiedComposer);
@@ -722,15 +807,41 @@ async function runReplyUnreadChats(context: Context) {
     await android.inputTextHumanized(context.serial, reply);
     const sendState = await dump(context.serial);
     const currentSend = exactClickable(sendState.nodes, ["Send"]);
-    if (!currentSend || !await tapNode(context, currentSend, "send the configured unread-chat reply")) {
-      await android.pressBack(context.serial);
+    const typedReply = sendState.nodes.some(node => normalizedText(node.text).includes(normalizedText(reply)));
+    if (!currentSend || !typedReply || !await tapNode(context, currentSend, "send the configured unread-chat reply")) {
+      context.onLog("Reply to Unread Chats stopped: the reply text and Send control were not both confirmed.");
+      await exitSnapchatConversation(context).catch(() => false);
       break;
     }
+    const sentState = await dump(context.serial);
+    const sentTextConfirmed = sentState.nodes.some(node =>
+      normalizedText(node.text).includes(normalizedText(reply)),
+    );
+    if (!sentTextConfirmed) {
+      context.onLog(`Reply to Unread Chats: send could not be confirmed for ${username}; it was not added to the sent count.`);
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
+    }
+    try {
+      const record = appendSnapchatReplyHistory({
+        slotId: context.slotId,
+        serial: context.serial,
+        username,
+        displayName: row.displayName,
+        capturedMessages: transcript,
+        sentText: reply,
+        sentAt: new Date().toISOString(),
+      });
+      context.onLog(`Reply log saved for @${username}; confirmed sent reply #${record.replyNumber}.`);
+    } catch (error) {
+      context.onLog(`Reply to Unread Chats warning: the message was sent, but the local log could not be saved (${error instanceof Error ? error.message : "write failed"}).`);
+    }
     replied++;
-    await android.pressBack(context.serial).catch(() => {});
-    await context.sleep(500);
+    await exitSnapchatConversation(context).catch(() => false);
+    list = await dump(context.serial);
   }
-  context.onLog(`Reply to Unread Chats: sent ${replied}/${requested} ChatGPT-generated replies.`);
+  context.onLog(`Reply to Unread Chats: confirmed ${replied}/${requested} GPT-6 Luna replies.`);
 }
 
 async function runViewSpotlights(context: Context) {
