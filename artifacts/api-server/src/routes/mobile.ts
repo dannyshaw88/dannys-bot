@@ -7270,6 +7270,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          tLog("▶ Opening Snapchat account app…");
          await android.launchSnapchat(serial);
          steps.push("launch-snapchat");
+          tLog("▶ Waiting 5 seconds for Snapchat to finish loading…");
+          await sleepOrAbort(serial, 5_000, "navigation", "exact");
           const devicePrefsForSnapchat = (() => {
             try { return loadInstanceConfigs()[serial]?.devicePrefs ?? {}; } catch { return {}; }
           })();

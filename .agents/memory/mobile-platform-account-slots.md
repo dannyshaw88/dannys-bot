@@ -7,6 +7,8 @@ Keep Instagram and Snapchat accounts in one ordered device slot list, using a pe
 
 Reply to Unread Chats must tap and validate only Snapchat's “Unread” chat-list filter; never use “Unreplied.”
 
+After launching Snapchat, wait five seconds before starting its first tool so the app can finish loading its Chat screen.
+
 The user wants five individual accounts on each device. Keep their settings, prompts, contacts, and reply history isolated by persisted slot identity.
 
 **Why:** the user explicitly wants five independent accounts on every device.
