@@ -7,8 +7,8 @@ Snapchat reply history must be associated with the persisted account-slot ID and
 
 When replying, verify the chat header, tap the display-name text to read the profile username, then return to the thread before checking its composer. Do not require a Send button before typing: Snapchat shows it only after reply text is entered.
 
-Enter Snapchat replies using Android clipboard set-and-paste, not per-character `adb input text`; log only that a draft was produced and its character count, verify the pasted field, press Android `KEYCODE_ENTER` (66) without per-device calibration, then confirm the message appeared and composer cleared.
+Enter Snapchat replies using Android clipboard set-and-paste, not per-character `adb input text`; try Ctrl+V first because `KEYCODE_PASTE` can return without populating the composer, retry with the native Paste key only after checking the field, then press Android `KEYCODE_ENTER` (66) and confirm the message appeared and composer cleared.
 
-**Why:** the user said display names can collide, chose to retain conversation logs until manually cleared, specified stopping replies after the link, wants each slot to be able to use its own Boundlus link, provided Inspect evidence showing the reply lives in the chat composer, and supplied a Windows log with Android's `input text` throwing a null-array exception.
+**Why:** the user said display names can collide, chose to retain conversation logs until manually cleared, specified stopping replies after the link, wants each slot to be able to use its own Boundlus link, provided Inspect evidence showing the reply lives in the chat composer, and a Windows run showed Android's `input text` throws while `KEYCODE_PASTE` may silently leave the field empty.
 
-**How to apply:** when changing Snapchat reply automation or its history UI, capture the username from the profile screen, never merge contacts by display name alone, and use stored link-sent state as a code-level gate (not a prompt-only instruction).
+**How to apply:** when changing Snapchat reply automation or its history UI, capture the username from the profile screen, never merge contacts by display name alone, verify each paste in the composer before sending, and use stored link-sent state as a code-level gate (not a prompt-only instruction).

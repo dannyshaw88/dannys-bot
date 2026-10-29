@@ -727,8 +727,11 @@ async function runReplyUnreadChats(context: Context) {
     context.onLog("Reply to Unread Chats skipped: Chat tab was not found.");
     return;
   }
-  context.onLog("Reply to Unread Chats: waiting 15 seconds for the chat filters to load…");
-  await context.sleep(15_000, "exact");
+  context.onLog("Reply to Unread Chats: tapping Chat again to refresh the chat list.");
+  if (!await tapExact(context, ["Chat"], "refresh the chat list")) {
+    context.onLog("Reply to Unread Chats stopped: Chat tab was not available for the second tap.");
+    return;
+  }
   let list = await dump(context.serial);
   const unreadFilter = findUnreadChatFilter(list.nodes);
   if (!unreadFilter || !await tapNode(context, unreadFilter, "show Snapchat's Unread chat filter")) {
@@ -822,17 +825,39 @@ async function runReplyUnreadChats(context: Context) {
     }
     const { x, y } = center(verifiedComposer);
     await android.tap(context.serial, x, y, "bot", "Snapchat: focus confirmed unread-chat composer", "automation");
+    let sendState = await dump(context.serial);
+    const replyIsInComposer = (state: Awaited<ReturnType<typeof dump>>) =>
+      state.nodes.some(node =>
+        /edittext/i.test(node.className) &&
+        /chat_input_text_field/i.test(node.resourceId) &&
+        normalizedText(node.text).includes(normalizedText(reply)),
+      );
     try {
       await android.setClipboard(context.serial, reply);
-      await android.pasteClipboard(context.serial);
+      await android.pasteClipboard(context.serial, "ctrl-v");
+      await context.sleep(450, "exact");
+      sendState = await dump(context.serial);
+      if (!replyIsInComposer(sendState)) {
+        context.onLog("Reply to Unread Chats: Ctrl+V did not appear in the composer; retrying Android Paste.");
+        const currentComposer = sendState.nodes.find(node =>
+          /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+        );
+        const fallbackComposer = currentComposer ?? verifiedComposer;
+        const { x: composerX, y: composerY } = center(fallbackComposer);
+        await android.tap(context.serial, composerX, composerY, "bot", "Snapchat: refocus reply composer for paste retry", "automation");
+        if (currentComposer?.text.trim()) {
+          await android.clearFocusedTextField(context.serial);
+        }
+        await android.pasteClipboard(context.serial, "paste-key");
+        await context.sleep(450, "exact");
+        sendState = await dump(context.serial);
+      }
     } catch {
       context.onLog("Reply to Unread Chats stopped: Android clipboard paste failed; the reply was not sent.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    const sendState = await dump(context.serial);
-    const typedReply = sendState.nodes.some(node => normalizedText(node.text).includes(normalizedText(reply)));
-    if (!typedReply) {
+    if (!replyIsInComposer(sendState)) {
       context.onLog("Reply to Unread Chats stopped: the pasted reply text was not confirmed in the composer.");
       await exitSnapchatConversation(context).catch(() => false);
       break;

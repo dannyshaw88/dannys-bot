@@ -5072,13 +5072,18 @@ async function probeClipboard(serial: string, expected: string): Promise<Clipboa
 }
 
 /** Paste the current Android clipboard into the focused field. */
-export async function pasteClipboard(serial: string): Promise<void> {
+export async function pasteClipboard(
+  serial: string,
+  method: "ctrl-v" | "paste-key" = "ctrl-v",
+): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   try {
     const { stdout, stderr } = await execFileP(
       adb,
-      ["-s", serial, "shell", "input", "keyevent", "KEYCODE_PASTE"],
+      method === "ctrl-v"
+        ? ["-s", serial, "shell", "input", "keycombination", "KEYCODE_CTRL_LEFT", "KEYCODE_V"]
+        : ["-s", serial, "shell", "input", "keyevent", "KEYCODE_PASTE"],
       { encoding: "utf8", timeout: 5000 } as any,
     );
     const out = `${stdout ?? ""}${stderr ?? ""}`.trim();
