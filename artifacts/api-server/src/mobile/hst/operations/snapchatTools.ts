@@ -41,8 +41,6 @@ type Context = {
 };
 
 const shortResourceId = (node: UiNode) => node.resourceId.split("/").pop() ?? node.resourceId;
-const findUnreadChatFilter = (nodes: UiNode[]) =>
-  nodes.find(node => shortResourceId(node) === "list-picker-pill-Unread");
 const decodeXml = (value: string) => value
   .replace(/&quot;/g, '"')
   .replace(/&apos;/g, "'")
@@ -395,7 +393,7 @@ async function exitSnapchatConversation(context: Context): Promise<boolean> {
     .sort((a, b) => (a.bounds[2] - a.bounds[0]) - (b.bounds[2] - b.bounds[0]))[0];
   if (!chevron || !await tapNode(context, chevron, "exit the conversation with its top-left chevron")) return false;
   const after = await dump(context.serial);
-  return Boolean(findUnreadChatFilter(after.nodes)) &&
+  return Boolean(exactClickable(after.nodes, ["Chat"])) &&
     !after.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
 }
 
@@ -733,14 +731,9 @@ async function runReplyUnreadChats(context: Context) {
     return;
   }
   let list = await dump(context.serial);
-  const unreadFilter = findUnreadChatFilter(list.nodes);
-  if (!unreadFilter || !await tapNode(context, unreadFilter, "show Snapchat's Unread chat filter")) {
-    context.onLog("Reply to Unread Chats stopped: Snapchat's Unread filter was not confirmed.");
-    return;
-  }
-  list = await dump(context.serial);
-  if (!findUnreadChatFilter(list.nodes)) {
-    context.onLog("Reply to Unread Chats stopped: Snapchat left the chat list before unread rows were confirmed.");
+  if (!exactClickable(list.nodes, ["Chat"]) ||
+      list.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId))) {
+    context.onLog("Reply to Unread Chats stopped: the chat list was not confirmed after the second Chat tap.");
     return;
   }
 
