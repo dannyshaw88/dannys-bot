@@ -107,18 +107,35 @@ async function tapExact(context: Context, labels: string[], reason: string): Pro
 }
 
 async function openAddFriends(context: Context): Promise<boolean> {
-  const state = await dump(context.serial);
-  if (isAddFriendsPage(state.xml)) return true;
-  const addFriendsIcon = state.nodes.find(node =>
-    shortResourceId(node) === "neon_add_friend_button_container",
-  );
-  if (!/camera_page/i.test(state.xml) || !addFriendsIcon) {
-    context.onLog("Add Friends stopped: the live camera screen's top-right Add Friends icon was not confirmed.");
-    return false;
+  for (let attempt = 0; attempt < 5 && !context.isAborted(); attempt++) {
+    const state = await dump(context.serial);
+    if (isAddFriendsPage(state.xml)) return true;
+    const addFriendsIcon = state.nodes.find(node =>
+      shortResourceId(node) === "neon_add_friend_button_container",
+    );
+    if (!/camera_page/i.test(state.xml) || !addFriendsIcon) {
+      context.onLog("Add Friends stopped: the live camera screen's top-right Add Friends icon was not confirmed.");
+      return false;
+    }
+    const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    const incomingChatBanner = state.nodes.find(node =>
+      /\bsent you a chat\b/i.test(nodeLabel(node)) &&
+      node.bounds[1] < screenHeight * 0.25,
+    );
+    if (incomingChatBanner) {
+      if (attempt === 4) {
+        context.onLog("Add Friends skipped: the incoming-chat banner still covers the top controls; no tap was sent.");
+        return false;
+      }
+      context.onLog("Add Friends: incoming-chat banner detected; checking briefly for this banner only.");
+      await context.sleep(400);
+      continue;
+    }
+    if (!await tapNode(context, addFriendsIcon, "open Add Friends from the top-right person-plus icon")) return false;
+    const afterTap = await dump(context.serial);
+    return isAddFriendsPage(afterTap.xml);
   }
-  if (!await tapNode(context, addFriendsIcon, "open Add Friends from the top-right person-plus icon")) return false;
-  const afterTap = await dump(context.serial);
-  return isAddFriendsPage(afterTap.xml);
+  return false;
 }
 
 function randomCount(min: number, max: number): number {
