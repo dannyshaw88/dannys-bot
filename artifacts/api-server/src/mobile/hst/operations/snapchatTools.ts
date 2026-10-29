@@ -100,6 +100,24 @@ function isAddFriendsPage(xml: string): boolean {
     /find friends/i.test(xml);
 }
 
+function findOccludingBanner(nodes: UiNode[], target: UiNode, screenWidth: number, screenHeight: number) {
+  const point = center(target);
+  const targetArea = (target.bounds[2] - target.bounds[0]) * (target.bounds[3] - target.bounds[1]);
+  const screenArea = screenWidth * screenHeight;
+  return nodes.find(node => {
+    if (node === target || !node.clickable) return false;
+    const [left, top, right, bottom] = node.bounds;
+    const area = (right - left) * (bottom - top);
+    const coversTapPoint = point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
+    // The normal clickable wrapper around Add Friends is only slightly larger
+    // than the icon. A banner-sized hitbox is substantially larger and can
+    // intercept the same coordinate.
+    return coversTapPoint &&
+      area > targetArea * 2.5 &&
+      area < screenArea * 0.5;
+  });
+}
+
 async function tapExact(context: Context, labels: string[], reason: string): Promise<boolean> {
   const { nodes } = await dump(context.serial);
   const node = exactClickable(nodes, labels);
@@ -117,17 +135,14 @@ async function openAddFriends(context: Context): Promise<boolean> {
       context.onLog("Add Friends stopped: the live camera screen's top-right Add Friends icon was not confirmed.");
       return false;
     }
-    const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
-    const incomingChatBanner = state.nodes.find(node =>
-      /\bsent you a chat\b/i.test(nodeLabel(node)) &&
-      node.bounds[1] < screenHeight * 0.25,
-    );
-    if (incomingChatBanner) {
+    const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    const occludingBanner = findOccludingBanner(state.nodes, addFriendsIcon, screenWidth, screenHeight);
+    if (occludingBanner) {
       if (attempt === 4) {
-        context.onLog("Add Friends skipped: the incoming-chat banner still covers the top controls; no tap was sent.");
+        context.onLog("Add Friends skipped: a top overlay still covers the icon's tap area; no tap was sent.");
         return false;
       }
-      context.onLog("Add Friends: incoming-chat banner detected; checking briefly for this banner only.");
+      context.onLog("Add Friends: top overlay overlaps the icon's tap area; checking briefly for it to clear.");
       await context.sleep(400);
       continue;
     }
