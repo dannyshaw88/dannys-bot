@@ -76,6 +76,7 @@ const center = (node: UiNode) => ({
   x: Math.round((node.bounds[0] + node.bounds[2]) / 2),
   y: Math.round((node.bounds[1] + node.bounds[3]) / 2),
 });
+const BANNER_RECHECK_MS = 120;
 
 async function dump(serial: string): Promise<{ xml: string; nodes: UiNode[] }> {
   const xml = await android.dumpUi(serial).catch(() => "");
@@ -129,9 +130,12 @@ async function tapExact(context: Context, labels: string[], reason: string): Pro
 }
 
 async function openAddFriends(context: Context): Promise<boolean> {
-  let attempt = 0;
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+  let cameraWaitLogged = false;
+  let iconWaitLogged = false;
+  let bannerWaitLogged = false;
+  let pageWaitLogged = false;
   while (!context.isAborted()) {
-    attempt++;
     const state = await dump(context.serial);
     if (isAddFriendsPage(state.xml)) return true;
 
@@ -143,40 +147,48 @@ async function openAddFriends(context: Context): Promise<boolean> {
         node.clickable && shortResourceId(node) === "ngs_camera_icon_container",
       );
       if (cameraTab) {
+        cameraWaitLogged = false;
         if (!await tapNode(context, cameraTab, "return to Camera before retrying Add Friends")) return false;
-      } else if (attempt === 1 || attempt % 6 === 0) {
+      } else if (!cameraWaitLogged) {
         context.onLog("Add Friends: waiting for Snapchat's Camera tab to become available; will retry.");
+        cameraWaitLogged = true;
       }
-      await context.sleep(900);
+      await context.sleep(BANNER_RECHECK_MS, "exact");
       continue;
     }
+    cameraWaitLogged = false;
 
     const addFriendsIcon = state.nodes.find(node =>
       shortResourceId(node) === "neon_add_friend_button_container",
     );
     if (!addFriendsIcon) {
-      if (attempt === 1 || attempt % 6 === 0) {
+      if (!iconWaitLogged) {
         context.onLog("Add Friends: waiting for the top-right person-plus icon; will retry.");
+        iconWaitLogged = true;
       }
-      await context.sleep(900);
+      await context.sleep(BANNER_RECHECK_MS, "exact");
       continue;
     }
-    const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    iconWaitLogged = false;
     const occludingBanner = findOccludingBanner(state.nodes, addFriendsIcon, screenWidth, screenHeight);
     if (occludingBanner) {
-      if (attempt === 1 || attempt % 6 === 0) {
-        context.onLog("Add Friends: a possible top overlay covers the person-plus tap area; waiting and retrying.");
+      if (!bannerWaitLogged) {
+        context.onLog("Add Friends: person-plus is covered; checking again until the tap is clear.");
+        bannerWaitLogged = true;
       }
-      await context.sleep(900);
+      await context.sleep(BANNER_RECHECK_MS, "exact");
       continue;
     }
+    bannerWaitLogged = false;
+    pageWaitLogged = false;
     if (!await tapNode(context, addFriendsIcon, "open Add Friends from the top-right person-plus icon")) return false;
     const afterTap = await dump(context.serial);
     if (isAddFriendsPage(afterTap.xml)) return true;
-    if (attempt === 1 || attempt % 6 === 0) {
+    if (!pageWaitLogged) {
       context.onLog("Add Friends: the page did not open yet; checking the live screen and retrying.");
+      pageWaitLogged = true;
     }
-    await context.sleep(900);
+    await context.sleep(BANNER_RECHECK_MS, "exact");
   }
   return false;
 }
@@ -456,7 +468,9 @@ async function runAddFriends(context: Context) {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
   if (!context.tools.addFriends.enabled || requested === 0) return;
   if (!await openAddFriends(context)) return;
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let added = 0;
+  let blockedFriend = "";
   while (added < requested && !context.isAborted()) {
     const { xml, nodes } = await dump(context.serial);
     if (!isAddFriendsPage(xml)) {
@@ -472,7 +486,6 @@ async function runAddFriends(context: Context) {
       break;
     }
     const findFriendsTitle = nodes[findFriendsStart];
-    const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
     const acceptFriendsStart = nodes.findIndex((node, index) =>
       index > findFriendsStart &&
       shortResourceId(node) === "section-title" &&
@@ -505,6 +518,15 @@ async function runAddFriends(context: Context) {
       context.onLog("Add Friends stopped: the selected Add button could not be matched to a visible friend row.");
       break;
     }
+    if (findOccludingBanner(nodes, candidate, screenWidth, screenHeight)) {
+      if (blockedFriend !== friendName) {
+        blockedFriend = friendName;
+        context.onLog(`Add Friends: waiting for the banner to clear Add for ${friendName}.`);
+      }
+      await context.sleep(BANNER_RECHECK_MS, "exact");
+      continue;
+    }
+    blockedFriend = "";
     if (!await tapNode(context, candidate, `tap Add for ${friendName} under Find Friends`)) break;
     const confirmation = await dump(context.serial);
     if (!isAddFriendsPage(confirmation.xml)) {
@@ -540,6 +562,9 @@ async function runAcceptFriends(context: Context) {
   const requested = randomCount(context.tools.acceptFriends.min, context.tools.acceptFriends.max);
   if (!context.tools.acceptFriends.enabled || requested === 0) return;
   if (!await openAddFriends(context)) return;
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+  let blockedAcceptance = "";
+  let viewMoreBannerWaitLogged = false;
 
   const getAddedMeSection = (nodes: UiNode[]) => {
     const start = nodes.findIndex(node =>
@@ -596,8 +621,18 @@ async function runAcceptFriends(context: Context) {
     );
     if (!moreButton) break;
     const beforeLabel = nodeLabel(moreButton);
-    const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
     const beforeCount = getAcceptRows(state.nodes, section, screenHeight).length;
+    if (findOccludingBanner(state.nodes, moreButton, screenWidth, screenHeight)) {
+      if (!viewMoreBannerWaitLogged) {
+        context.onLog("Accept Friends: waiting for the banner to clear View More.");
+        viewMoreBannerWaitLogged = true;
+      }
+      await context.sleep(BANNER_RECHECK_MS, "exact");
+      state = await dump(context.serial);
+      expansion--;
+      continue;
+    }
+    viewMoreBannerWaitLogged = false;
     if (!await tapNode(context, moreButton, `expand Added Me (${beforeLabel})`)) return;
     const expanded = await dump(context.serial);
     if (!isAddFriendsPage(expanded.xml)) {
@@ -643,7 +678,7 @@ async function runAcceptFriends(context: Context) {
       const pendingStillVisible = getAcceptRows(
         state.nodes,
         pendingSection,
-        (await android.getScreenSizeAsync(context.serial)).h,
+        screenHeight,
       ).some(row => row.name === pendingAcceptance);
       if (pendingStillVisible) {
         context.onLog(`Accept Friends stopped: Snapchat still shows Accept for ${pendingAcceptance}.`);
@@ -653,17 +688,30 @@ async function runAcceptFriends(context: Context) {
       pendingAcceptance = null;
       if (accepted >= requested) break;
     }
+    state = await dump(context.serial);
+    if (!isAddFriendsPage(state.xml)) {
+      context.onLog("Accept Friends stopped: Snapchat left the verified Add Friends screen.");
+      break;
+    }
     const section = getAddedMeSection(state.nodes);
     if (!section) {
       context.onLog("Accept Friends stopped: the Added Me section is no longer visible.");
       break;
     }
-    const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
     const candidate = getAcceptRows(state.nodes, section, screenHeight)[0];
     if (!candidate) {
       context.onLog("Accept Friends stopped: no labeled Accept badge was found under Added Me.");
       break;
     }
+    if (findOccludingBanner(state.nodes, candidate.button, screenWidth, screenHeight)) {
+      if (blockedAcceptance !== candidate.name) {
+        blockedAcceptance = candidate.name;
+        context.onLog(`Accept Friends: waiting for the banner to clear Accept for ${candidate.name}.`);
+      }
+      await context.sleep(BANNER_RECHECK_MS, "exact");
+      continue;
+    }
+    blockedAcceptance = "";
     if (!await tapNode(context, candidate.button, `accept ${candidate.name} under Added Me`, 250)) break;
     pendingAcceptance = candidate.name;
   }
@@ -671,41 +719,53 @@ async function runAcceptFriends(context: Context) {
 }
 
 async function collapseAddFriendsBeforeNextTool(context: Context): Promise<boolean> {
-  let attempt = 0;
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+  let chevronWaitLogged = false;
+  let missingChevronLogged = false;
+  let cameraWaitLogged = false;
   while (!context.isAborted()) {
-    attempt++;
     const current = await dump(context.serial);
     if (/camera_page/i.test(current.xml) && !/add_friends_root/i.test(current.xml)) return true;
 
     if (/add_friends_root/i.test(current.xml)) {
+      cameraWaitLogged = false;
       const dismiss = current.nodes.find(node => shortResourceId(node) === "add_friends_dismiss");
       if (dismiss) {
-        const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+        missingChevronLogged = false;
         const occludingBanner = findOccludingBanner(current.nodes, dismiss, screenWidth, screenHeight);
         if (occludingBanner) {
-          if (attempt === 1 || attempt % 6 === 0) {
-            context.onLog("Snapchat: a possible top overlay covers the collapse chevron; waiting and retrying.");
+          if (!chevronWaitLogged) {
+            context.onLog("Snapchat: collapse chevron is covered; checking again until the tap is clear.");
+            chevronWaitLogged = true;
           }
-          await context.sleep(900);
+          await context.sleep(BANNER_RECHECK_MS, "exact");
           continue;
         }
+        chevronWaitLogged = false;
         if (!await tapNode(context, dismiss, "collapse the Add Friends list before the next tool")) return false;
         const after = await dump(context.serial);
-        if (/camera_page/i.test(after.xml) && !/add_friends_root/i.test(after.xml)) return true;
-      } else if (attempt === 1 || attempt % 6 === 0) {
+        if (/camera_page/i.test(after.xml) && !/add_friends_root/i.test(after.xml)) {
+          context.onLog("Snapchat: Add Friends panel collapsed with the down-chevron.");
+          return true;
+        }
+      } else if (!missingChevronLogged) {
         context.onLog("Snapchat: waiting for the Add Friends collapse chevron; will retry.");
+        missingChevronLogged = true;
       }
     } else {
+      missingChevronLogged = false;
       const cameraTab = current.nodes.find(node =>
         node.clickable && shortResourceId(node) === "ngs_camera_icon_container",
       );
       if (cameraTab) {
+        cameraWaitLogged = false;
         if (!await tapNode(context, cameraTab, "return to Camera before continuing")) return false;
-      } else if (attempt === 1 || attempt % 6 === 0) {
+      } else if (!cameraWaitLogged) {
         context.onLog("Snapchat: waiting for Camera or the Add Friends list; will retry.");
+        cameraWaitLogged = true;
       }
     }
-    await context.sleep(900);
+    await context.sleep(BANNER_RECHECK_MS, "exact");
   }
   return false;
 }
@@ -1048,12 +1108,18 @@ export async function runSnapchatTools(context: Context): Promise<void> {
   for (let index = 0; index < orderedTools.length; index++) {
     const tool = orderedTools[index];
     if (context.isAborted()) return;
-    await tool.run();
-    if (index < orderedTools.length - 1 &&
-        (tool.name === "Add Friends" || tool.name === "Accept Friends")) {
-      if (context.isAborted()) return;
+    let toolError: unknown;
+    let toolFailed = false;
+    try {
+      await tool.run();
+    } catch (error) {
+      toolError = error;
+      toolFailed = true;
+    }
+    if ((tool.name === "Add Friends" || tool.name === "Accept Friends") && !context.isAborted()) {
       if (!await collapseAddFriendsBeforeNextTool(context)) return;
     }
+    if (toolFailed) throw toolError;
     if (index < orderedTools.length - 1 &&
         (tool.name === "View Spotlights" || tool.name === "View Snaps")) {
       if (context.isAborted()) return;
