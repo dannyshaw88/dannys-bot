@@ -375,7 +375,7 @@ async function readVerifiedSnapchatUsername(context: Context, displayName: strin
   const returned = await dump(context.serial);
   const returnedToThread = returned.nodes.some(node =>
     node.bounds[1] < 400 && normalizedText(node.text) === normalizedText(displayName),
-  ) && returned.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
+  );
   if (!returnedToThread) {
     context.onLog("Reply to Unread Chats stopped: the verified contact conversation did not reopen after profile lookup.");
     return null;
@@ -754,24 +754,14 @@ async function runReplyUnreadChats(context: Context) {
     if (visited.has(identity)) break;
     visited.add(identity);
     if (!await tapNode(context, row.marker, `open unread chat for ${row.displayName}`)) break;
-    const thread = await dump(context.serial);
-    const headerConfirmsPeer = thread.nodes.some(node =>
+    const openedThread = await dump(context.serial);
+    const headerConfirmsPeer = openedThread.nodes.some(node =>
       node.bounds[1] < 400 &&
       !/edittext/i.test(node.className) &&
       normalizedText(node.text) === identity,
     );
-    const composer = thread.nodes.find(node =>
-      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-    );
-    const send = exactClickable(thread.nodes, ["Send"]);
-    if (!headerConfirmsPeer || !composer || !send || !/\b(chat|message)\b/i.test(thread.xml)) {
-      context.onLog("Reply to Unread Chats stopped: contact name, chat composer, and Send button were not all confirmed.");
-      await exitSnapchatConversation(context).catch(() => false);
-      break;
-    }
-    const transcript = visibleConversation(thread.nodes, composer.bounds[1]);
-    if (transcript.length === 0) {
-      context.onLog("Reply to Unread Chats skipped: no readable conversation context was found.");
+    if (!headerConfirmsPeer || !/\b(chat|message)\b/i.test(openedThread.xml)) {
+      context.onLog("Reply to Unread Chats stopped: the opened conversation did not confirm the selected contact.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
@@ -785,6 +775,24 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       list = await dump(context.serial);
       continue;
+    }
+    const thread = await dump(context.serial);
+    const composer = thread.nodes.find(node =>
+      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+    );
+    const threadConfirmsPeer = thread.nodes.some(node =>
+      node.bounds[1] < 400 && normalizedText(node.text) === identity,
+    );
+    if (!threadConfirmsPeer || !composer || !/\b(chat|message)\b/i.test(thread.xml)) {
+      context.onLog("Reply to Unread Chats stopped: the verified contact conversation or chat composer was not confirmed.");
+      await exitSnapchatConversation(context).catch(() => false);
+      break;
+    }
+    const transcript = visibleConversation(thread.nodes, composer.bounds[1]);
+    if (transcript.length === 0) {
+      context.onLog("Reply to Unread Chats skipped: no readable conversation context was found.");
+      await exitSnapchatConversation(context).catch(() => false);
+      break;
     }
     let reply: string;
     try {
@@ -803,11 +811,10 @@ async function runReplyUnreadChats(context: Context) {
     const verifiedComposer = verifiedThread.nodes.find(node =>
       /edittext/i.test(node.className) && /message|chat|send/i.test(`${node.resourceId} ${node.desc}`),
     );
-    const verifiedSend = exactClickable(verifiedThread.nodes, ["Send"]);
     const verifiedPeer = verifiedThread.nodes.some(node =>
       node.bounds[1] < 400 && normalizedText(node.text) === identity,
     );
-    if (!verifiedPeer || !verifiedComposer || !verifiedSend) {
+    if (!verifiedPeer || !verifiedComposer) {
       context.onLog("Reply to Unread Chats stopped: the conversation changed while ChatGPT was drafting.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
