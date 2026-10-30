@@ -2389,6 +2389,7 @@ function CalibrationDialog({
   // Starts pre-populated with the saved map so the wizard merges into it rather
   // than wiping previously captured keys when you redo calibration partially.
   const [map, setMap] = useState<Record<string, { x: number; y: number }>>({});
+  const [calibrationScreen, setCalibrationScreen] = useState<{ w: number; h: number } | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -2423,6 +2424,7 @@ function CalibrationDialog({
     onCalibrationPosition?.(null);
     setStep(0);
     setMap({});
+    setCalibrationScreen(null);
     setCapturing(false);
     setLastResult(null);
     setSaved(false);
@@ -2440,7 +2442,12 @@ function CalibrationDialog({
     // display current coords without wiping anything.
     fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/keyboard-calibration`)
       .then(r => r.json())
-      .then(body => { if (body.ok && body.map) setMap(body.map); })
+      .then(body => {
+        if (body.ok && body.map) setMap(body.map);
+        if (body.screen && Number.isFinite(body.screen.w) && Number.isFinite(body.screen.h)) {
+          setCalibrationScreen({ w: body.screen.w, h: body.screen.h });
+        }
+      })
       .catch(() => {});
 
     // Pre-warm device-info + screen-size caches so the first capture is fast.
@@ -2785,7 +2792,12 @@ function CalibrationDialog({
                               size="sm"
                               variant="ghost"
                               className="h-6 px-2 text-[10px] text-red-300 hover:bg-red-950/50 hover:text-red-200"
-                              onClick={() => onCalibrationPosition?.({ x: coord.x, y: coord.y, label: k.display })}
+                              onClick={() => onCalibrationPosition?.({
+                                x: coord.x,
+                                y: coord.y,
+                                label: k.display,
+                                screen: calibrationScreen ?? undefined,
+                              })}
                               disabled={!!editCapturing}
                             >
                               Position

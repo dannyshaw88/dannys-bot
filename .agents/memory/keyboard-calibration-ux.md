@@ -13,4 +13,8 @@ The CalibrationDialog in MobilePage.tsx has three `mode` values: `"intro"`, `"wi
 
 **How to apply:** any future change to the capture flow must keep the merge-not-replace behaviour — never overwrite the full map with only the newly captured subset.
 
+**Position marker coordinate space:** saved key taps use the Android logical display dimensions, while the mirror may render at a different video resolution. Pass the current display size with the selected point and scale it through the mirror's recorded draw rectangle.
+
+**Why:** using the video-frame dimensions as the saved coordinate space can put the red marker outside the visible phone image, making a correct calibration appear missing or misplaced.
+
 **5-second delay fix:** `captureOneTap` now checks `_calDeviceInfoCache` and `_calScreenSizeCache` (module-level Maps) before running `getevent -lp` or `_uiDump`. A `prefetchCalibrationData(serial)` export (+ `POST /keyboard-calibration/prefetch` endpoint) warms both caches when the dialog opens, so the first actual capture is fast. Caches are in-process only; they reset on server restart, which is fine.

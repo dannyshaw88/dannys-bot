@@ -11587,11 +11587,12 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
   });
 
   /** Get the saved calibration map for a device (null if none saved yet). */
-  app.get("/api/mobile/devices/:serial/keyboard-calibration", (req: Request, res: Response) => {
+  app.get("/api/mobile/devices/:serial/keyboard-calibration", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
       const map = android.loadKeyCalibrationMap(serial);
-      res.json({ ok: true, map });
+      const screen = await android.getScreenSizeAsync(serial).catch(() => null);
+      res.json({ ok: true, map, screen });
     } catch (e: any) { res.status(400).json({ ok: false, error: e?.message }); }
   });
 
