@@ -407,6 +407,20 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
+async function pressAndroidBack(context: Context, count: number, action: string): Promise<boolean> {
+  for (let press = 0; press < count; press++) {
+    if (context.isAborted()) return false;
+    try {
+      await android.keyevent(context.serial, 4); // Android KEYCODE_BACK
+    } catch {
+      context.onLog(`Snapchat: Android Back failed while ${action}.`);
+      return false;
+    }
+    if (press + 1 < count) await context.sleep(200, "exact");
+  }
+  return true;
+}
+
 async function readVerifiedSnapchatUsername(
   context: Context,
   displayName: string,
@@ -432,34 +446,13 @@ async function readVerifiedSnapchatUsername(
     return null;
   }
 
-  const dismiss = profile.nodes.find(node => shortResourceId(node) === "unified_profile_dismiss_button");
-  if (!dismiss || !await tapNode(context, dismiss, "return from the verified contact profile")) return null;
-  const isContactThread = (state: Awaited<ReturnType<typeof dump>>) =>
-    state.nodes.some(node =>
-      node.bounds[1] < 400 && normalizedText(node.text) === normalizedText(displayName),
-    );
-  let returned = await dump(context.serial);
-  if (!isContactThread(returned)) {
-    const retryDeadline = Date.now() + 2_500;
-    let dismissRetried = false;
-    while (!context.isAborted() && Date.now() < retryDeadline) {
-      if (isContactThread(returned)) break;
-      const profileStillOpen = returned.nodes.some(node =>
-        shortResourceId(node) === "unified_profile_3d_bitmoji",
-      );
-      const retryDismiss = profileStillOpen && !dismissRetried
-        ? returned.nodes.find(node => shortResourceId(node) === "unified_profile_dismiss_button")
-        : undefined;
-      if (retryDismiss) {
-        dismissRetried = true;
-        await tapNode(context, retryDismiss, "retry returning from the verified contact profile", 250);
-      } else {
-        await context.sleep(250, "exact");
-      }
-      returned = await dump(context.serial);
-    }
-  }
-  if (!isContactThread(returned)) {
+  if (!await pressAndroidBack(context, 1, "returning from the verified contact profile")) return null;
+  await context.sleep(200, "exact");
+  const returned = await dump(context.serial);
+  const returnedToThread = returned.nodes.some(node =>
+    node.bounds[1] < 400 && normalizedText(node.text) === normalizedText(displayName),
+  );
+  if (!returnedToThread) {
     context.onLog(`Reply to Unread Chats: skipping ${displayName}; Snapchat did not return to the chat after profile lookup.`);
     return null;
   }
@@ -467,16 +460,7 @@ async function readVerifiedSnapchatUsername(
 }
 
 async function exitSnapchatConversation(context: Context): Promise<boolean> {
-  let state = await dump(context.serial);
-  if (state.nodes.some(node => shortResourceId(node) === "unified_profile_3d_bitmoji")) {
-    const dismiss = state.nodes.find(node => shortResourceId(node) === "unified_profile_dismiss_button");
-    if (!dismiss || !await tapNode(context, dismiss, "leave the contact profile")) return false;
-    state = await dump(context.serial);
-  }
-  const chevron = state.nodes
-    .filter(node => node.bounds[0] <= 20 && node.bounds[2] <= 145 && node.bounds[1] >= 100 && node.bounds[1] <= 260)
-    .sort((a, b) => (a.bounds[2] - a.bounds[0]) - (b.bounds[2] - b.bounds[0]))[0];
-  if (!chevron || !await tapNode(context, chevron, "exit the conversation with its top-left chevron")) return false;
+  if (!await pressAndroidBack(context, 2, "exiting the conversation")) return false;
   const after = await dump(context.serial);
   return Boolean(exactClickable(after.nodes, ["Chat"])) &&
     !after.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
@@ -846,54 +830,20 @@ async function runAcceptFriends(context: Context) {
 }
 
 async function collapseAddFriendsBeforeNextTool(context: Context): Promise<boolean> {
-  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
-  let chevronWaitLogged = false;
-  let missingChevronLogged = false;
-  let cameraWaitLogged = false;
-  while (!context.isAborted()) {
-    const current = await dump(context.serial);
-    if (/camera_page/i.test(current.xml) && !/add_friends_root/i.test(current.xml)) return true;
-
-    if (/add_friends_root/i.test(current.xml)) {
-      cameraWaitLogged = false;
-      const dismiss = current.nodes.find(node => shortResourceId(node) === "add_friends_dismiss");
-      if (dismiss) {
-        missingChevronLogged = false;
-        const occludingBanner = findOccludingBanner(current.nodes, dismiss, screenWidth, screenHeight);
-        if (occludingBanner) {
-          if (!chevronWaitLogged) {
-            context.onLog("Snapchat: collapse chevron is covered; checking again until the tap is clear.");
-            chevronWaitLogged = true;
-          }
-          await context.sleep(BANNER_RECHECK_MS, "exact");
-          continue;
-        }
-        chevronWaitLogged = false;
-        if (!await tapNode(context, dismiss, "collapse the Add Friends list before the next tool")) return false;
-        const after = await dump(context.serial);
-        if (/camera_page/i.test(after.xml) && !/add_friends_root/i.test(after.xml)) {
-          context.onLog("Snapchat: Add Friends panel collapsed with the down-chevron.");
-          return true;
-        }
-      } else if (!missingChevronLogged) {
-        context.onLog("Snapchat: waiting for the Add Friends collapse chevron; will retry.");
-        missingChevronLogged = true;
-      }
-    } else {
-      missingChevronLogged = false;
-      const cameraTab = current.nodes.find(node =>
-        node.clickable && shortResourceId(node) === "ngs_camera_icon_container",
-      );
-      if (cameraTab) {
-        cameraWaitLogged = false;
-        if (!await tapNode(context, cameraTab, "return to Camera before continuing")) return false;
-      } else if (!cameraWaitLogged) {
-        context.onLog("Snapchat: waiting for Camera or the Add Friends list; will retry.");
-        cameraWaitLogged = true;
-      }
-    }
-    await context.sleep(BANNER_RECHECK_MS, "exact");
+  const current = await dump(context.serial);
+  if (/camera_page/i.test(current.xml) && !/add_friends_root/i.test(current.xml)) return true;
+  if (!/add_friends_root/i.test(current.xml)) {
+    context.onLog("Snapchat: cannot close Add Friends because its panel is not confirmed.");
+    return false;
   }
+  if (!await pressAndroidBack(context, 1, "closing the Add Friends panel")) return false;
+  await context.sleep(200, "exact");
+  const after = await dump(context.serial);
+  if (/camera_page/i.test(after.xml) && !/add_friends_root/i.test(after.xml)) {
+    context.onLog("Snapchat: returned to Camera with Android Back.");
+    return true;
+  }
+  context.onLog("Snapchat stopped: Android Back did not close the Add Friends panel.");
   return false;
 }
 
