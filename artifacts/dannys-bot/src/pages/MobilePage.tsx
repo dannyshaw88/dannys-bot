@@ -7008,12 +7008,15 @@ export function AutomationSettingsPanel({
                 <div className="space-y-1">
                   <Label className="text-sm text-muted-foreground">Conversation goal and purpose</Label>
                   <textarea
-                    maxLength={1200}
+                    maxLength={5000}
                     value={settings.snapchatTools.replyUnreadChats.replyGoal}
                     onChange={e => updateSnapchatTool("replyUnreadChats", { replyGoal: e.target.value })}
                     disabled={loading || !tool.enabled}
                     className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
                   />
+                  <p className="text-xs text-muted-foreground text-right">
+                    {settings.snapchatTools.replyUnreadChats.replyGoal.length.toLocaleString()} / 5,000 characters
+                  </p>
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button
                       type="button"

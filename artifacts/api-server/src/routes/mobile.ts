@@ -2826,7 +2826,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         max: z.number().int().min(0).max(10).default(1),
         activatePctMin: z.number().int().min(0).max(100).default(100),
         activatePctMax: z.number().int().min(0).max(100).default(100),
-        replyGoal: z.string().max(1200).default(""),
+        replyGoal: z.string().max(5000).default(""),
       }).default({ enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" }),
       viewStories: z.object({
         enabled: z.boolean().default(false),
