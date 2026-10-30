@@ -1060,6 +1060,11 @@ async function runReplyUnreadChats(context: Context) {
         await exitSnapchatConversation(context).catch(() => false);
         break;
       }
+      if (typed.fatal) {
+        context.onLog("Reply to Unread Chats stopped: the calibrated keyboard could not return to letters; the partial draft was not sent.");
+        await exitSnapchatConversation(context).catch(() => false);
+        break;
+      }
       if (typed.missing.length) {
         context.onLog(
           `Reply to Unread Chats: skipped unmapped key(s) ${[...new Set(typed.missing)].join(", ")}; continuing with the remaining calibrated keys.`,

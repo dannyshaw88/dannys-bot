@@ -17,4 +17,10 @@ The CalibrationDialog in MobilePage.tsx has three `mode` values: `"intro"`, `"wi
 
 **Why:** using the video-frame dimensions as the saved coordinate space can put the red marker outside the visible phone image, making a correct calibration appear missing or misplaced.
 
+**Mirror-frame pillarboxing:** Mapping a saved Android-display point across the entire encoded video frame is wrong when the frame contains black side/top padding. Convert through the actual display-content rectangle inside the video frame, then through the canvas draw rectangle.
+
+**Why:** some phones stream a wider encoded frame than their logical display; direct normalized screen coordinates can put a keyboard key's marker in the black pillarbox.
+
+**How to apply:** Use the saved Android display dimensions and current decoded-frame dimensions to derive the centered content rectangle, then scale that point into the mirror canvas. If display dimensions are unavailable, do not silently substitute video dimensions.
+
 **5-second delay fix:** `captureOneTap` now checks `_calDeviceInfoCache` and `_calScreenSizeCache` (module-level Maps) before running `getevent -lp` or `_uiDump`. A `prefetchCalibrationData(serial)` export (+ `POST /keyboard-calibration/prefetch` endpoint) warms both caches when the dialog opens, so the first actual capture is fast. Caches are in-process only; they reset on server restart, which is fine.

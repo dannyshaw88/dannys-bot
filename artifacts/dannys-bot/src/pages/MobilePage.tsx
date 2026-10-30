@@ -1915,24 +1915,56 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       })()}
       {calibrationPosition && (() => {
         const canvas = canvasRef.current;
-        // Use the display size recorded with the calibration map. A stale
-        // phoneDims value (or a stream with a different encoded height) can
-        // otherwise move a correctly captured point toward the bottom.
-        const ps = calibrationPosition.screen ?? phoneSizeRef.current ?? phoneDims;
+        // Calibration coordinates are in Android display space. The encoded
+        // mirror frame can include pillar/letterboxing, so first map the point
+        // into the actual display rectangle inside that frame, then into the
+        // canvas draw rectangle. Falling back to video dimensions makes these
+        // 1080x2460 points land outside a 480x854 mirror.
+        const ps = calibrationPosition.screen;
+        const frame = phoneSizeRef.current;
         const dr = drawRectRef.current ?? (canvas ? { dx: 0, dy: 0, dw: canvas.clientWidth, dh: canvas.clientHeight } : null);
-        if (!ps || !dr || !canvas || !canvas.clientWidth || !canvas.clientHeight) return null;
-        const cssX = dr.dx + (calibrationPosition.x / ps.w) * dr.dw;
-        const cssY = dr.dy + (calibrationPosition.y / ps.h) * dr.dh;
+        if (!ps?.w || !ps?.h || !dr || !canvas || !canvas.clientWidth || !canvas.clientHeight) return null;
+        const frameW = frame?.w ?? ps.w;
+        const frameH = frame?.h ?? ps.h;
+        const screenRatio = ps.w / ps.h;
+        const frameRatio = frameW / frameH;
+        let contentX = 0;
+        let contentY = 0;
+        let contentW = frameW;
+        let contentH = frameH;
+        if (frameRatio > screenRatio) {
+          contentW = frameH * screenRatio;
+          contentX = (frameW - contentW) / 2;
+        } else if (frameRatio < screenRatio) {
+          contentH = frameW / screenRatio;
+          contentY = (frameH - contentH) / 2;
+        }
+        const pointX = Math.max(0, Math.min(1, calibrationPosition.x / ps.w));
+        const pointY = Math.max(0, Math.min(1, calibrationPosition.y / ps.h));
+        const frameX = contentX + pointX * contentW;
+        const frameY = contentY + pointY * contentH;
+        const cssX = dr.dx + (frameX / frameW) * dr.dw;
+        const cssY = dr.dy + (frameY / frameH) * dr.dh;
         return (
           <div
             title={`${calibrationPosition.label}: (${calibrationPosition.x}, ${calibrationPosition.y})`}
             style={{
-              position: "absolute", left: cssX, top: cssY, width: 18, height: 18,
-              marginLeft: -9, marginTop: -9, borderRadius: "50%",
-              background: "rgba(255, 25, 25, 0.95)", border: "2px solid white",
-              boxShadow: "0 0 8px rgba(255, 0, 0, 0.9)", zIndex: 30, pointerEvents: "none",
+              position: "absolute", left: cssX, top: cssY, width: 26, height: 26,
+              marginLeft: -13, marginTop: -13, borderRadius: "50%",
+              background: "rgba(255, 25, 25, 0.9)", border: "3px solid white",
+              boxShadow: "0 0 0 3px rgba(220, 0, 0, 0.9), 0 0 12px rgba(255, 0, 0, 1)",
+              zIndex: 40, pointerEvents: "none",
             }}
-          />
+          >
+            <span style={{
+              position: "absolute", left: 25, top: -5, whiteSpace: "nowrap",
+              color: "white", background: "rgba(120, 0, 0, 0.95)",
+              border: "1px solid white", borderRadius: 4, padding: "2px 5px",
+              fontSize: 10, fontWeight: 700, lineHeight: 1.2,
+            }}>
+              {calibrationPosition.label}
+            </span>
+          </div>
         );
       })()}
 
@@ -2724,6 +2756,14 @@ function CalibrationDialog({
               <p className="text-xs text-slate-400">
                 {normalMappedCount} / {CALIB_KEYS.length - twoFaKeys.length} keyboard keys · {twoFaMappedCount} / {twoFaKeys.length} 2FA digits mapped — click Re-tap to fix any wrong one
               </p>
+              <span
+                className={`shrink-0 px-2 text-[10px] ${calibrationScreen ? "text-slate-500" : "text-amber-300"}`}
+                title={calibrationScreen ? "Marker is scaled from the Android display size" : "Waiting for the Android display size; marker positions are unavailable"}
+              >
+                {calibrationScreen
+                  ? `${calibrationScreen.w}×${calibrationScreen.h}`
+                  : "Display size unavailable"}
+              </span>
               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-slate-300 hover:bg-slate-800"
                 onClick={() => { setMode("intro"); setEditResult(null); }} disabled={!!editCapturing}>
                 ← Back
@@ -2798,7 +2838,8 @@ function CalibrationDialog({
                                 label: k.display,
                                 screen: calibrationScreen ?? undefined,
                               })}
-                              disabled={!!editCapturing}
+                              disabled={!!editCapturing || !calibrationScreen}
+                              title={calibrationScreen ? "Show this calibrated point on the phone mirror" : "The Android display size is not available"}
                             >
                               Position
                             </Button>

@@ -15257,7 +15257,7 @@ export async function typeViaSavedCalibrationMap(
   typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
   options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean },
-): Promise<{ ok: boolean; available: boolean; missing: string[] }> {
+): Promise<{ ok: boolean; available: boolean; missing: string[]; fatal?: boolean }> {
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
   const uniqueChars = [...new Set([...text])].join("");
@@ -15321,6 +15321,7 @@ export async function typeViaSavedCalibrationMap(
   }
   if (needsSymbols) required.add("symbols");
   if (needsMoreSymbols) required.add("moreSymbols");
+  if (needsSymbols || needsMoreSymbols) required.add("abc");
   const missing = [...required].filter(key => !hasPoint(key));
   if (missing.length) {
     if (!options?.compactLogs) onLog?.(
@@ -15328,6 +15329,9 @@ export async function typeViaSavedCalibrationMap(
       `(serial=${serial}, mappedKeys=${Object.keys(map).length}` +
       `${options?.skipMissingKeys ? "; unmapped characters will be skipped" : ""})`,
     );
+    if (options?.skipMissingKeys && missing.some(key => ["symbols", "moreSymbols", "abc"].includes(key))) {
+      return { ok: false, available: true, missing, fatal: true };
+    }
     if (!options?.skipMissingKeys) return { ok: false, available: true, missing };
   }
 
@@ -15887,7 +15891,7 @@ export async function typeViaCalibrationMap(
   onLog?: (msg: string) => void,
   typingProfile: TypingSpeedProfile,
   options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean },
-): Promise<{ ok: boolean; missing: string[] }> {
+): Promise<{ ok: boolean; missing: string[]; fatal?: boolean }> {
   if (!typingProfile ||
       !Number.isFinite(typingProfile.minMs) ||
       !Number.isFinite(typingProfile.maxMs) ||
@@ -16146,13 +16150,18 @@ export async function typeViaCalibrationMap(
   ]);
 
   let charIndex = 0;
+  let fatal = false;
   for (const ch of text) {
     const debugChar = ch === "\n" ? "\\n" : ch === " " ? "<space>" : ch;
     if (!options?.compactLogs && options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} begin=${debugChar}`);
     await maybeHumanError();
     const label = ch === " " ? "space" : ch === "\n" ? "enter" : ch.toLowerCase();
     if (ch === " " || ch === "\n") {
-      await switchLayer("letters");
+      if (!await switchLayer("letters")) {
+        missing.push(ch);
+        fatal = true;
+        break;
+      }
       if (ch === "\n") {
         // A bio newline must not use Shift+Enter. On the farm keyboard that
         // combination can enter selection/navigation mode and act on the last
@@ -16180,8 +16189,11 @@ export async function typeViaCalibrationMap(
     }
 
     if (/^[a-z]$/i.test(ch) || abcPunctuation.has(ch)) {
-      if (!await switchLayer("letters")) missing.push(ch);
-      if (missing[missing.length - 1] === ch && !map[label] && !map[ch]) continue;
+      if (!await switchLayer("letters")) {
+        missing.push(ch);
+        fatal = true;
+        break;
+      }
 
       if (ch !== ch.toLowerCase()) {
         if (!await tapMapped("shift", "Shift")) {
@@ -16196,17 +16208,27 @@ export async function typeViaCalibrationMap(
     }
 
     if (moreSymbolChars.has(ch)) {
-      if (!await switchLayer("moreSymbols")) missing.push(ch);
+      if (!await switchLayer("moreSymbols")) {
+        missing.push(ch);
+        fatal = true;
+        break;
+      }
     } else if (!await switchLayer("symbols")) {
       missing.push(ch);
-      continue;
+      fatal = true;
+      break;
     }
 
     if (!await tapMapped(map[label] ? label : ch, ch)) {
       // A symbol can be on the extended layer even if the caller did not
       // classify it above; make one explicit attempt after the layer switch.
       if (!moreSymbolChars.has(ch) && map[ch]) {
-        if (await switchLayer("moreSymbols") && await tapMapped(ch, ch)) continue;
+        if (!await switchLayer("moreSymbols")) {
+          missing.push(ch);
+          fatal = true;
+          break;
+        }
+        if (await tapMapped(ch, ch)) continue;
       }
       missing.push(ch);
     }
@@ -16218,14 +16240,14 @@ export async function typeViaCalibrationMap(
   // Leave the IME on its normal letters layer. This matters when a symbol or
   // digit was the final character, and prevents the next isolated caller from
   // inheriting the symbols screen and typing into the wrong key positions.
-  if (layer !== "letters") await switchLayer("letters");
+  if (layer !== "letters" && !await switchLayer("letters")) fatal = true;
   _calKeyboardLayer.set(serial, layer);
   if (!options?.compactLogs) onLog?.(
     `[cal-keyboard] typing-session end serial=${serial} display=${display.w}x${display.h} ` +
     `ime=${activeIme || "unknown"} finalLayer=${layer} ok=${missing.length === 0} ` +
     `missing=${missing.join(",") || "none"}`,
   );
-  return { ok: missing.length === 0, missing };
+  return { ok: missing.length === 0 && !fatal, missing, ...(fatal ? { fatal: true } : {}) };
 }
 
 /**
