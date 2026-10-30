@@ -27,17 +27,17 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 
 **How to apply:** Keep banner checks for Add/Accept action buttons themselves, but use one system Back press to close the completed tool's panel.
 
-**Prompt and link-send boundary:** Keep persona, conversation wording, and early picture/sexual-request redirects in the editable reply goal. Also enforce the ordinary third-outgoing-reply Boundlus link at the send boundary; a prompt alone is not reliable enough.
+**Prompt source of truth:** Keep all conversational timing, reply wording, link timing, and redirect rules in the user's editable reply goal. Do not hardcode prompt-specific text, phrase checks, or fallback replies in software.
 
-**Why:** A clear third-reply instruction still failed to make Luna consistently include the link. The user wants the required invitation and link sent rather than trusting the model to obey silently.
+**Why:** The user explicitly requires the editable prompt to be the sole source of truth for prompts and replies; hardcoded wording can conflict with their saved instructions.
 
-**How to apply:** Keep immediate picture/sexual-request behavior in the editable goal. For the ordinary link, use the saved outgoing-reply count, request one corrected draft, then use a compliant fallback if needed. Verify the exact URL, add invitation, and Boundlus benefit in the actual typed composer before sending; never send or log a damaged link.
+**How to apply:** Edit the saved prompt for conversational behavior. Keep only generic automation concerns in code, such as calibrated typing and confirmation that text was entered and sent; do not enforce wording, link timing, or semantic phrases in the sender.
 
-**Link reply content:** Every Boundlus link reply must respond to the contact's latest message and give a clear reason to move, such as Luna being more active on Boundlus or Boundlus being better than Snap. A generic invitation alone is insufficient.
+**Link reply content:** The prompt's Boundlus message should answer the latest message, explain that Luna is getting overwhelmed on Snap, and directly invite the person to add her so they can talk more privately on Boundlus.
 
 **Why:** The user said “Catch me on Boundlus” without a contextual response or reason to switch feels weak.
 
-**How to apply:** In the editable prompt, require a brief response to the latest message plus the activity/benefit rationale, invitation, and exact URL, within the existing 20 supporting-word limit.
+**How to apply:** Keep that sequence, rationale, direct invitation, and exact URL in the editable prompt, within its supporting-word limit. Do not duplicate these requirements as code checks or canned messages.
 
 **Unread list eligibility:** Treat the Snapchat Unread tab itself as the unread signal; do not require a row status to say “New Chat.” Reply to named text-chat rows there even when the status says “Received” or “Opened.” Ignore pure Snap/photo/video rows, but allow a mixed media-and-chat row only through its separate chat-only right-side action icon.
 

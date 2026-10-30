@@ -197,3 +197,17 @@ mtime_ms = 1791757454318
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/de498b55-510f-400b-b5a1-9b7c8ab7ba17/27f39b67-e0d0-4133-9185-d27ba3bc5ec3"
 storage_version_token = "1791757477765309"
 content_type = "text/plain"
+
+[[outputs]]
+id = "MaNP96Qzjymc7dUiym3s6"
+uri = "file://generated-artifacts/snapchat-luna-reply-goal-revised.txt"
+type = "text"
+title = "Revised Snapchat reply goal"
+description = "Editable prompt with the stronger overwhelmed-on-Snap and private-chat transition."
+logical_id = "6f63035c-ff23-4e4a-824f-08374a8b20e1"
+content_hash = "sha256:8facf2ffe3bb527c63c41722bb846ea2250e2881dae9d7c31f188d92473a7633"
+size = 3993
+mtime_ms = 1793388454675
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/6f63035c-ff23-4e4a-824f-08374a8b20e1/ebc50695-00b2-4d0f-862b-36444d4ab860"
+storage_version_token = "1793388504040999"
+content_type = "text/plain"

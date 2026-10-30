@@ -71,14 +71,6 @@ export function getSnapchatReplyHistory(slotId: string, contactKey: string): {
   };
 }
 
-export function hasSentSnapchatBoundlusLink(slotId: string, contactKey: string): boolean {
-  return readEntries().some(entry =>
-    entry.slotId === slotId &&
-    matchesContact(entry, contactKey) &&
-    containsSnapchatBoundlusLink(entry.sentText),
-  );
-}
-
 export function exportSnapchatReplyHistory(slotId: string): string {
   const entries = readEntries().filter(entry => entry.slotId === slotId);
   if (!entries.length) return "No Snapchat reply history recorded for this account slot.\n";
