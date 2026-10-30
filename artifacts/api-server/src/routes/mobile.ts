@@ -532,6 +532,11 @@ type AutomationSettings = {
   cycleIntervalMax?: number;
   snapchatTools?: {
     shuffleToolOrder: boolean;
+    uploadSnap: {
+      enabled: boolean; min: number; max: number;
+      activatePctMin: number; activatePctMax: number;
+      directoryPath: string; selectAtRandom: boolean;
+    };
     addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
       massSnap: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; contactScrollPixels: number };
     acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
@@ -2798,6 +2803,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // nested so they cannot accidentally alter Instagram's existing settings.
     snapchatTools: z.object({
       shuffleToolOrder: z.boolean().default(false),
+      uploadSnap: z.object({
+        enabled: z.boolean().default(false),
+        min: z.number().int().min(1).max(10).default(1),
+        max: z.number().int().min(1).max(10).default(1),
+        activatePctMin: z.number().int().min(0).max(100).default(100),
+        activatePctMax: z.number().int().min(0).max(100).default(100),
+        directoryPath: z.string().max(4096).default(""),
+        selectAtRandom: z.boolean().default(false),
+      }).default({
+        enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100,
+        directoryPath: "", selectAtRandom: false,
+      }),
       addFriends: z.object({
         enabled: z.boolean().default(false),
         min: z.number().int().min(0).max(10).default(1),
@@ -2850,6 +2867,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 }),
     }).default({
       shuffleToolOrder: false,
+      uploadSnap: {
+        enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100,
+        directoryPath: "", selectAtRandom: false,
+      },
       addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
       massSnap: { enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 },
       acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
@@ -2884,6 +2905,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
       snapchatTools: {
         shuffleToolOrder: false,
+        uploadSnap: {
+          enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100,
+          directoryPath: "", selectAtRandom: false,
+        },
         addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
         massSnap: { enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 },
         acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
@@ -3590,6 +3615,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
         snapchatTools: {
           shuffleToolOrder: false,
+          uploadSnap: {
+            enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100,
+            directoryPath: "", selectAtRandom: false,
+          },
           addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
           massSnap: { enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 },
           acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
@@ -3819,7 +3848,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           : {};
         const incomingTools = body.snapchatTools;
         const mergedTools: Record<string, any> = { ...existingTools, ...incomingTools };
-        for (const toolKey of ["addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"]) {
+        for (const toolKey of ["uploadSnap", "addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"]) {
           const incomingTool = incomingTools[toolKey];
           if (incomingTool && typeof incomingTool === "object" && !Array.isArray(incomingTool)) {
             const existingTool = existingTools[toolKey] && typeof existingTools[toolKey] === "object"

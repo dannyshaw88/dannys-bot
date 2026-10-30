@@ -12,6 +12,7 @@
 - [Automation image consumption](automation-image-consumption.md) — Make a Post and Random Actions avatar updates must delete each selected source and staged copy on every attempt, without relying on a reuse history
 - [Activate Percentage gate levels](activate-percentage-gate-levels.md) — per-execution tool-level gate (View Feed/Stories/Follow/Jitter) vs per-user Inject Browsing gate are distinct; don't conflate
 - [Mobile settings save/load schema drift](mobile-settings-schema-drift.md) — add fields to the persistence schema or settings can silently reset on restart
+- [Snapchat Upload a Snap configuration](snapchat-upload-snap-config.md) — keep the per-slot settings UI and saved folder path separate from upload execution until that flow is requested
 - [leaksPage.ts client script must be plain JS](leaks-page-ts-syntax.md) — TS syntax in the embedded `<script>` string is a silent SyntaxError that freezes every Leak Check card in "pending" forever
 - [Fingerprint noise entropy floor](fingerprint-noise-entropy.md) — canvas/audio noise must be full 32-bit ints, not modulo/rounded-float derived, or accounts collide at scale
 - [Artifact duplicate-engine hazard](artifact-duplicate-engine-hazard.md) — artifact workflows can start a second stateful backend; guard ownership with a cross-process lock

@@ -86,6 +86,15 @@ export interface UsbPhone {
 
 export interface SnapchatToolSettings {
   shuffleToolOrder: boolean;
+  uploadSnap: {
+    enabled: boolean;
+    min: number;
+    max: number;
+    activatePctMin: number;
+    activatePctMax: number;
+    directoryPath: string;
+    selectAtRandom: boolean;
+  };
   addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
   massSnap: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; contactScrollPixels: number };
   acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
@@ -305,6 +314,15 @@ export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
   snapchatTools: {
     shuffleToolOrder: false,
+    uploadSnap: {
+      enabled: false,
+      min: 1,
+      max: 1,
+      activatePctMin: 100,
+      activatePctMax: 100,
+      directoryPath: "",
+      selectAtRandom: false,
+    },
     addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
     massSnap: { enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 },
     acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },

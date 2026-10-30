@@ -6367,7 +6367,7 @@ export function AutomationSettingsPanel({
     trustScoreAssigned === true || Boolean(settings.trustScoreId)
   );
   const updateSnapchatTool = (
-    tool: keyof AutomationSettingsData["snapchatTools"],
+    tool: Exclude<keyof AutomationSettingsData["snapchatTools"], "shuffleToolOrder">,
     patch: Record<string, unknown>,
   ) => setSettings(s => ({
     ...s,
@@ -6928,6 +6928,7 @@ export function AutomationSettingsPanel({
           </div>
         </div>
         {([
+          ["uploadSnap", "Upload a Snap"],
           ["addFriends", "Add Friends"],
           ["acceptFriends", "Accept Friends"],
           ["viewStories", "View Spotlights"],
@@ -6936,6 +6937,7 @@ export function AutomationSettingsPanel({
           ["replyUnreadChats", "Reply to Unread Chats"],
         ] as const).map(([key, title]) => {
           const tool = settings.snapchatTools[key];
+          const uploadSnap = settings.snapchatTools.uploadSnap;
           const countFloor = key === "viewStories" || key === "viewSnaps" || key === "massSnap" ? 1 : 0;
           return (
             <div key={key} className="rounded-lg border border-border/70 p-4 space-y-3">
@@ -6967,7 +6969,7 @@ export function AutomationSettingsPanel({
                   </div>
                   <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
                     <Label className="text-[11px] text-muted-foreground">
-                      {key === "viewStories" ? "Swipes" : key === "viewSnaps" ? "Snaps" : key === "massSnap" ? "Select" : "Count"}
+                      {key === "viewStories" ? "Swipes" : key === "viewSnaps" ? "Snaps" : key === "massSnap" ? "Select" : key === "uploadSnap" ? "Amount" : "Count"}
                     </Label>
                     <Input
                       type="number" min={countFloor} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
@@ -7056,6 +7058,59 @@ export function AutomationSettingsPanel({
                 <p className="text-xs text-muted-foreground">
                   Configuration only; Snapchat recipient selection and sending are not connected yet.
                 </p>
+              )}
+              {key === "uploadSnap" && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={loading || !(window as any).electronAPI?.openFolderDialog}
+                      title={!(window as any).electronAPI?.openFolderDialog
+                        ? "Assign a directory from the Windows Electron app."
+                        : undefined}
+                      onClick={async () => {
+                        const api = (window as any).electronAPI;
+                        if (!api?.openFolderDialog) return;
+                        try {
+                          const selected = await api.openFolderDialog(uploadSnap.directoryPath || undefined);
+                          if (selected?.canceled || !selected?.folder) return;
+                          updateSnapchatTool("uploadSnap", { directoryPath: selected.folder });
+                        } catch (error) {
+                          window.alert(error instanceof Error ? error.message : "Could not open the folder picker.");
+                        }
+                      }}
+                    >
+                      <FolderOpen className="mr-2 h-4 w-4" />
+                      {uploadSnap.directoryPath ? "Assigned Directory" : "Assign Directory"}
+                    </Button>
+                    {uploadSnap.directoryPath ? (
+                      <span className="min-w-0 truncate text-xs text-muted-foreground" title={uploadSnap.directoryPath}>
+                        {uploadSnap.directoryPath}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {(window as any).electronAPI?.openFolderDialog
+                          ? "No media directory assigned"
+                          : "Assign a directory from the Windows Electron app"}
+                      </span>
+                    )}
+                  </div>
+                  <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={uploadSnap.selectAtRandom}
+                      onChange={event => updateSnapchatTool("uploadSnap", { selectAtRandom: event.target.checked })}
+                      disabled={loading || !tool.enabled}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    Select at random
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Settings only; Snapchat media upload is not connected yet.
+                  </p>
+                </div>
               )}
               {key === "replyUnreadChats" && (
                 <div className="space-y-1">
