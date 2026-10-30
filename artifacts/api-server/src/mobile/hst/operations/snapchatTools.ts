@@ -984,7 +984,7 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    context.onLog(`GPT-6 Luna drafted a reply (${reply.length} characters); it has not been sent yet.`);
+    context.onLog(`GPT-6 Luna drafted a reply (${reply.length} characters; not sent yet): ${JSON.stringify(reply)}`);
     const verifiedThread = await dump(context.serial);
     const lateNotice = await handleNotAddedFriendNotice(context, row.displayName, verifiedThread);
     if (lateNotice === "exited") {
