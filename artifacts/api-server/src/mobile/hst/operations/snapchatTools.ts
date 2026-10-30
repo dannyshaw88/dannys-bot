@@ -428,18 +428,39 @@ async function readVerifiedSnapchatUsername(
   const verifiedUsername = usernameNode?.text.trim().replace(/^@/, "");
   if (!profileOpen || !profileName || normalizedText(profileName.text) !== normalizedText(displayName) ||
       !verifiedUsername || !/^[a-z0-9._]{2,40}$/i.test(verifiedUsername)) {
-    context.onLog(`Reply to Unread Chats stopped: Snapchat profile identity could not be verified for ${displayName}.`);
+    context.onLog(`Reply to Unread Chats: skipping ${displayName}; Snapchat profile identity could not be verified.`);
     return null;
   }
 
   const dismiss = profile.nodes.find(node => shortResourceId(node) === "unified_profile_dismiss_button");
   if (!dismiss || !await tapNode(context, dismiss, "return from the verified contact profile")) return null;
-  const returned = await dump(context.serial);
-  const returnedToThread = returned.nodes.some(node =>
-    node.bounds[1] < 400 && normalizedText(node.text) === normalizedText(displayName),
-  );
-  if (!returnedToThread) {
-    context.onLog("Reply to Unread Chats stopped: the verified contact conversation did not reopen after profile lookup.");
+  const isContactThread = (state: Awaited<ReturnType<typeof dump>>) =>
+    state.nodes.some(node =>
+      node.bounds[1] < 400 && normalizedText(node.text) === normalizedText(displayName),
+    );
+  let returned = await dump(context.serial);
+  if (!isContactThread(returned)) {
+    const retryDeadline = Date.now() + 2_500;
+    let dismissRetried = false;
+    while (!context.isAborted() && Date.now() < retryDeadline) {
+      if (isContactThread(returned)) break;
+      const profileStillOpen = returned.nodes.some(node =>
+        shortResourceId(node) === "unified_profile_3d_bitmoji",
+      );
+      const retryDismiss = profileStillOpen && !dismissRetried
+        ? returned.nodes.find(node => shortResourceId(node) === "unified_profile_dismiss_button")
+        : undefined;
+      if (retryDismiss) {
+        dismissRetried = true;
+        await tapNode(context, retryDismiss, "retry returning from the verified contact profile", 250);
+      } else {
+        await context.sleep(250, "exact");
+      }
+      returned = await dump(context.serial);
+    }
+  }
+  if (!isContactThread(returned)) {
+    context.onLog(`Reply to Unread Chats: skipping ${displayName}; Snapchat did not return to the chat after profile lookup.`);
     return null;
   }
   return verifiedUsername.toLowerCase();
@@ -942,8 +963,12 @@ async function runReplyUnreadChats(context: Context) {
     if (openedNotice === "exit-failed") break;
     const username = await readVerifiedSnapchatUsername(context, row.displayName, openedThread);
     if (!username) {
-      await exitSnapchatConversation(context).catch(() => false);
-      break;
+      if (!await exitSnapchatConversation(context).catch(() => false)) {
+        context.onLog("Reply to Unread Chats stopped: could not recover to the chat list after profile lookup.");
+        break;
+      }
+      list = await dump(context.serial);
+      continue;
     }
     if (hasSentSnapchatBoundlusLink(context.slotId, username)) {
       context.onLog(`Reply to Unread Chats skipped for @${username}: the Boundlus link was already sent for this Snapchat slot.`);
