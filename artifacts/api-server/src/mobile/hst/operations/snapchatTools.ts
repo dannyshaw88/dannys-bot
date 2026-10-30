@@ -103,6 +103,18 @@ function exactClickable(nodes: UiNode[], labels: string[]): UiNode | undefined {
   );
 }
 
+function findUnreadTab(nodes: UiNode[], screenHeight: number): UiNode | undefined {
+  return nodes.find(node => {
+    if (node.bounds[1] > screenHeight * 0.4) return false;
+    const labelMatches = [node.text, node.desc].some(value =>
+      /^unread(?:\s+messages?)?(?:\s*\(\d+\))?$/i.test(value.trim()),
+    );
+    const resourceMatches = /(?:^|[_-])unread(?:[_-].*)?(?:tab|filter)|(?:tab|filter).*unread/i
+      .test(node.resourceId);
+    return labelMatches || (node.clickable && resourceMatches);
+  });
+}
+
 function isAddFriendsPage(xml: string): boolean {
   return /add_friends_root/i.test(xml) &&
     /add_friends_title/i.test(xml) &&
@@ -161,14 +173,40 @@ async function tapChatTabWhenClear(
     if (!await tapNode(context, chatTab, "refresh the chat list before the next reply")) {
       return { ok: false, state };
     }
-    const refreshed = await dump(context.serial);
-    const ok = Boolean(exactClickable(refreshed.nodes, ["Chat"])) &&
-      !refreshed.nodes.some(node =>
+    const unreadState = await waitForUnreadTab(context);
+    const ok = Boolean(unreadState && exactClickable(unreadState.nodes, ["Chat"])) &&
+      !unreadState?.nodes.some(node =>
         /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
       );
-    return { ok, state: refreshed };
+    return { ok, state: unreadState };
   }
   return { ok: false, state: null };
+}
+
+async function waitForUnreadTab(context: Context): Promise<Awaited<ReturnType<typeof dump>> | null> {
+  const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+  const startedAt = Date.now();
+  let waitLogged = false;
+  while (!context.isAborted()) {
+    const state = await dump(context.serial);
+    const unreadTab = findUnreadTab(state.nodes, screenHeight);
+    if (unreadTab) {
+      context.onLog("Reply to Unread Chats: Unread tab appeared; tapping it now.");
+      if (!await tapNode(context, unreadTab, "open the Unread chat filter")) return null;
+      return await dump(context.serial);
+    }
+    const remainingMs = 30_000 - (Date.now() - startedAt);
+    if (remainingMs <= 0) {
+      context.onLog("Reply to Unread Chats stopped: Unread tab did not appear within 30 seconds.");
+      return null;
+    }
+    if (!waitLogged) {
+      context.onLog("Reply to Unread Chats: waiting up to 30 seconds for Unread; checking every 5 seconds.");
+      waitLogged = true;
+    }
+    await context.sleep(Math.min(5_000, remainingMs), "exact");
+  }
+  return null;
 }
 
 async function openAddFriends(context: Context): Promise<boolean> {
@@ -843,15 +881,11 @@ async function runReplyUnreadChats(context: Context) {
     context.onLog("Reply to Unread Chats skipped: Chat tab was not found.");
     return;
   }
-  context.onLog("Reply to Unread Chats: tapping Chat again to refresh the chat list.");
-  if (!await tapExact(context, ["Chat"], "refresh the chat list")) {
-    context.onLog("Reply to Unread Chats stopped: Chat tab was not available for the second tap.");
-    return;
-  }
-  let list = await dump(context.serial);
+  let list = await waitForUnreadTab(context);
+  if (!list) return;
   if (!exactClickable(list.nodes, ["Chat"]) ||
       list.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId))) {
-    context.onLog("Reply to Unread Chats stopped: the chat list was not confirmed after the second Chat tap.");
+    context.onLog("Reply to Unread Chats stopped: the Unread chat list was not confirmed after tapping its tab.");
     return;
   }
 
