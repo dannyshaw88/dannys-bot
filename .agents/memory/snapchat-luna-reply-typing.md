@@ -19,7 +19,7 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 
 **Why:** The user says the header can be obscured by banners and should not gate replies. The name on the unread list is visible before opening and is the intended contact identity.
 
-**How to apply:** Capture the row name and its text-node tap target from one unread-list snapshot, then tap that target. Use the captured name for prompt context and reply history; after opening, check for a composer only, never the header.
+**How to apply:** Capture the row name from one unread-list snapshot, then tap horizontally in the row's central text area at the name's vertical position, between the avatar and right-side action icon. Do not tap the avatar, action icon, or conversation header. Use the captured name for prompt context and reply history; after opening, check for a composer only.
 
 **Snapchat panel navigation:** Close the Add Friends panel with one Android Back press after Add Friends or Accept Friends finishes. Do not tap the down-chevron or run a banner-clear check for this navigation.
 

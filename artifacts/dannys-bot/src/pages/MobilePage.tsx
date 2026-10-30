@@ -7067,9 +7067,6 @@ export function AutomationSettingsPanel({
                       variant="outline"
                       size="sm"
                       disabled={loading || !(window as any).electronAPI?.openFolderDialog}
-                      title={!(window as any).electronAPI?.openFolderDialog
-                        ? "Assign a directory from the Windows Electron app."
-                        : undefined}
                       onClick={async () => {
                         const api = (window as any).electronAPI;
                         if (!api?.openFolderDialog) return;
@@ -7091,9 +7088,7 @@ export function AutomationSettingsPanel({
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground">
-                        {(window as any).electronAPI?.openFolderDialog
-                          ? "No media directory assigned"
-                          : "Assign a directory from the Windows Electron app"}
+                        No media directory assigned
                       </span>
                     )}
                   </div>
@@ -7107,9 +7102,6 @@ export function AutomationSettingsPanel({
                     />
                     Select at random
                   </label>
-                  <p className="text-xs text-muted-foreground">
-                    Settings only; Snapchat media upload is not connected yet.
-                  </p>
                 </div>
               )}
               {key === "replyUnreadChats" && (

@@ -534,6 +534,26 @@ function unreadChatRows(nodes: UiNode[]) {
   });
 }
 
+async function tapUnreadChatNameArea(
+  context: Context,
+  row: ReturnType<typeof unreadChatRows>[number],
+  screenWidth: number,
+): Promise<boolean> {
+  if (context.isAborted()) return false;
+  const [rowLeft, rowTop, rowRight, rowBottom] = row.marker.bounds;
+  const rowWidth = rowRight - rowLeft;
+  // The ff_item node normally spans the full chat row. If Snapchat exposes a
+  // narrower marker node, use the screen midpoint instead. Both positions land
+  // between the avatar on the left and the action icon on the right.
+  const x = Math.round(rowWidth >= screenWidth * 0.6 ? rowLeft + rowWidth / 2 : screenWidth / 2);
+  const nameCenter = center(row.nameNode);
+  const y = Math.max(rowTop + 1, Math.min(rowBottom - 1, nameCenter.y));
+  context.onLog(`Reply to Unread Chats: tapping the central name area for "${row.displayName}" at (${x},${y}), between the avatar and right-side icon.`);
+  await android.tap(context.serial, x, y, "bot", `Snapchat: open unread chat for ${row.displayName}`, "automation");
+  await context.sleep(700);
+  return !context.isAborted();
+}
+
 async function generateContextualReply(
   goal: string,
   peer: string,
@@ -842,6 +862,7 @@ async function runReplyUnreadChats(context: Context) {
     context.onLog("Reply to Unread Chats stopped: the Unread chat list was not confirmed after tapping its tab.");
     return;
   }
+  const { w: screenWidth } = await android.getScreenSizeAsync(context.serial);
 
   let replied = 0;
   const visited = new Set<string>();
@@ -855,8 +876,8 @@ async function runReplyUnreadChats(context: Context) {
     const identity = normalizedText(row.displayName);
     if (visited.has(identity)) break;
     visited.add(identity);
-    context.onLog(`Reply to Unread Chats: noted unread contact name "${row.displayName}" from the list; opening that name.`);
-    if (!await tapNode(context, row.nameNode, `open unread chat for ${row.displayName}`)) break;
+    context.onLog(`Reply to Unread Chats: noted unread contact name "${row.displayName}" from the list.`);
+    if (!await tapUnreadChatNameArea(context, row, screenWidth)) break;
     const openedThread = await dump(context.serial);
     const snapRecovery = await recoverFromUnreadSnapViewer(
       context,
