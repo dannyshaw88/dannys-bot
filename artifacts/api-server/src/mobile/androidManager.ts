@@ -5762,30 +5762,44 @@ export async function openRecentApps(serial: string): Promise<void> {
 }
 
 /**
- * Given a reference y-coordinate (the vertical centre of a known card/label,
- * e.g. "Instagram" in the floating-windows recents strip), finds every
- * text/content-desc-bearing element in the same UI dump that sits in the
- * same horizontal band and returns the one with the smallest x — i.e. the
- * LEFT-MOST card currently visible in that strip, whatever app it belongs
- * to. This device's recents UI is a Xiaomi "floating windows" carousel, not
- * stock Android recents: it shows at most two card labels side by side at a
- * time, and user-confirmed screen recordings show cards are dismissed by
- * dragging the left-most one off the left edge — dismissing it then slides
- * the next card into the left slot, so the same "find left-most, drag left"
- * gesture must repeat rather than always retargeting "Instagram" by name.
+ * Parses distinct text/content-desc labels in the card-title band. Complete
+ * node attributes are inspected so attribute order cannot hide a label. The
+ * Xiaomi floating-windows carousel shows up to two card labels side by side;
+ * the returned x-sorted list is both the visible count and the safe swipe
+ * bound. A fresh list is required after every dismissal before another swipe.
  */
-function _findLeftmostLabelInBand(xml: string, refY: number, bandPx: number): { x: number; y: number } | null {
-  const re = /(?:text|content-desc)="[^"]+"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/g;
-  let best: { x: number; y: number } | null = null;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(xml)) !== null) {
-    const x1 = +m[1], y1 = +m[2], x2 = +m[3], y2 = +m[4];
-    const cy = Math.floor((y1 + y2) / 2);
-    const cx = Math.floor((x1 + x2) / 2);
-    if (Math.abs(cy - refY) > bandPx) continue;
-    if (!best || cx < best.x) best = { x: cx, y: cy };
+function _findLabelsInBand(
+  xml: string,
+  refY: number,
+  bandPx: number,
+  screenWidth: number,
+): Array<{ x: number; y: number; label: string }> {
+  const labels: Array<{ x: number; y: number; label: string }> = [];
+  const nodeRe = /<node\b([^>]*)>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = nodeRe.exec(xml)) !== null) {
+    const attrs = match[1];
+    const bounds = attrs.match(/\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
+    if (!bounds) continue;
+    const text = attrs.match(/\btext="([^"]*)"/i)?.[1]?.trim() ?? "";
+    const desc = attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1]?.trim() ?? "";
+    const label = text || desc;
+    if (!label) continue;
+    const x = Math.floor((Number(bounds[1]) + Number(bounds[3])) / 2);
+    const y = Math.floor((Number(bounds[2]) + Number(bounds[4])) / 2);
+    if (Math.abs(y - refY) > bandPx) continue;
+
+    // A card title can be repeated by nested accessibility nodes. Collapse
+    // labels with nearly identical x centers so one card counts only once.
+    const duplicateX = Math.max(24, Math.round(screenWidth * 0.06));
+    const existing = labels.find(item => Math.abs(item.x - x) <= duplicateX);
+    if (existing) {
+      if (label.length < existing.label.length) existing.label = label;
+      continue;
+    }
+    labels.push({ x, y, label });
   }
-  return best;
+  return labels.sort((a, b) => a.x - b.x);
 }
 
 /**
@@ -5883,97 +5897,59 @@ export async function closeInstagramViaRecents(
   await openRecentApps(serial);
   await new Promise(r => setTimeout(r, 1200)); // wait for MIUI/OEM overview animation to settle
 
-  // Poll pidof for up to POLL_MS after a swipe instead of a single check at
-  // a fixed delay. Root-cause fix (Jul 2026): a real, correctly-aimed drag
-  // was dismissing the card (user-confirmed visually) but the underlying
-  // process doesn't always die within a fixed short window — Instagram
-  // keeps background services (notifications, etc.) alive briefly after
-  // its UI is dismissed. A single check at 600ms was catching it mid-death
-  // and concluding "still running", so the loop kept re-swiping an already
-  // -empty screen 4 more times for no reason (~20s wasted every cycle).
-  // Polling gives the same single successful swipe a real chance to
-  // register as closed before we ever attempt a second one.
-  const POLL_MS = 3500;
-  const POLL_STEP_MS = 400;
-  const waitForClosed = async (): Promise<boolean> => {
-    const deadline = Date.now() + POLL_MS;
-    while (Date.now() < deadline) {
-      if (!pidof()) return true;
-      await new Promise(r => setTimeout(r, POLL_STEP_MS));
-    }
-    return !pidof();
-  };
-
-  // This launcher's recents dump has never once exposed a text/content-desc
-  // "Instagram" label in real testing (every attempt logs "no label found"),
-  // so the multi-card left-most detection below is effectively a no-op on
-  // this device — the switcher shows cards as bare thumbnails with no
-  // accessible caption. Without any way to *see* how many cards remain, we
-  // can't justify looping 5 times "just in case" — that was the source of
-  // the wasted repeat swiping on an already-closed/empty screen the user
-  // reported. Cap blind (no-label) attempts at 2: one real attempt, and one
-  // retry only if the generous poll above still says Instagram is running
-  // (e.g. the first drag genuinely missed). If a labelled card IS found on
-  // a device where the dump does expose captions, keep looping per distinct
-  // card as before, up to 5, since that count is then actual ground truth.
-  const MAX_BLIND_ATTEMPTS = 2;
-  const MAX_LABELLED_ATTEMPTS = 5;
-  let method = "no attempts made";
-  let attemptsRun = 0;
-  let attempt = 0;
-  let sawAnyLabel = false;
-  while (true) {
-    attempt++;
-    attemptsRun = attempt;
-    if (!pidof()) { method = `${appLabel} already gone before attempt ${attempt}`; break; }
-
+  const readVisibleCards = async () => {
     const xml = await _uiDump(adb, serial);
     const appCard = xml ? _findElem(xml, appLabel) : null;
-    const card = (appCard && xml) ? (_findLeftmostLabelInBand(xml, appCard.y, 120) ?? appCard) : null;
-    if (card) sawAnyLabel = true;
+    const labels = appCard ? _findLabelsInBand(xml, appCard.y, 120, w) : [];
+    const targetVisible = labels.some(item => item.label.toLowerCase().includes(appLabel.toLowerCase()));
+    return { labels, targetVisible };
+  };
 
-    if (card) {
+  let method = "no recents gesture attempted";
+  let attemptsRun = 0;
+  let cardState = await readVisibleCards();
+  // Never use pidof as a proxy for visible recents cards: Android can keep an
+  // app process alive after its card is dismissed. Only swipe when the live
+  // hierarchy identifies the target card and gives us a count to bound the
+  // actions. If labels are absent, skip blind swipes rather than close every
+  // floating window in the carousel.
+  if (!pidof()) {
+    method = `${appLabel} already gone before recents swipe`;
+  } else if (!cardState.targetVisible || cardState.labels.length === 0) {
+    method = `no accessible ${appLabel} card/count found (${cardState.labels.length} visible card labels); skipped recents swipes`;
+  } else {
+    const initialVisibleCardCount = cardState.labels.length;
+    let previousCount = initialVisibleCardCount;
+    method = `${initialVisibleCardCount} visible recents card label(s) detected`;
+    for (let attempt = 1; attempt <= initialVisibleCardCount; attempt++) {
+      if (!cardState.targetVisible || cardState.labels.length === 0) break;
+      const card = cardState.labels[0];
+      attemptsRun = attempt;
       if (dismissDirection === "up") {
         const vertical = await profileVerticalDismiss();
-        method = `attempt ${attempt}: applied vertical Swipe Gesture Profile from (${vertical.from[0]},${vertical.from[1]}) to (${vertical.to[0]},${vertical.to[1]}) in ${vertical.durationMs}ms`;
+        method = `attempt ${attempt}/${initialVisibleCardCount}: swiped visible card from (${vertical.from[0]},${vertical.from[1]}) to (${vertical.to[0]},${vertical.to[1]})`;
       } else {
         const horizontal = await profileHorizontalDismiss(card.x, card.y);
-        method = `attempt ${attempt}: applied horizontal Swipe Gesture Profile to card at (${card.x},${card.y}) left to (${horizontal.toX},${card.y}) in ${horizontal.durationMs}ms`;
+        method = `attempt ${attempt}/${initialVisibleCardCount}: swiped leftmost visible card "${card.label}" at (${card.x},${card.y}) to (${horizontal.toX},${card.y})`;
       }
-    } else {
-      // Couldn't find any label at all (e.g. dump failed, or — as observed
-      // on this device — the launcher just never exposes card captions).
-      const cardX = Math.round(w * 0.5);
-      const cardY = Math.round(h * 0.45);
-      if (dismissDirection === "up") {
-        const vertical = await profileVerticalDismiss();
-        method = `attempt ${attempt}: no label found — applied vertical Swipe Gesture Profile from (${vertical.from[0]},${vertical.from[1]}) to (${vertical.to[0]},${vertical.to[1]}) in ${vertical.durationMs}ms`;
-      } else {
-        const horizontal = await profileHorizontalDismiss(cardX, cardY);
-        method = `attempt ${attempt}: no label found — applied horizontal Swipe Gesture Profile from (${cardX},${cardY}) to (${horizontal.toX},${cardY}) in ${horizontal.durationMs}ms`;
+
+      await new Promise(r => setTimeout(r, 700));
+      const nextState = await readVisibleCards();
+      cardState = nextState;
+      if (!nextState.targetVisible) {
+        method += ` — ${appLabel} card no longer visible`;
+        break;
       }
+      if (nextState.labels.length >= previousCount) {
+        method += ` — visible card count did not decrease (${previousCount} → ${nextState.labels.length}); stopped`;
+        break;
+      }
+      previousCount = nextState.labels.length;
     }
-
-    const closed = await waitForClosed();
-    if (closed) { method += ` — ${appLabel} closed`; break; }
-
-    const capReached = sawAnyLabel ? attempt >= MAX_LABELLED_ATTEMPTS : attempt >= MAX_BLIND_ATTEMPTS;
-    if (capReached) { method += ` — still running after ${attempt} attempt(s), giving up on the recents gesture`; break; }
-
-    // DO NOT call openRecentApps() here. On this Xiaomi floating-windows
-    // device, the card strip STAYS VISIBLE after each card is dismissed —
-    // the remaining cards are immediately ready for the next swipe. Pressing
-    // KEYCODE_APP_SWITCH (openRecentApps) while already IN the recents overlay
-    // TOGGLES it off, sending the phone to the home screen. The next loop pass
-    // then can't find the overview, so it called openRecentApps again to bring
-    // it back — producing the "goes to phone UI → back to floating windows"
-    // loop the user reported. Just wait briefly and swipe the next card directly.
-    await new Promise(r => setTimeout(r, 600));
   }
 
   const runningNow = pidof();
-  const capLabel = sawAnyLabel ? MAX_LABELLED_ATTEMPTS : MAX_BLIND_ATTEMPTS;
-  log(`[close-${appLabel.toLowerCase()}] attempt ${attemptsRun}/${capLabel}: ${method} — ${appLabel} ${runningNow ? "still running" : "closed ✓"}`);
+  log(`[close-${appLabel.toLowerCase()}] observed ${cardState.labels.length} card label(s); ${attemptsRun} swipe(s): ${method} — ${appLabel} ${runningNow ? "still running" : "closed ✓"}`);
 
   // Card-dismiss gestures aren't consistent across OEM launchers/Android
   // versions — a "closed completely" requirement can't rely on the gesture

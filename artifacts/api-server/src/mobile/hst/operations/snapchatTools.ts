@@ -517,10 +517,16 @@ async function handleNotAddedFriendNotice(
 function unreadChatRows(nodes: UiNode[]) {
   return nodes.flatMap(marker => {
     const markerLabel = `${marker.text} ${marker.desc}`.trim();
-    if (!/ff_item/i.test(shortResourceId(marker)) ||
-        /\b(snaps?|photos?|videos?)\b/i.test(markerLabel) ||
-        !/\bnew\s+(chats?|messages?)\b/i.test(markerLabel)) return [];
+    if (!/ff_item/i.test(shortResourceId(marker))) return [];
     const rowHeight = marker.bounds[3] - marker.bounds[1];
+    const rowNodes = nodes.filter(node =>
+      node.bounds[0] >= marker.bounds[0] &&
+      node.bounds[1] >= marker.bounds[1] &&
+      node.bounds[2] <= marker.bounds[2] &&
+      node.bounds[3] <= marker.bounds[3],
+    );
+    const rowLabel = [markerLabel, ...rowNodes.map(nodeLabel)].join(" ");
+    if (/\b(snaps?|photos?|videos?)\b/i.test(rowLabel)) return [];
     const names = nodes.filter(node =>
       node.text.trim() &&
       node.bounds[1] >= marker.bounds[1] &&
@@ -867,10 +873,20 @@ async function runReplyUnreadChats(context: Context) {
   let replied = 0;
   const visited = new Set<string>();
   while (replied < requested && !context.isAborted()) {
-    const rows = unreadChatRows(list.nodes);
+    let rows = unreadChatRows(list.nodes);
+    // Snapchat can take a moment to repopulate the Unread list after Back.
+    // Re-dump briefly before treating an empty accessibility snapshot as the
+    // end of the list; membership in the Unread tab is the unread signal, not
+    // whether the row's status happens to say "New Chat".
+    for (let retry = 0; rows.length === 0 && retry < 4 && !context.isAborted(); retry++) {
+      await context.sleep(500, "exact");
+      list = await dump(context.serial);
+      rows = unreadChatRows(list.nodes);
+    }
+    context.onLog(`Reply to Unread Chats: found ${rows.length} eligible text-chat row(s) in the Unread list.`);
     const row = rows.find(item => !visited.has(normalizedText(item.displayName)));
     if (!row) {
-      context.onLog("Reply to Unread Chats: no clearly marked unread chat row remains.");
+      context.onLog("Reply to Unread Chats: no eligible text-chat row remains in Snapchat's Unread list.");
       break;
     }
     const identity = normalizedText(row.displayName);

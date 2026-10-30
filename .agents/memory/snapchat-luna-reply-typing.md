@@ -39,8 +39,8 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 
 **How to apply:** In the editable prompt, require a brief response to the latest message plus the activity/benefit rationale, invitation, and exact URL, within the existing 20 supporting-word limit.
 
-**Unread media rows:** Reply to text-chat rows only. Ignore Snapchat unread markers identified as Snap, photo, or video content, regardless of the icon color; never tap those rows.
+**Unread list eligibility:** Treat the Snapchat Unread tab itself as the unread signal; do not require a row status to say “New Chat.” Reply to named text-chat rows there even when the status says “Received” or “Opened,” and ignore rows marked as Snap, photo, or video regardless of icon color.
 
-**Why:** The user identified red photo and purple video reply icons as media replies and explicitly instructed the automation not to open them.
+**Why:** The run stopped after two replies because the row filter accepted only “New Chat” labels, although other text-chat rows remained in the Unread tab with statuses such as “Received” or “Opened.” The user also identified red photo and purple video reply icons as media replies and explicitly instructed the automation not to open them.
 
-**How to apply:** Filter media-marked rows out before selecting or tapping an unread contact, regardless of red or purple icon styling, while continuing to process clearly marked text-chat rows only.
+**How to apply:** Verify the Unread tab is active, then select named rows from it regardless of status wording. Filter media-marked rows out before tapping, regardless of red or purple icon styling.

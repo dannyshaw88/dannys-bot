@@ -42,24 +42,22 @@ Instagram screen, relaunching the app, then skipping the entire Follow step.
 window.” Preserve the fallback only for callers that explicitly need a usable
 coordinate space.
 
-## Follow-up (11 Jul 2026): pidof checked too soon after a working swipe
+## Safe card counting
 
-A correctly-aimed drag was dismissing the card (user-confirmed visually),
-but Instagram's background services kept the process alive past a single
-600ms `pidof` check, so the code concluded the swipe had failed and
-redundantly repeated it (up to 5x, ~20s wasted) against an already-closed
-screen. Fixed by polling `pidof` for up to 3.5s after each swipe instead of
-one point-in-time check.
+Never use `pidof` as the signal to swipe another recents card. Android can keep
+an app process alive after its card is dismissed, and a blind retry can close
+other floating windows. Parse live UIAutomator node attributes independent of
+attribute order, count distinct visible card labels, and continue only while
+the target card is still visible and the observed count decreases. If the
+launcher exposes no card labels/count, skip further recents swipes and use the
+exact target-package fallback; do not guess how many cards remain.
 
-Also: this launcher's recents dump has never exposed a text/content-desc
-label for any card in real testing, so "count how many cards remain" has no
-ground truth here — capped blind (no-label) retries at 2 instead of 5;
-still loop the full 5 when real per-card labels ARE found on other devices.
+**Why:** Repeating the gesture based on process liveness caused Step 3 to
+dismiss additional floating windows after the target card was already gone.
 
-**Why this matters generally:** a process being dismissed from a switcher
-UI and its OS process actually terminating are two different events with an
-unpredictable gap between them — never conclude "the gesture failed" from a
-single fast liveness check right after a UI dismiss action.
+**How to apply:** A card dismissal is verified from a fresh UI dump, not
+`pidof`. Bound gestures by the observed card count and stop immediately when
+the target label disappears or the count fails to decrease.
 
 ## Related open hypothesis: per-device aspect-ratio calibration risk
 
