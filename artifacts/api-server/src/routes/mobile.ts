@@ -7323,10 +7323,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const snapchatTools = automationSchema.shape.snapchatTools.parse(
             effectiveSettings.snapchatTools ?? {},
           );
+          let leaveSnapchatOnSelectedImage = false;
           try {
-            await runSnapchatTools({
+            leaveSnapchatOnSelectedImage = await runSnapchatTools({
               serial,
               slotId: configuredSlot?.slotId,
+              slotIdx: incomingSlotIdx,
+              path,
+              pickLocalFolderImage,
               tools: snapchatTools,
               onLog: tLog,
               isAborted: () => isCycleAborted(serial),
@@ -7335,8 +7339,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 sleepOrAbort(serial, milliseconds, "navigation", timingMode),
               swipeGesture: devicePrefsForSnapchat.swipeGesture,
             });
+            if (leaveSnapchatOnSelectedImage) {
+              steps.push("snapchat-upload-snap-image-selected");
+              tLog("✓ Upload a Snap image is selected. Leaving Snapchat open for your test.");
+            }
           } finally {
-            if (!isCycleAborted(serial)) {
+            if (!isCycleAborted(serial) && !leaveSnapchatOnSelectedImage) {
               const devicePrefsForDismiss = devicePrefsForSnapchat;
               const effectiveDismiss = dismissDirection !== "auto"
                 ? dismissDirection
