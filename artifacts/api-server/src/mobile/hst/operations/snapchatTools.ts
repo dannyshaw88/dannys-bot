@@ -407,17 +407,6 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
-function conversationHeaderMatches(nodes: UiNode[], displayName: string): boolean {
-  const expected = normalizedText(displayName);
-  // Require the exact contact display name in the header area. Typing banners
-  // such as "Alex is typing…" are not a valid match for the contact name.
-  return nodes.some(node =>
-    node.bounds[1] < 400 &&
-    !/edittext/i.test(node.className) &&
-    normalizedText(node.text) === expected,
-  );
-}
-
 async function pressAndroidBack(context: Context, count: number, action: string): Promise<boolean> {
   for (let press = 0; press < count; press++) {
     if (context.isAborted()) return false;
@@ -451,7 +440,6 @@ async function exitSnapchatConversation(context: Context): Promise<boolean> {
 async function recoverFromUnreadSnapViewer(
   context: Context,
   displayName: string,
-  identity: string,
   opened: Awaited<ReturnType<typeof dump>>,
 ): Promise<{ detected: boolean; list?: Awaited<ReturnType<typeof dump>> }> {
   if (!isSnapMediaViewer(opened.xml, opened.nodes)) return { detected: false };
@@ -481,9 +469,9 @@ async function recoverFromUnreadSnapViewer(
     return { detected: true };
   }
 
-  const returnedToConversation =
-    state.nodes.some(node => node.bounds[1] < 400 && normalizedText(node.text) === identity) &&
-    /\b(chat|message)\b/i.test(state.xml);
+  const returnedToConversation = state.nodes.some(node =>
+    /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+  );
   if (returnedToConversation) {
     if (!await exitSnapchatConversation(context).catch(() => false)) {
       context.onLog(`Reply to Unread Chats stopped: could not exit ${displayName}'s conversation after closing the Snap.`);
@@ -540,8 +528,9 @@ function unreadChatRows(nodes: UiNode[]) {
       node.bounds[1] < marker.bounds[1] + rowHeight * 0.48 &&
       !/^(unread|received|sent|opened|new|camera|chat)$/i.test(node.text.trim()),
     ).sort((a, b) => a.bounds[1] - b.bounds[1]);
-    const displayName = names[0]?.text.trim();
-    return displayName ? [{ marker, displayName }] : [];
+    const nameNode = names[0];
+    const displayName = nameNode?.text.trim();
+    return nameNode && displayName ? [{ marker, nameNode, displayName }] : [];
   });
 }
 
@@ -866,24 +855,18 @@ async function runReplyUnreadChats(context: Context) {
     const identity = normalizedText(row.displayName);
     if (visited.has(identity)) break;
     visited.add(identity);
-    if (!await tapNode(context, row.marker, `open unread chat for ${row.displayName}`)) break;
+    context.onLog(`Reply to Unread Chats: noted unread contact name "${row.displayName}" from the list; opening that name.`);
+    if (!await tapNode(context, row.nameNode, `open unread chat for ${row.displayName}`)) break;
     const openedThread = await dump(context.serial);
     const snapRecovery = await recoverFromUnreadSnapViewer(
       context,
       row.displayName,
-      identity,
       openedThread,
     );
     if (snapRecovery.detected) {
       if (!snapRecovery.list) break;
       list = snapRecovery.list;
       continue;
-    }
-    const headerConfirmsPeer = conversationHeaderMatches(openedThread.nodes, row.displayName);
-    if (!headerConfirmsPeer || !/\b(chat|message)\b/i.test(openedThread.xml)) {
-      context.onLog("Reply to Unread Chats stopped: the opened conversation did not confirm the selected contact.");
-      await exitSnapchatConversation(context).catch(() => false);
-      break;
     }
     const openedNotice = await handleNotAddedFriendNotice(context, row.displayName, openedThread);
     if (openedNotice === "exited") {
@@ -908,9 +891,8 @@ async function runReplyUnreadChats(context: Context) {
     const composer = thread.nodes.find(node =>
       /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
     );
-    const threadConfirmsPeer = conversationHeaderMatches(thread.nodes, row.displayName);
-    if (!threadConfirmsPeer || !composer || !/\b(chat|message)\b/i.test(thread.xml)) {
-      context.onLog("Reply to Unread Chats stopped: the verified contact conversation or chat composer was not confirmed.");
+    if (!composer) {
+      context.onLog("Reply to Unread Chats stopped: the chat composer was not available after opening the noted unread contact.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
@@ -945,9 +927,8 @@ async function runReplyUnreadChats(context: Context) {
     const verifiedComposer = verifiedThread.nodes.find(node =>
       /edittext/i.test(node.className) && /message|chat|send/i.test(`${node.resourceId} ${node.desc}`),
     );
-    const verifiedPeer = conversationHeaderMatches(verifiedThread.nodes, row.displayName);
-    if (!verifiedPeer || !verifiedComposer) {
-      context.onLog("Reply to Unread Chats stopped: the conversation changed while ChatGPT was drafting.");
+    if (!verifiedComposer) {
+      context.onLog("Reply to Unread Chats stopped: the chat composer was no longer available after ChatGPT finished drafting.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }

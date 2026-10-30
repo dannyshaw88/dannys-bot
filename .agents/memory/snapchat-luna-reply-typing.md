@@ -15,11 +15,11 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 
 **How to apply:** Keep detailed calibration diagnostics out of the Snapchat action log; retain actionable failures and the draft, typing, send, and completion results.
 
-**Snapchat contact identity:** Never tap the conversation name to open a profile or look up a username. The exact display name from the selected unread row must match a text node in the conversation header before replying; text such as “Alex is typing” is not an exact match. Use that display name as the identity key for reply history and link-sent tracking.
+**Snapchat contact identity:** Read and retain the contact name from the unread-list row before tapping that same name to open the conversation. Do not inspect or validate the conversation header; require the chat composer before drafting.
 
-**Why:** The user removed the profile-name tap because the banner guard repeatedly failed. The selected row’s name, verified against the exact conversation-header name, is sufficient and avoids confusing typing-banner text with the recipient.
+**Why:** The user says the header can be obscured by banners and should not gate replies. The name on the unread list is visible before opening and is the intended contact identity.
 
-**How to apply:** Confirm the selected unread row’s exact display name in the top conversation area and require the chat/message surface. If it is absent or differs, do not reply to that contact; never infer identity from a banner or profile lookup.
+**How to apply:** Capture the row name and its text-node tap target from one unread-list snapshot, then tap that target. Use the captured name for prompt context and reply history; after opening, check for a composer only, never the header.
 
 **Snapchat panel navigation:** Close the Add Friends panel with one Android Back press after Add Friends or Accept Friends finishes. Do not tap the down-chevron or run a banner-clear check for this navigation.
 
