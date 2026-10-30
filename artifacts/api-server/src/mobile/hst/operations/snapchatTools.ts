@@ -146,44 +146,6 @@ async function tapExact(context: Context, labels: string[], reason: string): Pro
   return node ? tapNode(context, node, reason) : false;
 }
 
-async function tapChatTabWhenClear(
-  context: Context,
-): Promise<{ ok: boolean; state: Awaited<ReturnType<typeof dump>> | null }> {
-  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
-  let bannerWaitLogged = false;
-  while (!context.isAborted()) {
-    const state = await dump(context.serial);
-    if (state.nodes.some(node =>
-      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-    )) {
-      return { ok: false, state };
-    }
-    const chatTab = exactClickable(state.nodes, ["Chat"]);
-    if (!chatTab) {
-      await context.sleep(BANNER_RECHECK_MS, "exact");
-      continue;
-    }
-    if (findOccludingBanner(state.nodes, chatTab, screenWidth, screenHeight)) {
-      if (!bannerWaitLogged) {
-        context.onLog("Reply to Unread Chats: Chat tab is covered; checking until clear for an immediate tap.");
-        bannerWaitLogged = true;
-      }
-      await context.sleep(BANNER_RECHECK_MS, "exact");
-      continue;
-    }
-    if (!await tapNode(context, chatTab, "refresh the chat list before the next reply")) {
-      return { ok: false, state };
-    }
-    const unreadState = await waitForUnreadTab(context);
-    const ok = Boolean(unreadState && exactClickable(unreadState.nodes, ["Chat"])) &&
-      !unreadState?.nodes.some(node =>
-        /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-      );
-    return { ok, state: unreadState };
-  }
-  return { ok: false, state: null };
-}
-
 async function waitForUnreadTab(context: Context): Promise<Awaited<ReturnType<typeof dump>> | null> {
   const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   const startedAt = Date.now();
@@ -1027,19 +989,18 @@ async function runReplyUnreadChats(context: Context) {
       context.onLog("Reply to Unread Chats stopped: could not return to Snapchat after sending the reply.");
       break;
     }
-    const anotherUnreadWasListed = rows.some(item =>
-      !visited.has(normalizedText(item.displayName)),
-    );
-    if (replied < requested && anotherUnreadWasListed) {
-      context.onLog("Reply to Unread Chats: another unread reply is pending; refreshing Chat.");
-      const refreshed = await tapChatTabWhenClear(context);
-      if (!refreshed.ok || !refreshed.state) {
-        context.onLog("Reply to Unread Chats stopped: the chat list was not confirmed after refreshing it.");
-        break;
-      }
-      list = refreshed.state;
-    } else {
-      list = await dump(context.serial);
+    list = await dump(context.serial);
+    const chatListStillOpen =
+      Boolean(exactClickable(list.nodes, ["Chat"])) &&
+      !list.nodes.some(node =>
+        /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+      );
+    if (!chatListStillOpen) {
+      context.onLog("Reply to Unread Chats stopped: Snapchat did not return to the chat list after exiting the conversation.");
+      break;
+    }
+    if (replied < requested) {
+      context.onLog("Reply to Unread Chats: continuing in the existing Unread list without tapping Chat or Unread again.");
     }
   }
   context.onLog(`Reply to Unread Chats: confirmed ${replied}/${requested} GPT-6 Luna replies.`);
