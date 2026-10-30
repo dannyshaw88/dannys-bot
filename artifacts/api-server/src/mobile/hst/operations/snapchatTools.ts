@@ -1061,7 +1061,11 @@ async function runReplyUnreadChats(context: Context) {
         break;
       }
       if (typed.fatal) {
-        context.onLog("Reply to Unread Chats stopped: the calibrated keyboard could not return to letters; the partial draft was not sent.");
+        context.onLog(
+          typed.missing.includes("abc")
+            ? "Reply to Unread Chats stopped: this device's ABC key is not calibrated; the partial draft was not sent."
+            : "Reply to Unread Chats stopped: the calibrated keyboard could not return to letters; the partial draft was not sent.",
+        );
         await exitSnapchatConversation(context).catch(() => false);
         break;
       }
