@@ -2,7 +2,9 @@ import * as android from "../../androidManager";
 import { storage } from "../../../storage";
 import {
   appendSnapchatReplyHistory,
+  containsSnapchatBoundlusLink,
   getSnapchatReplyHistory,
+  isBoundlusClarificationQuestion,
 } from "../../snapchatReplyHistory";
 import { generateSnapchatLunaReply } from "../../snapchatLuna";
 
@@ -567,6 +569,19 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
+function findPostLinkMessage(
+  transcript: string[],
+  linkReply: { capturedMessages: string[] },
+): string {
+  const beforeLink = new Set(linkReply.capturedMessages.map(normalizedText));
+  return transcript
+    .filter(message =>
+      !beforeLink.has(normalizedText(message)) &&
+      !containsSnapchatBoundlusLink(message)
+    )
+    .at(-1) ?? "";
+}
+
 async function pressAndroidBack(context: Context, count: number, action: string): Promise<boolean> {
   for (let press = 0; press < count; press++) {
     if (context.isAborted()) return false;
@@ -1113,6 +1128,29 @@ async function runReplyUnreadChats(context: Context) {
     }
     let reply: string;
     const history = getSnapchatReplyHistory(context.slotId, contactKey);
+    const linkReplyIndex = history.sentReplies.findIndex(entry =>
+      containsSnapchatBoundlusLink(entry.sentText),
+    );
+    if (linkReplyIndex >= 0) {
+      const alreadyAnswered = history.sentReplies.slice(linkReplyIndex + 1).length > 0;
+      const postLinkMessage = findPostLinkMessage(transcript, history.sentReplies[linkReplyIndex]);
+      if (alreadyAnswered || !isBoundlusClarificationQuestion(postLinkMessage)) {
+        context.onLog(
+          alreadyAnswered
+            ? `Reply to Unread Chats skipped for ${row.displayName}: the one post-link clarification was already used.`
+            : `Reply to Unread Chats skipped for ${row.displayName}: the Boundlus link was already sent and the latest message is not a Boundlus question.`,
+        );
+        await exitSnapchatConversation(context).catch(() => false);
+        list = await dump(context.serial);
+        continue;
+      }
+      context.onLog(`Reply to Unread Chats: ${row.displayName} asked what Boundlus is; allowing the one post-link clarification.`);
+    } else if (history.previousReplyCount >= 3) {
+      context.onLog(`Reply to Unread Chats skipped for ${row.displayName}: the three ordinary replies have already been used.`);
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
+    }
     try {
       reply = await generateContextualReply(replyGoal, contactKey, transcript, history);
     } catch (error) {

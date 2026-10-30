@@ -27,6 +27,17 @@ export function containsSnapchatBoundlusLink(text: string): boolean {
   return /(?:^|[^a-z0-9.-])(?:www\.)?boundlus\.com(?:$|[/?#\s.)\]},!?;:])/i.test(decoded);
 }
 
+export function isBoundlusClarificationQuestion(message: string): boolean {
+  const text = message
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return /\b(?:whats|what is|wtf is)\s+(?:that|it|this|boundlus)(?:\s+(?:app|link))?\b/.test(text) ||
+    /\bnever heard of (?:it|boundlus|that|this)\b/.test(text) ||
+    /\bwhat does (?:boundlus|it|that|this) mean\b/.test(text);
+}
+
 function historyPath() {
   return path.join(path.dirname(sqlite.name), "snapchat-reply-history.jsonl");
 }

@@ -41,7 +41,10 @@ import { fetchInstagramCodeFromImap } from "../instagram/imapHelper";
 import { logger } from "../lib/logger";
 import { IgApiClient } from "instagram-private-api";
 import { generateSnapchatLunaReply } from "../mobile/snapchatLuna";
-import { containsSnapchatBoundlusLink } from "../mobile/snapchatReplyHistory";
+import {
+  containsSnapchatBoundlusLink,
+  isBoundlusClarificationQuestion,
+} from "../mobile/snapchatReplyHistory";
 import {
   getOrCreateSession,
   attachWS,
@@ -6013,14 +6016,31 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         )) {
       return res.status(400).json({ error: "Conversation must contain up to 50 messages, each no longer than 4,000 characters." });
     }
-    const linkWasAlreadySent = messages.some((message: { role: string; content: string }) =>
+    const linkMessageIndex = messages.findIndex((message: { role: string; content: string }) =>
       message.role === "assistant" && containsSnapchatBoundlusLink(message.content),
     );
-    if (linkWasAlreadySent) {
+    if (linkMessageIndex >= 0) {
+      const messagesAfterLink = messages.slice(linkMessageIndex + 1) as Array<{ role: string; content: string }>;
+      const clarificationAlreadySent = messagesAfterLink.some(message => message.role === "assistant");
+      const latestIncomingAfterLink = [...messagesAfterLink]
+        .reverse()
+        .find(message => message.role === "user");
+      if (
+        clarificationAlreadySent ||
+        !latestIncomingAfterLink ||
+        !isBoundlusClarificationQuestion(latestIncomingAfterLink.content)
+      ) {
+        return res.json({
+          reply: null,
+          skipped: true,
+          reason: "boundlus_link_already_sent",
+        });
+      }
+    } else if (messages.filter((message: { role: string }) => message.role === "assistant").length >= 3) {
       return res.json({
         reply: null,
         skipped: true,
-        reason: "boundlus_link_already_sent",
+        reason: "reply_limit_reached",
       });
     }
     const settings = await storage.getGlobalSettings();
