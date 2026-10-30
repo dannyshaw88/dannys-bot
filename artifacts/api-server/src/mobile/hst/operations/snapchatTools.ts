@@ -681,7 +681,16 @@ function unreadChatRows(nodes: UiNode[]) {
       node.bounds[3] <= marker.bounds[3],
     );
     const rowLabel = [markerLabel, ...rowNodes.map(nodeLabel)].join(" ");
-    if (/\b(snaps?|photos?|videos?)\b/i.test(rowLabel)) return [];
+    const hasMedia = /\b(snaps?|photos?|videos?)\b/i.test(rowLabel);
+    const hasChats = /\bchats?\b/i.test(rowLabel);
+    const chatActionNode = rowNodes.find(node =>
+      /feed_chat_button/i.test(`${node.text} ${node.desc} ${node.resourceId}`) &&
+      node.bounds[0] >= marker.bounds[0] + rowHeight * 0.65,
+    );
+    // Pure photo/video/Snap rows still open media and must be ignored. A
+    // mixed "Snaps and Chats" row is safe only when Snapchat exposes its
+    // separate chat-only action at the far right of that same row.
+    if (hasMedia && !(hasChats && chatActionNode)) return [];
     const names = nodes.filter(node =>
       node.text.trim() &&
       node.bounds[1] >= marker.bounds[1] &&
@@ -691,7 +700,9 @@ function unreadChatRows(nodes: UiNode[]) {
     ).sort((a, b) => a.bounds[1] - b.bounds[1]);
     const nameNode = names[0];
     const displayName = nameNode?.text.trim();
-    return nameNode && displayName ? [{ marker, nameNode, displayName }] : [];
+    return nameNode && displayName
+      ? [{ marker, nameNode, displayName, chatActionNode: hasMedia ? chatActionNode : undefined }]
+      : [];
   });
 }
 
@@ -701,6 +712,13 @@ async function tapUnreadChatNameArea(
   screenWidth: number,
 ): Promise<boolean> {
   if (context.isAborted()) return false;
+  if (row.chatActionNode) {
+    const { x, y } = center(row.chatActionNode);
+    context.onLog(`Reply to Unread Chats: "${row.displayName}" has mixed media and chat activity; tapping its chat-only right-side icon at (${x},${y}).`);
+    await android.tap(context.serial, x, y, "bot", `Snapchat: open chat-only action for ${row.displayName}`, "automation");
+    await context.sleep(700);
+    return !context.isAborted();
+  }
   const [rowLeft, rowTop, rowRight, rowBottom] = row.marker.bounds;
   const rowWidth = rowRight - rowLeft;
   // The ff_item node normally spans the full chat row. If Snapchat exposes a
@@ -725,6 +743,30 @@ async function generateContextualReply(
   const apiKey = String((settings as any).openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
   if (!apiKey) throw new Error("Add an OpenAI API key in Settings → Security.");
   return generateSnapchatLunaReply(apiKey, goal, peer, transcript, history);
+}
+
+function extractRequiredBoundlusLink(goal: string): string | undefined {
+  return goal.match(/(?:https?:\/\/)?(?:www\.)?boundlus\.com\/[^\s<>"')\],;]+/i)?.[0]
+    .replace(/[.!?]+$/, "");
+}
+
+function includesExactLink(reply: string, link: string): boolean {
+  return reply.toLowerCase().includes(link.toLowerCase());
+}
+
+function hasCompliantLinkReply(reply: string, link: string): boolean {
+  return includesExactLink(reply, link) &&
+    /\badd\s+(?:me|lisa)\s+on\s+boundlus\b/i.test(reply) &&
+    /\bmore active (?:on boundlus|there)\b/i.test(reply) &&
+    /\bbetter than snap\b/i.test(reply);
+}
+
+function fallbackBoundlusLinkReply(link: string): string {
+  const options = [
+    `Thanks for telling me. I’m more active on Boundlus, and it’s better than Snap. Add me on Boundlus: ${link}`,
+    `I hear you. Boundlus is better than Snap, and I’m more active there. Add me on Boundlus: ${link}`,
+  ];
+  return options[Math.floor(Math.random() * options.length)];
 }
 
 async function runAddFriends(context: Context) {
@@ -1095,20 +1137,64 @@ async function runReplyUnreadChats(context: Context) {
       break;
     }
     let reply: string;
+    let usedLinkFallback = false;
+    let history: ReturnType<typeof getSnapchatReplyHistory> = {
+      previousReplyCount: 0,
+      sentReplies: [],
+    };
+    const requiredBoundlusLink = extractRequiredBoundlusLink(replyGoal);
+    let linkIsDue = false;
     try {
-      const history = getSnapchatReplyHistory(context.slotId, contactKey);
-      reply = await generateContextualReply(replyGoal, contactKey, transcript, history);
+      history = getSnapchatReplyHistory(context.slotId, contactKey);
+      linkIsDue = history.previousReplyCount >= 2 && Boolean(requiredBoundlusLink);
+      const generationGoal = linkIsDue
+        ? `${replyGoal}\n\nMANDATORY LINK CHECK: The conversation has ${history.previousReplyCount} confirmed outgoing replies and no Boundlus link. This reply must include the exact URL ${requiredBoundlusLink} and directly invite the contact to add Lisa on Boundlus. Do not return SKIP.`
+        : replyGoal;
+      reply = await generateContextualReply(generationGoal, contactKey, transcript, history);
+      if (
+        linkIsDue &&
+        requiredBoundlusLink &&
+        (!reply || !hasCompliantLinkReply(reply, requiredBoundlusLink))
+      ) {
+        context.onLog(`Reply to Unread Chats: Luna's draft for ${row.displayName} missed the required link reply; requesting one correction before sending.`);
+        const correctedGoal =
+          `${generationGoal}\n\nCORRECTION: Your previous draft was rejected because it omitted the required exact URL. ` +
+          `Write a natural reply to the latest message, give the reason to move, explicitly invite the contact to add Lisa on Boundlus, and include ${requiredBoundlusLink}.`;
+        reply = await generateContextualReply(correctedGoal, contactKey, transcript, history);
+        if (!reply || !hasCompliantLinkReply(reply, requiredBoundlusLink)) {
+          reply = fallbackBoundlusLinkReply(requiredBoundlusLink);
+          usedLinkFallback = true;
+          context.onLog(`Reply to Unread Chats: Luna did not produce a compliant link reply for ${row.displayName}; using the required safe link template.`);
+        }
+      }
     } catch (error) {
-      context.onLog(`Reply to Unread Chats skipped: ${error instanceof Error ? error.message : "GPT-6 Luna could not draft a reply."}`);
+      if (linkIsDue && requiredBoundlusLink) {
+        reply = fallbackBoundlusLinkReply(requiredBoundlusLink);
+        usedLinkFallback = true;
+        context.onLog(`Reply to Unread Chats: Luna could not produce the required link reply for ${row.displayName}; using the safe link template.`);
+      } else {
+        context.onLog(`Reply to Unread Chats skipped: ${error instanceof Error ? error.message : "GPT-6 Luna could not draft a reply."}`);
+        await exitSnapchatConversation(context).catch(() => false);
+        break;
+      }
+    }
+    if (
+      linkIsDue &&
+      requiredBoundlusLink &&
+      (!reply || !hasCompliantLinkReply(reply, requiredBoundlusLink))
+    ) {
+      context.onLog(`Reply to Unread Chats: no compliant Boundlus link draft was produced for ${row.displayName}; nothing was sent.`);
       await exitSnapchatConversation(context).catch(() => false);
-      break;
+      list = await dump(context.serial);
+      continue;
     }
     if (!reply) {
       context.onLog(`Reply to Unread Chats: GPT-6 Luna deferred the reply for ${row.displayName}.`);
       await exitSnapchatConversation(context).catch(() => false);
-      break;
+      list = await dump(context.serial);
+      continue;
     }
-    context.onLog(`Luna draft (not sent yet): ${reply.replace(/[\r\n]+/g, " ")}`);
+    context.onLog(`${usedLinkFallback ? "Required-link fallback" : "Luna draft"} (not sent yet): ${reply.replace(/[\r\n]+/g, " ")}`);
     const verifiedThread = await dump(context.serial);
     const lateNotice = await handleNotAddedFriendNotice(context, row.displayName, verifiedThread);
     if (lateNotice === "exited") {
@@ -1179,6 +1265,16 @@ async function runReplyUnreadChats(context: Context) {
         context.onLog("Reply to Unread Chats stopped: no new reply text appeared in the composer.");
         await exitSnapchatConversation(context).catch(() => false);
         break;
+      }
+      if (
+        linkIsDue &&
+        requiredBoundlusLink &&
+        !hasCompliantLinkReply(enteredReply, requiredBoundlusLink)
+      ) {
+        context.onLog(`Reply to Unread Chats stopped: the calibrated keyboard did not enter the required link, invite, and reason for ${row.displayName}; the draft was not sent.`);
+        await exitSnapchatConversation(context).catch(() => false);
+        list = await dump(context.serial);
+        continue;
       }
     } catch {
       context.onLog("Reply to Unread Chats stopped: calibrated keyboard typing failed; the reply was not sent.");
