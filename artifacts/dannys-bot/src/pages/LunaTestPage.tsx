@@ -57,6 +57,8 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
       if (!response.ok) throw new Error(data.error ?? `Request failed (${response.status}).`);
       if (data.reply) {
         setMessages(current => [...current, { role: "assistant", content: data.reply }]);
+      } else if (data.reason === "boundlus_link_already_sent") {
+        setNotice("Luna already sent the link to this contact. No more AI replies will be generated in this chat.");
       } else {
         setNotice("Luna skipped this turn. No message was sent.");
       }
@@ -141,6 +143,7 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
                   <input
                     value={peer}
                     onChange={event => setPeer(event.target.value)}
+                    disabled={loading || messages.length > 0}
                     maxLength={80}
                     className="h-8 w-32 rounded-md border border-yellow-700/30 bg-white/80 px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />

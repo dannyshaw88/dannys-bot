@@ -41,6 +41,7 @@ import { fetchInstagramCodeFromImap } from "../instagram/imapHelper";
 import { logger } from "../lib/logger";
 import { IgApiClient } from "instagram-private-api";
 import { generateSnapchatLunaReply } from "../mobile/snapchatLuna";
+import { containsSnapchatBoundlusLink } from "../mobile/snapchatReplyHistory";
 import {
   getOrCreateSession,
   attachWS,
@@ -6011,6 +6012,16 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
           message.content.length > 4_000,
         )) {
       return res.status(400).json({ error: "Conversation must contain up to 50 messages, each no longer than 4,000 characters." });
+    }
+    const linkWasAlreadySent = messages.some((message: { role: string; content: string }) =>
+      message.role === "assistant" && containsSnapchatBoundlusLink(message.content),
+    );
+    if (linkWasAlreadySent) {
+      return res.json({
+        reply: null,
+        skipped: true,
+        reason: "boundlus_link_already_sent",
+      });
     }
     const settings = await storage.getGlobalSettings();
     const apiKey = String((settings as any).openaiApiKey ?? "").trim() ||

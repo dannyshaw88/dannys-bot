@@ -13,7 +13,7 @@ export type SnapchatReplyHistoryEntry = {
   replyNumber: number;
 };
 
-function containsBoundlusTarget(text: string): boolean {
+export function containsSnapchatBoundlusLink(text: string): boolean {
   let decoded = text;
   for (let pass = 0; pass < 2; pass++) {
     try {
@@ -67,7 +67,7 @@ export function hasSentSnapchatBoundlusLink(slotId: string, username: string): b
   return readEntries().some(entry =>
     entry.slotId === slotId &&
     entry.username.replace(/^@/, "").toLowerCase() === normalizedUsername &&
-    containsBoundlusTarget(entry.sentText),
+    containsSnapchatBoundlusLink(entry.sentText),
   );
 }
 
@@ -77,7 +77,7 @@ export function exportSnapchatReplyHistory(slotId: string): string {
   return entries.map(entry => [
     `Contact: @${entry.username} (${entry.displayName})`,
     `Reply number: ${entry.replyNumber}`,
-    `Boundlus link sent: ${containsBoundlusTarget(entry.sentText) ? "Yes" : "No"}`,
+    `Boundlus link sent: ${containsSnapchatBoundlusLink(entry.sentText) ? "Yes" : "No"}`,
     `Sent at: ${entry.sentAt}`,
     "Captured conversation:",
     ...entry.capturedMessages.map(message => `  ${message}`),
