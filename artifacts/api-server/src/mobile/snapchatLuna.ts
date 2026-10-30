@@ -148,7 +148,7 @@ export async function generateSnapchatLunaReply(
           : supportingText;
         cleanedReply = `${safeSupportingText || "I’m more active here, add me instead"}: ${goalUrl}`;
       } else if (shortReplies && nextOutgoingReplyNumber < 3 && countWords(cleanedReply) > 5) {
-        cleanedReply = `${cleanedReply.split(/\s+/).slice(0, 5).join(" ")}.`;
+        cleanedReply = "Sounds fun, what about you?";
       }
       return cleanedReply;
     }
