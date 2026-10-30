@@ -20,3 +20,9 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 **Why:** One delayed profile dismissal previously stopped the entire unread batch before that contact's history and third-reply link rule could be evaluated.
 
 **How to apply:** Never draft or send without a confirmed peer and composer. A profile-return failure is recoverable at the batch level only after the app's return to the Unread list is itself verified.
+
+**Prompt boundary:** Treat direct or indirect requests to see Luna, her appearance, photos, or videos as picture requests, including vague lines such as “let’s see you.” For these, and for sexual propositions or requests for nude content, send the Boundlus link reply immediately without asking what they have in mind or continuing sexual banter; stop replying after the link.
+
+**Why:** A vague request to see Luna led the prompt to ask a suggestive follow-up instead of applying the intended Boundlus redirect.
+
+**How to apply:** Keep this as editable reply-goal text, not fixed generator code. State explicit examples of indirect requests and make the immediate link-and-stop exception clear alongside the normal third-reply link timing.
