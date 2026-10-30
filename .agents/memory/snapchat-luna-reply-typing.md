@@ -39,11 +39,11 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 
 **How to apply:** Keep that sequence, rationale, direct invitation, and exact URL in the editable prompt, within its supporting-word limit. Do not duplicate these requirements as code checks or canned messages.
 
-**Post-link clarification:** After sending the Boundlus link, the prompt allows one answer only if the contact asks what Boundlus is or what the link means: “It’s a new social media app people are making easy money off, so I’m using it more.” Then stop.
+**Post-link clarification:** After sending the Boundlus link, allow one answer only to a clear question about what Boundlus is or what the link means. An unrelated message such as “I just tried too” is not a question and must get no reply.
 
 **Why:** The user reports contacts ask what Boundlus is after receiving the link and wants a single explanation before ending the conversation.
 
-**How to apply:** Keep this exception and its exact explanation in the editable prompt. Do not resend the link, continue unrelated conversation, or add a code-level reply rule.
+**How to apply:** Keep this exception and its exact explanation in the editable prompt: “It’s a new social media app people are making easy money off, so I’m using that more.” For every other post-link message, return SKIP; after the one explanation, stop completely. Do not resend the link, quote the incoming message, or add a code-level reply rule.
 
 **Unread list eligibility:** Treat the Snapchat Unread tab itself as the unread signal; do not require a row status to say “New Chat.” Reply to named text-chat rows there even when the status says “Received” or “Opened.” Ignore pure Snap/photo/video rows, but allow a mixed media-and-chat row only through its separate chat-only right-side action icon.
 
