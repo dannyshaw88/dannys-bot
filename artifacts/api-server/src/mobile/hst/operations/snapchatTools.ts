@@ -562,8 +562,10 @@ async function handleNotAddedFriendNotice(
 
 function unreadChatRows(nodes: UiNode[]) {
   return nodes.flatMap(marker => {
+    const markerLabel = `${marker.text} ${marker.desc}`.trim();
     if (!/ff_item/i.test(shortResourceId(marker)) ||
-        !/\bnew\s+(chats?|snaps?|messages?)\b/i.test(marker.desc)) return [];
+        /\b(snaps?|photos?|videos?)\b/i.test(markerLabel) ||
+        !/\bnew\s+(chats?|messages?)\b/i.test(markerLabel)) return [];
     const rowHeight = marker.bounds[3] - marker.bounds[1];
     const names = nodes.filter(node =>
       node.text.trim() &&

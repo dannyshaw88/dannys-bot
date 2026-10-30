@@ -26,3 +26,9 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 **Why:** A vague request to see Luna led the prompt to ask a suggestive follow-up instead of applying the intended Boundlus redirect.
 
 **How to apply:** Keep this as editable reply-goal text, not fixed generator code. State explicit examples of indirect requests and make the immediate link-and-stop exception clear alongside the normal third-reply link timing.
+
+**Unread media rows:** Reply to text-chat rows only. Ignore Snapchat unread markers identified as Snap, photo, or video content, regardless of the icon color; never tap those rows.
+
+**Why:** The user identified red photo and purple video reply icons as media replies and explicitly instructed the automation not to open them.
+
+**How to apply:** Filter media-marked rows out before selecting or tapping an unread contact, regardless of red or purple icon styling, while continuing to process clearly marked text-chat rows only.
