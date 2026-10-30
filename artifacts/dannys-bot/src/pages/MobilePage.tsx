@@ -5792,6 +5792,7 @@ type DeviceSlots = { phone: UsbPhone; slots: Array<{ username: string; platform?
 const SNAPCHAT_COPY_OPTIONS = [
   { key: "step1", label: "Step 1 enabled state and interval" },
   { key: "shuffleToolOrder", label: "Shuffle tool order" },
+  { key: "uploadSnap", label: "Upload a Snap" },
   { key: "addFriends", label: "Add Friends" },
   { key: "acceptFriends", label: "Accept Friends" },
   { key: "viewStories", label: "View Spotlights" },
@@ -6037,7 +6038,7 @@ function CopySettingsDialog({
       if (selectedSnapchatCopyKeys.has("shuffleToolOrder")) {
         snapchatTools.shuffleToolOrder = settings.snapchatTools.shuffleToolOrder;
       }
-      for (const key of ["addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"] as const) {
+      for (const key of ["uploadSnap", "addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"] as const) {
         if (selectedSnapchatCopyKeys.has(key)) snapchatTools[key] = settings.snapchatTools[key];
       }
       if (Object.keys(snapchatTools).length > 0) partial.snapchatTools = snapchatTools;
@@ -6972,16 +6973,24 @@ export function AutomationSettingsPanel({
                       {key === "viewStories" ? "Swipes" : key === "viewSnaps" ? "Snaps" : key === "massSnap" ? "Select" : key === "uploadSnap" ? "Amount" : "Count"}
                     </Label>
                     <Input
-                      type="number" min={countFloor} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
+                      type="number" min={countFloor} max={key === "replyUnreadChats" ? undefined : 10}
+                      className={`${key === "replyUnreadChats" ? "w-16" : "w-10"} h-7 px-0.5 text-center text-xs`}
                       value={countFloor ? Math.max(1, tool.min) : tool.min}
-                      onChange={e => updateSnapchatTool(key, { min: Math.max(countFloor, Math.min(10, clamp4(Number(e.target.value)))) })}
+                      onChange={e => {
+                        const value = clamp4(Number(e.target.value));
+                        updateSnapchatTool(key, { min: Math.max(countFloor, key === "replyUnreadChats" ? value : Math.min(10, value)) });
+                      }}
                       disabled={loading || !tool.enabled}
                     />
                     <span className="text-xs text-muted-foreground">–</span>
                     <Input
-                      type="number" min={countFloor} max={10} className="w-10 h-7 px-0.5 text-center text-xs"
+                      type="number" min={countFloor} max={key === "replyUnreadChats" ? undefined : 10}
+                      className={`${key === "replyUnreadChats" ? "w-16" : "w-10"} h-7 px-0.5 text-center text-xs`}
                       value={countFloor ? Math.max(1, tool.max) : tool.max}
-                      onChange={e => updateSnapchatTool(key, { max: Math.max(countFloor, Math.min(10, clamp4(Number(e.target.value)))) })}
+                      onChange={e => {
+                        const value = clamp4(Number(e.target.value));
+                        updateSnapchatTool(key, { max: Math.max(countFloor, key === "replyUnreadChats" ? value : Math.min(10, value)) });
+                      }}
                       disabled={loading || !tool.enabled}
                     />
                   </div>

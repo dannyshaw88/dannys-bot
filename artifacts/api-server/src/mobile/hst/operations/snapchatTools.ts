@@ -258,6 +258,12 @@ function randomCount(min: number, max: number): number {
   return low + Math.floor(Math.random() * (high - low + 1));
 }
 
+function randomUncappedCount(min: number, max: number): number {
+  const low = Math.max(0, Math.min(min, max));
+  const high = Math.max(low, Math.max(min, max));
+  return low + Math.floor(Math.random() * (high - low + 1));
+}
+
 type UploadSnapResult = "not-started" | "selected" | "failed";
 
 async function runUploadSnap(context: Context): Promise<UploadSnapResult> {
@@ -1018,7 +1024,7 @@ async function collapseAddFriendsBeforeNextTool(context: Context): Promise<boole
 
 async function runReplyUnreadChats(context: Context) {
   const { enabled, replyGoal } = context.tools.replyUnreadChats;
-  const requested = randomCount(context.tools.replyUnreadChats.min, context.tools.replyUnreadChats.max);
+  const requested = randomUncappedCount(context.tools.replyUnreadChats.min, context.tools.replyUnreadChats.max);
   if (!enabled || requested === 0) return;
   context.onLog(`Reply to Unread Chats: target ${requested} unread contact(s), one reply per contact.`);
   if (!context.slotId) {
