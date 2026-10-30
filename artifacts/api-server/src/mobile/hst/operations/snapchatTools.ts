@@ -290,10 +290,14 @@ function isStoriesListSurface(nodes: UiNode[]): boolean {
     );
 }
 
-function isSnapStoryViewer(xml: string, nodes: UiNode[]): boolean {
+function isSnapMediaViewer(xml: string, nodes: UiNode[]): boolean {
   return /opera_viewer/i.test(xml) &&
     nodes.some(node => shortResourceId(node) === "chrome_title") &&
-    nodes.some(node => shortResourceId(node) === "base_image_layer_container");
+    nodes.some(node =>
+      shortResourceId(node) === "base_image_layer_container" ||
+      /base_.*video.*layer|video.*viewer/i.test(shortResourceId(node)) ||
+      /(?:SurfaceView|TextureView|VideoView)$/i.test(node.className),
+    );
 }
 
 async function openStories(context: Context): Promise<boolean> {
@@ -451,6 +455,61 @@ async function exitSnapchatConversation(context: Context): Promise<boolean> {
   const after = await dump(context.serial);
   return Boolean(exactClickable(after.nodes, ["Chat"])) &&
     !after.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
+}
+
+async function recoverFromUnreadSnapViewer(
+  context: Context,
+  displayName: string,
+  identity: string,
+  opened: Awaited<ReturnType<typeof dump>>,
+): Promise<{ detected: boolean; list?: Awaited<ReturnType<typeof dump>> }> {
+  if (!isSnapMediaViewer(opened.xml, opened.nodes)) return { detected: false };
+
+  context.onLog(`Reply to Unread Chats: ${displayName}'s unread item opened a photo/video Snap; swiping down to close it.`);
+  const { w, h } = await android.getScreenSizeAsync(context.serial);
+  let state = opened;
+  for (let attempt = 0; attempt < 2 && isSnapMediaViewer(state.xml, state.nodes); attempt++) {
+    if (context.isAborted()) return { detected: true };
+    await android.swipe(
+      context.serial,
+      Math.round(w * 0.5),
+      Math.round(h * 0.35),
+      Math.round(w * 0.5),
+      Math.round(h * 0.85),
+      300,
+      false,
+    );
+    await context.sleep(500, "exact");
+    state = await dump(context.serial);
+    if (isSnapMediaViewer(state.xml, state.nodes) && attempt === 0) {
+      context.onLog("Reply to Unread Chats: Snap viewer is still open; retrying the downward dismiss swipe.");
+    }
+  }
+  if (isSnapMediaViewer(state.xml, state.nodes)) {
+    context.onLog("Reply to Unread Chats stopped: Snapchat's photo/video viewer did not close after two downward swipes.");
+    return { detected: true };
+  }
+
+  const returnedToConversation =
+    state.nodes.some(node => node.bounds[1] < 400 && normalizedText(node.text) === identity) &&
+    /\b(chat|message)\b/i.test(state.xml);
+  if (returnedToConversation) {
+    if (!await exitSnapchatConversation(context).catch(() => false)) {
+      context.onLog(`Reply to Unread Chats stopped: could not exit ${displayName}'s conversation after closing the Snap.`);
+      return { detected: true };
+    }
+    state = await dump(context.serial);
+  }
+
+  const returnedToChatList =
+    Boolean(exactClickable(state.nodes, ["Chat"])) &&
+    !state.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
+  if (!returnedToChatList) {
+    context.onLog("Reply to Unread Chats stopped: the Snap closed, but Snapchat's chat list was not confirmed.");
+    return { detected: true };
+  }
+  context.onLog(`Reply to Unread Chats: closed the received Snap, exited the conversation, and will continue on the Unread list.`);
+  return { detected: true, list: await dump(context.serial) };
 }
 
 function hasNotAddedFriendNotice(state: Awaited<ReturnType<typeof dump>>): boolean {
@@ -849,6 +908,17 @@ async function runReplyUnreadChats(context: Context) {
     visited.add(identity);
     if (!await tapNode(context, row.marker, `open unread chat for ${row.displayName}`)) break;
     const openedThread = await dump(context.serial);
+    const snapRecovery = await recoverFromUnreadSnapViewer(
+      context,
+      row.displayName,
+      identity,
+      openedThread,
+    );
+    if (snapRecovery.detected) {
+      if (!snapRecovery.list) break;
+      list = snapRecovery.list;
+      continue;
+    }
     const headerConfirmsPeer = openedThread.nodes.some(node =>
       node.bounds[1] < 400 &&
       !/edittext/i.test(node.className) &&
@@ -1114,7 +1184,7 @@ async function runViewSnaps(context: Context) {
   if (!await tapNode(context, story, "open a circular story")) return;
 
   let state = await dump(context.serial);
-  if (!isSnapStoryViewer(state.xml, state.nodes)) {
+  if (!isSnapMediaViewer(state.xml, state.nodes)) {
     context.onLog("View Snaps stopped: Snapchat's story viewer was not confirmed after opening a story.");
     return;
   }
@@ -1127,7 +1197,7 @@ async function runViewSnaps(context: Context) {
     if (context.isAborted()) break;
 
     state = await dump(context.serial);
-    if (!isSnapStoryViewer(state.xml, state.nodes)) {
+    if (!isSnapMediaViewer(state.xml, state.nodes)) {
       context.onLog("View Snaps stopped: the Snapchat story viewer was no longer active.");
       break;
     }
@@ -1136,7 +1206,7 @@ async function runViewSnaps(context: Context) {
     await android.tap(context.serial, x, y, "bot", "Snapchat: advance to next Snap on right side", "automation");
     await context.sleep(700);
     state = await dump(context.serial);
-    if (!isSnapStoryViewer(state.xml, state.nodes)) {
+    if (!isSnapMediaViewer(state.xml, state.nodes)) {
       context.onLog("View Snaps stopped: the story viewer closed after the right-side tap.");
       break;
     }
