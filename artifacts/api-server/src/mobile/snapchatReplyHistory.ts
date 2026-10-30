@@ -41,15 +41,24 @@ function readEntries(): SnapchatReplyHistoryEntry[] {
   }
 }
 
-export function getSnapchatReplyHistory(slotId: string, username: string): {
+function normalizeContactKey(value: string): string {
+  return value.replace(/^@/, "").trim().toLowerCase();
+}
+
+function matchesContact(entry: SnapchatReplyHistoryEntry, contactKey: string): boolean {
+  const expected = normalizeContactKey(contactKey);
+  return normalizeContactKey(entry.username) === expected ||
+    normalizeContactKey(entry.displayName) === expected;
+}
+
+export function getSnapchatReplyHistory(slotId: string, contactKey: string): {
   previousReplyCount: number;
   sentReplies: Array<{ replyNumber: number; capturedMessages: string[]; sentText: string }>;
 } {
-  const normalizedUsername = username.replace(/^@/, "").toLowerCase();
   const entries = readEntries()
     .filter(entry =>
       entry.slotId === slotId &&
-      entry.username.replace(/^@/, "").toLowerCase() === normalizedUsername,
+      matchesContact(entry, contactKey),
     )
     .sort((a, b) => a.replyNumber - b.replyNumber);
   return {
@@ -62,11 +71,10 @@ export function getSnapchatReplyHistory(slotId: string, username: string): {
   };
 }
 
-export function hasSentSnapchatBoundlusLink(slotId: string, username: string): boolean {
-  const normalizedUsername = username.replace(/^@/, "").toLowerCase();
+export function hasSentSnapchatBoundlusLink(slotId: string, contactKey: string): boolean {
   return readEntries().some(entry =>
     entry.slotId === slotId &&
-    entry.username.replace(/^@/, "").toLowerCase() === normalizedUsername &&
+    matchesContact(entry, contactKey) &&
     containsSnapchatBoundlusLink(entry.sentText),
   );
 }
@@ -75,7 +83,9 @@ export function exportSnapchatReplyHistory(slotId: string): string {
   const entries = readEntries().filter(entry => entry.slotId === slotId);
   if (!entries.length) return "No Snapchat reply history recorded for this account slot.\n";
   return entries.map(entry => [
-    `Contact: @${entry.username} (${entry.displayName})`,
+    `Contact: ${normalizeContactKey(entry.username) === normalizeContactKey(entry.displayName)
+      ? entry.displayName
+      : `@${entry.username} (${entry.displayName})`}`,
     `Reply number: ${entry.replyNumber}`,
     `Boundlus link sent: ${containsSnapchatBoundlusLink(entry.sentText) ? "Yes" : "No"}`,
     `Sent at: ${entry.sentAt}`,
@@ -107,7 +117,11 @@ export function appendSnapchatReplyHistory(
     for (const line of lines) {
       try {
         const prior = JSON.parse(line) as Partial<SnapchatReplyHistoryEntry>;
-        if (prior.slotId === entry.slotId && prior.username?.toLowerCase() === entry.username.toLowerCase()) {
+        if (
+          prior.slotId === entry.slotId &&
+          (normalizeContactKey(prior.username ?? "") === normalizeContactKey(entry.username) ||
+            normalizeContactKey(prior.displayName ?? "") === normalizeContactKey(entry.username))
+        ) {
           replyNumber = Math.max(replyNumber, Number(prior.replyNumber || 0) + 1);
         }
       } catch { /* Ignore an incomplete final line and continue counting valid entries. */ }

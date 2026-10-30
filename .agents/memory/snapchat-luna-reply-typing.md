@@ -9,17 +9,17 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 
 **How to apply:** Keep other typing callers strict by default. Put Luna conversation wording and behavior constraints in the user's editable reply prompt, not fixed generator rules, unless the user explicitly asks for hard-coded enforcement. Use the Replit-only Luna sandbox for prompt tests; diagnose live phone behavior from Windows Electron logs and never claim Replit can trace the user's phone. For live Snapchat replies, skip only unavailable characters, continue the calibrated sequence, verify and record/send the actual composer contents, and use two Android Back key events after exiting each chat.
 
-**Debugging log:** For live Snapchat replies, show the full Luna draft before typing and log the exact username-lookup decision, tap timing, profile-verification flags, Back-navigation result, and recovery outcome; suppress per-character progress lines.
+**Debugging log:** For live Snapchat replies, show the full Luna draft before typing and log concise action outcomes; suppress per-character progress lines.
 
 **Why:** The user wants to inspect Luna's intended sentence while keeping the live log readable and focused on what the tool did.
 
 **How to apply:** Keep detailed calibration diagnostics out of the Snapchat action log; retain actionable failures and the draft, typing, send, and completion results.
 
-**Profile-name tap and return:** Use a fresh chat snapshot for the header-name tap. If an accessibility banner covers the target, recheck until clear and tap immediately from that same clear snapshot. After verifying the username, press Android Back once and require the chat header to be visible.
+**Snapchat contact identity:** Never tap the conversation name to open a profile or look up a username. The exact display name from the selected unread row must match a text node in the conversation header before replying; text such as “Alex is typing” is not an exact match. Use that display name as the identity key for reply history and link-sent tracking.
 
-**Why:** Incoming messages and banners can make an earlier snapshot stale; the user requires the header tap to follow the clear check immediately and replaced the profile chevron with Android Back.
+**Why:** The user removed the profile-name tap because the banner guard repeatedly failed. The selected row’s name, verified against the exact conversation-header name, is sufficient and avoids confusing typing-banner text with the recipient.
 
-**How to apply:** Apply the banner check only to the profile header-name tap; do not use the profile dismiss chevron. For return navigation, use one Android Back and verify the thread before reading history or drafting.
+**How to apply:** Confirm the selected unread row’s exact display name in the top conversation area and require the chat/message surface. If it is absent or differs, do not reply to that contact; never infer identity from a banner or profile lookup.
 
 **Snapchat panel navigation:** Close the Add Friends panel with one Android Back press after Add Friends or Accept Friends finishes. Do not tap the down-chevron or run a banner-clear check for this navigation.
 

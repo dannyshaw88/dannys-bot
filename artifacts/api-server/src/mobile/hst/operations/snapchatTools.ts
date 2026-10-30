@@ -407,6 +407,17 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
+function conversationHeaderMatches(nodes: UiNode[], displayName: string): boolean {
+  const expected = normalizedText(displayName);
+  // Require the exact contact display name in the header area. Typing banners
+  // such as "Alex is typing…" are not a valid match for the contact name.
+  return nodes.some(node =>
+    node.bounds[1] < 400 &&
+    !/edittext/i.test(node.className) &&
+    normalizedText(node.text) === expected,
+  );
+}
+
 async function pressAndroidBack(context: Context, count: number, action: string): Promise<boolean> {
   for (let press = 0; press < count; press++) {
     if (context.isAborted()) return false;
@@ -419,90 +430,6 @@ async function pressAndroidBack(context: Context, count: number, action: string)
     if (press + 1 < count) await context.sleep(200, "exact");
   }
   return true;
-}
-
-async function readVerifiedSnapchatUsername(
-  context: Context,
-  displayName: string,
-): Promise<string | null> {
-  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
-  const bannerWaitStartedAt = Date.now();
-  let bannerWaitLogged = false;
-  let profile: Awaited<ReturnType<typeof dump>> | null = null;
-  while (!context.isAborted()) {
-    // Use a fresh screen snapshot here: the chat can change after opening,
-    // including when an incoming message or banner appears.
-    const thread = await dump(context.serial);
-    const nameNode = thread.nodes.find(node =>
-      node.clickable &&
-      node.bounds[1] < 400 &&
-      node.bounds[0] > 140 &&
-      normalizedText(node.text) === normalizedText(displayName),
-    );
-    if (!nameNode) {
-      context.onLog(`Reply to Unread Chats: username lookup for ${displayName} stopped before tapping; no clickable matching header name was found in the fresh chat snapshot.`);
-      return null;
-    }
-
-    const occludingBanner = findOccludingBanner(thread.nodes, nameNode, screenWidth, screenHeight);
-    if (occludingBanner) {
-      if (!bannerWaitLogged) {
-        context.onLog(`Reply to Unread Chats: banner is covering ${displayName}'s header name; rechecking until the tap is clear.`);
-        bannerWaitLogged = true;
-      }
-      if (Date.now() - bannerWaitStartedAt >= 30_000) {
-        context.onLog(`Reply to Unread Chats: stopped username lookup for ${displayName}; the header name stayed covered for 30 seconds.`);
-        return null;
-      }
-      await context.sleep(BANNER_RECHECK_MS, "exact");
-      continue;
-    }
-
-    const clearAt = Date.now();
-    const namePoint = center(nameNode);
-    context.onLog(`Reply to Unread Chats: banner clear for ${displayName}; tapping the fresh header-name target at (${namePoint.x},${namePoint.y}) immediately.`);
-    if (!await tapNode(context, nameNode, `open ${displayName}'s name to verify username`, 0)) {
-      context.onLog(`Reply to Unread Chats: username lookup tap for ${displayName} did not complete; aborted=${context.isAborted()}.`);
-      return null;
-    }
-    context.onLog(`Reply to Unread Chats: username tap dispatched ${Date.now() - clearAt}ms after the clear check; waiting for the profile to settle.`);
-    await context.sleep(700, "exact");
-    profile = await dump(context.serial);
-    break;
-  }
-  if (!profile) {
-    context.onLog(`Reply to Unread Chats: username lookup for ${displayName} ended before tapping; aborted=${context.isAborted()}.`);
-    return null;
-  }
-
-  const profileName = profile.nodes.find(node => shortResourceId(node) === "profile_identity_section_display_name");
-  const usernameNode = profile.nodes.find(node => shortResourceId(node) === "profile_identity_section_username");
-  const profileOpen = profile.nodes.some(node => shortResourceId(node) === "unified_profile_3d_bitmoji");
-  const verifiedUsername = usernameNode?.text.trim().replace(/^@/, "");
-  const profileNameMatches = Boolean(profileName && normalizedText(profileName.text) === normalizedText(displayName));
-  const usernameValid = Boolean(verifiedUsername && /^[a-z0-9._]{2,40}$/i.test(verifiedUsername));
-  if (!profileOpen || !profileNameMatches || !usernameValid) {
-    context.onLog(`Reply to Unread Chats: profile verification failed for ${displayName}; profileSurface=${profileOpen}, displayNameMatch=${profileNameMatches}, usernameNode=${Boolean(usernameNode)}, usernameValid=${usernameValid}.`);
-    return null;
-  }
-
-  context.onLog(`Reply to Unread Chats: verified ${displayName}'s profile identity; pressing Android Back once to return to the conversation.`);
-  if (!await pressAndroidBack(context, 1, "returning from the verified contact profile")) return null;
-  await context.sleep(200, "exact");
-  const returned = await dump(context.serial);
-  const returnedToThread = returned.nodes.some(node =>
-    node.bounds[1] < 400 && normalizedText(node.text) === normalizedText(displayName),
-  );
-  if (!returnedToThread) {
-    const hasComposer = returned.nodes.some(node =>
-      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-    );
-    const unreadVisible = Boolean(findUnreadTab(returned.nodes, (await android.getScreenSizeAsync(context.serial)).h));
-    context.onLog(`Reply to Unread Chats: profile Back did not restore ${displayName}'s conversation; headerMatch=false, composer=${hasComposer}, unreadTab=${unreadVisible}.`);
-    return null;
-  }
-  context.onLog(`Reply to Unread Chats: profile Back restored ${displayName}'s conversation; continuing username lookup.`);
-  return verifiedUsername.toLowerCase();
 }
 
 async function exitSnapchatConversation(context: Context): Promise<boolean> {
@@ -952,11 +879,7 @@ async function runReplyUnreadChats(context: Context) {
       list = snapRecovery.list;
       continue;
     }
-    const headerConfirmsPeer = openedThread.nodes.some(node =>
-      node.bounds[1] < 400 &&
-      !/edittext/i.test(node.className) &&
-      normalizedText(node.text) === identity,
-    );
+    const headerConfirmsPeer = conversationHeaderMatches(openedThread.nodes, row.displayName);
     if (!headerConfirmsPeer || !/\b(chat|message)\b/i.test(openedThread.xml)) {
       context.onLog("Reply to Unread Chats stopped: the opened conversation did not confirm the selected contact.");
       await exitSnapchatConversation(context).catch(() => false);
@@ -968,19 +891,9 @@ async function runReplyUnreadChats(context: Context) {
       continue;
     }
     if (openedNotice === "exit-failed") break;
-    const username = await readVerifiedSnapchatUsername(context, row.displayName);
-    if (!username) {
-      context.onLog(`Reply to Unread Chats: username lookup returned no verified username for ${row.displayName}; attempting two-Back conversation recovery.`);
-      if (!await exitSnapchatConversation(context).catch(() => false)) {
-        context.onLog(`Reply to Unread Chats stopped: username lookup failed for ${row.displayName}, and two-Back recovery did not verify the Chat list.`);
-        break;
-      }
-      list = await dump(context.serial);
-      context.onLog(`Reply to Unread Chats: recovered after username lookup failure for ${row.displayName}; continuing with the refreshed Unread list.`);
-      continue;
-    }
-    if (hasSentSnapchatBoundlusLink(context.slotId, username)) {
-      context.onLog(`Reply to Unread Chats skipped for @${username}: the Boundlus link was already sent for this Snapchat slot.`);
+    const contactKey = row.displayName;
+    if (hasSentSnapchatBoundlusLink(context.slotId, contactKey)) {
+      context.onLog(`Reply to Unread Chats skipped for ${row.displayName}: the Boundlus link was already sent for this Snapchat slot.`);
       await exitSnapchatConversation(context).catch(() => false);
       list = await dump(context.serial);
       continue;
@@ -995,9 +908,7 @@ async function runReplyUnreadChats(context: Context) {
     const composer = thread.nodes.find(node =>
       /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
     );
-    const threadConfirmsPeer = thread.nodes.some(node =>
-      node.bounds[1] < 400 && normalizedText(node.text) === identity,
-    );
+    const threadConfirmsPeer = conversationHeaderMatches(thread.nodes, row.displayName);
     if (!threadConfirmsPeer || !composer || !/\b(chat|message)\b/i.test(thread.xml)) {
       context.onLog("Reply to Unread Chats stopped: the verified contact conversation or chat composer was not confirmed.");
       await exitSnapchatConversation(context).catch(() => false);
@@ -1011,15 +922,15 @@ async function runReplyUnreadChats(context: Context) {
     }
     let reply: string;
     try {
-      const history = getSnapchatReplyHistory(context.slotId, username);
-      reply = await generateContextualReply(replyGoal, username, transcript, history);
+      const history = getSnapchatReplyHistory(context.slotId, contactKey);
+      reply = await generateContextualReply(replyGoal, contactKey, transcript, history);
     } catch (error) {
       context.onLog(`Reply to Unread Chats skipped: ${error instanceof Error ? error.message : "GPT-6 Luna could not draft a reply."}`);
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
     if (!reply) {
-      context.onLog(`Reply to Unread Chats: GPT-6 Luna deferred the reply for ${username}.`);
+      context.onLog(`Reply to Unread Chats: GPT-6 Luna deferred the reply for ${row.displayName}.`);
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
@@ -1034,9 +945,7 @@ async function runReplyUnreadChats(context: Context) {
     const verifiedComposer = verifiedThread.nodes.find(node =>
       /edittext/i.test(node.className) && /message|chat|send/i.test(`${node.resourceId} ${node.desc}`),
     );
-    const verifiedPeer = verifiedThread.nodes.some(node =>
-      node.bounds[1] < 400 && normalizedText(node.text) === identity,
-    );
+    const verifiedPeer = conversationHeaderMatches(verifiedThread.nodes, row.displayName);
     if (!verifiedPeer || !verifiedComposer) {
       context.onLog("Reply to Unread Chats stopped: the conversation changed while ChatGPT was drafting.");
       await exitSnapchatConversation(context).catch(() => false);
@@ -1123,7 +1032,7 @@ async function runReplyUnreadChats(context: Context) {
       !beforeConversation.includes(normalizedText(enteredReply)) &&
       (!composerAfterSend?.text.trim() || normalizedText(composerAfterSend.text) === "send chat");
     if (!sentTextConfirmed) {
-      context.onLog(`Reply to Unread Chats: send could not be confirmed for ${username}; it was not added to the sent count.`);
+      context.onLog(`Reply to Unread Chats: send could not be confirmed for ${row.displayName}; it was not added to the sent count.`);
       await exitSnapchatConversation(context).catch(() => false);
       list = await dump(context.serial);
       continue;
@@ -1132,13 +1041,13 @@ async function runReplyUnreadChats(context: Context) {
       const record = appendSnapchatReplyHistory({
         slotId: context.slotId,
         serial: context.serial,
-        username,
+        username: contactKey,
         displayName: row.displayName,
         capturedMessages: transcript,
         sentText: enteredReply,
         sentAt: new Date().toISOString(),
       });
-      context.onLog(`Reply log saved for @${username}; confirmed sent reply #${record.replyNumber}.`);
+      context.onLog(`Reply log saved for ${row.displayName}; confirmed sent reply #${record.replyNumber}.`);
     } catch (error) {
       context.onLog(`Reply to Unread Chats warning: the message was sent, but the local log could not be saved (${error instanceof Error ? error.message : "write failed"}).`);
     }
