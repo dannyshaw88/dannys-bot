@@ -40,6 +40,7 @@ import { createInstagramAccountViaApi, submitSignupCode } from "../instagram/ins
 import { fetchInstagramCodeFromImap } from "../instagram/imapHelper";
 import { logger } from "../lib/logger";
 import { IgApiClient } from "instagram-private-api";
+import { generateSnapchatLunaReply } from "../mobile/snapchatLuna";
 import {
   getOrCreateSession,
   attachWS,
@@ -5990,6 +5991,61 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       return res.status(502).json({
         ok: false,
         error: timedOut ? "OpenAI request timed out." : "Could not connect to OpenAI.",
+      });
+    }
+  });
+
+  app.post("/api/snapchat/luna-test", async (req, res) => {
+    const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
+    const peer = (typeof req.body?.peer === "string" ? req.body.peer.trim().slice(0, 80) : "") || "Test user";
+    const messages = req.body?.messages;
+    if (!prompt || prompt.length > 12_000) {
+      return res.status(400).json({ error: "Enter a prompt of up to 12,000 characters." });
+    }
+    if (!Array.isArray(messages) || messages.length === 0 || messages.length > 50 ||
+        messages.some(message =>
+          !message ||
+          !["user", "assistant"].includes(message.role) ||
+          typeof message.content !== "string" ||
+          !message.content.trim() ||
+          message.content.length > 4_000,
+        )) {
+      return res.status(400).json({ error: "Conversation must contain up to 50 messages, each no longer than 4,000 characters." });
+    }
+    const settings = await storage.getGlobalSettings();
+    const apiKey = String((settings as any).openaiApiKey ?? "").trim() ||
+      (process.env.OPENAI_API_KEY ?? "").trim();
+    if (!apiKey) {
+      return res.status(400).json({ error: "Add an OpenAI API key in Settings → Security first." });
+    }
+    const transcript = messages.map((message: { role: string; content: string }) =>
+      `${message.role === "assistant" ? "Luna" : peer}: ${message.content}`,
+    );
+    const priorAssistantMessages = messages.filter((message: { role: string }) => message.role === "assistant");
+    const sentReplies = messages.flatMap((message: { role: string; content: string }, index: number) => {
+      if (message.role !== "assistant") return [];
+      const replyNumber = messages.slice(0, index + 1)
+        .filter((entry: { role: string }) => entry.role === "assistant").length;
+      return [{
+        replyNumber,
+        capturedMessages: messages.slice(0, index).map((entry: { role: string; content: string }) =>
+          `${entry.role === "assistant" ? "Luna" : peer}: ${entry.content}`,
+        ),
+        sentText: message.content,
+      }];
+    }).slice(-10);
+    try {
+      const reply = await generateSnapchatLunaReply(
+        apiKey,
+        prompt,
+        peer,
+        transcript,
+        { previousReplyCount: priorAssistantMessages.length, sentReplies },
+      );
+      return res.json({ reply, skipped: !reply });
+    } catch (error) {
+      return res.status(502).json({
+        error: error instanceof Error ? error.message : "Luna could not generate a reply.",
       });
     }
   });
