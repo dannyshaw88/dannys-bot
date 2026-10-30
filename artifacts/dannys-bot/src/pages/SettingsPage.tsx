@@ -12,7 +12,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, Activity, Globe } from "lucide-react";
+import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, Activity, Globe, MessageCircle } from "lucide-react";
+import { LunaTestPage } from "@/pages/LunaTestPage";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -32,6 +33,7 @@ const SETTINGS_TABS = [
   { label: "Scraping", icon: Database },
   { label: "Automation", icon: Timer },
   { label: "Security", icon: ShieldAlert },
+  { label: "Prompt Test", icon: MessageCircle },
   { label: "Data", icon: HardDrive },
 ] as const;
 
@@ -659,6 +661,8 @@ export function SettingsPage() {
 
       {settingsTab === "import reel" && <ImportReelTabContent />}
 
+      {settingsTab === "prompt test" && <LunaTestPage embedded />}
+
       {/* Keep this mounted while switching tabs so parsed account details survive
           tab navigation. Raw file contents are intentionally not persisted to
           browser storage because Jarvee files may contain credentials/cookies. */}
@@ -666,7 +670,7 @@ export function SettingsPage() {
         <JarveeBinaryViewerContent />
       </div>
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import", "import reel", "jarvee import"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import", "import reel", "jarvee import", "prompt test"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button

@@ -4,7 +4,7 @@ import { useSidebarSlot } from "@/contexts/SidebarSlotContext";
 import { useNavigationHistory } from "@/contexts/NavigationHistoryContext";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, FileSearch, MessageCircle } from "lucide-react";
+import { Loader2, FileSearch } from "lucide-react";
 
 function FilledDashboardIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -133,7 +133,6 @@ export function Sidebar() {
     { name: "Dashboard",       shortLabel: "DASHBOARD",      path: "/dashboard",    icon: FilledDashboardIcon   },
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon },
-    { name: "Luna Test",       shortLabel: "LUNA TEST",      path: "/luna-test",    icon: MessageCircle },
     { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon  },
     { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: HackerIcon },
   ];

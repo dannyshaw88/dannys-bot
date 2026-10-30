@@ -12,7 +12,7 @@ function readSavedPrompt(): string {
   try { return localStorage.getItem(PROMPT_STORAGE_KEY) ?? ""; } catch { return ""; }
 }
 
-export function LunaTestPage() {
+export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
   const [prompt, setPrompt] = useState(readSavedPrompt);
   const [peer, setPeer] = useState("Test user");
   const [messages, setMessages] = useState<TestMessage[]>([]);
@@ -74,14 +74,13 @@ export function LunaTestPage() {
     setNotice("");
   };
 
-  return (
-    <AppLayout>
+  const content = (
       <div className="space-y-5 pb-8">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <MessageCircle className="h-6 w-6 text-cyan-500" />
-              <h1 className="text-2xl font-bold tracking-tight">Luna test ground</h1>
+              <h1 className="text-2xl font-bold tracking-tight">Prompt Test</h1>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               A text-only Snapchat simulation using Luna’s real reply generator. It never opens a phone or sends a message.
@@ -98,7 +97,7 @@ export function LunaTestPage() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Sparkles className="h-4 w-4 text-cyan-500" />
-                Luna’s prompt
+                Test prompt
               </CardTitle>
               <p className="text-xs text-muted-foreground">
                 Paste or edit the prompt you want Luna to follow. It is remembered in this browser.
@@ -117,7 +116,7 @@ export function LunaTestPage() {
                 maxLength={12_000}
               />
               <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Uses the OpenAI key in Settings → Security.</span>
+                <span>Requires a ChatGPT API key saved in Settings → Security.</span>
                 <span>{prompt.length.toLocaleString()} / 12,000</span>
               </div>
               <div className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-950">
@@ -223,6 +222,6 @@ export function LunaTestPage() {
           </Card>
         </div>
       </div>
-    </AppLayout>
   );
+  return embedded ? content : <AppLayout>{content}</AppLayout>;
 }
