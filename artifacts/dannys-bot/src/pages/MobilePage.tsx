@@ -7052,16 +7052,8 @@ export function AutomationSettingsPanel({
                     />
                   </div>
                 )}
-                </div>
-              </div>
-              {key === "massSnap" && (
-                <p className="text-xs text-muted-foreground">
-                  Configuration only; Snapchat recipient selection and sending are not connected yet.
-                </p>
-              )}
-              {key === "uploadSnap" && (
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
+                {key === "uploadSnap" && (
+                  <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
                     <Button
                       type="button"
                       variant="outline"
@@ -7080,29 +7072,34 @@ export function AutomationSettingsPanel({
                       }}
                     >
                       <FolderOpen className="mr-2 h-4 w-4" />
-                      {uploadSnap.directoryPath ? "Assigned Directory" : "Assign Directory"}
+                      Directory
                     </Button>
-                    {uploadSnap.directoryPath ? (
-                      <span className="min-w-0 truncate text-xs text-muted-foreground" title={uploadSnap.directoryPath}>
+                    <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={uploadSnap.selectAtRandom}
+                        onChange={event => updateSnapchatTool("uploadSnap", { selectAtRandom: event.target.checked })}
+                        disabled={loading || !tool.enabled}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      Select at random
+                    </label>
+                    {uploadSnap.directoryPath && (
+                      <span
+                        className="max-w-40 truncate text-xs text-muted-foreground"
+                        title={uploadSnap.directoryPath}
+                      >
                         {uploadSnap.directoryPath}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        No media directory assigned
                       </span>
                     )}
                   </div>
-                  <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={uploadSnap.selectAtRandom}
-                      onChange={event => updateSnapchatTool("uploadSnap", { selectAtRandom: event.target.checked })}
-                      disabled={loading || !tool.enabled}
-                      className="h-4 w-4 accent-primary"
-                    />
-                    Select at random
-                  </label>
+                )}
                 </div>
+              </div>
+              {key === "massSnap" && (
+                <p className="text-xs text-muted-foreground">
+                  Configuration only; Snapchat recipient selection and sending are not connected yet.
+                </p>
               )}
               {key === "replyUnreadChats" && (
                 <div className="space-y-1">

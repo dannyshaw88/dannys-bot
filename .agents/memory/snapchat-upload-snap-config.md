@@ -7,4 +7,4 @@ The Upload a Snap settings in Snapchat Step 2 are configuration only until the u
 
 **Why:** The user explicitly requested only the settings UI for now and said the upload flow would be implemented later.
 
-**How to apply:** Do not add dispatch or media-upload behavior while working on the settings. Use the existing Windows Electron directory picker and slot-scoped automation settings autosave for the folder path.
+**How to apply:** Do not add dispatch or media-upload behavior while working on the settings. Use the existing Windows Electron directory picker and slot-scoped automation settings autosave for the folder path. When the upload flow is later implemented, skip the tool entirely if its directory path is empty; do not show an empty-directory notice.
