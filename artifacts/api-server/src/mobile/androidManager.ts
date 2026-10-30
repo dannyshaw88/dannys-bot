@@ -15256,12 +15256,12 @@ export async function typeViaSavedCalibrationMap(
   text: string,
   typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
-  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean },
+  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean },
 ): Promise<{ ok: boolean; available: boolean; missing: string[] }> {
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
   const uniqueChars = [...new Set([...text])].join("");
-  logger.info({
+  if (!options?.compactLogs) logger.info({
     serial,
     map: map ? "loaded" : "missing",
     mapEntries: map ? Object.keys(map).length : 0,
@@ -15275,13 +15275,13 @@ export async function typeViaSavedCalibrationMap(
     errorPercentMax: typingProfile?.errorPercentMax ?? null,
     textLength: text.length,
   }, "[cal-keyboard] execution profile resolved");
-  onLog?.(
+  if (!options?.compactLogs) onLog?.(
     `[cal-keyboard] serial=${serial} map=${map ? "loaded" : "missing"} ` +
     `entries=${map ? Object.keys(map).length : 0} typingProfile=${typingProfile ? "loaded" : "missing"} ` +
     `textLength=${text.length} uniqueChars=${JSON.stringify(uniqueChars)} path=${mapPath}`,
   );
   if (!map) {
-    onLog?.("[cal-keyboard] no saved calibration map");
+    if (!options?.compactLogs) onLog?.("[cal-keyboard] no saved calibration map");
     return { ok: false, available: false, missing: [...text] };
   }
 
@@ -15323,7 +15323,7 @@ export async function typeViaSavedCalibrationMap(
   if (needsMoreSymbols) required.add("moreSymbols");
   const missing = [...required].filter(key => !hasPoint(key));
   if (missing.length) {
-    onLog?.(
+    if (!options?.compactLogs) onLog?.(
       `[cal-keyboard] calibration preflight missing: ${missing.join(", ")} ` +
       `(serial=${serial}, mappedKeys=${Object.keys(map).length}` +
       `${options?.skipMissingKeys ? "; unmapped characters will be skipped" : ""})`,
@@ -15334,6 +15334,7 @@ export async function typeViaSavedCalibrationMap(
   const result = await typeViaCalibrationMap(serial, text, map, onLog, typingProfile, {
     disableHumanErrors: options?.disableHumanErrors,
     debugLabel: options?.debugLabel,
+    compactLogs: options?.compactLogs,
   });
   return { ...result, available: true };
 }
@@ -15885,7 +15886,7 @@ export async function typeViaCalibrationMap(
   map: KeyCalibrationMap,
   onLog?: (msg: string) => void,
   typingProfile: TypingSpeedProfile,
-  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string },
+  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean },
 ): Promise<{ ok: boolean; missing: string[] }> {
   if (!typingProfile ||
       !Number.isFinite(typingProfile.minMs) ||
@@ -15908,8 +15909,8 @@ export async function typeViaCalibrationMap(
   let layer: "letters" | "symbols" | "moreSymbols" = "letters";
   _calKeyboardLayer.set(serial, layer);
   const display = getScreenSize(serial);
-  const activeIme = await getActiveInputMethodPackage(serial).catch(() => "");
-  onLog?.(
+  const activeIme = options?.compactLogs ? "" : await getActiveInputMethodPackage(serial).catch(() => "");
+  if (!options?.compactLogs) onLog?.(
     `[cal-keyboard] typing-session start serial=${serial} display=${display.w}x${display.h} ` +
     `ime=${activeIme || "unknown"} initialLayer=${layer} textLength=${text.length} ` +
     `typingGapMs=${typingProfile.minMs}-${typingProfile.maxMs} ` +
@@ -15938,7 +15939,7 @@ export async function typeViaCalibrationMap(
     const dwellMax = allowDestructive && _dwellOverrideMs != null
       ? dwellMin
       : Math.max(dwellMin, typingProfile.maxMs);
-    if (allowDestructive && options?.debugLabel) {
+    if (!options?.compactLogs && allowDestructive && options?.debugLabel) {
       onLog?.(
         `[${options.debugLabel}] destructive-key permitted key=${JSON.stringify(description)} ` +
         `dwell=${dwellMin}ms layer=${layer} configuredTyping=${typingProfile.minMs}-${typingProfile.maxMs}ms`,
@@ -15952,17 +15953,17 @@ export async function typeViaCalibrationMap(
       .map(alias => map[alias])
       .find(candidate => candidate && Number.isFinite(candidate.x) && Number.isFinite(candidate.y));
     if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
-      onLog?.(`[cal-keyboard] '${description}' is not in calibration map`);
+      if (!options?.compactLogs) onLog?.(`[cal-keyboard] '${description}' is not in calibration map`);
       return false;
     }
-    if (options?.debugLabel) {
+    if (!options?.compactLogs && options?.debugLabel) {
       onLog?.(
         `[${options.debugLabel}] tap-plan key=${JSON.stringify(description)} ` +
         `coordinate=(${pos.x},${pos.y}) layer=${layer} display=${display.w}x${display.h}`,
       );
     }
     const dispatched = applySmallTapOffset(pos.x, pos.y);
-    logger.info({
+    if (!options?.compactLogs) logger.info({
       serial,
       key: description,
       requestedX: Math.round(pos.x),
@@ -15988,16 +15989,18 @@ export async function typeViaCalibrationMap(
       onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
       return false;
     }
-    onLog?.(`[cal-keyboard] tapped ${description} at (${dispatched.x},${dispatched.y}) requested=(${pos.x},${pos.y}) elapsed=${Date.now() - tapStartedAt}ms`);
-    if (options?.debugLabel && /(?:shift|enter|backspace|delete)/i.test(description)) {
+    if (!options?.compactLogs) {
+      onLog?.(`[cal-keyboard] tapped ${description} at (${dispatched.x},${dispatched.y}) requested=(${pos.x},${pos.y}) elapsed=${Date.now() - tapStartedAt}ms`);
+    }
+    if (!options?.compactLogs && options?.debugLabel && /(?:shift|enter|backspace|delete)/i.test(description)) {
       onLog?.(`[${options.debugLabel}] key-event=${description} coordinate=(${pos.x},${pos.y})`);
     }
     const pause = dwellMin + Math.round(Math.random() * (dwellMax - dwellMin));
-    onLog?.(`[cal-keyboard] pacing after ${description}: ${pause}ms (range=${dwellMin}-${dwellMax}ms)`);
+    if (!options?.compactLogs) onLog?.(`[cal-keyboard] pacing after ${description}: ${pause}ms (range=${dwellMin}-${dwellMax}ms)`);
     const pacingStartedAt = Date.now();
     await _sleep(pause);
     const pacingElapsedMs = Date.now() - pacingStartedAt;
-    logger.info({
+    if (!options?.compactLogs) logger.info({
       serial,
       key: description,
       scheduledMs: pause,
@@ -16006,12 +16009,12 @@ export async function typeViaCalibrationMap(
       configuredMaxMs: dwellMax,
       completed: true,
     }, "[cal-keyboard] pacing completed");
-    onLog?.(`[cal-keyboard] pacing completed after ${description}: elapsed=${pacingElapsedMs}ms scheduled=${pause}ms`);
+    if (!options?.compactLogs) onLog?.(`[cal-keyboard] pacing completed after ${description}: elapsed=${pacingElapsedMs}ms scheduled=${pause}ms`);
     return true;
   };
   const maybeHumanError = async () => {
     if (options?.disableHumanErrors) {
-      if (options.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction skipped (disabled)`);
+      if (!options.compactLogs && options.debugLabel) onLog?.(`[${options.debugLabel}] human-error correction skipped (disabled)`);
       return;
     }
     if (!typingProfile || !map.backspace) {
@@ -16145,7 +16148,7 @@ export async function typeViaCalibrationMap(
   let charIndex = 0;
   for (const ch of text) {
     const debugChar = ch === "\n" ? "\\n" : ch === " " ? "<space>" : ch;
-    if (options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} begin=${debugChar}`);
+    if (!options?.compactLogs && options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} begin=${debugChar}`);
     await maybeHumanError();
     const label = ch === " " ? "space" : ch === "\n" ? "enter" : ch.toLowerCase();
     if (ch === " " || ch === "\n") {
@@ -16171,7 +16174,7 @@ export async function typeViaCalibrationMap(
         if (ch === " ") {
           await waitWordHesitation();
         }
-      if (options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} end=${debugChar}`);
+      if (!options?.compactLogs && options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} end=${debugChar}`);
       charIndex++;
       continue;
     }
@@ -16187,7 +16190,7 @@ export async function typeViaCalibrationMap(
         }
       }
       if (!await tapMapped(map[label] ? label : ch, ch)) missing.push(ch);
-      if (options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} end=${debugChar}`);
+      if (!options?.compactLogs && options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} end=${debugChar}`);
       charIndex++;
       continue;
     }
@@ -16208,7 +16211,7 @@ export async function typeViaCalibrationMap(
       missing.push(ch);
     }
     if (ch === "." || ch === "_") await waitWordHesitation();
-    if (options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} end=${debugChar}`);
+    if (!options?.compactLogs && options?.debugLabel) onLog?.(`[${options.debugLabel}] char ${charIndex + 1}/${text.length} end=${debugChar}`);
     charIndex++;
   }
 
@@ -16217,7 +16220,7 @@ export async function typeViaCalibrationMap(
   // inheriting the symbols screen and typing into the wrong key positions.
   if (layer !== "letters") await switchLayer("letters");
   _calKeyboardLayer.set(serial, layer);
-  onLog?.(
+  if (!options?.compactLogs) onLog?.(
     `[cal-keyboard] typing-session end serial=${serial} display=${display.w}x${display.h} ` +
     `ime=${activeIme || "unknown"} finalLayer=${layer} ok=${missing.length === 0} ` +
     `missing=${missing.join(",") || "none"}`,

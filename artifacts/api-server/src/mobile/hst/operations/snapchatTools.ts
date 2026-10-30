@@ -407,8 +407,12 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
-async function readVerifiedSnapchatUsername(context: Context, displayName: string): Promise<string | null> {
-  const thread = await dump(context.serial);
+async function readVerifiedSnapchatUsername(
+  context: Context,
+  displayName: string,
+  knownThread?: Awaited<ReturnType<typeof dump>>,
+): Promise<string | null> {
+  const thread = knownThread ?? await dump(context.serial);
   const nameNode = thread.nodes.find(node =>
     node.clickable &&
     node.bounds[1] < 400 &&
@@ -874,6 +878,7 @@ async function runReplyUnreadChats(context: Context) {
   const { enabled, replyGoal } = context.tools.replyUnreadChats;
   const requested = randomCount(context.tools.replyUnreadChats.min, context.tools.replyUnreadChats.max);
   if (!enabled || requested === 0) return;
+  context.onLog(`Reply to Unread Chats: target ${requested} unread contact(s), one reply per contact.`);
   if (!context.slotId) {
     context.onLog("Reply to Unread Chats stopped: this Snapchat slot has no stable saved ID for private history.");
     return;
@@ -935,7 +940,7 @@ async function runReplyUnreadChats(context: Context) {
       continue;
     }
     if (openedNotice === "exit-failed") break;
-    const username = await readVerifiedSnapchatUsername(context, row.displayName);
+    const username = await readVerifiedSnapchatUsername(context, row.displayName, openedThread);
     if (!username) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
@@ -984,7 +989,7 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    context.onLog(`GPT-6 Luna drafted a reply (${reply.length} characters; not sent yet): ${JSON.stringify(reply)}`);
+    context.onLog(`Luna draft (not sent yet): ${reply.replace(/[\r\n]+/g, " ")}`);
     const verifiedThread = await dump(context.serial);
     const lateNotice = await handleNotAddedFriendNotice(context, row.displayName, verifiedThread);
     if (lateNotice === "exited") {
@@ -1011,7 +1016,7 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    context.onLog(`Reply to Unread Chats: typing ${reply.length} characters with this device's calibrated keyboard.`);
+    context.onLog("Reply to Unread Chats: typing Luna's draft with calibrated keys.");
     const { x, y } = center(verifiedComposer);
     await android.tap(context.serial, x, y, "bot", "Snapchat: focus confirmed unread-chat composer", "automation");
     try {
@@ -1020,7 +1025,7 @@ async function runReplyUnreadChats(context: Context) {
         reply,
         context.effectiveTypingProfile(context.serial),
         message => context.onLog(`Reply to Unread Chats: ${message}`),
-        { debugLabel: "Snapchat reply", disableHumanErrors: true, skipMissingKeys: true },
+        { debugLabel: "Snapchat reply", disableHumanErrors: true, skipMissingKeys: true, compactLogs: true },
       );
       if (!typed.available) {
         context.onLog(
@@ -1055,7 +1060,7 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    context.onLog(`Reply to Unread Chats: confirmed ${enteredReply.length} characters in the composer; pressing Enter to send.`);
+    context.onLog("Reply to Unread Chats: draft verified in the composer; sending.");
     try {
       await android.keyevent(context.serial, 66); // Android KEYCODE_ENTER; no per-device key mapping required.
     } catch {

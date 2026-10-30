@@ -7308,7 +7308,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             });
           } finally {
             if (!isCycleAborted(serial)) {
-              tLog("▶ Step 3: Opening Snapchat in the floating-window view and dismissing it…");
               const devicePrefsForDismiss = devicePrefsForSnapchat;
               const effectiveDismiss = dismissDirection !== "auto"
                 ? dismissDirection
@@ -7319,26 +7318,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               const resolvedDismissDir: "left" | "up" = effectiveDismiss !== "auto"
                 ? effectiveDismiss
                 : android.getModelDismissDirection(rawModel);
-              tLog(`  dismiss direction: ${resolvedDismissDir} (slot: ${dismissDirection}, device-pref: ${devicePrefsForDismiss.dismissDirection ?? "none"}, model: "${rawModel}")`);
               await android.closeInstagramViaRecents(
                 serial,
                 resolvedDismissDir,
-                message => tLog(`  ${message}`),
+                message => {
+                  if (/(?:failed|error|unable|not found|could not|not confirmed)/i.test(message)) {
+                    tLog(`Snapchat cleanup issue: ${message}`);
+                  }
+                },
                 devicePrefsForDismiss.swipeGesture,
                 "com.snapchat.android",
                 "Snapchat",
               );
               steps.push("closed-snapchat");
-              tLog("  ✓ Snapchat closed");
               await android.keyevent(serial, 3 /* KEYCODE_HOME */);
               await new Promise(resolve => setTimeout(resolve, 600));
               automationCurrentTool.set(serial, "FINALISING");
-              tLog("▶ Finalising — locking the phone…");
               await android.swipeUpFromBottom(serial);
               steps.push("swipe-up");
               logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_SLEEP(223)" }, "[mobile-screen-state] intentional command");
               await android.sleepScreen(serial);
-              await logScreenState("after-intentional-sleep");
               steps.push("power-off");
             }
           }
