@@ -424,28 +424,69 @@ async function pressAndroidBack(context: Context, count: number, action: string)
 async function readVerifiedSnapchatUsername(
   context: Context,
   displayName: string,
-  knownThread?: Awaited<ReturnType<typeof dump>>,
 ): Promise<string | null> {
-  const thread = knownThread ?? await dump(context.serial);
-  const nameNode = thread.nodes.find(node =>
-    node.clickable &&
-    node.bounds[1] < 400 &&
-    node.bounds[0] > 140 &&
-    normalizedText(node.text) === normalizedText(displayName),
-  );
-  if (!nameNode || !await tapNode(context, nameNode, `open ${displayName}'s name to verify username`)) return null;
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+  const bannerWaitStartedAt = Date.now();
+  let bannerWaitLogged = false;
+  let profile: Awaited<ReturnType<typeof dump>> | null = null;
+  while (!context.isAborted()) {
+    // Use a fresh screen snapshot here: the chat can change after opening,
+    // including when an incoming message or banner appears.
+    const thread = await dump(context.serial);
+    const nameNode = thread.nodes.find(node =>
+      node.clickable &&
+      node.bounds[1] < 400 &&
+      node.bounds[0] > 140 &&
+      normalizedText(node.text) === normalizedText(displayName),
+    );
+    if (!nameNode) {
+      context.onLog(`Reply to Unread Chats: username lookup for ${displayName} stopped before tapping; no clickable matching header name was found in the fresh chat snapshot.`);
+      return null;
+    }
 
-  const profile = await dump(context.serial);
+    const occludingBanner = findOccludingBanner(thread.nodes, nameNode, screenWidth, screenHeight);
+    if (occludingBanner) {
+      if (!bannerWaitLogged) {
+        context.onLog(`Reply to Unread Chats: banner is covering ${displayName}'s header name; rechecking until the tap is clear.`);
+        bannerWaitLogged = true;
+      }
+      if (Date.now() - bannerWaitStartedAt >= 30_000) {
+        context.onLog(`Reply to Unread Chats: stopped username lookup for ${displayName}; the header name stayed covered for 30 seconds.`);
+        return null;
+      }
+      await context.sleep(BANNER_RECHECK_MS, "exact");
+      continue;
+    }
+
+    const clearAt = Date.now();
+    const namePoint = center(nameNode);
+    context.onLog(`Reply to Unread Chats: banner clear for ${displayName}; tapping the fresh header-name target at (${namePoint.x},${namePoint.y}) immediately.`);
+    if (!await tapNode(context, nameNode, `open ${displayName}'s name to verify username`, 0)) {
+      context.onLog(`Reply to Unread Chats: username lookup tap for ${displayName} did not complete; aborted=${context.isAborted()}.`);
+      return null;
+    }
+    context.onLog(`Reply to Unread Chats: username tap dispatched ${Date.now() - clearAt}ms after the clear check; waiting for the profile to settle.`);
+    await context.sleep(700, "exact");
+    profile = await dump(context.serial);
+    break;
+  }
+  if (!profile) {
+    context.onLog(`Reply to Unread Chats: username lookup for ${displayName} ended before tapping; aborted=${context.isAborted()}.`);
+    return null;
+  }
+
   const profileName = profile.nodes.find(node => shortResourceId(node) === "profile_identity_section_display_name");
   const usernameNode = profile.nodes.find(node => shortResourceId(node) === "profile_identity_section_username");
   const profileOpen = profile.nodes.some(node => shortResourceId(node) === "unified_profile_3d_bitmoji");
   const verifiedUsername = usernameNode?.text.trim().replace(/^@/, "");
-  if (!profileOpen || !profileName || normalizedText(profileName.text) !== normalizedText(displayName) ||
-      !verifiedUsername || !/^[a-z0-9._]{2,40}$/i.test(verifiedUsername)) {
-    context.onLog(`Reply to Unread Chats: skipping ${displayName}; Snapchat profile identity could not be verified.`);
+  const profileNameMatches = Boolean(profileName && normalizedText(profileName.text) === normalizedText(displayName));
+  const usernameValid = Boolean(verifiedUsername && /^[a-z0-9._]{2,40}$/i.test(verifiedUsername));
+  if (!profileOpen || !profileNameMatches || !usernameValid) {
+    context.onLog(`Reply to Unread Chats: profile verification failed for ${displayName}; profileSurface=${profileOpen}, displayNameMatch=${profileNameMatches}, usernameNode=${Boolean(usernameNode)}, usernameValid=${usernameValid}.`);
     return null;
   }
 
+  context.onLog(`Reply to Unread Chats: verified ${displayName}'s profile identity; pressing Android Back once to return to the conversation.`);
   if (!await pressAndroidBack(context, 1, "returning from the verified contact profile")) return null;
   await context.sleep(200, "exact");
   const returned = await dump(context.serial);
@@ -453,17 +494,31 @@ async function readVerifiedSnapchatUsername(
     node.bounds[1] < 400 && normalizedText(node.text) === normalizedText(displayName),
   );
   if (!returnedToThread) {
-    context.onLog(`Reply to Unread Chats: skipping ${displayName}; Snapchat did not return to the chat after profile lookup.`);
+    const hasComposer = returned.nodes.some(node =>
+      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+    );
+    const unreadVisible = Boolean(findUnreadTab(returned.nodes, (await android.getScreenSizeAsync(context.serial)).h));
+    context.onLog(`Reply to Unread Chats: profile Back did not restore ${displayName}'s conversation; headerMatch=false, composer=${hasComposer}, unreadTab=${unreadVisible}.`);
     return null;
   }
+  context.onLog(`Reply to Unread Chats: profile Back restored ${displayName}'s conversation; continuing username lookup.`);
   return verifiedUsername.toLowerCase();
 }
 
 async function exitSnapchatConversation(context: Context): Promise<boolean> {
-  if (!await pressAndroidBack(context, 2, "exiting the conversation")) return false;
+  context.onLog("Reply to Unread Chats: exiting the current conversation with two Android Back presses.");
+  if (!await pressAndroidBack(context, 2, "exiting the conversation")) {
+    context.onLog(`Reply to Unread Chats: conversation exit Back presses did not complete; aborted=${context.isAborted()}.`);
+    return false;
+  }
   const after = await dump(context.serial);
-  return Boolean(exactClickable(after.nodes, ["Chat"])) &&
-    !after.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
+  const chatTabVisible = Boolean(exactClickable(after.nodes, ["Chat"]));
+  const composerVisible = after.nodes.some(node =>
+    /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+  );
+  const exited = chatTabVisible && !composerVisible;
+  context.onLog(`Reply to Unread Chats: conversation exit verification chatTab=${chatTabVisible}, composer=${composerVisible}, success=${exited}.`);
+  return exited;
 }
 
 async function recoverFromUnreadSnapViewer(
@@ -535,7 +590,7 @@ async function handleNotAddedFriendNotice(
   state: Awaited<ReturnType<typeof dump>>,
 ): Promise<"not-present" | "exited" | "exit-failed"> {
   if (!hasNotAddedFriendNotice(state)) return "not-present";
-  context.onLog(`Reply to Unread Chats: Snapchat says ${displayName} has not added this account; skipping the reply and exiting with the top-left chevron.`);
+  context.onLog(`Reply to Unread Chats: Snapchat says ${displayName} has not added this account; skipping the reply and exiting with two Android Back presses.`);
   const exited = await exitSnapchatConversation(context).catch(() => false);
   if (!exited) {
     context.onLog(`Reply to Unread Chats stopped: could not exit ${displayName}'s conversation after Snapchat showed the friend notice.`);
@@ -913,13 +968,15 @@ async function runReplyUnreadChats(context: Context) {
       continue;
     }
     if (openedNotice === "exit-failed") break;
-    const username = await readVerifiedSnapchatUsername(context, row.displayName, openedThread);
+    const username = await readVerifiedSnapchatUsername(context, row.displayName);
     if (!username) {
+      context.onLog(`Reply to Unread Chats: username lookup returned no verified username for ${row.displayName}; attempting two-Back conversation recovery.`);
       if (!await exitSnapchatConversation(context).catch(() => false)) {
-        context.onLog("Reply to Unread Chats stopped: could not recover to the chat list after profile lookup.");
+        context.onLog(`Reply to Unread Chats stopped: username lookup failed for ${row.displayName}, and two-Back recovery did not verify the Chat list.`);
         break;
       }
       list = await dump(context.serial);
+      context.onLog(`Reply to Unread Chats: recovered after username lookup failure for ${row.displayName}; continuing with the refreshed Unread list.`);
       continue;
     }
     if (hasSentSnapchatBoundlusLink(context.slotId, username)) {
