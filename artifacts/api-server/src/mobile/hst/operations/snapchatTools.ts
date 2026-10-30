@@ -453,6 +453,29 @@ async function exitSnapchatConversation(context: Context): Promise<boolean> {
     !after.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
 }
 
+function hasNotAddedFriendNotice(state: Awaited<ReturnType<typeof dump>>): boolean {
+  const visibleText = state.nodes
+    .map(node => `${node.text} ${node.desc}`)
+    .join(" ")
+    .replace(/\s+/g, " ");
+  return /\bhas not added you as a friend\b/i.test(visibleText);
+}
+
+async function handleNotAddedFriendNotice(
+  context: Context,
+  displayName: string,
+  state: Awaited<ReturnType<typeof dump>>,
+): Promise<"not-present" | "exited" | "exit-failed"> {
+  if (!hasNotAddedFriendNotice(state)) return "not-present";
+  context.onLog(`Reply to Unread Chats: Snapchat says ${displayName} has not added this account; skipping the reply and exiting with the top-left chevron.`);
+  const exited = await exitSnapchatConversation(context).catch(() => false);
+  if (!exited) {
+    context.onLog(`Reply to Unread Chats stopped: could not exit ${displayName}'s conversation after Snapchat showed the friend notice.`);
+    return "exit-failed";
+  }
+  return "exited";
+}
+
 function unreadChatRows(nodes: UiNode[]) {
   return nodes.flatMap(marker => {
     if (!/ff_item/i.test(shortResourceId(marker)) ||
@@ -836,6 +859,12 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
+    const openedNotice = await handleNotAddedFriendNotice(context, row.displayName, openedThread);
+    if (openedNotice === "exited") {
+      list = await dump(context.serial);
+      continue;
+    }
+    if (openedNotice === "exit-failed") break;
     const username = await readVerifiedSnapchatUsername(context, row.displayName);
     if (!username) {
       await exitSnapchatConversation(context).catch(() => false);
@@ -848,6 +877,12 @@ async function runReplyUnreadChats(context: Context) {
       continue;
     }
     const thread = await dump(context.serial);
+    const threadNotice = await handleNotAddedFriendNotice(context, row.displayName, thread);
+    if (threadNotice === "exited") {
+      list = await dump(context.serial);
+      continue;
+    }
+    if (threadNotice === "exit-failed") break;
     const composer = thread.nodes.find(node =>
       /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
     );
@@ -881,6 +916,12 @@ async function runReplyUnreadChats(context: Context) {
     }
     context.onLog(`GPT-6 Luna drafted a reply (${reply.length} characters); it has not been sent yet.`);
     const verifiedThread = await dump(context.serial);
+    const lateNotice = await handleNotAddedFriendNotice(context, row.displayName, verifiedThread);
+    if (lateNotice === "exited") {
+      list = await dump(context.serial);
+      continue;
+    }
+    if (lateNotice === "exit-failed") break;
     const verifiedComposer = verifiedThread.nodes.find(node =>
       /edittext/i.test(node.className) && /message|chat|send/i.test(`${node.resourceId} ${node.desc}`),
     );
