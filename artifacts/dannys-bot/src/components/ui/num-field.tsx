@@ -35,6 +35,7 @@ export function NumField({ value, min, max, className, onChange }: NumFieldProps
         width: "3ch",
         minWidth: "3ch",
         maxWidth: "3ch",
+        boxSizing: "content-box",
         paddingInline: 0,
         appearance: "textfield",
       }}
