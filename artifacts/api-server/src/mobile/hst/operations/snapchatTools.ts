@@ -36,6 +36,7 @@ type UiNode = {
   desc: string;
   resourceId: string;
   className: string;
+  packageName: string;
   clickable: boolean;
   focusable: boolean;
   focused: boolean;
@@ -90,6 +91,7 @@ function parseNodes(xml: string): UiNode[] {
       desc: get("content-desc"),
       resourceId: get("resource-id"),
       className: get("class"),
+      packageName: get("package"),
       clickable: get("clickable") === "true",
       focusable: get("focusable") === "true",
       focused: get("focused") === "true",
@@ -204,6 +206,32 @@ function findOccludingBanner(nodes: UiNode[], target: UiNode, screenWidth: numbe
   });
 }
 
+function findAddFriendsBanner(nodes: UiNode[], target: UiNode, screenWidth: number, screenHeight: number) {
+  const point = center(target);
+  const targetWidth = target.bounds[2] - target.bounds[0];
+  const targetHeight = target.bounds[3] - target.bounds[1];
+  const targetArea = targetWidth * targetHeight;
+  const screenArea = screenWidth * screenHeight;
+  return nodes.find(node => {
+    if (node === target) return false;
+    const [left, top, right, bottom] = node.bounds;
+    const width = right - left;
+    const height = bottom - top;
+    const area = width * height;
+    const coversTapPoint = point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
+    if (!coversTapPoint || area < targetArea * 2.5 || area >= screenArea * 0.5) return false;
+
+    const identity = `${node.packageName} ${node.className} ${node.resourceId}`;
+    const explicitBanner = /banner|snackbar|toast|heads.?up|notification(?:stack|row|panel|popup|overlay)/i.test(identity);
+    const topWideOverlay = top <= screenHeight * 0.25 &&
+      bottom <= screenHeight * 0.4 &&
+      width >= screenWidth * 0.45 &&
+      height >= Math.max(targetHeight * 1.4, 36);
+    const systemNotification = /com\.android\.systemui/i.test(node.packageName) && topWideOverlay;
+    return explicitBanner || systemNotification;
+  });
+}
+
 type TabActivationResult = "activated" | "covered" | "surface-changed" | "not-focusable" | "focus-not-reached";
 
 async function activateFocusedNodeWithTab(
@@ -278,8 +306,8 @@ async function waitForUnreadTab(context: Context): Promise<Awaited<ReturnType<ty
 
 async function openAddFriends(context: Context): Promise<boolean> {
   let cameraWaitLogged = false;
-  let controlWaitLogged = false;
-  let bannerWaitLogged = false;
+  let controlChecks = 0;
+  let bannerChecks = 0;
   let entryAttempts = 0;
   let chatKeyboardDismissAttempted = false;
   let chatExitAttempted = false;
@@ -342,24 +370,30 @@ async function openAddFriends(context: Context): Promise<boolean> {
 
     const entry = findAddFriendsEntry(state.nodes);
     if (!entry) {
-      if (!controlWaitLogged) {
-        context.onLog("Add Friends: waiting for the live Add Friends control on Camera.");
-        controlWaitLogged = true;
+      controlChecks++;
+      if (controlChecks >= 10) {
+        context.onLog("Add Friends: the live control was not exposed after 10 checks; skipping only this tool.");
+        return false;
       }
+      context.onLog(`Add Friends: live control not exposed (check ${controlChecks}/10); checking again in 5 seconds.`);
       await context.sleep(ADD_FRIENDS_BANNER_RECHECK_MS, "exact");
       continue;
     }
-    controlWaitLogged = false;
+    controlChecks = 0;
 
-    if (findOccludingBanner(state.nodes, entry, screenWidth, screenHeight)) {
-      if (!bannerWaitLogged) {
-        context.onLog("Add Friends: a banner is covering the Add control; waiting 5 seconds before checking again.");
-        bannerWaitLogged = true;
+    const bannerCheck = bannerChecks + 1;
+    if (findAddFriendsBanner(state.nodes, entry, screenWidth, screenHeight)) {
+      bannerChecks = bannerCheck;
+      if (bannerChecks >= 10) {
+        context.onLog("Add Friends: a banner still covers the control after 10 checks; skipping only this tool.");
+        return false;
       }
+      context.onLog(`Add Friends: banner covers the control (check ${bannerChecks}/10); checking again in 5 seconds.`);
       await context.sleep(ADD_FRIENDS_BANNER_RECHECK_MS, "exact");
       continue;
     }
-    bannerWaitLogged = false;
+    context.onLog(`Add Friends: banner check ${bannerCheck}/10 is clear; tapping the live control now.`);
+    bannerChecks = 0;
 
     if (entryAttempts >= 3) {
       context.onLog("Add Friends: three live-control taps did not open the friend list; skipping only this tool.");
@@ -367,7 +401,6 @@ async function openAddFriends(context: Context): Promise<boolean> {
     }
 
     entryAttempts++;
-    context.onLog("Add Friends: banner clear; tapping the live Add Friends control now.");
     if (!await tapNode(context, entry, "open Add Friends from its live accessibility bounds", 500)) return false;
   }
   return false;

@@ -7090,24 +7090,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return parts.join(", ") || "No metrics recorded";
     };
     const cycleStart = Date.now();
-    let snapchatProgressWatchStartedAt = 0;
-    let snapchatIdleRecoveryTriggered = false;
-    let snapchatIdleWatchdog: ReturnType<typeof setInterval> | null = null;
-    const stopSnapchatIdleWatchdog = () => {
-      if (snapchatIdleWatchdog) {
-        clearInterval(snapchatIdleWatchdog);
-        snapchatIdleWatchdog = null;
-      }
-      snapchatProgressWatchStartedAt = 0;
-    };
     // tLog prefixes every log line with elapsed seconds so the user can see
     // exactly where each chunk of time is going in the Log tab.
     const tLog = (msg: string) => {
-      // Screen-state probes are diagnostic only; they must not disguise a
-      // stalled Snapchat tool as forward progress.
-      if (snapchatProgressWatchStartedAt > 0 && !msg.startsWith("[SCREEN] ")) {
-        snapchatProgressWatchStartedAt = Date.now();
-      }
       const totalSec = (Date.now() - cycleStart) / 1000;
       const mins = Math.floor(totalSec / 60);
       const secs = (totalSec % 60).toFixed(1);
@@ -7457,24 +7442,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             snapchatSpotlights: 0,
             snapchatSnaps: 0,
           };
-          snapchatProgressWatchStartedAt = Date.now();
-          snapchatIdleWatchdog = setInterval(() => {
-            if (
-              snapchatIdleRecoveryTriggered ||
-              snapchatProgressWatchStartedAt <= 0 ||
-              automationCycleCurrentId.get(serial) !== incomingCycleId ||
-              isCycleAborted(serial)
-            ) return;
-            const idleMs = Date.now() - snapchatProgressWatchStartedAt;
-            if (idleMs < 60_000) return;
-
-            // Stop the current tool first. The cycle's finally block performs
-            // the app recovery after the worker unwinds, before releasing the
-            // device lease, so cleanup cannot cancel or race the reopen.
-            snapchatIdleRecoveryTriggered = true;
-            automationCycleAbortedId.set(serial, incomingCycleId);
-            tLog(`⚠ Snapchat has made no logged progress for ${Math.round(idleMs / 1000)} seconds; aborting this tool. Snapchat will reopen after the tool exits.`);
-          }, 5_000);
           try {
             leaveSnapchatOnSelectedImage = await runSnapchatTools({
               serial,
@@ -7484,11 +7451,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               pickLocalFolderImage,
               tools: snapchatTools,
               onLog: tLog,
-              onProgress: () => {
-                if (snapchatProgressWatchStartedAt > 0) {
-                  snapchatProgressWatchStartedAt = Date.now();
-                }
-              },
+              onProgress: () => {},
               onMetric: (key, count = 1) => {
                 const metricKey = ({
                   snapchat_add_friends: "snapchatAddFriends",
@@ -7501,23 +7464,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               },
               isAborted: () => isCycleAborted(serial),
               effectiveTypingProfile,
-              sleep: async (milliseconds, timingMode = "static") => {
-                // Intentional Snapchat viewing/pacing delays are not a hang.
-                // Keep the idle watchdog alive only while this known wait is
-                // actually pending; an unresolved device action still times
-                // out against the 60-second inactivity limit.
-                let heartbeat: ReturnType<typeof setInterval> | null = null;
-                if (snapchatProgressWatchStartedAt > 0 && milliseconds > 10_000) {
-                  heartbeat = setInterval(() => {
-                    if (!isCycleAborted(serial)) snapchatProgressWatchStartedAt = Date.now();
-                  }, 5_000);
-                }
-                try {
-                  await sleepOrAbort(serial, milliseconds, "navigation", timingMode);
-                } finally {
-                  if (heartbeat) clearInterval(heartbeat);
-                }
-              },
+              sleep: async (milliseconds, timingMode = "static") =>
+                sleepOrAbort(serial, milliseconds, "navigation", timingMode),
               swipeGesture: devicePrefsForSnapchat.swipeGesture,
             });
             if (leaveSnapchatOnSelectedImage) {
@@ -7580,7 +7528,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
           }
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-           stopSnapchatIdleWatchdog();
           if (resolvedSlotUsername && Object.values(snapchatMetricCounts).some(count => count > 0)) {
             await storage.incrementMobileStats(`snapchat__${resolvedSlotUsername}`, {
               likes: 0,
@@ -9392,7 +9339,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
     } finally {
-      stopSnapchatIdleWatchdog();
       if (screenMonitor) {
         clearInterval(screenMonitor);
         screenMonitor = null;
@@ -9402,21 +9348,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           logger.warn({ err: error, serial, slotId, cycleId: incomingCycleId }, "[mobile-screen-state] timeout lease restore failed");
         });
         screenTimeoutLease = null;
-      }
-      if (
-        snapchatIdleRecoveryTriggered &&
-        automationCycleCurrentId.get(serial) === incomingCycleId
-      ) {
-        try {
-          await android.wakeScreen(serial);
-          await new Promise(resolve => setTimeout(resolve, 1_000));
-          await android.unlockScreen(serial);
-          await new Promise(resolve => setTimeout(resolve, 800));
-          await android.launchSnapchat(serial);
-          tLog("✓ Screen woke, unlock was attempted, and Snapchat reopened after the stalled tool exited; the interrupted task was not resumed.");
-        } catch (error: any) {
-          tLog(`⚠ Snapchat idle recovery could not reopen the app: ${error?.message ?? String(error)}`);
-        }
       }
       automationCycleInProgress.delete(serial);
       automationCycleActiveSlot.delete(serial);
