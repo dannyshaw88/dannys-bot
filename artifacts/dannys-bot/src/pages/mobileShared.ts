@@ -6,6 +6,10 @@
  */
 
 import type { ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
+import { snapchatToolSettingsDefaults } from "./snapchatSettings";
+import type { SnapchatToolSettings } from "./snapchatSettings";
+
+export type { SnapchatToolSettings } from "./snapchatSettings";
 
 /**
  * Read one local wallpaper through the native Electron picker when available,
@@ -83,25 +87,6 @@ export interface UsbPhone {
 }
 
 // ─── AutomationSettingsData ───────────────────────────────────────────────────
-
-export interface SnapchatToolSettings {
-  shuffleToolOrder: boolean;
-  uploadSnap: {
-    enabled: boolean;
-    min: number;
-    max: number;
-    activatePctMin: number;
-    activatePctMax: number;
-    directoryPath: string;
-    selectAtRandom: boolean;
-  };
-  addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
-  massSnap: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; contactScrollPixels: number };
-  acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
-  replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
-  viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; likePercentMin: number; likePercentMax: number; watchSecondsMin: number; watchSecondsMax: number };
-  viewSnaps: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
-}
 
 export interface AutomationSettingsData {
   enabled: boolean;
@@ -312,24 +297,7 @@ export interface AutomationSettingsData {
 
 export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
-  snapchatTools: {
-    shuffleToolOrder: false,
-    uploadSnap: {
-      enabled: false,
-      min: 1,
-      max: 1,
-      activatePctMin: 100,
-      activatePctMax: 100,
-      directoryPath: "",
-      selectAtRandom: false,
-    },
-    addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
-    massSnap: { enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 },
-    acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
-    replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
-    viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
-    viewSnaps: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
-  },
+  snapchatTools: snapchatToolSettingsDefaults,
   feedEnabled: true, storiesEnabled: true, shuffleToolOrder: false,
   actionDelayMin: 5, actionDelayMax: 10,
   likePercentMin: 3, likePercentMax: 5,

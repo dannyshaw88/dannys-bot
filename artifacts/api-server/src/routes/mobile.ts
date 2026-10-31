@@ -40,6 +40,11 @@ import { storage } from "../storage";
 import { logger } from "../lib/logger";
 import { HikerApiClient } from "../instagram/hikerApiClient";
 import { runAppSwitch as runAppSwitchOperation } from "../mobile/hst/operations/appSwitch";
+import {
+  snapchatToolsSettingsDefault,
+  snapchatToolsSettingsSchema,
+  type SnapchatToolSettings,
+} from "../mobile/hst/settings/snapchat";
 import { runVisitOwnProfile as runVisitOwnProfileOperation } from "../mobile/hst/operations/visitOwnProfile";
 import { runVisitSaved as runVisitSavedOperation } from "../mobile/hst/operations/visitSaved";
 import { runVisitSettings as runVisitSettingsOperation } from "../mobile/hst/operations/visitSettings";
@@ -530,20 +535,7 @@ const p = (req: Request, key: string): string => String((req.params as any)[key]
 type AutomationSettings = {
   cycleIntervalMin?: number;
   cycleIntervalMax?: number;
-  snapchatTools?: {
-    shuffleToolOrder: boolean;
-    uploadSnap: {
-      enabled: boolean; min: number; max: number;
-      activatePctMin: number; activatePctMax: number;
-      directoryPath: string; selectAtRandom: boolean;
-    };
-    addFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
-      massSnap: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; contactScrollPixels: number };
-    acceptFriends: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number };
-    replyUnreadChats: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; replyGoal: string };
-    viewStories: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; likePercentMin: number; likePercentMax: number; watchSecondsMin: number; watchSecondsMax: number };
-    viewSnaps: { enabled: boolean; min: number; max: number; activatePctMin: number; activatePctMax: number; watchSecondsMin: number; watchSecondsMax: number };
-  };
+  snapchatTools?: SnapchatToolSettings;
   enabled: boolean;
   trustScoreId?: string | null;
   trustScoreDisabledTools?: string[];
@@ -2824,85 +2816,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     //    windows app switcher. 'auto' = look up the model in DEVICE_PROFILES on
     //    the server; 'left'/'up' = manual override stored per device.
     dismissDirection: z.enum(["auto", "left", "up"]).default("auto"),
-    // Snapchat's tools are a separate suite from Instagram. Keep all controls
-    // nested so they cannot accidentally alter Instagram's existing settings.
-    snapchatTools: z.object({
-      shuffleToolOrder: z.boolean().default(false),
-      uploadSnap: z.object({
-        enabled: z.boolean().default(false),
-        min: z.number().int().min(1).default(1),
-        max: z.number().int().min(1).default(1),
-        activatePctMin: z.number().int().min(0).max(100).default(100),
-        activatePctMax: z.number().int().min(0).max(100).default(100),
-        directoryPath: z.string().max(4096).default(""),
-        selectAtRandom: z.boolean().default(false),
-      }).default({
-        enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100,
-        directoryPath: "", selectAtRandom: false,
-      }),
-      addFriends: z.object({
-        enabled: z.boolean().default(false),
-        min: z.number().int().min(0).default(1),
-        max: z.number().int().min(0).default(2),
-        activatePctMin: z.number().int().min(0).max(100).default(100),
-        activatePctMax: z.number().int().min(0).max(100).default(100),
-      }).default({ enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 }),
-      massSnap: z.object({
-        enabled: z.boolean().default(false),
-        min: z.number().int().min(1).default(1),
-        max: z.number().int().min(1).default(1),
-        activatePctMin: z.number().int().min(0).max(100).default(0),
-        activatePctMax: z.number().int().min(0).max(100).default(0),
-        contactScrollPixels: z.number().int().min(40).max(1_000).default(130),
-      }).default({ enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 }),
-      acceptFriends: z.object({
-        enabled: z.boolean().default(false),
-        min: z.number().int().min(0).default(1),
-        max: z.number().int().min(0).default(3),
-        activatePctMin: z.number().int().min(0).max(100).default(100),
-        activatePctMax: z.number().int().min(0).max(100).default(100),
-      }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 }),
-      replyUnreadChats: z.object({
-        enabled: z.boolean().default(false),
-        min: z.number().int().min(0).default(1),
-        max: z.number().int().min(0).default(1),
-        activatePctMin: z.number().int().min(0).max(100).default(100),
-        activatePctMax: z.number().int().min(0).max(100).default(100),
-        replyGoal: z.string().max(5000).default(""),
-      }).default({ enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" }),
-      viewStories: z.object({
-        enabled: z.boolean().default(false),
-        min: z.number().int().min(0).default(1),
-        max: z.number().int().min(0).default(3),
-        activatePctMin: z.number().int().min(0).max(100).default(100),
-        activatePctMax: z.number().int().min(0).max(100).default(100),
-        likePercentMin: z.number().int().min(0).max(100).default(0),
-        likePercentMax: z.number().int().min(0).max(100).default(0),
-        watchSecondsMin: z.number().int().min(1).max(60).default(5),
-        watchSecondsMax: z.number().int().min(1).max(60).default(10),
-      }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 }),
-      viewSnaps: z.object({
-        enabled: z.boolean().default(false),
-        min: z.number().int().min(1).default(1),
-        max: z.number().int().min(1).default(3),
-        activatePctMin: z.number().int().min(0).max(100).default(100),
-        activatePctMax: z.number().int().min(0).max(100).default(100),
-        watchSecondsMin: z.number().int().min(1).max(60).default(5),
-        watchSecondsMax: z.number().int().min(1).max(60).default(10),
-      }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 }),
-    }).default({
-      shuffleToolOrder: false,
-      uploadSnap: {
-        enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100,
-        directoryPath: "", selectAtRandom: false,
-      },
-      addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
-      massSnap: { enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 },
-      acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
-      replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
-      viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
-      viewSnaps: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
-    }),
+    // Snapchat controls are composed from per-setting modules.
+    snapchatTools: snapchatToolsSettingsSchema,
   });
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/snapchat/reply-history", (req: Request, res: Response) => {
     const serial = String(req.params.serial);
@@ -2928,19 +2843,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const cfg = loadInstanceConfigs();
     const defaults: AutomationSettings = {
       enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
-      snapchatTools: {
-        shuffleToolOrder: false,
-        uploadSnap: {
-          enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100,
-          directoryPath: "", selectAtRandom: false,
-        },
-        addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
-        massSnap: { enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 },
-        acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
-        replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
-        viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
-        viewSnaps: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
-      },
+      snapchatTools: snapchatToolsSettingsDefault,
       feedEnabled: true, storiesEnabled: true,
       actionDelayMin: 5, actionDelayMax: 10,
       likePercentMin: 3, likePercentMax: 5,
@@ -3638,19 +3541,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId : undefined;
       const defaults: AutomationSettings = {
         enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
-        snapchatTools: {
-          shuffleToolOrder: false,
-          uploadSnap: {
-            enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100,
-            directoryPath: "", selectAtRandom: false,
-          },
-          addFriends: { enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 },
-          massSnap: { enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 },
-          acceptFriends: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 },
-          replyUnreadChats: { enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" },
-          viewStories: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 },
-          viewSnaps: { enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, watchSecondsMin: 5, watchSecondsMax: 10 },
-        },
+        snapchatTools: snapchatToolsSettingsDefault,
         feedEnabled: true, storiesEnabled: true,
         actionDelayMin: 5, actionDelayMax: 10,
         likePercentMin: 3, likePercentMax: 5,
