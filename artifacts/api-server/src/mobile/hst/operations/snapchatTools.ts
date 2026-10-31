@@ -149,6 +149,12 @@ function isAddFriendsPage(xml: string): boolean {
     /find friends/i.test(xml);
 }
 
+function findAddFriendsEntry(nodes: UiNode[]): UiNode | undefined {
+  return nodes.find(node =>
+    node.clickable && shortResourceId(node) === "neon_add_friend_button_container",
+  );
+}
+
 function hasSnapchatChatComposer(nodes: UiNode[]): boolean {
   return nodes.some(node =>
     /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
@@ -160,9 +166,12 @@ function findOccludingBanner(nodes: UiNode[], target: UiNode, screenWidth: numbe
   const targetArea = (target.bounds[2] - target.bounds[0]) * (target.bounds[3] - target.bounds[1]);
   const screenArea = screenWidth * screenHeight;
   return nodes.find(node => {
-    if (node === target || !node.clickable) return false;
+    if (node === target) return false;
     const [left, top, right, bottom] = node.bounds;
     const area = (right - left) * (bottom - top);
+    const hasOverlaySignal = node.clickable || Boolean(node.text.trim() || node.desc.trim()) ||
+      /banner|toast|snackbar|notification/i.test(node.resourceId);
+    if (!hasOverlaySignal) return false;
     const coversTapPoint = point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
     // The normal clickable wrapper around Add Friends is only slightly larger
     // than the icon. A banner-sized hitbox is substantially larger and can
@@ -247,11 +256,12 @@ async function waitForUnreadTab(context: Context): Promise<Awaited<ReturnType<ty
 
 async function openAddFriends(context: Context): Promise<boolean> {
   let cameraWaitLogged = false;
-  let deepLinkAttempts = 0;
+  let nativeActivityAttempted = false;
+  let entryAttempts = 0;
   let chatKeyboardDismissAttempted = false;
   let chatExitAttempted = false;
   while (!context.isAborted()) {
-    const state = await dump(context.serial);
+    let state = await dump(context.serial);
     if (isAddFriendsPage(state.xml)) return true;
 
     const chatComposer = hasSnapchatChatComposer(state.nodes);
@@ -306,43 +316,69 @@ async function openAddFriends(context: Context): Promise<boolean> {
     }
     cameraWaitLogged = false;
 
-    if (deepLinkAttempts >= 3) {
-      context.onLog("Add Friends: Snapchat did not open the page from its deep link after three attempts; skipping Add Friends without tapping the person-plus icon.");
+    if (!nativeActivityAttempted) {
+      nativeActivityAttempted = true;
+      try {
+        context.onLog("Add Friends: trying Snapchat's native AddFriendsActivity.");
+        await android.openSnapchatAddFriends(context.serial);
+      } catch (error: any) {
+        context.onLog(`Add Friends: native activity launch failed (${error?.message ?? String(error)}); using the live Camera control.`);
+      }
+      await context.sleep(500, "exact");
+      state = await dump(context.serial);
+      if (isAddFriendsPage(state.xml)) {
+        context.onLog("Add Friends: Snapchat opened the verified Add Friends page through its native activity.");
+        return true;
+      }
+      if (hasSnapchatChatComposer(state.nodes)) continue;
+      if (!/camera_page/i.test(state.xml)) continue;
+    }
+
+    const entry = findAddFriendsEntry(state.nodes);
+    if (!entry) {
+      if (!cameraWaitLogged) {
+        context.onLog("Add Friends: waiting for the live Add Friends control on Camera.");
+        cameraWaitLogged = true;
+      }
+      await context.sleep(BANNER_RECHECK_MS, "exact");
+      continue;
+    }
+    cameraWaitLogged = false;
+
+    if (entryAttempts >= 3) {
+      context.onLog("Add Friends: the native launch and three live-control attempts did not open the friend list; skipping only this tool.");
       return false;
     }
-    deepLinkAttempts++;
-    try {
-      context.onLog(`Add Friends: opening Snapchat's Add Friends deep link directly (attempt ${deepLinkAttempts}/3).`);
-      await android.openSnapchatAddFriends(context.serial);
-    } catch (error: any) {
-      context.onLog(`Add Friends: deep-link attempt ${deepLinkAttempts}/3 failed (${error?.message ?? String(error)}).`);
-      if (deepLinkAttempts >= 3) {
-        context.onLog("Add Friends: skipping this tool; no person-plus tap fallback will run.");
-        return false;
-      }
-      await context.sleep(700, "exact");
+
+    const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    if (findOccludingBanner(state.nodes, entry, screenWidth, screenHeight)) {
+      await context.sleep(BANNER_RECHECK_MS, "exact");
       continue;
     }
 
-    let linkedState = state;
-    for (let settle = 0; settle < 4 && !context.isAborted(); settle++) {
-      await context.sleep(500, "exact");
-      linkedState = await dump(context.serial);
-      if (isAddFriendsPage(linkedState.xml)) {
-        context.onLog("Add Friends: Snapchat opened the verified Add Friends page from its deep link.");
-        return true;
+    entryAttempts++;
+    if (entry.focusable) {
+      const focusResult = await activateFocusedNodeWithTab(
+        context,
+        findAddFriendsEntry,
+        xml => /camera_page/i.test(xml),
+        screenWidth,
+        screenHeight,
+        "Add Friends control",
+      );
+      if (focusResult === "activated") {
+        await context.sleep(500, "exact");
+        continue;
       }
-      if (hasSnapchatChatComposer(linkedState.nodes)) break;
+      if (focusResult === "covered") {
+        await context.sleep(BANNER_RECHECK_MS, "exact");
+        continue;
+      }
+      if (focusResult === "surface-changed") continue;
     }
-    if (hasSnapchatChatComposer(linkedState.nodes)) {
-      context.onLog("Add Friends: the direct link landed on a chat; recovering to Camera before retrying the same link.");
-      continue;
-    }
-    if (deepLinkAttempts >= 3) {
-      context.onLog("Add Friends: Snapchat did not open the page from its deep link after three attempts; skipping Add Friends without tapping the person-plus icon.");
-      return false;
-    }
-    context.onLog(`Add Friends: the direct link did not reach the friend list; retrying the same link (${deepLinkAttempts}/3).`);
+
+    context.onLog("Add Friends: opening the live Add Friends control using its current on-screen bounds.");
+    if (!await tapNode(context, entry, "open Add Friends from its live accessibility bounds", 500)) return false;
   }
   return false;
 }

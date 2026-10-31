@@ -1258,11 +1258,10 @@ export async function openSnapchatAddFriends(serial: string): Promise<void> {
   const adb = requireTool(tools.adb, "adb");
   const output = await runAdbStrict(adb, [
     "-s", serial, "shell", "am", "start",
-    "-a", "android.intent.action.VIEW",
-    "-d", "snapchat://add_friends",
+    "-n", "com.snapchat.android/com.snap.identity.ui.profile.AddFriendsActivity",
   ], 10000);
-  if (/\b(?:No activity found|unable to resolve|Error:)\b/i.test(output)) {
-    throw new Error(output.trim().slice(0, 240) || "Snapchat did not resolve its Add Friends link");
+  if (/\b(?:No activity found|unable to resolve|Error(?: type \d+)?|Permission Denial)\b/i.test(output)) {
+    throw new Error(output.trim().slice(0, 240) || "Snapchat did not resolve its native Add Friends activity");
   }
 }
 
