@@ -15,9 +15,10 @@ export async function scrollAddFriendsListOneSlot(
   );
   const rowHeight = addedRow.bounds[3] - addedRow.bounds[1];
   if (!findFriendsTitle || rowHeight <= 0 || !Number.isFinite(screenHeight) || screenHeight <= 0) {
-    context.onLog(`Add Friends: could not calculate a safe one-row scroll after adding ${friendName}.`);
+    context.onLog(`Add Friends: could not calculate a safe short scroll after adding ${friendName}.`);
     return false;
   }
+  const scrollDistance = Math.max(1, Math.round(rowHeight * 0.3));
 
   const listTop = findFriendsTitle.bounds[3];
   const safeBottom = Math.floor(screenHeight * 0.82);
@@ -26,14 +27,14 @@ export async function scrollAddFriendsListOneSlot(
     safeBottom - 6,
     Math.max(listTop + rowHeight + 8, addedRow.bounds[3] - 8),
   );
-  const endY = startY - rowHeight;
+  const endY = startY - scrollDistance;
   if (endY < listTop + 6) {
-    context.onLog(`Add Friends: not enough visible list space for a safe one-row scroll after ${friendName}.`);
+    context.onLog(`Add Friends: not enough visible list space for a safe short scroll after ${friendName}.`);
     return false;
   }
 
   context.onLog(
-    `Add Friends: scrolling the Find Friends list up one row slot after ${friendName} ` +
+    `Add Friends: scrolling the Find Friends list up 30% of one row height after ${friendName} ` +
     `(from ${x},${startY} to ${x},${endY}); staying above Android's bottom navigation.`,
   );
   await android.swipe(context.serial, x, startY, x, endY, 240, false);
