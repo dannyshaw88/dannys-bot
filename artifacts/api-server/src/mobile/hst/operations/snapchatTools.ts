@@ -198,9 +198,48 @@ async function openAddFriends(context: Context): Promise<boolean> {
   let iconWaitLogged = false;
   let bannerWaitLogged = false;
   let pageWaitLogged = false;
+  let chatKeyboardDismissAttempted = false;
+  let chatExitAttempted = false;
   while (!context.isAborted()) {
     const state = await dump(context.serial);
     if (isAddFriendsPage(state.xml)) return true;
+
+    const chatComposer = state.nodes.some(node =>
+      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+    );
+    if (chatComposer) {
+      const keyboardShown = await android.isKeyboardShown(context.serial).catch(() => false);
+      if (keyboardShown) {
+        if (chatKeyboardDismissAttempted) {
+          context.onLog("Snapchat stopped: the chat keyboard stayed open after one Back press; refusing to navigate from an unverified surface.");
+          return false;
+        }
+        chatKeyboardDismissAttempted = true;
+        context.onLog("Snapchat: dismissing the open chat keyboard before returning to Camera.");
+        await android.keyevent(context.serial, 4); // Android KEYCODE_BACK
+        await context.sleep(300, "exact");
+        continue;
+      }
+
+      if (chatExitAttempted) {
+        context.onLog("Snapchat stopped: the active chat remained open after one Back press; refusing to continue on the wrong screen.");
+        return false;
+      }
+      chatExitAttempted = true;
+      context.onLog("Snapchat: leaving the verified open chat before returning to Camera.");
+      await android.keyevent(context.serial, 4); // Android KEYCODE_BACK
+      await context.sleep(400, "exact");
+      const afterBack = await dump(context.serial);
+      const composerStillOpen = afterBack.nodes.some(node =>
+        /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+      );
+      if (composerStillOpen) {
+        context.onLog("Snapchat stopped: Android Back did not close the active chat.");
+        return false;
+      }
+      chatKeyboardDismissAttempted = false;
+      continue;
+    }
 
     // Other tools can leave Snapchat on a different tab (or a transient
     // loading surface). Return to Camera before retrying the person-plus
