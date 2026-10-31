@@ -4944,13 +4944,15 @@ function escapeForAdbInput(s: string): string {
 // which is exactly the "clicks do nothing, no error anywhere" symptom this
 // is fixing.
 async function runInputShell(serial: string, args: string[], label: string, tapId?: string): Promise<void> {
+  const queuedAt = Date.now();
   return runWithDeviceInputGate(serial, async () => {
     const tools = detectToolset();
     const adb = requireTool(tools.adb, "adb");
+    const gateWaitMs = Date.now() - queuedAt;
     const inputStartedAt = Date.now();
     const tapIdSuffix = tapId ? ` tapId=${tapId}` : "";
     logger.info(
-      { serial, label, args, tapId, startedAt: inputStartedAt },
+      { serial, label, args, tapId, startedAt: inputStartedAt, gateWaitMs },
       `[mobile-input] adb input begin${tapIdSuffix}`,
     );
     try {
@@ -4964,7 +4966,15 @@ async function runInputShell(serial: string, args: string[], label: string, tapI
         throw new Error(out);
       }
       logger.info(
-        { serial, label, args, tapId, elapsedMs: Date.now() - inputStartedAt },
+        {
+          serial,
+          label,
+          args,
+          tapId,
+          gateWaitMs,
+          commandMs: Date.now() - inputStartedAt,
+          totalMs: Date.now() - queuedAt,
+        },
         `[mobile-input] adb input end${tapIdSuffix}`,
       );
     } catch (e: any) {
@@ -5009,12 +5019,17 @@ async function runCalibratedTapBatch(
       ? [tap, `sleep ${(pause / 1000).toFixed(3)}`]
       : [tap];
   });
-  const startedAt = Date.now();
+  const queuedAt = Date.now();
+  let gateWaitMs = 0;
+  let commandMs = 0;
   try {
     await runWithDeviceInputGate(serial, async () => {
+      gateWaitMs = Date.now() - queuedAt;
+      const commandStartedAt = Date.now();
       const { stdout, stderr } = await execFileP(adb, [
         "-s", serial, "shell", commands.join(" && "),
       ], { encoding: "utf8", timeout: 30_000 } as any);
+      commandMs = Date.now() - commandStartedAt;
       const output = `${stdout ?? ""}${stderr ?? ""}`.trim();
       if (/error|exception|permission denied/i.test(output)) {
         throw new Error(output);
@@ -5024,7 +5039,9 @@ async function runCalibratedTapBatch(
       serial,
       tapCount: taps.length,
       configuredPauseMs: taps.reduce((sum, tap) => sum + tap.pauseMs, 0),
-      elapsedMs: Date.now() - startedAt,
+      gateWaitMs,
+      commandMs,
+      totalMs: Date.now() - queuedAt,
     }, "[cal-keyboard] calibrated tap batch completed");
   } catch (error: any) {
     const output = `${error?.stderr ?? ""}${error?.stdout ?? ""}`.trim();
@@ -15273,7 +15290,7 @@ export async function typeViaSavedCalibrationMap(
   text: string,
   typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
-  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean; onProgress?: () => void },
+  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean },
 ): Promise<{ ok: boolean; available: boolean; missing: string[]; fatal?: boolean }> {
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
@@ -15357,6 +15374,7 @@ export async function typeViaSavedCalibrationMap(
     debugLabel: options?.debugLabel,
     compactLogs: options?.compactLogs,
     onProgress: options?.onProgress,
+    batchTaps: options?.batchTaps,
   });
   return { ...result, available: true };
 }
@@ -15908,7 +15926,7 @@ export async function typeViaCalibrationMap(
   map: KeyCalibrationMap,
   onLog?: (msg: string) => void,
   typingProfile: TypingSpeedProfile,
-  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean; onProgress?: () => void },
+  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean },
 ): Promise<{ ok: boolean; missing: string[]; fatal?: boolean }> {
   if (!typingProfile ||
       !Number.isFinite(typingProfile.minMs) ||
@@ -15931,6 +15949,20 @@ export async function typeViaCalibrationMap(
   let layer: "letters" | "symbols" | "moreSymbols" = "letters";
   _calKeyboardLayer.set(serial, layer);
   const display = getScreenSize(serial);
+  const pendingTaps: CalibratedTapBatchItem[] = [];
+  const flushPendingTaps = async () => {
+    if (pendingTaps.length === 0) return;
+    const batch = pendingTaps.splice(0, pendingTaps.length);
+    const batchStartedAt = Date.now();
+    await runCalibratedTapBatch(serial, batch);
+    for (const _tap of batch) options?.onProgress?.();
+    if (options?.batchTaps) {
+      onLog?.(
+        `[${options?.debugLabel ?? "cal-keyboard"}] sent ${batch.length} calibrated key tap(s) ` +
+        `in ${Date.now() - batchStartedAt}ms`,
+      );
+    }
+  };
   const activeIme = options?.compactLogs ? "" : await getActiveInputMethodPackage(serial).catch(() => "");
   if (!options?.compactLogs) onLog?.(
     `[cal-keyboard] typing-session start serial=${serial} display=${display.w}x${display.h} ` +
@@ -15996,7 +16028,14 @@ export async function typeViaCalibrationMap(
       layer,
     }, "[cal-keyboard] tap dispatched");
     const tapStartedAt = Date.now();
+    const pause = dwellMin + Math.round(Math.random() * (dwellMax - dwellMin));
+    const layerControl = label === "abc" || label === "symbols" || label === "moreSymbols";
+    if (options?.batchTaps && !layerControl) {
+      pendingTaps.push({ x: dispatched.x, y: dispatched.y, pauseMs: pause });
+      return true;
+    }
     try {
+      if (options?.batchTaps) await flushPendingTaps();
       // A zero-distance swipe is not a tap with a configurable dwell: on
       // Xiaomi/MIUI it can be interpreted as a long-press and emit repeats.
       // Calibration records coordinates, so emit exactly one native tap and
@@ -16018,7 +16057,6 @@ export async function typeViaCalibrationMap(
     if (!options?.compactLogs && options?.debugLabel && /(?:shift|enter|backspace|delete)/i.test(description)) {
       onLog?.(`[${options.debugLabel}] key-event=${description} coordinate=(${pos.x},${pos.y})`);
     }
-    const pause = dwellMin + Math.round(Math.random() * (dwellMax - dwellMin));
     if (!options?.compactLogs) onLog?.(`[cal-keyboard] pacing after ${description}: ${pause}ms (range=${dwellMin}-${dwellMax}ms)`);
     const pacingStartedAt = Date.now();
     await _sleep(pause);
@@ -16102,7 +16140,12 @@ export async function typeViaCalibrationMap(
   const waitWordHesitation = async () => {
     const hesitationMin = Math.max(0, Math.min(typingProfile.hesitationMinMs, typingProfile.hesitationMaxMs));
     const hesitationMax = Math.max(hesitationMin, typingProfile.hesitationMaxMs);
-    await _sleep(hesitationMin + Math.round(Math.random() * (hesitationMax - hesitationMin)));
+    const hesitation = hesitationMin + Math.round(Math.random() * (hesitationMax - hesitationMin));
+    if (options?.batchTaps && pendingTaps.length > 0) {
+      pendingTaps[pendingTaps.length - 1].pauseMs += hesitation;
+    } else {
+      await _sleep(hesitation);
+    }
   };
 
   const switchLayer = async (target: "letters" | "symbols" | "moreSymbols"): Promise<boolean> => {
@@ -16186,6 +16229,7 @@ export async function typeViaCalibrationMap(
         // combination can enter selection/navigation mode and act on the last
         // word. Send Android's plain Enter key event instead.
         try {
+          if (options?.batchTaps) await flushPendingTaps();
           await keyevent(serial, 66); // KEYCODE_ENTER
           onLog?.(options?.debugLabel
             ? `[${options.debugLabel}] newline: plain KEYCODE_ENTER (66); no Shift`
@@ -16260,6 +16304,7 @@ export async function typeViaCalibrationMap(
   // digit was the final character, and prevents the next isolated caller from
   // inheriting the symbols screen and typing into the wrong key positions.
   if (layer !== "letters" && !await switchLayer("letters")) fatal = true;
+  if (options?.batchTaps) await flushPendingTaps();
   _calKeyboardLayer.set(serial, layer);
   if (!options?.compactLogs) onLog?.(
     `[cal-keyboard] typing-session end serial=${serial} display=${display.w}x${display.h} ` +

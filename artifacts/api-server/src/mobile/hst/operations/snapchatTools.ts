@@ -1240,9 +1240,7 @@ async function runReplyUnreadChats(context: Context) {
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    context.onLog("Reply to Unread Chats: typing Luna's draft with calibrated keys.");
-    const { x, y } = center(verifiedComposer);
-    await android.tap(context.serial, x, y, "bot", "Snapchat: focus confirmed unread-chat composer", "automation");
+    context.onLog("Reply to Unread Chats: typing Luna's draft into the composer focused by opening the chat.");
     try {
       const typed = await android.typeViaSavedCalibrationMap(
         context.serial,
