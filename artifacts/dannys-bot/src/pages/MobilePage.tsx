@@ -336,7 +336,8 @@ type InspectNode = {
   index?: number;
   cls: string; resourceId: string; contentDesc: string; text: string;
   bounds: string; boundsRaw: [number,number,number,number];
-  center: { x: number; y: number }; clickable: boolean; area: number;
+  center: { x: number; y: number };
+  clickable: boolean; focusable: boolean; focused: boolean; area: number;
 };
 type InspectResult = {
   ok: boolean; nodes: InspectNode[]; screenW: number; screenH: number;
@@ -3717,7 +3718,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
     if (inspectNodes?.length) {
       lines.push(`── UIAutomator Tree — ${inspectNodes.length} nodes ──`);
       inspectNodes.forEach(n =>
-        lines.push(`[${n.index ?? "?"}] ${n.clickable ? "● TAP" : "○ view"} ${n.cls}${n.resourceId ? `  id="${n.resourceId}"` : ""}${n.contentDesc ? `  desc="${n.contentDesc}"` : ""}${n.text ? `  text="${n.text}"` : ""}  ${n.bounds}  center=(${n.center.x},${n.center.y})`)
+        lines.push(`[${n.index ?? "?"}] clickable=${n.clickable} focusable=${n.focusable} focused=${n.focused} ${n.cls}${n.resourceId ? `  id="${n.resourceId}"` : ""}${n.contentDesc ? `  desc="${n.contentDesc}"` : ""}${n.text ? `  text="${n.text}"` : ""}  ${n.bounds}  center=(${n.center.x},${n.center.y})`)
       );
     }
     if (customPins.length) {

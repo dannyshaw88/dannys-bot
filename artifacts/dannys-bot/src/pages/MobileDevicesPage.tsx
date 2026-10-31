@@ -1706,12 +1706,15 @@ export function MobileDevicesPage() {
     sessionStorage.setItem("mobile_device_nav_started_at", String(started));
     sessionStorage.setItem("mobile_autopower_serial", serial);
 
-    // Opening a device is an explicit request for its live mirror. The mirror
-    // stream performs the conditional ensureScreenOn check after it connects:
-    // an awake phone is left alone, while a sleeping phone is woken so the
-    // mirror can produce frames. Do not send a standalone wake before the
-    // mirror opens — that was waking the physical device without opening the
-    // requested mirror yet.
+    // Device inventory can take several seconds to load before LiveCanvas
+    // opens its stream. Start the conditional wake at the same time as
+    // navigation so a short-timeout phone is awake when the mirror connects.
+    // This runs only for an explicit Farm device selection, not a tab mount.
+    void fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/standby`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on: true }),
+    }).catch(error => console.warn("[phone-farm] pre-mirror wake request failed", error));
     setLocation(`/mobile/farm/${encodeURIComponent(serial)}?autopower=1`);
   }, [onlineSerials, setLocation]);
 

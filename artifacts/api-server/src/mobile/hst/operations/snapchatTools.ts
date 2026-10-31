@@ -246,11 +246,8 @@ async function waitForUnreadTab(context: Context): Promise<Awaited<ReturnType<ty
 }
 
 async function openAddFriends(context: Context): Promise<boolean> {
-  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let cameraWaitLogged = false;
-  let iconWaitLogged = false;
-  let bannerWaitLogged = false;
-  let pageWaitLogged = false;
+  let deepLinkAttempts = 0;
   let chatKeyboardDismissAttempted = false;
   let chatExitAttempted = false;
   while (!context.isAborted()) {
@@ -309,72 +306,43 @@ async function openAddFriends(context: Context): Promise<boolean> {
     }
     cameraWaitLogged = false;
 
-    const addFriendsIcon = state.nodes.find(node =>
-      shortResourceId(node) === "neon_add_friend_button_container",
-    );
-    if (!addFriendsIcon) {
-      if (!iconWaitLogged) {
-        context.onLog("Add Friends: waiting for the top-right person-plus icon; will retry.");
-        iconWaitLogged = true;
+    if (deepLinkAttempts >= 3) {
+      context.onLog("Add Friends: Snapchat did not open the page from its deep link after three attempts; skipping Add Friends without tapping the person-plus icon.");
+      return false;
+    }
+    deepLinkAttempts++;
+    try {
+      context.onLog(`Add Friends: opening Snapchat's Add Friends deep link directly (attempt ${deepLinkAttempts}/3).`);
+      await android.openSnapchatAddFriends(context.serial);
+    } catch (error: any) {
+      context.onLog(`Add Friends: deep-link attempt ${deepLinkAttempts}/3 failed (${error?.message ?? String(error)}).`);
+      if (deepLinkAttempts >= 3) {
+        context.onLog("Add Friends: skipping this tool; no person-plus tap fallback will run.");
+        return false;
       }
-      await context.sleep(BANNER_RECHECK_MS, "exact");
+      await context.sleep(700, "exact");
       continue;
     }
-    iconWaitLogged = false;
-    const occludingBanner = findOccludingBanner(state.nodes, addFriendsIcon, screenWidth, screenHeight);
-    if (occludingBanner) {
-      if (!bannerWaitLogged) {
-        context.onLog("Add Friends: person-plus is covered; checking again until the tap is clear.");
-        bannerWaitLogged = true;
+
+    let linkedState = state;
+    for (let settle = 0; settle < 4 && !context.isAborted(); settle++) {
+      await context.sleep(500, "exact");
+      linkedState = await dump(context.serial);
+      if (isAddFriendsPage(linkedState.xml)) {
+        context.onLog("Add Friends: Snapchat opened the verified Add Friends page from its deep link.");
+        return true;
       }
-      await context.sleep(BANNER_RECHECK_MS, "exact");
+      if (hasSnapchatChatComposer(linkedState.nodes)) break;
+    }
+    if (hasSnapchatChatComposer(linkedState.nodes)) {
+      context.onLog("Add Friends: the direct link landed on a chat; recovering to Camera before retrying the same link.");
       continue;
     }
-    bannerWaitLogged = false;
-    pageWaitLogged = false;
-    const focusResult = await activateFocusedNodeWithTab(
-      context,
-      nodes => nodes.find(node => shortResourceId(node) === "neon_add_friend_button_container"),
-      xml => /camera_page/i.test(xml) && !/add_friends_root/i.test(xml),
-      screenWidth,
-      screenHeight,
-      "person-plus control",
-    );
-    if (focusResult === "covered") {
-      if (!bannerWaitLogged) {
-        context.onLog("Add Friends: waiting for the top-right control to clear before activating it.");
-        bannerWaitLogged = true;
-      }
-      await context.sleep(BANNER_RECHECK_MS, "exact");
-      continue;
+    if (deepLinkAttempts >= 3) {
+      context.onLog("Add Friends: Snapchat did not open the page from its deep link after three attempts; skipping Add Friends without tapping the person-plus icon.");
+      return false;
     }
-    if (focusResult === "surface-changed") continue;
-    if (focusResult !== "activated") {
-      const fresh = await dump(context.serial);
-      if (!/camera_page/i.test(fresh.xml) || /add_friends_root/i.test(fresh.xml)) continue;
-      const liveIcon = fresh.nodes.find(node =>
-        shortResourceId(node) === "neon_add_friend_button_container",
-      );
-      if (!liveIcon) continue;
-      if (findOccludingBanner(fresh.nodes, liveIcon, screenWidth, screenHeight)) {
-        await context.sleep(BANNER_RECHECK_MS, "exact");
-        continue;
-      }
-      if (!await tapNode(
-        context,
-        liveIcon,
-        "open Add Friends from the top-right person-plus icon",
-        700,
-        true,
-      )) return false;
-    }
-    const afterTap = await dump(context.serial);
-    if (isAddFriendsPage(afterTap.xml)) return true;
-    if (!pageWaitLogged) {
-      context.onLog("Add Friends: the page did not open yet; checking the live screen and retrying.");
-      pageWaitLogged = true;
-    }
-    await context.sleep(BANNER_RECHECK_MS, "exact");
+    context.onLog(`Add Friends: the direct link did not reach the friend list; retrying the same link (${deepLinkAttempts}/3).`);
   }
   return false;
 }
@@ -915,15 +883,15 @@ async function generateContextualReply(
   return generateSnapchatLunaReply(apiKey, goal, peer, transcript, history);
 }
 
-async function runAddFriends(context: Context): Promise<"surface-lost" | void> {
+async function runAddFriends(context: Context): Promise<void> {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
   if (!context.tools.addFriends.enabled || requested === 0) return;
   if (!await openAddFriends(context)) return;
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let added = 0;
   let blockedFriend = "";
-  let surfaceLost = false;
   const attemptedFriends = new Set<string>();
+  const recoveryAttempts = new Map<string, number>();
   const findAddCandidates = (nodes: UiNode[]) => {
     const findFriendsStart = nodes.findIndex(node =>
       shortResourceId(node) === "section-title" &&
@@ -969,8 +937,12 @@ async function runAddFriends(context: Context): Promise<"surface-lost" | void> {
   while (added < requested && !context.isAborted()) {
     const { xml, nodes } = await dump(context.serial);
     if (!isAddFriendsPage(xml)) {
-      context.onLog("Add Friends stopped: the verified Add Friends page is no longer open.");
-      break;
+      context.onLog("Add Friends: Snapchat left the friend list; restoring it before continuing.");
+      if (!await openAddFriends(context)) {
+        context.onLog("Add Friends: could not restore the friend list; ending this tool without running another action on the wrong screen.");
+        break;
+      }
+      continue;
     }
     const { findFriendsStart, addButtons, candidates } = findAddCandidates(nodes);
     if (findFriendsStart < 0) {
@@ -1004,9 +976,18 @@ async function runAddFriends(context: Context): Promise<"surface-lost" | void> {
       continue;
     }
     if (focusResult === "surface-changed") {
-      context.onLog("Add Friends stopped: Snapchat left the verified friend list; no other Snapchat tool will run on that screen.");
-      surfaceLost = true;
-      break;
+      const recoveries = (recoveryAttempts.get(friendKey) ?? 0) + 1;
+      recoveryAttempts.set(friendKey, recoveries);
+      context.onLog(`Add Friends: Snapchat left the friend list during Add for ${friendName}; returning to Add Friends and retrying (${recoveries}/3).`);
+      if (!await openAddFriends(context)) {
+        context.onLog("Add Friends: could not recover to the friend list; ending this tool without running another action on the wrong screen.");
+        break;
+      }
+      if (recoveries >= 3) {
+        attemptedFriends.add(friendKey);
+        context.onLog(`Add Friends: skipping ${friendName} after three interrupted attempts and continuing with other available friends.`);
+      }
+      continue;
     }
 
     blockedFriend = "";
@@ -1017,9 +998,18 @@ async function runAddFriends(context: Context): Promise<"surface-lost" | void> {
       // fallback.
       const latest = await dump(context.serial);
       if (!isAddFriendsPage(latest.xml)) {
-        context.onLog("Add Friends stopped: Snapchat left the verified friend list before input.");
-        surfaceLost = true;
-        break;
+        const recoveries = (recoveryAttempts.get(friendKey) ?? 0) + 1;
+        recoveryAttempts.set(friendKey, recoveries);
+        context.onLog(`Add Friends: Snapchat left the friend list before Add for ${friendName}; restoring the list (${recoveries}/3).`);
+        if (!await openAddFriends(context)) {
+          context.onLog("Add Friends: could not recover to the friend list; ending this tool without running another action on the wrong screen.");
+          break;
+        }
+        if (recoveries >= 3) {
+          attemptedFriends.add(friendKey);
+          context.onLog(`Add Friends: skipping ${friendName} after three interrupted attempts and continuing with other available friends.`);
+        }
+        continue;
       }
       const liveSelection = findAddCandidates(latest.nodes).candidates.find(
         item => item.friendKey === friendKey,
@@ -1044,17 +1034,26 @@ async function runAddFriends(context: Context): Promise<"surface-lost" | void> {
 
     const afterTap = await dump(context.serial);
     if (hasSnapchatChatComposer(afterTap.nodes) || !isAddFriendsPage(afterTap.xml)) {
-      context.onLog(`Add Friends stopped: Snapchat left the friend list while processing ${friendName}; stopping the tool sequence instead of entering the banner's chat.`);
-      surfaceLost = true;
-      break;
+      const recoveries = (recoveryAttempts.get(friendKey) ?? 0) + 1;
+      recoveryAttempts.set(friendKey, recoveries);
+      context.onLog(`Add Friends: Snapchat opened another screen while processing ${friendName}; leaving it, restoring Add Friends, and retrying (${recoveries}/3).`);
+      if (!await openAddFriends(context)) {
+        context.onLog("Add Friends: could not recover to the friend list; ending this tool without running another action on the wrong screen.");
+        break;
+      }
+      if (recoveries >= 3) {
+        attemptedFriends.add(friendKey);
+        context.onLog(`Add Friends: skipping ${friendName} after three interrupted attempts and continuing with other available friends.`);
+      }
+      continue;
     }
     attemptedFriends.add(friendKey);
+    recoveryAttempts.delete(friendKey);
     added++;
     context.onMetric?.("snapchat_add_friends");
     context.onLog(`Add Friends: tapped Add for ${friendName}; continuing without waiting for Snapchat's confirmation.`);
   }
   context.onLog(`Add Friends: processed ${added}/${requested} Add tap(s) from the Find Friends section.`);
-  return surfaceLost ? "surface-lost" : undefined;
 }
 
 async function runAcceptFriends(context: Context) {
@@ -1665,7 +1664,6 @@ export async function runSnapchatTools(context: Context): Promise<boolean> {
     let toolFailed = false;
     try {
       const result = await tool.run();
-      if (tool.name === "Add Friends" && result === "surface-lost") return false;
       if (tool.name === "Upload a Snap") {
         // This staged test flow intentionally leaves Snapchat on the selected
         // image. Do not run later shuffled tools against the editor surface.

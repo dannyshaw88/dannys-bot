@@ -15,7 +15,9 @@ surprising, unwanted "ghost input" from the phone's perspective — indistinguis
 **How to apply:** gate any code that starts streaming/injects input against a
 device on an explicit trigger — an on-screen Power button press, an automation
 toggle, or an explicit Phone Farm device selection — never on component mount /
-tab navigation alone. A device selection should open the mirror first; the
-mirror's conditional screen-on check may wake a sleeping device but must return
-immediately for an already-awake device. Also reset any such "live" flag when
-the device disconnects so a reconnect doesn't silently resume streaming.
+tab navigation alone. On Farm selection, start the conditional screen-on
+request in parallel with navigation so slow device-inventory loading does not
+leave a short-timeout phone asleep before the mirror stream starts. The check
+must return immediately for an already-awake device. Also reset any such "live"
+flag when the device disconnects so a reconnect doesn't silently resume
+streaming.

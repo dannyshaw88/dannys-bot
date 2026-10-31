@@ -1725,9 +1725,51 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         timeoutChanged: activeTimeoutLease?.changed ?? false,
         previousTimeoutMs: activeTimeoutLease?.previousTimeoutMs ?? null,
       });
-      // Do not auto-wake a phone merely because a background mirror connects:
-      // the detail mirror is opened by an explicit user action. The keepalive
-      // below only runs for that already-user-requested mirror session.
+      // Begin display readiness as soon as the explicit mirror request is
+      // accepted, in parallel with stale screenrecord cleanup below. Waiting
+      // for cleanup first can leave a short-timeout device asleep by the time
+      // the first video frame is ready.
+      const displayReadinessPromise = (async () => {
+        const screenOnBefore = await android.isScreenOn(serial).catch(() => null);
+        let ensureScreenOnError: string | null = null;
+        try {
+          await android.ensureScreenOn(serial);
+        } catch (error: any) {
+          ensureScreenOnError = error?.message ?? String(error);
+        }
+        mirrorDiagnostic(serial, "display readiness completed alongside stream cleanup", {
+          elapsedMs: elapsed(),
+          screenOnBefore,
+          ensureScreenOnError,
+          automationActive: automationCycleInProgress.has(serial),
+        });
+        logger.info({ serial, elapsedMs: elapsed(), screenWasAlreadyOn: screenOnBefore === true }, "[mobile-video] timing: ensureScreenOn done");
+      })();
+
+      // One delayed retry covers a display that times out during a slow
+      // initial connection, even when it was awake at the first probe. Never
+      // wake periodically or during an automation cycle.
+      initialWakeRetryTimer = setTimeout(() => {
+        initialWakeRetryTimer = null;
+        void (async () => {
+          if (!running || ws.readyState !== 1 || automationCycleInProgress.has(serial)) return;
+          const screenOnNow = await android.isScreenOn(serial).catch(() => null);
+          if (!running || ws.readyState !== 1 || automationCycleInProgress.has(serial) || screenOnNow === true) return;
+          try {
+            await execFileP(adbPath, [
+              "-s", serial, "shell", "input", "keyevent", "224",
+            ], { encoding: "utf8", timeout: 3000 } as any);
+            mirrorDiagnostic(serial, "one-time initial WAKEUP retry succeeded", { screenOnNow });
+            logger.info({ serial }, "[mobile-video] issued one-time initial wake retry");
+          } catch (error: any) {
+            mirrorDiagnostic(serial, "one-time initial WAKEUP retry failed", {
+              screenOnNow,
+              error: error?.message ?? String(error),
+              stderr: String(error?.stderr ?? "").trim().slice(0, 500),
+            });
+          }
+        })();
+      }, 10_000);
 
       // NOTE: we intentionally do NOT force `--size` to the device's exact
       // `wm size` here. screenrecord's encoder on many devices requires
@@ -2237,48 +2279,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       videoSessionWS.set(serial, ws);
       logger.info({ serial, elapsedMs: elapsed() }, "[mobile-video] timing: pkill stale screenrecord done");
 
-      // NOTE: an earlier fix here assumed the display being off explained
-      // the first-connect delay — the user confirmed the screen was ON, so
-      // that theory was wrong. Keeping ensureScreenOn as a no-op-when-on
-      // safety net (it returns immediately if the screen is already awake),
-      // but logging its own elapsed cost separately so it's not blamed for
-      // time it didn't spend.
-      const screenOnBefore = await android.isScreenOn(serial).catch(() => null);
-      let ensureScreenOnError: string | null = null;
-      try {
-        await android.ensureScreenOn(serial);
-      } catch (error: any) {
-        ensureScreenOnError = error?.message ?? String(error);
-      }
-      mirrorDiagnostic(serial, "display readiness check completed", {
-        elapsedMs: elapsed(),
-        screenOnBefore,
-        ensureScreenOnError,
-        automationActive: automationCycleInProgress.has(serial),
-      });
-      logger.info({ serial, elapsedMs: elapsed(), screenWasAlreadyOn: screenOnBefore === true }, "[mobile-video] timing: ensureScreenOn done");
-
-      // The explicit mirror open already called ensureScreenOn above. Keep
-      // the requested 10-second grace for a phone opened from the Farm page,
-      // but make it a single retry only when that initial screen check said
-      // the display was not already on. Never wake a running automation cycle.
-      if (screenOnBefore !== true) {
-        initialWakeRetryTimer = setTimeout(() => {
-          initialWakeRetryTimer = null;
-          if (!running || ws.readyState !== 1 || automationCycleInProgress.has(serial)) return;
-          void execFileP(adbPath, [
-            "-s", serial, "shell", "input", "keyevent", "224",
-          ], { encoding: "utf8", timeout: 3000 } as any)
-            .then(() => {
-              mirrorDiagnostic(serial, "one-time initial WAKEUP keyevent succeeded");
-              logger.info({ serial }, "[mobile-video] issued one-time initial wake retry");
-            })
-            .catch((error: any) => mirrorDiagnostic(serial, "one-time initial WAKEUP keyevent failed", {
-              error: error?.message ?? String(error),
-              stderr: String(error?.stderr ?? "").trim().slice(0, 500),
-            }));
-        }, 10_000);
-      }
+      await displayReadinessPromise;
 
       logger.info({ serial, elapsedMs: elapsed(), adbPath }, "[mobile-video] timing: about to spawn screenrecord");
       spawnStream();
@@ -10247,7 +10248,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       interface AllNode {
         index: number; cls: string; resourceId: string; contentDesc: string; text: string;
         bounds: string; boundsRaw: [number,number,number,number];
-        center: { x: number; y: number }; clickable: boolean; area: number;
+        center: { x: number; y: number };
+        clickable: boolean; focusable: boolean; focused: boolean; area: number;
       }
       const nodes: AllNode[] = [];
       const nodeRe = /<node\s([^>]+?)\s*\/?>/g;
@@ -10270,6 +10272,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           boundsRaw:   [x1, y1, x2, y2],
           center:      { x: Math.round((x1+x2)/2), y: Math.round((y1+y2)/2) },
           clickable:   get("clickable") === "true",
+          focusable:   get("focusable") === "true",
+          focused:     get("focused") === "true",
           area:        (x2-x1) * (y2-y1),
         });
       }
@@ -10619,7 +10623,8 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       interface InspectNode {
         cls: string; resourceId: string; contentDesc: string; text: string;
         bounds: string; boundsRaw: [number,number,number,number];
-        center: { x: number; y: number }; clickable: boolean; area: number;
+        center: { x: number; y: number };
+        clickable: boolean; focusable: boolean; focused: boolean; area: number;
       }
       const hits: InspectNode[] = [];
       // Match BOTH self-closing <node … /> AND opening <node …> tags (nodes with children).
@@ -10647,6 +10652,8 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
           boundsRaw:   [x1, y1, x2, y2],
           center:      { x: Math.round((x1+x2)/2), y: Math.round((y1+y2)/2) },
           clickable:   get("clickable") === "true",
+          focusable:   get("focusable") === "true",
+          focused:     get("focused") === "true",
           area:        (x2-x1) * (y2-y1),
         });
       }
