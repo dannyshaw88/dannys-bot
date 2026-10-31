@@ -19,6 +19,12 @@ The user wants five individual accounts on each device. Keep their settings, pro
 
 **How to apply:** Extend the platform discriminator and app-launch branch, but keep Snapchat settings, copy targets, and dispatch platform-specific. Store the display label on that Snapchat account slot only; never resolve it through TrustScore APIs, templates, timers, or automation settings. Do not split shared HST scheduling or collision queues into platform-specific collections.
 
+In Snapchat Copy Settings, keep Reply to Unread Chats' prompt as an opt-in child setting, separate from the tool controls. If the prompt option is off, copying the tool must preserve each target slot's existing prompt.
+
+**Why:** The user does not always want reply prompts copied along with the operational settings.
+
+**How to apply:** Omit `replyGoal` from the copied tool payload unless the child checkbox is selected; the API merges the partial tool object over the target's saved values.
+
 Snapchat HST cycles also need a Step 3: dismiss Snapchat from the floating-window/recents view with the swipe gesture saved in My Device, then return Home and lock the phone. Resolve swipe direction using the same device preference/model rules as Instagram.
 
 **Why:** The user explicitly requested the same close-and-lock lifecycle for Snapchat while using the selected device gesture.

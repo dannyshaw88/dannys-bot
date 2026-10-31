@@ -58,6 +58,7 @@ type Context = {
   ) => Promise<string | null>;
   tools: SnapchatTools;
   onLog: (message: string) => void;
+  onProgress: () => void;
   isAborted: () => boolean;
   effectiveTypingProfile: (serial: string) => any;
   sleep: (milliseconds: number, timingMode?: "static" | "exact") => Promise<void>;
@@ -255,14 +256,8 @@ async function openAddFriends(context: Context): Promise<boolean> {
 }
 
 function randomCount(min: number, max: number): number {
-  const low = Math.max(0, Math.min(10, Math.min(min, max)));
-  const high = Math.max(low, Math.min(10, Math.max(min, max)));
-  return low + Math.floor(Math.random() * (high - low + 1));
-}
-
-function randomUncappedCount(min: number, max: number): number {
-  const low = Math.max(0, Math.min(min, max));
-  const high = Math.max(low, Math.max(min, max));
+  const low = Math.max(0, Math.trunc(Math.min(min, max)));
+  const high = Math.max(low, Math.trunc(Math.max(min, max)));
   return low + Math.floor(Math.random() * (high - low + 1));
 }
 
@@ -1039,7 +1034,7 @@ async function collapseAddFriendsBeforeNextTool(context: Context): Promise<boole
 
 async function runReplyUnreadChats(context: Context) {
   const { enabled, replyGoal } = context.tools.replyUnreadChats;
-  const requested = randomUncappedCount(context.tools.replyUnreadChats.min, context.tools.replyUnreadChats.max);
+  const requested = randomCount(context.tools.replyUnreadChats.min, context.tools.replyUnreadChats.max);
   if (!enabled || requested === 0) return;
   context.onLog(`Reply to Unread Chats: target ${requested} unread contact(s), one reply per contact.`);
   if (!context.slotId) {
@@ -1197,7 +1192,13 @@ async function runReplyUnreadChats(context: Context) {
         reply,
         context.effectiveTypingProfile(context.serial),
         message => context.onLog(`Reply to Unread Chats: ${message}`),
-        { debugLabel: "Snapchat reply", disableHumanErrors: true, skipMissingKeys: true, compactLogs: true },
+        {
+          debugLabel: "Snapchat reply",
+          disableHumanErrors: true,
+          skipMissingKeys: true,
+          compactLogs: true,
+          onProgress: context.onProgress,
+        },
       );
       if (!typed.available) {
         context.onLog(

@@ -136,24 +136,24 @@ export function HumanSessionWebBrowsingSection({
               <div className="flex gap-4 flex-wrap items-center">
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground whitespace-nowrap">Sites to Visit</Label>
-                  <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                  <NumField min={1} className="w-14 h-7 text-xs"
                     value={(settings as any).webBrowsingSitesMin ?? 3}
                     onChange={(v) => setSettings({ ...settings, webBrowsingSitesMin: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">–</span>
-                  <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                  <NumField min={1} className="w-14 h-7 text-xs"
                     value={(settings as any).webBrowsingSitesMax ?? 5}
                     onChange={(v) => setSettings({ ...settings, webBrowsingSitesMax: v } as any)}
                   />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground whitespace-nowrap">Internal Links</Label>
-                  <NumField min={0} max={50} className="w-14 h-7 text-xs"
+                  <NumField min={0} className="w-14 h-7 text-xs"
                     value={(settings as any).webBrowsingInternalLinksMin ?? 2}
                     onChange={(v) => setSettings({ ...settings, webBrowsingInternalLinksMin: v } as any)}
                   />
                   <span className="text-[10px] text-muted-foreground">–</span>
-                  <NumField min={0} max={50} className="w-14 h-7 text-xs"
+                  <NumField min={0} className="w-14 h-7 text-xs"
                     value={(settings as any).webBrowsingInternalLinksMax ?? 5}
                     onChange={(v) => setSettings({ ...settings, webBrowsingInternalLinksMax: v } as any)}
                   />

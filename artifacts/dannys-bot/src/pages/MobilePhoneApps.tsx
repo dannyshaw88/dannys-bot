@@ -950,19 +950,17 @@ function MobilePhoneAppsPanel({
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.chrome.scrollMin ?? 1}
-                        onChange={e => patchApp("chrome", { scrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("chrome", { scrollMin: Math.max(0, Number(e.target.value)) })}
                       />
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.chrome.scrollMax ?? 5}
-                        onChange={e => patchApp("chrome", { scrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("chrome", { scrollMax: Math.max(0, Number(e.target.value)) })}
                       />
                     </div>
                   </div>
@@ -972,19 +970,17 @@ function MobilePhoneAppsPanel({
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.chrome.storyTapMin ?? 0}
-                        onChange={e => patchApp("chrome", { storyTapMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("chrome", { storyTapMin: Math.max(0, Number(e.target.value)) })}
                       />
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.chrome.storyTapMax ?? 0}
-                        onChange={e => patchApp("chrome", { storyTapMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("chrome", { storyTapMax: Math.max(0, Number(e.target.value)) })}
                       />
                     </div>
                   </div>
@@ -994,19 +990,17 @@ function MobilePhoneAppsPanel({
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.chrome.tappedStoryScrollMin ?? 0}
-                        onChange={e => patchApp("chrome", { tappedStoryScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("chrome", { tappedStoryScrollMin: Math.max(0, Number(e.target.value)) })}
                       />
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.chrome.tappedStoryScrollMax ?? 0}
-                        onChange={e => patchApp("chrome", { tappedStoryScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("chrome", { tappedStoryScrollMax: Math.max(0, Number(e.target.value)) })}
                       />
                     </div>
                   </div>
@@ -1015,17 +1009,17 @@ function MobilePhoneAppsPanel({
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Searches Per Run</span>
                     <div className="flex items-center gap-1">
-                      <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMin ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMin: Math.min(50, Math.max(1, Number(e.target.value))) })} />
+                      <Input type="number" min={1} className={PCT_INPUT} value={settings.chrome.manualSearchCountMin ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMin: Math.max(1, Number(e.target.value)) })} />
                       <span className="text-muted-foreground text-sm">to</span>
-                      <Input type="number" min={1} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchCountMax ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMax: Math.min(50, Math.max(1, Number(e.target.value))) })} />
+                      <Input type="number" min={1} className={PCT_INPUT} value={settings.chrome.manualSearchCountMax ?? 1} onChange={e => patchApp("chrome", { manualSearchCountMax: Math.max(1, Number(e.target.value)) })} />
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground whitespace-nowrap">Search Result Scrolls</span>
                     <div className="flex items-center gap-1">
-                      <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMin ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })} />
+                      <Input type="number" min={0} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMin ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMin: Math.max(0, Number(e.target.value)) })} />
                       <span className="text-muted-foreground text-sm">to</span>
-                      <Input type="number" min={0} max={50} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMax ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })} />
+                      <Input type="number" min={0} className={PCT_INPUT} value={settings.chrome.manualSearchScrollMax ?? 0} onChange={e => patchApp("chrome", { manualSearchScrollMax: Math.max(0, Number(e.target.value)) })} />
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-1">
@@ -1101,19 +1095,17 @@ function MobilePhoneAppsPanel({
                           <Input
                             type="number"
                             min={0}
-                            max={50}
                             className={PCT_INPUT}
                             value={settings.chrome.tapTrendingStoryMin ?? 0}
-                            onChange={e => patchApp("chrome", { tapTrendingStoryMin: Math.min(50, Math.max(0, Math.round(Number(e.target.value)))) })}
+                            onChange={e => patchApp("chrome", { tapTrendingStoryMin: Math.max(0, Math.round(Number(e.target.value))) })}
                           />
                           <span className="text-muted-foreground text-sm">to</span>
                           <Input
                             type="number"
                             min={0}
-                            max={50}
                             className={PCT_INPUT}
                             value={settings.chrome.tapTrendingStoryMax ?? 0}
-                            onChange={e => patchApp("chrome", { tapTrendingStoryMax: Math.min(50, Math.max(0, Math.round(Number(e.target.value)))) })}
+                            onChange={e => patchApp("chrome", { tapTrendingStoryMax: Math.max(0, Math.round(Number(e.target.value))) })}
                           />
                         </div>
                       </div>
@@ -1137,19 +1129,17 @@ function MobilePhoneAppsPanel({
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.youtube.scrollMin ?? 1}
-                        onChange={e => patchApp("youtube", { scrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("youtube", { scrollMin: Math.max(0, Number(e.target.value)) })}
                       />
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.youtube.scrollMax ?? 5}
-                        onChange={e => patchApp("youtube", { scrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("youtube", { scrollMax: Math.max(0, Number(e.target.value)) })}
                       />
                     </div>
                   </div>
@@ -1230,19 +1220,17 @@ function MobilePhoneAppsPanel({
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.youtube.shortsScrollMin ?? 0}
-                        onChange={e => patchApp("youtube", { shortsScrollMin: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("youtube", { shortsScrollMin: Math.max(0, Number(e.target.value)) })}
                       />
                       <span className="text-muted-foreground text-sm">to</span>
                       <Input
                         type="number"
                         min={0}
-                        max={50}
                         className={PCT_INPUT}
                         value={settings.youtube.shortsScrollMax ?? 0}
-                        onChange={e => patchApp("youtube", { shortsScrollMax: Math.min(50, Math.max(0, Number(e.target.value))) })}
+                        onChange={e => patchApp("youtube", { shortsScrollMax: Math.max(0, Number(e.target.value)) })}
                       />
                     </div>
                   </div>
@@ -1313,19 +1301,17 @@ function MobilePhoneAppsPanel({
                     <Input
                       type="number"
                       min={1}
-                      max={100}
                       className={PCT_INPUT}
                       value={settings.whatsapp.userCountMin ?? 1}
-                      onChange={e => patchApp("whatsapp", { userCountMin: Math.min(100, Math.max(1, Math.round(Number(e.target.value)))) })}
+                      onChange={e => patchApp("whatsapp", { userCountMin: Math.max(1, Math.round(Number(e.target.value))) })}
                     />
                     <span className="text-muted-foreground text-sm">to</span>
                     <Input
                       type="number"
                       min={1}
-                      max={100}
                       className={PCT_INPUT}
                       value={settings.whatsapp.userCountMax ?? 1}
-                      onChange={e => patchApp("whatsapp", { userCountMax: Math.min(100, Math.max(1, Math.round(Number(e.target.value)))) })}
+                      onChange={e => patchApp("whatsapp", { userCountMax: Math.max(1, Math.round(Number(e.target.value))) })}
                     />
                   </div>
                 </>}

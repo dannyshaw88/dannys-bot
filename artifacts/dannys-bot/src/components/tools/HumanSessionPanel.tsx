@@ -1005,12 +1005,12 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
                 <div className="h-4 w-px bg-border/60 shrink-0" />
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                  <NumField min={0} max={50} className="w-16 h-7 text-xs"
+                  <NumField min={0} className="w-16 h-7 text-xs"
                     value={settings.reelWatchCountMin ?? 1}
                     onChange={(v) => setSettings({ ...settings, reelWatchCountMin: v })}
                   />
                   <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                  <NumField min={0} max={50} className="w-16 h-7 text-xs"
+                  <NumField min={0} className="w-16 h-7 text-xs"
                     value={settings.reelWatchCountMax ?? 3}
                     onChange={(v) => setSettings({ ...settings, reelWatchCountMax: v })}
                   />
@@ -1075,23 +1075,23 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               </div>
               {/* Sub-row 1 — Users to Watch | Slides per User | Watch % */}
               <div className={`flex items-center gap-2.5 flex-wrap transition-opacity ${!settings.checkTimelineStoriesEnabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                <NumField min={1} max={50} className="w-14 h-7 text-xs"
+                <NumField min={1} className="w-14 h-7 text-xs"
                   value={settings.checkTimelineStoriesMin ?? 3}
                   onChange={(v) => setSettings({ ...settings, checkTimelineStoriesMin: v })}
                 />
                 <span className="text-[10px] text-muted-foreground">–</span>
-                <NumField min={1} max={50} className="w-14 h-7 text-xs"
+                <NumField min={1} className="w-14 h-7 text-xs"
                   value={settings.checkTimelineStoriesMax ?? 8}
                   onChange={(v) => setSettings({ ...settings, checkTimelineStoriesMax: v })}
                 />
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Users to Watch</span>
                 <div className="h-4 w-px bg-border/60 shrink-0" />
-                <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                <NumField min={1} className="w-14 h-7 text-xs"
                   value={(settings as any).checkTimelineStoriesSlideMin ?? 2}
                   onChange={(v) => setSettings({ ...settings, checkTimelineStoriesSlideMin: v } as any)}
                 />
                 <span className="text-[10px] text-muted-foreground">–</span>
-                <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                <NumField min={1} className="w-14 h-7 text-xs"
                   value={(settings as any).checkTimelineStoriesSlideMax ?? 5}
                   onChange={(v) => setSettings({ ...settings, checkTimelineStoriesSlideMax: v } as any)}
                 />
@@ -1488,14 +1488,14 @@ export function HumanSessionPanel({ tool, profile, copyOpen: copyOpenProp, onCop
               <div className="flex items-center gap-1.5">
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground">Min</Label>
-                  <NumField min={1} max={20} className="w-16 h-7 text-xs"
+                  <NumField min={1} className="w-16 h-7 text-xs"
                     value={settings.repostMin ?? 1}
                     onChange={(v) => setSettings({ ...settings, repostMin: v })}
                   />
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Label className="text-xs text-muted-foreground">Max</Label>
-                  <NumField min={1} max={20} className="w-16 h-7 text-xs"
+                  <NumField min={1} className="w-16 h-7 text-xs"
                     value={settings.repostMax ?? 1}
                     onChange={(v) => setSettings({ ...settings, repostMax: v })}
                   />

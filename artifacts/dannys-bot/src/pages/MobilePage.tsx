@@ -5826,6 +5826,7 @@ function CopySettingsDialog({
   const [selectedSnapchatCopyKeys, setSelectedSnapchatCopyKeys] = useState<Set<SnapchatCopyKey>>(
     () => new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key)),
   );
+  const [copyReplyPrompt, setCopyReplyPrompt] = useState(false);
   const [copying, setCopying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const displayCopySections = (() => {
@@ -6039,7 +6040,11 @@ function CopySettingsDialog({
         snapchatTools.shuffleToolOrder = settings.snapchatTools.shuffleToolOrder;
       }
       for (const key of ["uploadSnap", "addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"] as const) {
-        if (selectedSnapchatCopyKeys.has(key)) snapchatTools[key] = settings.snapchatTools[key];
+        if (selectedSnapchatCopyKeys.has(key)) {
+          const toolSettings = { ...settings.snapchatTools[key] } as Record<string, unknown>;
+          if (key === "replyUnreadChats" && !copyReplyPrompt) delete toolSettings.replyGoal;
+          snapchatTools[key] = toolSettings;
+        }
       }
       if (Object.keys(snapchatTools).length > 0) partial.snapchatTools = snapchatTools;
     } else {
@@ -6192,11 +6197,17 @@ function CopySettingsDialog({
                   <span className="text-xs font-bold text-foreground">Snapchat settings</span>
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
-                      onClick={() => setSelectedSnapchatCopyKeys(new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key)))}>
+                      onClick={() => {
+                        setSelectedSnapchatCopyKeys(new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key)));
+                        setCopyReplyPrompt(true);
+                      }}>
                       All
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
-                      onClick={() => setSelectedSnapchatCopyKeys(new Set())}>
+                      onClick={() => {
+                        setSelectedSnapchatCopyKeys(new Set());
+                        setCopyReplyPrompt(false);
+                      }}>
                       None
                     </Button>
                   </div>
@@ -6206,20 +6217,38 @@ function CopySettingsDialog({
                     Copies only to Snapchat account slots. Instagram slots are excluded.
                   </p>
                   {SNAPCHAT_COPY_OPTIONS.map(option => (
-                    <label key={option.key} className="flex items-center gap-2 py-0.5 text-xs text-muted-foreground cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        className="w-3.5 h-3.5 accent-primary shrink-0"
-                        checked={selectedSnapchatCopyKeys.has(option.key)}
-                        onChange={event => setSelectedSnapchatCopyKeys(previous => {
-                          const next = new Set(previous);
-                          if (event.target.checked) next.add(option.key);
-                          else next.delete(option.key);
-                          return next;
-                        })}
-                      />
-                      {option.label}
-                    </label>
+                    <div key={option.key} className="space-y-0.5">
+                      <label className="flex items-center gap-2 py-0.5 text-xs text-muted-foreground cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          className="w-3.5 h-3.5 accent-primary shrink-0"
+                          checked={selectedSnapchatCopyKeys.has(option.key)}
+                          onChange={event => setSelectedSnapchatCopyKeys(previous => {
+                            const next = new Set(previous);
+                            if (event.target.checked) next.add(option.key);
+                            else next.delete(option.key);
+                            return next;
+                          })}
+                        />
+                        {option.label}
+                      </label>
+                      {option.key === "replyUnreadChats" && (
+                        <label className={`flex items-center gap-2 pl-5 py-0.5 text-[11px] select-none ${
+                          selectedSnapchatCopyKeys.has("replyUnreadChats")
+                            ? "text-muted-foreground cursor-pointer"
+                            : "text-muted-foreground/50 cursor-not-allowed"
+                        }`}>
+                          <input
+                            type="checkbox"
+                            className="w-3 h-3 accent-primary shrink-0"
+                            checked={copyReplyPrompt}
+                            disabled={!selectedSnapchatCopyKeys.has("replyUnreadChats")}
+                            onChange={event => setCopyReplyPrompt(event.target.checked)}
+                          />
+                          Copy reply prompt
+                        </label>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -6973,23 +7002,23 @@ export function AutomationSettingsPanel({
                       {key === "viewStories" ? "Swipes" : key === "viewSnaps" ? "Snaps" : key === "massSnap" ? "Select" : key === "uploadSnap" ? "Amount" : "Count"}
                     </Label>
                     <Input
-                      type="number" min={countFloor} max={key === "replyUnreadChats" ? undefined : 10}
-                      className={`${key === "replyUnreadChats" ? "w-16" : "w-10"} h-7 px-0.5 text-center text-xs`}
+                      type="number" min={countFloor}
+                      className="w-16 h-7 px-0.5 text-center text-xs"
                       value={countFloor ? Math.max(1, tool.min) : tool.min}
                       onChange={e => {
                         const value = clamp4(Number(e.target.value));
-                        updateSnapchatTool(key, { min: Math.max(countFloor, key === "replyUnreadChats" ? value : Math.min(10, value)) });
+                        updateSnapchatTool(key, { min: Math.max(countFloor, value) });
                       }}
                       disabled={loading || !tool.enabled}
                     />
                     <span className="text-xs text-muted-foreground">–</span>
                     <Input
-                      type="number" min={countFloor} max={key === "replyUnreadChats" ? undefined : 10}
-                      className={`${key === "replyUnreadChats" ? "w-16" : "w-10"} h-7 px-0.5 text-center text-xs`}
+                      type="number" min={countFloor}
+                      className="w-16 h-7 px-0.5 text-center text-xs"
                       value={countFloor ? Math.max(1, tool.max) : tool.max}
                       onChange={e => {
                         const value = clamp4(Number(e.target.value));
-                        updateSnapchatTool(key, { max: Math.max(countFloor, key === "replyUnreadChats" ? value : Math.min(10, value)) });
+                        updateSnapchatTool(key, { max: Math.max(countFloor, value) });
                       }}
                       disabled={loading || !tool.enabled}
                     />
@@ -8959,12 +8988,12 @@ export function AutomationSettingsPanel({
                 <div className="space-y-1.5">
                   <Label className="text-sm text-muted-foreground block text-center">Posts per session</Label>
                   <div className="flex items-center gap-2">
-                    <Input type="number" min={1} max={20} maxLength={4} className={NUM_INPUT_CLASS}
+                    <Input type="number" min={1} className={NUM_INPUT_CLASS}
                       value={settings.makePostPerSessionMin}
                       onChange={e => setSettings(s => ({ ...s, makePostPerSessionMin: clamp4(Number(e.target.value)) }))}
                       disabled={fieldDisabled("makePostPerSessionMin")} />
                     <span className="text-muted-foreground text-sm">to</span>
-                    <Input type="number" min={1} max={20} maxLength={4} className={NUM_INPUT_CLASS}
+                    <Input type="number" min={1} className={NUM_INPUT_CLASS}
                       value={settings.makePostPerSessionMax}
                       onChange={e => setSettings(s => ({ ...s, makePostPerSessionMax: clamp4(Number(e.target.value)) }))}
                       disabled={fieldDisabled("makePostPerSessionMax")} />
@@ -9074,20 +9103,20 @@ export function AutomationSettingsPanel({
                           disabled={fieldDisabled("makePostDisableAtPostCountEnabled")}
                           className="w-3.5 h-3.5 accent-primary cursor-pointer" />
                         <label htmlFor={`make-a-post-disable-post-count-${slotIdx ?? 0}`} className="text-xs text-muted-foreground cursor-pointer select-none">Disable when account reaches</label>
-                        <Input type="number" min={1} max={1000000} className={`${NUM_INPUT_CLASS} w-16`}
+                        <Input type="number" min={1} className={`${NUM_INPUT_CLASS} w-16`}
                           value={settings.makePostDisableAtPostCountMin}
                           onChange={e => setSettings(s => ({
                             ...s,
-                            makePostDisableAtPostCountMin: Math.max(1, Math.min(1000000, clamp4(Number(e.target.value)))),
+                            makePostDisableAtPostCountMin: Math.max(1, clamp4(Number(e.target.value))),
                             makePostDisableAtPostCountTarget: null,
                           }))}
                           disabled={fieldDisabled("makePostDisableAtPostCountMin") || !settings.makePostDisableAtPostCountEnabled} />
                         <span className="text-xs text-muted-foreground">to</span>
-                        <Input type="number" min={1} max={1000000} className={`${NUM_INPUT_CLASS} w-16`}
+                        <Input type="number" min={1} className={`${NUM_INPUT_CLASS} w-16`}
                           value={settings.makePostDisableAtPostCountMax}
                           onChange={e => setSettings(s => ({
                             ...s,
-                            makePostDisableAtPostCountMax: Math.max(1, Math.min(1000000, clamp4(Number(e.target.value)))),
+                            makePostDisableAtPostCountMax: Math.max(1, clamp4(Number(e.target.value))),
                             makePostDisableAtPostCountTarget: null,
                           }))}
                           disabled={fieldDisabled("makePostDisableAtPostCountMax") || !settings.makePostDisableAtPostCountEnabled} />
@@ -9305,14 +9334,14 @@ export function AutomationSettingsPanel({
                   <Label className="text-sm text-muted-foreground block text-center">Activate Percentage</Label>
                   <div className="flex items-center gap-3">
                     <Input
-                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      type="number" min={0} max={100} className={NUM_INPUT_CLASS}
                       value={settings.shareReelActivatePctMin}
                       onChange={e => setSettings(s => ({ ...s, shareReelActivatePctMin: Math.min(100, clamp4(Number(e.target.value))) }))}
                       disabled={fieldDisabled("shareReelActivatePctMin")}
                     />
                     <span className="text-muted-foreground text-sm">to</span>
                     <Input
-                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      type="number" min={0} max={100} className={NUM_INPUT_CLASS}
                       value={settings.shareReelActivatePctMax}
                       onChange={e => setSettings(s => ({ ...s, shareReelActivatePctMax: Math.min(100, clamp4(Number(e.target.value))) }))}
                       disabled={fieldDisabled("shareReelActivatePctMax")}
@@ -9323,14 +9352,14 @@ export function AutomationSettingsPanel({
                   <Label className="text-sm text-muted-foreground block text-center">Process Amount</Label>
                   <div className="flex items-center gap-3">
                     <Input
-                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      type="number" min={0} className={NUM_INPUT_CLASS}
                       value={settings.shareReelProcessMin}
                       onChange={e => setSettings(s => ({ ...s, shareReelProcessMin: Math.max(0, clamp4(Number(e.target.value))) }))}
                       disabled={fieldDisabled("shareReelProcessMin")}
                     />
                     <span className="text-muted-foreground text-sm">to</span>
                     <Input
-                      type="number" min={0} max={100} maxLength={4} className={NUM_INPUT_CLASS}
+                      type="number" min={0} className={NUM_INPUT_CLASS}
                       value={settings.shareReelProcessMax}
                       onChange={e => setSettings(s => ({ ...s, shareReelProcessMax: Math.max(0, clamp4(Number(e.target.value))) }))}
                       disabled={fieldDisabled("shareReelProcessMax")}

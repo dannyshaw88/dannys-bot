@@ -2727,17 +2727,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // alteration, and image-settings fields below.
     makePostEnabled: z.boolean().default(false),
     makePostDisableAtPostCountEnabled: z.boolean().default(false),
-    makePostDisableAtPostCountMin: z.number().int().min(1).max(1_000_000).default(20),
-    makePostDisableAtPostCountMax: z.number().int().min(1).max(1_000_000).default(25),
-    makePostDisableAtPostCountTarget: z.number().int().min(1).max(1_000_000).nullable().default(null),
-    makePostDisableAtPostCountTargetMin: z.number().int().min(1).max(1_000_000).nullable().default(null),
-    makePostDisableAtPostCountTargetMax: z.number().int().min(1).max(1_000_000).nullable().default(null),
+    makePostDisableAtPostCountMin: z.number().int().min(1).default(20),
+    makePostDisableAtPostCountMax: z.number().int().min(1).default(25),
+    makePostDisableAtPostCountTarget: z.number().int().min(1).nullable().default(null),
+    makePostDisableAtPostCountTargetMin: z.number().int().min(1).nullable().default(null),
+    makePostDisableAtPostCountTargetMax: z.number().int().min(1).nullable().default(null),
     makePostDisableAtPostCountReached: z.boolean().default(false),
     makePostPostCountManualReenableToken: z.number().int().nonnegative().default(0),
     makePostActivatePctMin: z.number().min(0).max(100).default(100),
     makePostActivatePctMax: z.number().min(0).max(100).default(100),
-    makePostPerSessionMin: z.number().min(1).max(20).default(1),
-     makePostPerSessionMax: z.number().min(1).max(20).default(1),
+    makePostPerSessionMin: z.number().min(1).default(1),
+     makePostPerSessionMax: z.number().min(1).default(1),
      makePostFilterChanceMin: z.number().min(0).max(100).default(0),
      makePostFilterChanceMax: z.number().min(0).max(100).default(100),
     makePostAlterationEnabled: z.boolean().default(true),
@@ -2804,8 +2804,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     shareReelEnabled: z.boolean().default(false),
     shareReelActivatePctMin: z.number().min(0).max(100).default(100),
     shareReelActivatePctMax: z.number().min(0).max(100).default(100),
-    shareReelProcessMin: z.number().min(0).max(100).default(1),
-    shareReelProcessMax: z.number().min(0).max(100).default(1),
+    shareReelProcessMin: z.number().min(0).default(1),
+    shareReelProcessMax: z.number().min(0).default(1),
     shareReelSources: z.array(followSourceSchema).default([]),
     shareReelProcessedLinks: z.array(z.string()).default([]),
     // ── Shuffle Tool Order — was missing from this persistence schema, causing
@@ -2829,8 +2829,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       shuffleToolOrder: z.boolean().default(false),
       uploadSnap: z.object({
         enabled: z.boolean().default(false),
-        min: z.number().int().min(1).max(10).default(1),
-        max: z.number().int().min(1).max(10).default(1),
+        min: z.number().int().min(1).default(1),
+        max: z.number().int().min(1).default(1),
         activatePctMin: z.number().int().min(0).max(100).default(100),
         activatePctMax: z.number().int().min(0).max(100).default(100),
         directoryPath: z.string().max(4096).default(""),
@@ -2841,23 +2841,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }),
       addFriends: z.object({
         enabled: z.boolean().default(false),
-        min: z.number().int().min(0).max(10).default(1),
-        max: z.number().int().min(0).max(10).default(2),
+        min: z.number().int().min(0).default(1),
+        max: z.number().int().min(0).default(2),
         activatePctMin: z.number().int().min(0).max(100).default(100),
         activatePctMax: z.number().int().min(0).max(100).default(100),
       }).default({ enabled: false, min: 1, max: 2, activatePctMin: 100, activatePctMax: 100 }),
       massSnap: z.object({
         enabled: z.boolean().default(false),
-        min: z.number().int().min(1).max(10).default(1),
-        max: z.number().int().min(1).max(10).default(1),
+        min: z.number().int().min(1).default(1),
+        max: z.number().int().min(1).default(1),
         activatePctMin: z.number().int().min(0).max(100).default(0),
         activatePctMax: z.number().int().min(0).max(100).default(0),
         contactScrollPixels: z.number().int().min(40).max(1_000).default(130),
       }).default({ enabled: false, min: 1, max: 1, activatePctMin: 0, activatePctMax: 0, contactScrollPixels: 130 }),
       acceptFriends: z.object({
         enabled: z.boolean().default(false),
-        min: z.number().int().min(0).max(10).default(1),
-        max: z.number().int().min(0).max(10).default(3),
+        min: z.number().int().min(0).default(1),
+        max: z.number().int().min(0).default(3),
         activatePctMin: z.number().int().min(0).max(100).default(100),
         activatePctMax: z.number().int().min(0).max(100).default(100),
       }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100 }),
@@ -2871,8 +2871,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }).default({ enabled: false, min: 1, max: 1, activatePctMin: 100, activatePctMax: 100, replyGoal: "" }),
       viewStories: z.object({
         enabled: z.boolean().default(false),
-        min: z.number().int().min(0).max(10).default(1),
-        max: z.number().int().min(0).max(10).default(3),
+        min: z.number().int().min(0).default(1),
+        max: z.number().int().min(0).default(3),
         activatePctMin: z.number().int().min(0).max(100).default(100),
         activatePctMax: z.number().int().min(0).max(100).default(100),
         likePercentMin: z.number().int().min(0).max(100).default(0),
@@ -2882,8 +2882,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }).default({ enabled: false, min: 1, max: 3, activatePctMin: 100, activatePctMax: 100, likePercentMin: 0, likePercentMax: 0, watchSecondsMin: 5, watchSecondsMax: 10 }),
       viewSnaps: z.object({
         enabled: z.boolean().default(false),
-        min: z.number().int().min(1).max(10).default(1),
-        max: z.number().int().min(1).max(10).default(3),
+        min: z.number().int().min(1).default(1),
+        max: z.number().int().min(1).default(3),
         activatePctMin: z.number().int().min(0).max(100).default(100),
         activatePctMax: z.number().int().min(0).max(100).default(100),
         watchSecondsMin: z.number().int().min(1).max(60).default(5),
@@ -7072,9 +7072,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       return parts.join(", ") || "No metrics recorded";
     };
     const cycleStart = Date.now();
+    let snapchatProgressWatchStartedAt = 0;
+    let snapchatIdleRecoveryTriggered = false;
+    let snapchatCycleFinished = false;
+    let snapchatIdleWatchdog: ReturnType<typeof setInterval> | null = null;
+    let snapchatRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+    const stopSnapchatIdleWatchdog = () => {
+      if (snapchatIdleWatchdog) {
+        clearInterval(snapchatIdleWatchdog);
+        snapchatIdleWatchdog = null;
+      }
+      if (snapchatRecoveryTimer) {
+        clearTimeout(snapchatRecoveryTimer);
+        snapchatRecoveryTimer = null;
+      }
+      snapchatProgressWatchStartedAt = 0;
+    };
     // tLog prefixes every log line with elapsed seconds so the user can see
     // exactly where each chunk of time is going in the Log tab.
     const tLog = (msg: string) => {
+      // Screen-state probes are diagnostic only; they must not disguise a
+      // stalled Snapchat tool as forward progress.
+      if (snapchatProgressWatchStartedAt > 0 && !msg.startsWith("[SCREEN] ")) {
+        snapchatProgressWatchStartedAt = Date.now();
+      }
       const totalSec = (Date.now() - cycleStart) / 1000;
       const mins = Math.floor(totalSec / 60);
       const secs = (totalSec % 60).toFixed(1);
@@ -7417,6 +7438,42 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             effectiveSettings.snapchatTools ?? {},
           );
           let leaveSnapchatOnSelectedImage = false;
+          snapchatProgressWatchStartedAt = Date.now();
+          snapchatIdleWatchdog = setInterval(() => {
+            if (
+              snapchatIdleRecoveryTriggered ||
+              snapchatProgressWatchStartedAt <= 0 ||
+              automationCycleCurrentId.get(serial) !== incomingCycleId ||
+              isCycleAborted(serial)
+            ) return;
+            const idleMs = Date.now() - snapchatProgressWatchStartedAt;
+            if (idleMs < 60_000) return;
+
+            // Preserve the existing fail-closed behavior: stop the current
+            // tool before trying to recover Snapchat, and keep the cycle
+            // registered until its worker unwinds.
+            snapchatIdleRecoveryTriggered = true;
+            automationCycleAbortedId.set(serial, incomingCycleId);
+            tLog(`⚠ Snapchat has made no logged progress for ${Math.round(idleMs / 1000)} seconds; aborting this tool and preparing a safe app reopen.`);
+            snapchatRecoveryTimer = setTimeout(async () => {
+              if (snapchatCycleFinished) return;
+              if (
+                automationCycleCurrentId.get(serial) !== incomingCycleId ||
+                !automationCycleInProgress.has(serial)
+              ) return;
+              try {
+                await android.wakeScreen(serial);
+                await new Promise(resolve => setTimeout(resolve, 1_000));
+                await android.unlockScreen(serial);
+                await new Promise(resolve => setTimeout(resolve, 800));
+                await android.launchSnapchat(serial);
+                steps.push("snapchat-idle-recovery-reopened-app");
+                tLog("✓ Screen woke, unlock was attempted, and Snapchat reopened after the stalled tool was aborted; the interrupted task was not resumed.");
+              } catch (error: any) {
+                tLog(`⚠ Snapchat idle recovery could not reopen the app: ${error?.message ?? String(error)}`);
+              }
+            }, 1_500);
+          }, 5_000);
           try {
             leaveSnapchatOnSelectedImage = await runSnapchatTools({
               serial,
@@ -7426,10 +7483,30 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               pickLocalFolderImage,
               tools: snapchatTools,
               onLog: tLog,
+              onProgress: () => {
+                if (snapchatProgressWatchStartedAt > 0) {
+                  snapchatProgressWatchStartedAt = Date.now();
+                }
+              },
               isAborted: () => isCycleAborted(serial),
               effectiveTypingProfile,
-              sleep: (milliseconds, timingMode = "static") =>
-                sleepOrAbort(serial, milliseconds, "navigation", timingMode),
+              sleep: async (milliseconds, timingMode = "static") => {
+                // Intentional Snapchat viewing/pacing delays are not a hang.
+                // Keep the idle watchdog alive only while this known wait is
+                // actually pending; an unresolved device action still times
+                // out against the 60-second inactivity limit.
+                let heartbeat: ReturnType<typeof setInterval> | null = null;
+                if (snapchatProgressWatchStartedAt > 0 && milliseconds > 10_000) {
+                  heartbeat = setInterval(() => {
+                    if (!isCycleAborted(serial)) snapchatProgressWatchStartedAt = Date.now();
+                  }, 5_000);
+                }
+                try {
+                  await sleepOrAbort(serial, milliseconds, "navigation", timingMode);
+                } finally {
+                  if (heartbeat) clearInterval(heartbeat);
+                }
+              },
               swipeGesture: devicePrefsForSnapchat.swipeGesture,
             });
             if (leaveSnapchatOnSelectedImage) {
@@ -7460,18 +7537,27 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 "com.snapchat.android",
                 "Snapchat",
               );
+               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               steps.push("closed-snapchat");
+               tLog("✓ Snapchat closed");
+               tLog("▶ Returning to the launcher after Snapchat cleanup…");
               await android.keyevent(serial, 3 /* KEYCODE_HOME */);
               await new Promise(resolve => setTimeout(resolve, 600));
+               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               automationCurrentTool.set(serial, "FINALISING");
+               tLog("▶ Finalising Snapchat cycle…");
               await android.swipeUpFromBottom(serial);
+               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               steps.push("swipe-up");
               logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_SLEEP(223)" }, "[mobile-screen-state] intentional command");
               await android.sleepScreen(serial);
+               if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               steps.push("power-off");
             }
           }
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
+           snapchatCycleFinished = true;
+           stopSnapchatIdleWatchdog();
          return res.json({ ok: true, steps });
        }
 
@@ -8861,8 +8947,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   return;
                 }
 
-                const min = Math.max(1, Math.min(1_000_000, Math.trunc(effectiveSettings.makePostDisableAtPostCountMin ?? 20)));
-                const max = Math.max(min, Math.min(1_000_000, Math.trunc(effectiveSettings.makePostDisableAtPostCountMax ?? 25)));
+                const min = Math.max(1, Math.trunc(effectiveSettings.makePostDisableAtPostCountMin ?? 20));
+                const max = Math.max(min, Math.trunc(effectiveSettings.makePostDisableAtPostCountMax ?? 25));
                 let target = Number.isInteger(saved.makePostDisableAtPostCountTarget)
                   ? saved.makePostDisableAtPostCountTarget
                   : null;
@@ -9272,6 +9358,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
     } finally {
+      snapchatCycleFinished = true;
+      stopSnapchatIdleWatchdog();
       if (screenMonitor) {
         clearInterval(screenMonitor);
         screenMonitor = null;
@@ -11317,8 +11405,8 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
           enabled: z.boolean().optional(),
           activatePctMin: z.number().int().min(0).max(100).optional(),
           activatePctMax: z.number().int().min(0).max(100).optional(),
-          userCountMin: z.number().int().min(1).max(100).optional(),
-          userCountMax: z.number().int().min(1).max(100).optional(),
+          userCountMin: z.number().int().min(1).optional(),
+          userCountMax: z.number().int().min(1).optional(),
           message: z.string().max(10_000).optional(),
           useDeviceGalleryMedia: z.boolean().optional(),
           media: z.object({
@@ -11417,8 +11505,8 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
         shortsWatchTimeMax:   z.number().min(0).max(600).optional(),
         shortsLikePctMin:     z.number().int().min(0).max(100).optional(),
          shortsLikePctMax:     z.number().int().min(0).max(100).optional(),
-         userCountMin:         z.number().int().min(1).max(100).optional(),
-         userCountMax:         z.number().int().min(1).max(100).optional(),
+         userCountMin:         z.number().int().min(1).optional(),
+         userCountMax:         z.number().int().min(1).optional(),
          message:              z.string().max(10_000).optional(),
           useDeviceGalleryMedia: z.boolean().optional(),
          contactCount:         z.number().int().min(1).max(10_000).optional(),

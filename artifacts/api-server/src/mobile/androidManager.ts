@@ -15232,7 +15232,7 @@ export async function typeViaSavedCalibrationMap(
   text: string,
   typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
-  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean },
+  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean; onProgress?: () => void },
 ): Promise<{ ok: boolean; available: boolean; missing: string[]; fatal?: boolean }> {
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
@@ -15315,6 +15315,7 @@ export async function typeViaSavedCalibrationMap(
     disableHumanErrors: options?.disableHumanErrors,
     debugLabel: options?.debugLabel,
     compactLogs: options?.compactLogs,
+    onProgress: options?.onProgress,
   });
   return { ...result, available: true };
 }
@@ -15866,7 +15867,7 @@ export async function typeViaCalibrationMap(
   map: KeyCalibrationMap,
   onLog?: (msg: string) => void,
   typingProfile: TypingSpeedProfile,
-  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean },
+  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean; onProgress?: () => void },
 ): Promise<{ ok: boolean; missing: string[]; fatal?: boolean }> {
   if (!typingProfile ||
       !Number.isFinite(typingProfile.minMs) ||
@@ -15965,6 +15966,7 @@ export async function typeViaCalibrationMap(
         ["tap", String(dispatched.x), String(dispatched.y)],
         "calibrated-tap",
       );
+      options?.onProgress?.();
     } catch (e: any) {
       onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
       return false;

@@ -34,12 +34,12 @@ export function HumanSessionFeedSection({
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Posts</span>
                       <Label className="text-xs text-muted-foreground">Min</Label>
-                      <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                      <NumField min={1} className="w-14 h-7 text-xs"
                         value={settings.viewTimelineFeedMin ?? 3}
                         onChange={(v) => setSettings({ ...settings, viewTimelineFeedMin: v })}
                       />
                       <Label className="text-xs text-muted-foreground">Max</Label>
-                      <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                      <NumField min={1} className="w-14 h-7 text-xs"
                         value={settings.viewTimelineFeedMax ?? 8}
                         onChange={(v) => setSettings({ ...settings, viewTimelineFeedMax: v })}
                       />
@@ -171,12 +171,12 @@ export function HumanSessionFeedSection({
                   <>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">AMOUNT OF POSTS TO SCROLL ON</span>
                     <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                    <NumField min={1} max={20} className="w-14 h-7 text-xs"
+                    <NumField min={1} className="w-14 h-7 text-xs"
                       value={settings.viewProfilePostsCountMin ?? 1}
                       onChange={(v) => setSettings({ ...settings, viewProfilePostsCountMin: v })}
                     />
                     <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                    <NumField min={1} max={20} className="w-14 h-7 text-xs"
+                    <NumField min={1} className="w-14 h-7 text-xs"
                       value={settings.viewProfilePostsCountMax ?? 3}
                       onChange={(v) => setSettings({ ...settings, viewProfilePostsCountMax: v })}
                     />

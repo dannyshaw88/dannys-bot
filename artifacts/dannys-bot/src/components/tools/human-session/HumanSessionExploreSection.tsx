@@ -62,12 +62,12 @@ export function HumanSessionExploreSection({
                   {/* Row 1: Posts to scroll on Explore */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                    <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                    <NumField min={1} className="w-14 h-7 text-xs"
                       value={(settings as any).exploreScrollMin ?? 5}
                       onChange={(v) => setSettings({ ...settings, exploreScrollMin: v } as any)}
                     />
                     <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                    <NumField min={1} max={100} className="w-14 h-7 text-xs"
+                    <NumField min={1} className="w-14 h-7 text-xs"
                       value={(settings as any).exploreScrollMax ?? 15}
                       onChange={(v) => setSettings({ ...settings, exploreScrollMax: v } as any)}
                     />
@@ -76,12 +76,12 @@ export function HumanSessionExploreSection({
                   {/* Row 2: Posts to click on */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                    <NumField min={0} max={50} className="w-14 h-7 text-xs"
+                    <NumField min={0} className="w-14 h-7 text-xs"
                       value={(settings as any).exploreClickMin ?? 1}
                       onChange={(v) => setSettings({ ...settings, exploreClickMin: v } as any)}
                     />
                     <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                    <NumField min={0} max={50} className="w-14 h-7 text-xs"
+                    <NumField min={0} className="w-14 h-7 text-xs"
                       value={(settings as any).exploreClickMax ?? 3}
                       onChange={(v) => setSettings({ ...settings, exploreClickMax: v } as any)}
                     />
@@ -140,12 +140,12 @@ export function HumanSessionExploreSection({
                   {/* Row 5: Posts to scroll on profile */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                    <NumField min={1} max={50} className="w-14 h-7 text-xs"
+                    <NumField min={1} className="w-14 h-7 text-xs"
                       value={(settings as any).exploreProfileScrollMin ?? 3}
                       onChange={(v) => setSettings({ ...settings, exploreProfileScrollMin: v } as any)}
                     />
                     <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                    <NumField min={1} max={50} className="w-14 h-7 text-xs"
+                    <NumField min={1} className="w-14 h-7 text-xs"
                       value={(settings as any).exploreProfileScrollMax ?? 8}
                       onChange={(v) => setSettings({ ...settings, exploreProfileScrollMax: v } as any)}
                     />
@@ -154,12 +154,12 @@ export function HumanSessionExploreSection({
                   {/* Row 6: Posts to click on profile */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Label className="text-xs text-muted-foreground uppercase">Min</Label>
-                    <NumField min={0} max={20} className="w-14 h-7 text-xs"
+                    <NumField min={0} className="w-14 h-7 text-xs"
                       value={(settings as any).exploreProfileClickMin ?? 1}
                       onChange={(v) => setSettings({ ...settings, exploreProfileClickMin: v } as any)}
                     />
                     <Label className="text-xs text-muted-foreground uppercase">Max</Label>
-                    <NumField min={0} max={20} className="w-14 h-7 text-xs"
+                    <NumField min={0} className="w-14 h-7 text-xs"
                       value={(settings as any).exploreProfileClickMax ?? 3}
                       onChange={(v) => setSettings({ ...settings, exploreProfileClickMax: v } as any)}
                     />
