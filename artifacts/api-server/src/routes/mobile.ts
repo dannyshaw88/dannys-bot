@@ -7074,17 +7074,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const cycleStart = Date.now();
     let snapchatProgressWatchStartedAt = 0;
     let snapchatIdleRecoveryTriggered = false;
-    let snapchatCycleFinished = false;
     let snapchatIdleWatchdog: ReturnType<typeof setInterval> | null = null;
-    let snapchatRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
     const stopSnapchatIdleWatchdog = () => {
       if (snapchatIdleWatchdog) {
         clearInterval(snapchatIdleWatchdog);
         snapchatIdleWatchdog = null;
-      }
-      if (snapchatRecoveryTimer) {
-        clearTimeout(snapchatRecoveryTimer);
-        snapchatRecoveryTimer = null;
       }
       snapchatProgressWatchStartedAt = 0;
     };
@@ -7456,30 +7450,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             const idleMs = Date.now() - snapchatProgressWatchStartedAt;
             if (idleMs < 60_000) return;
 
-            // Preserve the existing fail-closed behavior: stop the current
-            // tool before trying to recover Snapchat, and keep the cycle
-            // registered until its worker unwinds.
+            // Stop the current tool first. The cycle's finally block performs
+            // the app recovery after the worker unwinds, before releasing the
+            // device lease, so cleanup cannot cancel or race the reopen.
             snapchatIdleRecoveryTriggered = true;
             automationCycleAbortedId.set(serial, incomingCycleId);
-            tLog(`⚠ Snapchat has made no logged progress for ${Math.round(idleMs / 1000)} seconds; aborting this tool and preparing a safe app reopen.`);
-            snapchatRecoveryTimer = setTimeout(async () => {
-              if (snapchatCycleFinished) return;
-              if (
-                automationCycleCurrentId.get(serial) !== incomingCycleId ||
-                !automationCycleInProgress.has(serial)
-              ) return;
-              try {
-                await android.wakeScreen(serial);
-                await new Promise(resolve => setTimeout(resolve, 1_000));
-                await android.unlockScreen(serial);
-                await new Promise(resolve => setTimeout(resolve, 800));
-                await android.launchSnapchat(serial);
-                steps.push("snapchat-idle-recovery-reopened-app");
-                tLog("✓ Screen woke, unlock was attempted, and Snapchat reopened after the stalled tool was aborted; the interrupted task was not resumed.");
-              } catch (error: any) {
-                tLog(`⚠ Snapchat idle recovery could not reopen the app: ${error?.message ?? String(error)}`);
-              }
-            }, 1_500);
+            tLog(`⚠ Snapchat has made no logged progress for ${Math.round(idleMs / 1000)} seconds; aborting this tool. Snapchat will reopen after the tool exits.`);
           }, 5_000);
           try {
             leaveSnapchatOnSelectedImage = await runSnapchatTools({
@@ -7586,7 +7562,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             }
           }
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
-           snapchatCycleFinished = true;
            stopSnapchatIdleWatchdog();
           if (resolvedSlotUsername && Object.values(snapchatMetricCounts).some(count => count > 0)) {
             await storage.incrementMobileStats(`snapchat__${resolvedSlotUsername}`, {
@@ -9399,7 +9374,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
     } finally {
-      snapchatCycleFinished = true;
       stopSnapchatIdleWatchdog();
       if (screenMonitor) {
         clearInterval(screenMonitor);
@@ -9410,6 +9384,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           logger.warn({ err: error, serial, slotId, cycleId: incomingCycleId }, "[mobile-screen-state] timeout lease restore failed");
         });
         screenTimeoutLease = null;
+      }
+      if (
+        snapchatIdleRecoveryTriggered &&
+        automationCycleCurrentId.get(serial) === incomingCycleId
+      ) {
+        try {
+          await android.wakeScreen(serial);
+          await new Promise(resolve => setTimeout(resolve, 1_000));
+          await android.unlockScreen(serial);
+          await new Promise(resolve => setTimeout(resolve, 800));
+          await android.launchSnapchat(serial);
+          tLog("✓ Screen woke, unlock was attempted, and Snapchat reopened after the stalled tool exited; the interrupted task was not resumed.");
+        } catch (error: any) {
+          tLog(`⚠ Snapchat idle recovery could not reopen the app: ${error?.message ?? String(error)}`);
+        }
       }
       automationCycleInProgress.delete(serial);
       automationCycleActiveSlot.delete(serial);
