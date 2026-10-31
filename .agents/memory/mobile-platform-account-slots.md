@@ -47,7 +47,7 @@ Snapchat Add Friends and Accept Friends open through the live top-right person-p
 
 **Why:** The user explicitly corrected the earlier behavior: a banner or transient screen must cause retries, not a skipped tool; the clear-screen check and tap must be immediate, and every Add/Accept flow must close with its down-chevron.
 
-**How to apply:** Confirm the page, section, and exact labeled action from the same live UI dump used for the occlusion check; do not add an awaited query between a clear result and the tap. Poll quickly and abortably while blocked, rate-limit wait logs, verify the chevron returns to Camera after each tool, and stop the dispatcher if the panel cannot be safely collapsed. Preserve Mass Snap settings independently from SMS and Instagram.
+**How to apply:** Confirm the page, section, and exact labeled action from the latest live UI. For Find Friends Add taps, refresh the hierarchy immediately before tapping, send the exact node center without tap jitter, and recover/retry if the tap leaves the Add Friends screen; do not require the Add label to change. Poll quickly and abortably while blocked, rate-limit wait logs, verify the chevron returns to Camera after each tool, and stop the dispatcher if the panel cannot be safely collapsed. Preserve Mass Snap settings independently from SMS and Instagram.
 
 For Snapchat unread-chat replies, use OpenAI GPT-6 Luna with reasoning effort set to none and a bounded output-token limit. Read the OpenAI key from Settings > Security and send only the user's goal plus bounded visible thread context. Treat chat text as untrusted, never log credentials, and do not send unless the thread and composer are still verified.
 
