@@ -564,6 +564,7 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
 }
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+const isMyAiChat = (name: string) => normalizedText(name) === "my ai";
 
 function findPostLinkMessage(
   transcript: string[],
@@ -716,6 +717,7 @@ function unreadChatRows(nodes: UiNode[]) {
     ).sort((a, b) => a.bounds[1] - b.bounds[1]);
     const nameNode = names[0];
     const displayName = nameNode?.text.trim();
+    if (displayName && isMyAiChat(displayName)) return [];
     return nameNode && displayName
       ? [{ marker, nameNode, displayName, chatActionNode: hasMedia ? chatActionNode : undefined }]
       : [];
@@ -728,6 +730,10 @@ async function tapUnreadChatNameArea(
   screenWidth: number,
 ): Promise<boolean> {
   if (context.isAborted()) return false;
+  if (isMyAiChat(row.displayName)) {
+    context.onLog("Reply to Unread Chats: refusing to open Snapchat's My AI chat.");
+    return false;
+  }
   if (row.chatActionNode) {
     const { x, y } = center(row.chatActionNode);
     context.onLog(`Reply to Unread Chats: "${row.displayName}" has mixed media and chat activity; tapping its chat-only right-side icon at (${x},${y}).`);

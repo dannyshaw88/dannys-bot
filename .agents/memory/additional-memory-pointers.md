@@ -14,3 +14,8 @@ Less frequently used project notes:
 - [Google manual search variety](google-manual-search-variety.md) — manual Chrome searches should be mostly natural multi-word queries, with isolated one-word terms limited to an occasional 5% path
 - [Images workspace local processing](images-workspace-local-processing.md) — reuse Make a Post processing and export copies; Electron should process native-selected paths locally
 - [Dashboard cycle summary icons](dashboard-cycle-summary-icons.md) — use Statistics action icons in cycle activity details, but keep eye-based metrics text-only
+- [DM share sheet blind-tap risk](dm-share-sheet-blind-tap.md) — confirm a modal sheet before coordinate-tapping; absence of a side effect does not prove it opened
+- [Share-sheet label-scan exclusions](share-sheet-label-scan-exclusions.md) — exclude feed hashtags and counts so underlying nodes cannot pass as recipients
+- [Reel share-sheet resource-id alias](share-sheet-resource-id-alias.md) — require ancestor Chat evidence; the avatar ID is reused by WhatsApp/Share shortcuts
+- [Share-sheet confirm and scan timing](share-sheet-dump-timing.md) — combine confirmation and recipient scan so the sheet stays open
+- [Your Story vs DM contact resource ID](share-sheet-your-story-rid.md) — filter the parent description because story and DM avatars share an ID

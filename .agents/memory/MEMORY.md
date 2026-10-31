@@ -32,9 +32,6 @@
 - [Instagram Stories safety pointers](instagram-stories-safety.md) — consult the detailed notes for viewer timing/exits, action identity, dialog handling, tray markers, and composers
 - [Retired Story publisher](standalone-post-story-settings.md) — preserve legacy settings, but keep the unused publisher out of UI, Copy Settings, and automation dispatch
 - [HST toggle self-echo](hst-toggle-self-echo.md) — mark locally accepted toggles before same-window broadcast so the originating runtime does not replay its own immediate ON
-- [DM share sheet blind-tap risk](dm-share-sheet-blind-tap.md) — confirm a modal sheet before coordinate-tapping; absence of a side effect does not prove it opened
-- [Share-sheet label-scan exclusions](share-sheet-label-scan-exclusions.md) — exclude feed hashtags and counts so underlying nodes cannot pass as recipients
-- [Reel share-sheet resource-id alias](share-sheet-resource-id-alias.md) — require ancestor Chat evidence; the avatar ID is reused by WhatsApp/Share shortcuts
 - [Reel Viewer repair log](../../REELVIEWERREPAIR.md) — read the dedicated filename → tool → sub-setting ledger before another Reel action fix
 - [Import Reel per-slot history](repost-source-import.md) — accept any valid HTTP(S) source URL and preserve independent processed histories
 - [Per-device fast confirmation](per-device-fast-confirmation.md) — replace each slow confirmation callsite individually; fixing a shared helper does not fix inline sibling checks
@@ -44,8 +41,6 @@
 - [Instagram media-picker default selection](instagram-media-picker-default-selection.md) — newest photo is preselected; detect it and don't retap or it will be deselected
 - [Mirror video letterbox tap scaling](mobile-mirror-video-letterbox-tap-scale.md) — map taps through the actual content rectangle to avoid edge drift
 - [Reels action-icon column detection](reels-action-icon-detection.md) — Reels actions form a right-edge column; check diagnostics before changing unverified labels
-- [Share-sheet confirm and scan timing](share-sheet-dump-timing.md) — combine confirmation and recipient scan so the sheet stays open
-- [Your Story vs DM contact resource ID](share-sheet-your-story-rid.md) — filter the parent description because story and DM avatars share an ID
 - [Collision Preventer turn priority](collision-preventer-turn-priority.md) — preserve due times through collision rest; queued slots run before fresh intervals
 - [Trust Score mobile settings](trust-score-mobile-settings.md) — Trust Score tiers use the mobile-engine Human Session Tool surface, not browser-tool settings, and must not start live device cycles.
 - [Account switcher render settling](account-switcher-render-settle.md) — profile-tab accessibility can precede visible Instagram navigation; wait briefly before the long-press
@@ -157,3 +152,4 @@
 - [Snapchat Luna reply typing](snapchat-luna-reply-typing.md) — test prompts in Replit; skip unmapped keys and wait for Unread after one Chat tap
 - [Uncapped quantity maxima](uncapped-quantity-maxima.md) — count/amount maxima stay uncapped while numeric settings fields remain fixed at 3 characters wide
 - [Snapchat idle recovery ordering](snapchat-idle-recovery-ordering.md) — reopen Snapchat from cycle finalization after the stalled tool unwinds, before releasing the device lease
+- [Never open Snapchat My AI](snapchat-my-ai-exclusion.md) — exclude the exact My AI row during unread-chat discovery and recheck immediately before tapping
