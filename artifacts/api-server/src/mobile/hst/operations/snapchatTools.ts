@@ -838,6 +838,7 @@ async function runAddFriends(context: Context) {
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let added = 0;
   let blockedFriend = "";
+  const attemptedFriends = new Set<string>();
   while (added < requested && !context.isAborted()) {
     const { xml, nodes } = await dump(context.serial);
     if (!isAddFriendsPage(xml)) {
@@ -866,25 +867,31 @@ async function runAddFriends(context: Context) {
       node.bounds[1] >= findFriendsTitle.bounds[3] &&
       node.bounds[3] < screenHeight * 0.95,
     );
-    const candidate = addButtons[0];
-    if (!candidate) {
-      context.onLog("Add Friends stopped: no Add button was found under Find Friends.");
+    const candidates = addButtons.flatMap(candidate => {
+      const candidateY = center(candidate).y;
+      const row = nodes.find(node =>
+        shortResourceId(node) === "scu_search_friend_cell" &&
+        candidateY >= node.bounds[1] && candidateY <= node.bounds[3],
+      );
+      const username = row && nodes.find(node =>
+        shortResourceId(node) === "result-title" &&
+        node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
+      );
+      const friendName = username ? nodeLabel(username) : "";
+      const friendKey = friendName.toLowerCase().replace(/\s+/g, " ").trim();
+      return friendName && !attemptedFriends.has(friendKey)
+        ? [{ candidate, friendName, friendKey }]
+        : [];
+    });
+    const selected = candidates[0];
+    const candidate = selected?.candidate;
+    if (!selected || !candidate) {
+      context.onLog(addButtons.length
+        ? "Add Friends: no unattempted Add rows remain; continuing to the next tool."
+        : "Add Friends: no Add button remains under Find Friends; continuing to the next tool.");
       break;
     }
-    const candidateY = center(candidate).y;
-    const row = nodes.find(node =>
-      shortResourceId(node) === "scu_search_friend_cell" &&
-      candidateY >= node.bounds[1] && candidateY <= node.bounds[3],
-    );
-    const username = row && nodes.find(node =>
-      shortResourceId(node) === "result-title" &&
-      node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
-    );
-    const friendName = username ? nodeLabel(username) : "";
-    if (!friendName) {
-      context.onLog("Add Friends stopped: the selected Add button could not be matched to a visible friend row.");
-      break;
-    }
+    const { friendName, friendKey } = selected;
     if (findOccludingBanner(nodes, candidate, screenWidth, screenHeight)) {
       if (blockedFriend !== friendName) {
         blockedFriend = friendName;
@@ -895,35 +902,12 @@ async function runAddFriends(context: Context) {
     }
     blockedFriend = "";
     if (!await tapNode(context, candidate, `tap Add for ${friendName} under Find Friends`)) break;
-    const confirmation = await dump(context.serial);
-    if (!isAddFriendsPage(confirmation.xml)) {
-      context.onLog("Add Friends stopped: the Add Friends page changed before the request could be confirmed.");
-      break;
-    }
-    const sameRowStillAdd = confirmation.nodes.some(node => {
-      if (shortResourceId(node) !== "scu_search_action_button" ||
-          ![node.text, node.desc].some(value => /^add$/i.test(value.trim()))) return false;
-      const y = center(node).y;
-      const matchingRow = confirmation.nodes.find(candidateRow =>
-        shortResourceId(candidateRow) === "scu_search_friend_cell" &&
-        y >= candidateRow.bounds[1] && y <= candidateRow.bounds[3],
-      );
-      if (!matchingRow) return false;
-      const matchingName = confirmation.nodes.find(candidateName =>
-        shortResourceId(candidateName) === "result-title" &&
-        candidateName.bounds[1] >= matchingRow.bounds[1] &&
-        candidateName.bounds[3] <= matchingRow.bounds[3],
-      );
-      return Boolean(matchingName && nodeLabel(matchingName) === friendName);
-    });
-    if (sameRowStillAdd) {
-      context.onLog(`Add Friends stopped: Snapchat still shows Add for ${friendName}; the request was not confirmed.`);
-      break;
-    }
+    attemptedFriends.add(friendKey);
     added++;
     context.onMetric?.("snapchat_add_friends");
+    context.onLog(`Add Friends: tapped Add for ${friendName}; continuing without waiting for Snapchat's confirmation.`);
   }
-  context.onLog(`Add Friends: confirmed ${added}/${requested} friend request(s) from the Find Friends section.`);
+  context.onLog(`Add Friends: processed ${added}/${requested} Add tap(s) from the Find Friends section.`);
 }
 
 async function runAcceptFriends(context: Context) {

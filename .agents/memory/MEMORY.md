@@ -152,5 +152,6 @@
 - [Snapchat Luna reply typing](snapchat-luna-reply-typing.md) — test prompts in Replit; skip unmapped keys and wait for Unread after one Chat tap
 - [Uncapped quantity maxima](uncapped-quantity-maxima.md) — count/amount maxima stay uncapped while numeric settings fields remain fixed at 3 characters wide
 - [Snapchat idle recovery ordering](snapchat-idle-recovery-ordering.md) — reopen Snapchat from cycle finalization after the stalled tool unwinds, before releasing the device lease
+- [Snapchat Add Friends confirmation](snapchat-add-friends-confirmation.md) — count an Add tap and continue without waiting for Snapchat's button label to update
 - [Never open Snapchat My AI](snapchat-my-ai-exclusion.md) — exclude the exact My AI row during unread-chat discovery and recheck immediately before tapping
 - [Snapchat tools from an open chat](snapchat-tools-open-chat.md) — dismiss the keyboard, exit the verified chat, then confirm Camera before Add/Accept Friends
