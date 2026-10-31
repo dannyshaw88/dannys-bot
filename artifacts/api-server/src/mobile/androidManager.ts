@@ -4944,15 +4944,13 @@ function escapeForAdbInput(s: string): string {
 // which is exactly the "clicks do nothing, no error anywhere" symptom this
 // is fixing.
 async function runInputShell(serial: string, args: string[], label: string, tapId?: string): Promise<void> {
-  const queuedAt = Date.now();
   return runWithDeviceInputGate(serial, async () => {
     const tools = detectToolset();
     const adb = requireTool(tools.adb, "adb");
-    const gateWaitMs = Date.now() - queuedAt;
     const inputStartedAt = Date.now();
     const tapIdSuffix = tapId ? ` tapId=${tapId}` : "";
     logger.info(
-      { serial, label, args, tapId, startedAt: inputStartedAt, gateWaitMs },
+      { serial, label, args, tapId, startedAt: inputStartedAt },
       `[mobile-input] adb input begin${tapIdSuffix}`,
     );
     try {
@@ -4966,15 +4964,7 @@ async function runInputShell(serial: string, args: string[], label: string, tapI
         throw new Error(out);
       }
       logger.info(
-        {
-          serial,
-          label,
-          args,
-          tapId,
-          gateWaitMs,
-          commandMs: Date.now() - inputStartedAt,
-          totalMs: Date.now() - queuedAt,
-        },
+        { serial, label, args, tapId, elapsedMs: Date.now() - inputStartedAt },
         `[mobile-input] adb input end${tapIdSuffix}`,
       );
     } catch (e: any) {
@@ -5019,30 +5009,16 @@ async function runCalibratedTapBatch(
       ? [tap, `sleep ${(pause / 1000).toFixed(3)}`]
       : [tap];
   });
-  const queuedAt = Date.now();
-  let gateWaitMs = 0;
-  let commandMs = 0;
   try {
     await runWithDeviceInputGate(serial, async () => {
-      gateWaitMs = Date.now() - queuedAt;
-      const commandStartedAt = Date.now();
       const { stdout, stderr } = await execFileP(adb, [
         "-s", serial, "shell", commands.join(" && "),
       ], { encoding: "utf8", timeout: 30_000 } as any);
-      commandMs = Date.now() - commandStartedAt;
       const output = `${stdout ?? ""}${stderr ?? ""}`.trim();
       if (/error|exception|permission denied/i.test(output)) {
         throw new Error(output);
       }
     });
-    logger.info({
-      serial,
-      tapCount: taps.length,
-      configuredPauseMs: taps.reduce((sum, tap) => sum + tap.pauseMs, 0),
-      gateWaitMs,
-      commandMs,
-      totalMs: Date.now() - queuedAt,
-    }, "[cal-keyboard] calibrated tap batch completed");
   } catch (error: any) {
     const output = `${error?.stderr ?? ""}${error?.stdout ?? ""}`.trim();
     const detail = output || error?.message || "unknown error";

@@ -9858,30 +9858,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const noOp = { x, y, rescaled: false, video: [videoW ?? 0, videoH ?? 0] as [number,number], device: [0,0] as [number,number], from: [x,y] as [number,number], to: [x,y] as [number,number] };
     if (!videoW || !videoH) return noOp;
     try {
-      const tools = await android.detectToolsetAsync();
-      const adbPath = tools.adb.path;
-      if (!adbPath) return noOp;
-      const wm = await execFileP(adbPath, ["-s", serial, "shell", "wm", "size"], {
-        encoding: "utf8",
-        timeout: 3000,
-      } as any);
-      const out = String(wm.stdout ?? "");
-      // `wm size` can print BOTH a "Physical size" and an "Override size"
-      // line when a display-size override is active (e.g. a prior
-      // testing/scaling change). Touch input is interpreted against the
-      // CURRENT logical size, which is the override when one is set — not
-      // the physical panel resolution. Picking the first match (always
-      // "Physical size") when an override was active meant every rescaled
-      // tap was proportionally off from the true target, growing with
-      // distance from the top-left corner — exactly the "tap the left edge
-      // of a key = correct, tap its centre = lands one key over" pattern
-      // reported on this device. Prefer Override size when present.
-      const overrideM = out.match(/Override size:\s*(\d+)x(\d+)/);
-      const physicalM = out.match(/Physical size:\s*(\d+)x(\d+)/);
-      const m = overrideM ?? physicalM ?? out.match(/(\d+)x(\d+)/);
-      if (!m) return noOp;
-      const realW = parseInt(m[1]);
-      const realH = parseInt(m[2]);
+      const { w: realW, h: realH } = await android.getScreenSizeAsync(serial);
       const device: [number,number] = [realW, realH];
       if (realW === videoW && realH === videoH) return { ...noOp, device };
       // NOTE: a previous version of this function skipped rescaling whenever
@@ -10678,33 +10655,18 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       let { x1, y1, x2, y2 } = input;
       if (input.videoW && input.videoH) {
         try {
-          const tools = await android.detectToolsetAsync();
-          const adbPath = tools.adb.path;
-          if (adbPath) {
-            const wm = await execFileP(adbPath, ["-s", serial, "shell", "wm", "size"], {
-              encoding: "utf8",
-              timeout: 3000,
-            } as any);
-            const m = String(wm.stdout ?? "").match(/(\d+)x(\d+)/);
-            if (m) {
-              const realW = parseInt(m[1]);
-              const realH = parseInt(m[2]);
-              if (realW !== input.videoW || realH !== input.videoH) {
-                // Same content-sub-rect correction as /input/tap (see
-                // videoContentRect above) — a naive full-buffer scale is
-                // only accurate at the padded axis's center and drifts
-                // toward the edges when the video buffer is letterboxed/
-                // pillarboxed relative to the device's real aspect ratio.
-                const rect = videoContentRect(input.videoW, input.videoH, realW, realH);
-                const scale = (v: number, off: number, span: number, real: number) =>
-                  Math.round(Math.min(real - 1, Math.max(0, ((v - off) / span) * real)));
-                x1 = scale(x1, rect.x, rect.w, realW);
-                y1 = scale(y1, rect.y, rect.h, realH);
-                x2 = scale(x2, rect.x, rect.w, realW);
-                y2 = scale(y2, rect.y, rect.h, realH);
-                logger.info({ serial, video: [input.videoW, input.videoH], real: [realW, realH], contentRect: rect }, "[mobile-swipe] rescaled swipe for downscaled/letterboxed video");
-              }
-            }
+          const { w: realW, h: realH } = await android.getScreenSizeAsync(serial);
+          if (realW !== input.videoW || realH !== input.videoH) {
+            // Keep the same letterbox/pillarbox correction as the tap route;
+            // reuse the cached device dimensions instead of running `wm size`
+            // as an extra ADB subprocess for every mirror swipe.
+            const rect = videoContentRect(input.videoW, input.videoH, realW, realH);
+            const scale = (v: number, off: number, span: number, real: number) =>
+              Math.round(Math.min(real - 1, Math.max(0, ((v - off) / span) * real)));
+            x1 = scale(x1, rect.x, rect.w, realW);
+            y1 = scale(y1, rect.y, rect.h, realH);
+            x2 = scale(x2, rect.x, rect.w, realW);
+            y2 = scale(y2, rect.y, rect.h, realH);
           }
         } catch { /* fall back to unscaled coordinates */ }
       }
