@@ -155,4 +155,4 @@
 - [Manual Android diagnostics across USB disconnects](manual-android-disconnect-diagnostics.md) — persist minimal state on-device while unplugged, then retrieve after reconnect; host-only ADB capture cannot observe the disconnected interval
 - [Idle phone-mirror log volume](idle-phone-mirror-log-volume.md) — suppress routine mirror heartbeats and restart chatter while automation is idle; preserve active-cycle diagnostics and real errors
 - [Snapchat Luna reply typing](snapchat-luna-reply-typing.md) — test prompts in Replit; skip unmapped keys and wait for Unread after one Chat tap
-- [Uncapped quantity maxima](uncapped-quantity-maxima.md) — count/amount Max fields must not have arbitrary upper caps in the UI, API schema, or execution path
+- [Uncapped quantity maxima](uncapped-quantity-maxima.md) — count/amount maxima stay uncapped while numeric settings fields remain fixed at 3 characters wide

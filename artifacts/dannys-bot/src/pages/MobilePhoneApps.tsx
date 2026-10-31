@@ -58,7 +58,7 @@ function WhatsAppIcon({ size = 20 }: { size?: number }) {
 
 // ── Shared style helpers ───────────────────────────────────────────────────────
 
-const PCT_INPUT = "w-14 text-center h-7 text-sm px-1";
+const PCT_INPUT = "w-[3ch] text-center h-7 text-sm px-0";
 
 function PixelDistanceInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
   const [draft, setDraft] = useState(String(value));
@@ -77,7 +77,7 @@ function PixelDistanceInput({ value, onCommit }: { value: number; onCommit: (val
       min={40}
       max={1000}
       step={1}
-      className="w-20 text-center h-7 text-sm px-1"
+      className="w-[3ch] text-center h-7 text-sm px-0"
       value={draft}
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
@@ -427,7 +427,7 @@ interface MobilePhoneAppsPanelProps {
   cancelQueuedSlot?: (idx: number) => void;
 }
 
-const NUM_INPUT_CLASS = "w-16 text-center";
+const NUM_INPUT_CLASS = "w-[3ch] text-center px-0";
 
 export const MobilePhoneAppsPanel = React.forwardRef<MobilePhoneAppsPanelHandle, MobilePhoneAppsPanelProps>(
 function MobilePhoneAppsPanel({

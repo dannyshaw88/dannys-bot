@@ -7438,6 +7438,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             effectiveSettings.snapchatTools ?? {},
           );
           let leaveSnapchatOnSelectedImage = false;
+          const snapchatMetricCounts = {
+            snapchatAddFriends: 0,
+            snapchatAcceptFriends: 0,
+            snapchatReplies: 0,
+            snapchatSpotlights: 0,
+            snapchatSnaps: 0,
+          };
           snapchatProgressWatchStartedAt = Date.now();
           snapchatIdleWatchdog = setInterval(() => {
             if (
@@ -7488,6 +7495,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   snapchatProgressWatchStartedAt = Date.now();
                 }
               },
+              onMetric: (key, count = 1) => {
+                const metricKey = ({
+                  snapchat_add_friends: "snapchatAddFriends",
+                  snapchat_accept_friends: "snapchatAcceptFriends",
+                  snapchat_replies: "snapchatReplies",
+                  snapchat_spotlights: "snapchatSpotlights",
+                  snapchat_snaps: "snapchatSnaps",
+                } as const)[key];
+                snapchatMetricCounts[metricKey] += count;
+              },
               isAborted: () => isCycleAborted(serial),
               effectiveTypingProfile,
               sleep: async (milliseconds, timingMode = "static") => {
@@ -7514,6 +7531,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               tLog("✓ Upload a Snap image is selected. Leaving Snapchat open for your test.");
             }
           } finally {
+            const snapchatActionTotal = Object.values(snapchatMetricCounts).reduce((sum, count) => sum + count, 0);
+            if (resolvedSlotUsername && snapchatActionTotal > 0) {
+              await storage.incrementMobileStats(`snapchat__${resolvedSlotUsername}`, {
+                likes: 0,
+                follows: 0,
+                stories: 0,
+                reels: 0,
+                dms: 0,
+                feedShares: 0,
+                cycles: 0,
+                ...snapchatMetricCounts,
+              }).catch((error: any) => logger.warn({ err: error }, "[snapchat-cycle] stat persist error"));
+            }
             if (!isCycleAborted(serial) && !leaveSnapchatOnSelectedImage) {
               const devicePrefsForDismiss = devicePrefsForSnapchat;
               const effectiveDismiss = dismissDirection !== "auto"
@@ -7558,6 +7588,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (isCycleAborted(serial)) throw new Error("cycle-aborted");
            snapchatCycleFinished = true;
            stopSnapchatIdleWatchdog();
+          if (resolvedSlotUsername && Object.values(snapchatMetricCounts).some(count => count > 0)) {
+            await storage.incrementMobileStats(`snapchat__${resolvedSlotUsername}`, {
+              likes: 0,
+              follows: 0,
+              stories: 0,
+              reels: 0,
+              dms: 0,
+              feedShares: 0,
+              cycles: 1,
+            }).catch((error: any) => logger.warn({ err: error }, "[snapchat-cycle] cycle count persist error"));
+          }
          return res.json({ ok: true, steps });
        }
 

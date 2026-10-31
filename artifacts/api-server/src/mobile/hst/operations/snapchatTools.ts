@@ -59,6 +59,7 @@ type Context = {
   tools: SnapchatTools;
   onLog: (message: string) => void;
   onProgress: () => void;
+  onMetric?: (key: "snapchat_add_friends" | "snapchat_accept_friends" | "snapchat_replies" | "snapchat_spotlights" | "snapchat_snaps", count?: number) => void;
   isAborted: () => boolean;
   effectiveTypingProfile: (serial: string) => any;
   sleep: (milliseconds: number, timingMode?: "static" | "exact") => Promise<void>;
@@ -850,6 +851,7 @@ async function runAddFriends(context: Context) {
       break;
     }
     added++;
+    context.onMetric?.("snapchat_add_friends");
   }
   context.onLog(`Add Friends: confirmed ${added}/${requested} friend request(s) from the Find Friends section.`);
 }
@@ -981,6 +983,7 @@ async function runAcceptFriends(context: Context) {
         break;
       }
       accepted++;
+      context.onMetric?.("snapchat_accept_friends");
       pendingAcceptance = null;
       if (accepted >= requested) break;
     }
@@ -1282,6 +1285,7 @@ async function runReplyUnreadChats(context: Context) {
       context.onLog(`Reply to Unread Chats warning: the message was sent, but the local log could not be saved (${error instanceof Error ? error.message : "write failed"}).`);
     }
     replied++;
+    context.onMetric?.("snapchat_replies");
     const exitedToChatSurface = await exitSnapchatConversation(context).catch(() => false);
     if (!exitedToChatSurface) {
       context.onLog("Reply to Unread Chats stopped: could not return to Snapchat after sending the reply.");
@@ -1317,6 +1321,7 @@ async function runViewSpotlights(context: Context) {
       context.onLog("View Spotlights stopped: Spotlight was no longer the active screen.");
       break;
     }
+    context.onMetric?.("snapchat_spotlights");
 
     const likeChance = randomPercent(settings.likePercentMin, settings.likePercentMax);
     const roll = Math.random() * 100;
@@ -1377,6 +1382,7 @@ async function runViewSnaps(context: Context) {
   }
 
   let viewed = 1;
+  context.onMetric?.("snapchat_snaps");
   for (let index = 1; index < requested && !context.isAborted(); index++) {
     const seconds = randomSeconds(settings.watchSecondsMin, settings.watchSecondsMax);
     context.onLog(`View Snaps: waiting ${seconds}s before the next Snap tap.`);
@@ -1398,6 +1404,7 @@ async function runViewSnaps(context: Context) {
       break;
     }
     viewed++;
+    context.onMetric?.("snapchat_snaps");
   }
   context.onLog(`View Snaps: viewed ${viewed}/${requested} Snap(s).`);
 }

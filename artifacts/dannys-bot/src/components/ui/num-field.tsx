@@ -31,6 +31,13 @@ export function NumField({ value, min, max, className, onChange }: NumFieldProps
     <Input
       type="number"
       className={className}
+      style={{
+        width: "3ch",
+        minWidth: "3ch",
+        maxWidth: "3ch",
+        paddingInline: 0,
+        appearance: "textfield",
+      }}
       min={min}
       max={max}
       value={local}

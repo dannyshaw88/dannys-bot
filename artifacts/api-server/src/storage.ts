@@ -54,7 +54,7 @@ export interface IStorage {
   getStatsByProfile(profileId: number): Promise<any[]>;
   getLifetimeStatsByProfile(): Promise<Record<number, number>>;
   incrementStat(profileId: number, toolType: string): Promise<void>;
-  incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; saves?: number; cycles: number; reelScrolls?: number; feedScrolls?: number; exploreScrolls?: number }): Promise<void>;
+  incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; saves?: number; cycles: number; reelScrolls?: number; feedScrolls?: number; exploreScrolls?: number; snapchatAddFriends?: number; snapchatAcceptFriends?: number; snapchatReplies?: number; snapchatSpotlights?: number; snapchatSnaps?: number }): Promise<void>;
   getMobileSlotStats(username: string): Promise<{ daily: Record<string, number>; lifetime: Record<string, number> }>;
   getDailyAbdStats(): Promise<Record<number, number>>;
 
@@ -696,7 +696,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; saves?: number; cycles: number; reelScrolls?: number; feedScrolls?: number; exploreScrolls?: number }): Promise<void> {
+  async incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; saves?: number; cycles: number; reelScrolls?: number; feedScrolls?: number; exploreScrolls?: number; snapchatAddFriends?: number; snapchatAcceptFriends?: number; snapchatReplies?: number; snapchatSpotlights?: number; snapchatSnaps?: number }): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
     const entries: Array<[string, number]> = ([
       [`mob:${username}:likes`,          metrics.likes],
@@ -710,6 +710,11 @@ export class DatabaseStorage implements IStorage {
       [`mob:${username}:reel_scrolls`,   metrics.reelScrolls ?? 0],
       [`mob:${username}:feed_scrolls`,   metrics.feedScrolls ?? 0],
       [`mob:${username}:explore_scrolls`, metrics.exploreScrolls ?? 0],
+      [`mob:${username}:snapchat_add_friends`, metrics.snapchatAddFriends ?? 0],
+      [`mob:${username}:snapchat_accept_friends`, metrics.snapchatAcceptFriends ?? 0],
+      [`mob:${username}:snapchat_replies`, metrics.snapchatReplies ?? 0],
+      [`mob:${username}:snapchat_spotlights`, metrics.snapchatSpotlights ?? 0],
+      [`mob:${username}:snapchat_snaps`, metrics.snapchatSnaps ?? 0],
     ] as Array<[string, number]>).filter(([, count]) => count > 0);
 
     for (const [toolType, count] of entries) {

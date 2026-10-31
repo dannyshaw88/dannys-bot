@@ -23,6 +23,7 @@ import {
   BarChart2, Zap, Send, Repeat2, ShieldAlert, PhoneOff, Lock, Flag, Shield,
   Smartphone, Clapperboard, BookOpen, Bookmark,
 } from "lucide-react";
+import { FaInstagram, FaSnapchatGhost } from "react-icons/fa";
 import { type Profile, type Tool } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
@@ -168,6 +169,16 @@ const FARM_STAT_LABELS: { key: string; label: string; icon: React.ReactNode; col
   { key: "explore_scrolls", label: "Explore",        icon: <Activity className="w-3 h-3" />,    color: "text-orange-500", showEye: true },
 ];
 
+const SNAPCHAT_FARM_STAT_LABELS: typeof FARM_STAT_LABELS = [
+  { key: "session_tool", label: "Session", icon: <Fingerprint className="w-3 h-3" />, color: "text-cyan-500" },
+  { key: "cycles", label: "Cycles", icon: <Activity className="w-3 h-3" />, color: "text-cyan-500" },
+  { key: "snapchat_add_friends", label: "Add Friends", icon: <UserPlus className="w-3 h-3" />, color: "text-blue-500" },
+  { key: "snapchat_accept_friends", label: "Accept Friends", icon: <UserPlus className="w-3 h-3" />, color: "text-green-500" },
+  { key: "snapchat_replies", label: "Chat Replies", icon: <Mail className="w-3 h-3" />, color: "text-violet-500" },
+  { key: "snapchat_spotlights", label: "Spotlights", icon: <Eye className="w-3 h-3" />, color: "text-purple-500", showEye: true },
+  { key: "snapchat_snaps", label: "Snaps Viewed", icon: <BookOpen className="w-3 h-3" />, color: "text-indigo-500", showEye: true },
+];
+
 const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   account:          224,
   session_tool:     110,
@@ -205,6 +216,10 @@ const MOBILE_METRIC_DEFS: {
 ];
 
 const MOBILE_PIE_METRIC_DEFS = MOBILE_METRIC_DEFS.filter(metric => metric.key !== "cycles");
+const SNAPCHAT_METRIC_DEFS = SNAPCHAT_FARM_STAT_LABELS
+  .filter(metric => metric.key !== "session_tool")
+  .map(metric => ({ ...metric, pieColor: "#6366f1" }));
+const SNAPCHAT_PIE_METRIC_DEFS = SNAPCHAT_METRIC_DEFS.filter(metric => metric.key !== "cycles");
 
 interface FarmPhone {
   serial: string;
@@ -221,6 +236,7 @@ type MetricAccount = {
   profile: Profile | null;
   serial?: string;
   slotIndex?: number;
+  platform: "instagram" | "snapchat";
 };
 
 function MobileSlotSessionToggle({ serial, slotIdx, slotId, slotUsername }: { serial: string; slotIdx: number; slotId?: string; slotUsername: string }) {
@@ -270,29 +286,33 @@ function MobileSlotSessionToggle({ serial, slotIdx, slotId, slotUsername }: { se
 
 function PhoneFarmPhoneSection({
   phone,
+  platform,
+  statLabels,
   farmColOrder,
   farmSortKey,
   farmSortDir,
   profiles,
 }: {
   phone: FarmPhone;
+  platform: "instagram" | "snapchat";
+  statLabels: typeof FARM_STAT_LABELS;
   farmColOrder: string[];
   farmSortKey: string | null;
   farmSortDir: "desc" | "asc";
   profiles: Profile[];
 }) {
-   const { data: account, isLoading } = useQuery<{ slots: { username: string; slotId?: string }[] }>({
+   const { data: account, isLoading } = useQuery<{ slots: { username: string; slotId?: string; platform?: "instagram" | "snapchat" }[] }>({
     queryKey: [`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`],
     refetchInterval: 30000,
   });
 
   const slots = (account?.slots ?? [])
-     .map((s, i) => ({ username: s.username?.trim() ?? "", slotId: s.slotId, idx: i }))
-    .filter(s => s.username !== "");
+     .map((s, i) => ({ username: s.username?.trim() ?? "", slotId: s.slotId, platform: s.platform ?? "instagram", idx: i }))
+    .filter(s => s.username !== "" && s.platform === platform);
 
   const slotStatsResults = useQueries({
     queries: slots.map(slot => ({
-      queryKey: [`/api/mobile/slot-stats?username=${encodeURIComponent(slot.username)}`],
+      queryKey: [`/api/mobile/slot-stats?username=${encodeURIComponent(platform === "snapchat" ? `snapchat__${slot.username}` : slot.username)}`],
       refetchInterval: 30000,
     })),
   });
@@ -305,7 +325,7 @@ function PhoneFarmPhoneSection({
   });
 
   const orderedLabels = farmColOrder
-    .map(k => FARM_STAT_LABELS.find(s => s.key === k))
+    .map(k => statLabels.find(s => s.key === k))
     .filter((label, index, labels) =>
       Boolean(label) && labels.findIndex(candidate => candidate?.key === label?.key) === index,
     ) as typeof FARM_STAT_LABELS;
@@ -628,6 +648,9 @@ export function StatsPage() {
   });
 
   // ── Metrics tab state ────────────────────────────────────────────────────────
+  const [accountPlatform, setAccountPlatform] = useState<"instagram" | "snapchat">(() =>
+    new URLSearchParams(window.location.search).get("platform") === "snapchat" ? "snapchat" : "instagram",
+  );
   const [activeTab, setActiveTab] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("tab") || "farm";
@@ -691,11 +714,13 @@ export function StatsPage() {
       (profiles ?? []).map(profile => [profile.username.trim().toLowerCase(), profile] as const),
     );
     return metricsPhoneList.map((phone, idx) => {
-      const slots = (deviceSlotResults[idx]?.data as { slots: { username: string }[] } | undefined)?.slots ?? [];
+      const slots = (deviceSlotResults[idx]?.data as { slots: { username: string; platform?: "instagram" | "snapchat" }[] } | undefined)?.slots ?? [];
       const seen = new Set<string>();
       const slotAccounts = slots
         .map((slot, slotIndex): MetricAccount | null => {
           const username = slot.username?.trim() ?? "";
+          const platform = slot.platform === "snapchat" ? "snapchat" : "instagram";
+          if (platform !== accountPlatform) return null;
           const normalizedUsername = username.toLowerCase();
           if (!normalizedUsername || seen.has(normalizedUsername)) return null;
           seen.add(normalizedUsername);
@@ -705,6 +730,7 @@ export function StatsPage() {
             username,
             label: profile?.accountLabel || profile?.username || username,
             profile,
+            platform,
             serial: phone.serial,
             slotIndex,
           };
@@ -717,7 +743,7 @@ export function StatsPage() {
       };
     }).filter(g => g.accounts.length > 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metricsPhoneList, deviceSlotResults.map(r => r.dataUpdatedAt).join(","), profiles]);
+  }, [metricsPhoneList, deviceSlotResults.map(r => r.dataUpdatedAt).join(","), profiles, accountPlatform]);
 
   const slotMetricAccounts = useMemo(
     () => deviceGroups.flatMap(group => group.accounts),
@@ -732,7 +758,7 @@ export function StatsPage() {
     });
   }, [activeTab, deviceGroups]);
   const unassignedProfiles = useMemo<MetricAccount[]>(
-    () => [...(profiles ?? [])]
+    () => (accountPlatform === "instagram" ? [...(profiles ?? [])] : [])
       .filter(p => !slotMetricAccounts.some(account => account.profile?.id === p.id))
       .sort((a, b) => (a.accountLabel || a.username || "").localeCompare(b.accountLabel || b.username || ""))
       .map(profile => ({
@@ -740,8 +766,9 @@ export function StatsPage() {
         username: profile.username,
         label: profile.accountLabel || profile.username,
         profile,
+          platform: "instagram" as const,
       })),
-    [profiles, slotMetricAccounts],
+    [profiles, slotMetricAccounts, accountPlatform],
   );
 
   const metricAccounts = useMemo(
@@ -759,8 +786,11 @@ export function StatsPage() {
     return metricAccounts[0] ?? null;
   }, [selectedAccountId, metricAccounts]);
 
-  const selectedProfile = selectedMetricAccount?.profile ?? null;
+  const selectedProfile = accountPlatform === "instagram" ? selectedMetricAccount?.profile ?? null : null;
   const selectedAccountUsername = selectedMetricAccount?.username ?? selectedProfile?.username ?? "";
+  const statsUsername = accountPlatform === "snapchat"
+    ? `snapchat__${selectedAccountUsername}`
+    : selectedAccountUsername;
 
   const metricsStats = useMemo(() => {
     if (!selectedProfile) return [];
@@ -781,9 +811,9 @@ export function StatsPage() {
     lifetime: Record<string, number>;
   }>({
     queryKey: selectedProfile
-      ? [`/api/mobile/slot-stats?username=${encodeURIComponent(selectedAccountUsername.trim())}`]
+       ? [`/api/mobile/slot-stats?username=${encodeURIComponent(statsUsername.trim())}`]
       : selectedMetricAccount
-        ? [`/api/mobile/slot-stats?username=${encodeURIComponent(selectedAccountUsername.trim())}`]
+         ? [`/api/mobile/slot-stats?username=${encodeURIComponent(statsUsername.trim())}`]
       : ["no-mobile-slot-stats"],
     enabled: activeTab === "metrics" && !!selectedAccountUsername,
     refetchInterval: 30000,
@@ -792,8 +822,10 @@ export function StatsPage() {
   const getStat = (type: string, date: string) =>
     metricsStats.find((s: any) => s.toolType === type && s.date === date)?.count ?? 0;
 
+  const activeMobileMetricDefs = accountPlatform === "snapchat" ? SNAPCHAT_METRIC_DEFS : MOBILE_METRIC_DEFS;
+  const activePieMetricDefs = accountPlatform === "snapchat" ? SNAPCHAT_PIE_METRIC_DEFS : MOBILE_PIE_METRIC_DEFS;
   const mobilePieData = useMemo(() =>
-    MOBILE_PIE_METRIC_DEFS
+    activePieMetricDefs
       .map(metric => ({
         name: metric.label,
         value: mobileSlotStats?.daily?.[metric.key] ?? 0,
@@ -801,10 +833,10 @@ export function StatsPage() {
       }))
       .sort((a, b) => b.value - a.value)
       ,
-  [mobileSlotStats]);
+  [mobileSlotStats, accountPlatform]);
 
   const mobileLifetimePieData = useMemo(() =>
-    MOBILE_PIE_METRIC_DEFS
+    activePieMetricDefs
       .map(metric => ({
         name: metric.label,
         value: mobileSlotStats?.lifetime?.[metric.key] ?? 0,
@@ -812,20 +844,20 @@ export function StatsPage() {
       }))
       .sort((a, b) => b.value - a.value)
       ,
-  [mobileSlotStats]);
+  [mobileSlotStats, accountPlatform]);
 
   const getMobileStat = (key: string, period: "daily" | "lifetime") =>
     mobileSlotStats?.[period]?.[key] ?? 0;
 
   const totalToday = useMemo(() =>
-    MOBILE_METRIC_DEFS.reduce((sum, m) => sum + getMobileStat(m.key, "daily"), 0),
+    activeMobileMetricDefs.reduce((sum, m) => sum + getMobileStat(m.key, "daily"), 0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [mobileSlotStats]);
+  [mobileSlotStats, accountPlatform]);
 
   const totalLifetime = useMemo(() =>
-    MOBILE_METRIC_DEFS.reduce((sum, m) => sum + getMobileStat(m.key, "lifetime"), 0),
+    activeMobileMetricDefs.reduce((sum, m) => sum + getMobileStat(m.key, "lifetime"), 0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [mobileSlotStats]);
+  [mobileSlotStats, accountPlatform]);
 
   const humanSessionTool = metricsTools?.find(t => t.type === "human_sessions");
   const humanSessionEnabled = humanSessionTool?.enabled ?? false;
@@ -852,6 +884,29 @@ export function StatsPage() {
       <div className="mb-3">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Automation Stats</h1>
         <p className="text-muted-foreground mt-1">Daily and lifetime performance metrics for all accounts.</p>
+        <div className="flex gap-2 mt-4" role="group" aria-label="Account platform">
+          {(["instagram", "snapchat"] as const).map(platform => (
+            <button
+              key={platform}
+              type="button"
+              onClick={() => setAccountPlatform(platform)}
+              aria-pressed={accountPlatform === platform}
+              aria-label={platform === "instagram" ? "Instagram accounts" : "Snapchat accounts"}
+              title={platform === "instagram" ? "Instagram accounts" : "Snapchat accounts"}
+              className={`inline-flex h-10 w-10 items-center justify-center rounded-md border transition-colors ${
+                accountPlatform === platform
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {platform === "instagram" ? (
+                <FaInstagram className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <FaSnapchatGhost className="h-5 w-5 rounded-full bg-[#FFFC00] p-0.5 text-black" aria-hidden="true" />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col gap-0">
@@ -930,11 +985,13 @@ export function StatsPage() {
                   )}
                 </SelectContent>
               </Select>
-              {selectedMetricAccount?.serial !== undefined && selectedMetricAccount.slotIndex !== undefined ? (
+              {accountPlatform === "instagram" && selectedMetricAccount?.serial !== undefined && selectedMetricAccount.slotIndex !== undefined ? (
                 <MetricsSlotTrustScoreBadge
                   serial={selectedMetricAccount.serial}
                   slotIdx={selectedMetricAccount.slotIndex}
                 />
+              ) : accountPlatform === "snapchat" && selectedMetricAccount ? (
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">Snapchat slot</span>
               ) : (
                 <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                   No device slot
@@ -1040,7 +1097,7 @@ export function StatsPage() {
                         <span className="text-[10px] text-muted-foreground">all actions</span>
                       </div>
                       {/* Per-action breakdown from mobile slot stats */}
-                      {MOBILE_METRIC_DEFS.map(m => (
+                  {activeMobileMetricDefs.map(m => (
                         <div key={m.key} className="rounded-lg border border-border/50 bg-muted/5 p-3 flex flex-col gap-1">
                           <span className={`text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${m.color}`}>
                             {m.icon}{m.label}
@@ -1053,8 +1110,8 @@ export function StatsPage() {
                   </CardContent>
                 </Card>
 
-                {/* Account health & system data points */}
-                <Card className="desktop-card border-none shadow-sm">
+                {/* Account health & system data points are Instagram profile metrics. */}
+                {accountPlatform === "instagram" && <Card className="desktop-card border-none shadow-sm">
                   <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
                       <ShieldAlert className="w-4 h-4 text-primary" />
@@ -1102,7 +1159,7 @@ export function StatsPage() {
 
                     </div>
                   </CardContent>
-                </Card>
+                </Card>}
 
               </>
             )}
@@ -1111,14 +1168,14 @@ export function StatsPage() {
 
         {/* ── Phone Farm Tab ───────────────────────────────────────────────────── */}
         <TabsContent value="farm" className="mt-0">
-          <PhoneFarmTab />
+          <PhoneFarmTab platform={accountPlatform} />
         </TabsContent>
       </Tabs>
     </AppLayout>
   );
 }
 
-function PhoneFarmTab() {
+function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
   const { data: rawProfiles } = useProfiles();
   const profiles = useMemo(() => rawProfiles?.filter(p => !p.isTemplate) ?? [], [rawProfiles]);
 
@@ -1197,10 +1254,13 @@ function PhoneFarmTab() {
     localStorage.setItem("farm_col_order", JSON.stringify(next));
   };
 
-  const orderedLabels = farmColOrder
-    .map(k => FARM_STAT_LABELS.find(s => s.key === k))
-    .filter(Boolean)
-    .filter(s => farmVisibleCols[s!.key] !== false) as typeof FARM_STAT_LABELS;
+  const statLabels = platform === "snapchat" ? SNAPCHAT_FARM_STAT_LABELS : FARM_STAT_LABELS;
+  const orderedLabels = platform === "snapchat"
+    ? SNAPCHAT_FARM_STAT_LABELS
+    : farmColOrder
+        .map(k => FARM_STAT_LABELS.find(s => s.key === k))
+        .filter(Boolean)
+        .filter(s => farmVisibleCols[s!.key] !== false) as typeof FARM_STAT_LABELS;
   const colCount = 1 + orderedLabels.length;
 
   return (
@@ -1209,7 +1269,7 @@ function PhoneFarmTab() {
         <CardTitle className="text-lg flex items-center gap-2">
           <Activity className="w-5 h-5 text-primary" /> Tool Performance
         </CardTitle>
-        <div className="relative">
+        <div className={platform === "instagram" ? "relative" : "hidden"}>
           <button
             onClick={() => setFarmManageColsOpen(o => !o)}
             className="flex items-center gap-1.5 text-xs text-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded hover:bg-muted/40"
@@ -1408,6 +1468,8 @@ function PhoneFarmTab() {
                   <PhoneFarmPhoneSection
                     key={phone.serial}
                     phone={phone}
+                    platform={platform}
+                    statLabels={statLabels}
                     farmColOrder={orderedLabels.map(s => s.key)}
                     farmSortKey={farmSortKey}
                     farmSortDir={farmSortDir}
