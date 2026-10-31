@@ -37,6 +37,8 @@ type UiNode = {
   resourceId: string;
   className: string;
   clickable: boolean;
+  focusable: boolean;
+  focused: boolean;
   selected: boolean;
   bounds: [number, number, number, number];
 };
@@ -89,6 +91,8 @@ function parseNodes(xml: string): UiNode[] {
       resourceId: get("resource-id"),
       className: get("class"),
       clickable: get("clickable") === "true",
+      focusable: get("focusable") === "true",
+      focused: get("focused") === "true",
       selected: get("selected") === "true",
       bounds: boundsMatch.slice(1).map(Number) as [number, number, number, number],
     });
@@ -145,6 +149,12 @@ function isAddFriendsPage(xml: string): boolean {
     /find friends/i.test(xml);
 }
 
+function hasSnapchatChatComposer(nodes: UiNode[]): boolean {
+  return nodes.some(node =>
+    /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+  );
+}
+
 function findOccludingBanner(nodes: UiNode[], target: UiNode, screenWidth: number, screenHeight: number) {
   const point = center(target);
   const targetArea = (target.bounds[2] - target.bounds[0]) * (target.bounds[3] - target.bounds[1]);
@@ -161,6 +171,46 @@ function findOccludingBanner(nodes: UiNode[], target: UiNode, screenWidth: numbe
       area > targetArea * 2.5 &&
       area < screenArea * 0.5;
   });
+}
+
+type TabActivationResult = "activated" | "covered" | "surface-changed" | "not-focusable" | "focus-not-reached";
+
+async function activateFocusedNodeWithTab(
+  context: Context,
+  findTarget: (nodes: UiNode[]) => UiNode | undefined,
+  isExpectedSurface: (xml: string) => boolean,
+  screenWidth: number,
+  screenHeight: number,
+  reason: string,
+): Promise<TabActivationResult> {
+  const maxTabSteps = 8;
+  let previousFocus = "";
+
+  for (let tabStep = 0; tabStep <= maxTabSteps && !context.isAborted(); tabStep++) {
+    const state = await dump(context.serial);
+    if (!isExpectedSurface(state.xml)) return "surface-changed";
+
+    const target = findTarget(state.nodes);
+    if (!target) return "focus-not-reached";
+    if (findOccludingBanner(state.nodes, target, screenWidth, screenHeight)) return "covered";
+    if (target.focused) {
+      context.onLog(`Snapchat: Android keyboard focus is on the intended ${reason}; activating with Enter instead of a coordinate tap.`);
+      await android.keyevent(context.serial, 66); // KEYCODE_ENTER
+      return "activated";
+    }
+    if (!target.focusable) return "not-focusable";
+    if (tabStep === maxTabSteps) return "focus-not-reached";
+
+    const focused = state.nodes.find(node => node.focused);
+    const focusSignature = focused
+      ? `${focused.resourceId}|${focused.text}|${focused.desc}|${focused.bounds.join(",")}`
+      : "<no-focused-node>";
+    if (tabStep > 0 && focusSignature === previousFocus) return "focus-not-reached";
+    previousFocus = focusSignature;
+    await android.keyevent(context.serial, 61); // KEYCODE_TAB
+  }
+
+  return "focus-not-reached";
 }
 
 async function tapExact(context: Context, labels: string[], reason: string): Promise<boolean> {
@@ -207,9 +257,7 @@ async function openAddFriends(context: Context): Promise<boolean> {
     const state = await dump(context.serial);
     if (isAddFriendsPage(state.xml)) return true;
 
-    const chatComposer = state.nodes.some(node =>
-      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-    );
+    const chatComposer = hasSnapchatChatComposer(state.nodes);
     if (chatComposer) {
       const keyboardShown = await android.isKeyboardShown(context.serial).catch(() => false);
       if (keyboardShown) {
@@ -233,9 +281,7 @@ async function openAddFriends(context: Context): Promise<boolean> {
       await android.keyevent(context.serial, 4); // Android KEYCODE_BACK
       await context.sleep(400, "exact");
       const afterBack = await dump(context.serial);
-      const composerStillOpen = afterBack.nodes.some(node =>
-        /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-      );
+      const composerStillOpen = hasSnapchatChatComposer(afterBack.nodes);
       if (composerStillOpen) {
         context.onLog("Snapchat stopped: Android Back did not close the active chat.");
         return false;
@@ -286,7 +332,42 @@ async function openAddFriends(context: Context): Promise<boolean> {
     }
     bannerWaitLogged = false;
     pageWaitLogged = false;
-    if (!await tapNode(context, addFriendsIcon, "open Add Friends from the top-right person-plus icon")) return false;
+    const focusResult = await activateFocusedNodeWithTab(
+      context,
+      nodes => nodes.find(node => shortResourceId(node) === "neon_add_friend_button_container"),
+      xml => /camera_page/i.test(xml) && !/add_friends_root/i.test(xml),
+      screenWidth,
+      screenHeight,
+      "person-plus control",
+    );
+    if (focusResult === "covered") {
+      if (!bannerWaitLogged) {
+        context.onLog("Add Friends: waiting for the top-right control to clear before activating it.");
+        bannerWaitLogged = true;
+      }
+      await context.sleep(BANNER_RECHECK_MS, "exact");
+      continue;
+    }
+    if (focusResult === "surface-changed") continue;
+    if (focusResult !== "activated") {
+      const fresh = await dump(context.serial);
+      if (!/camera_page/i.test(fresh.xml) || /add_friends_root/i.test(fresh.xml)) continue;
+      const liveIcon = fresh.nodes.find(node =>
+        shortResourceId(node) === "neon_add_friend_button_container",
+      );
+      if (!liveIcon) continue;
+      if (findOccludingBanner(fresh.nodes, liveIcon, screenWidth, screenHeight)) {
+        await context.sleep(BANNER_RECHECK_MS, "exact");
+        continue;
+      }
+      if (!await tapNode(
+        context,
+        liveIcon,
+        "open Add Friends from the top-right person-plus icon",
+        700,
+        true,
+      )) return false;
+    }
     const afterTap = await dump(context.serial);
     if (isAddFriendsPage(afterTap.xml)) return true;
     if (!pageWaitLogged) {
@@ -834,13 +915,14 @@ async function generateContextualReply(
   return generateSnapchatLunaReply(apiKey, goal, peer, transcript, history);
 }
 
-async function runAddFriends(context: Context) {
+async function runAddFriends(context: Context): Promise<"surface-lost" | void> {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
   if (!context.tools.addFriends.enabled || requested === 0) return;
   if (!await openAddFriends(context)) return;
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let added = 0;
   let blockedFriend = "";
+  let surfaceLost = false;
   const attemptedFriends = new Set<string>();
   const findAddCandidates = (nodes: UiNode[]) => {
     const findFriendsStart = nodes.findIndex(node =>
@@ -904,19 +986,16 @@ async function runAddFriends(context: Context) {
       break;
     }
     const { friendName, friendKey } = selected;
-    // Refresh immediately before the coordinate input. The prior hierarchy can
-    // become stale while a Snapchat message banner is entering the screen.
-    const latest = await dump(context.serial);
-    if (!isAddFriendsPage(latest.xml)) {
-      context.onLog("Add Friends: Snapchat changed screens before the Add tap; reopening the list and retrying.");
-      if (!await openAddFriends(context)) break;
-      continue;
-    }
-    const liveSelection = findAddCandidates(latest.nodes).candidates.find(
-      item => item.friendKey === friendKey,
+    const focusResult = await activateFocusedNodeWithTab(
+      context,
+      nodes => findAddCandidates(nodes).candidates.find(item => item.friendKey === friendKey)?.candidate,
+      isAddFriendsPage,
+      screenWidth,
+      screenHeight,
+      `Add for ${friendName}`,
     );
-    if (!liveSelection) continue;
-    if (findOccludingBanner(latest.nodes, liveSelection.candidate, screenWidth, screenHeight)) {
+    if (context.isAborted()) break;
+    if (focusResult === "covered") {
       if (blockedFriend !== friendName) {
         blockedFriend = friendName;
         context.onLog(`Add Friends: waiting for the banner to clear Add for ${friendName}.`);
@@ -924,19 +1003,50 @@ async function runAddFriends(context: Context) {
       await context.sleep(BANNER_RECHECK_MS, "exact");
       continue;
     }
+    if (focusResult === "surface-changed") {
+      context.onLog("Add Friends stopped: Snapchat left the verified friend list; no other Snapchat tool will run on that screen.");
+      surfaceLost = true;
+      break;
+    }
+
     blockedFriend = "";
-    if (!await tapNode(
-      context,
-      liveSelection.candidate,
-      `tap Add for ${friendName} under Find Friends`,
-      0,
-      true,
-    )) break;
+    if (focusResult !== "activated") {
+      // Keyboard focus is preferred because a banner cannot steal a key event
+      // by covering the Add button. If Snapchat does not expose this control
+      // to Tab navigation, take one final live snapshot before the coordinate
+      // fallback.
+      const latest = await dump(context.serial);
+      if (!isAddFriendsPage(latest.xml)) {
+        context.onLog("Add Friends stopped: Snapchat left the verified friend list before input.");
+        surfaceLost = true;
+        break;
+      }
+      const liveSelection = findAddCandidates(latest.nodes).candidates.find(
+        item => item.friendKey === friendKey,
+      );
+      if (!liveSelection) continue;
+      if (findOccludingBanner(latest.nodes, liveSelection.candidate, screenWidth, screenHeight)) {
+        if (blockedFriend !== friendName) {
+          blockedFriend = friendName;
+          context.onLog(`Add Friends: waiting for the banner to clear Add for ${friendName}.`);
+        }
+        await context.sleep(BANNER_RECHECK_MS, "exact");
+        continue;
+      }
+      if (!await tapNode(
+        context,
+        liveSelection.candidate,
+        `tap Add for ${friendName} under Find Friends`,
+        0,
+        true,
+      )) break;
+    }
+
     const afterTap = await dump(context.serial);
-    if (!isAddFriendsPage(afterTap.xml)) {
-      context.onLog(`Add Friends: the tap left the friend list instead of staying on Find Friends; reopening and retrying ${friendName}.`);
-      if (!await openAddFriends(context)) break;
-      continue;
+    if (hasSnapchatChatComposer(afterTap.nodes) || !isAddFriendsPage(afterTap.xml)) {
+      context.onLog(`Add Friends stopped: Snapchat left the friend list while processing ${friendName}; stopping the tool sequence instead of entering the banner's chat.`);
+      surfaceLost = true;
+      break;
     }
     attemptedFriends.add(friendKey);
     added++;
@@ -944,6 +1054,7 @@ async function runAddFriends(context: Context) {
     context.onLog(`Add Friends: tapped Add for ${friendName}; continuing without waiting for Snapchat's confirmation.`);
   }
   context.onLog(`Add Friends: processed ${added}/${requested} Add tap(s) from the Find Friends section.`);
+  return surfaceLost ? "surface-lost" : undefined;
 }
 
 async function runAcceptFriends(context: Context) {
@@ -1554,6 +1665,7 @@ export async function runSnapchatTools(context: Context): Promise<boolean> {
     let toolFailed = false;
     try {
       const result = await tool.run();
+      if (tool.name === "Add Friends" && result === "surface-lost") return false;
       if (tool.name === "Upload a Snap") {
         // This staged test flow intentionally leaves Snapchat on the selected
         // image. Do not run later shuffled tools against the editor surface.
