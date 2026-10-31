@@ -1,6 +1,7 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { openAddFriends, isAddFriendsPage, hasSnapchatChatComposer } from "../navigation/openAddFriends";
+import { scrollAddFriendsListOneSlot } from "../navigation/scrollAddFriendsListOneSlot";
 import { center, dump, nodeLabel, randomCount, shortResourceId, tapNode } from "../runtime";
 
 export async function runAddFriends(context: SnapchatContext): Promise<void> {
@@ -20,7 +21,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<void> {
       return {
         findFriendsStart,
         addButtons: [] as UiNode[],
-        candidates: [] as Array<{ candidate: UiNode; friendName: string; friendKey: string }>,
+        candidates: [] as Array<{ candidate: UiNode; friendName: string; friendKey: string; row: UiNode }>,
       };
     }
     const findFriendsTitle = nodes[findFriendsStart];
@@ -35,7 +36,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<void> {
       [node.text, node.desc].some(value => /^add$/i.test(value.trim())) &&
       node.bounds[2] > node.bounds[0] && node.bounds[3] > node.bounds[1] &&
       node.bounds[1] >= findFriendsTitle.bounds[3] &&
-      node.bounds[3] < screenHeight * 0.95,
+      node.bounds[3] <= screenHeight * 0.85,
     );
     const candidates = addButtons.flatMap(candidate => {
       const candidateY = center(candidate).y;
@@ -43,13 +44,14 @@ export async function runAddFriends(context: SnapchatContext): Promise<void> {
         shortResourceId(node) === "scu_search_friend_cell" &&
         candidateY >= node.bounds[1] && candidateY <= node.bounds[3],
       );
-      const username = row && nodes.find(node =>
+      if (!row) return [];
+      const username = nodes.find(node =>
         shortResourceId(node) === "result-title" &&
         node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
       );
       const friendName = username ? nodeLabel(username) : "";
       const friendKey = friendName.toLowerCase().replace(/\s+/g, " ").trim();
-      return friendName ? [{ candidate, friendName, friendKey }] : [];
+      return friendName ? [{ candidate, friendName, friendKey, row }] : [];
     });
     return { findFriendsStart, addButtons, candidates };
   };
@@ -101,6 +103,10 @@ export async function runAddFriends(context: SnapchatContext): Promise<void> {
     added++;
     context.onMetric?.("snapchat_add_friends");
     context.onLog(`Add Friends: tapped Add for ${friendName}; continuing without waiting for Snapchat's confirmation.`);
+    if (!await scrollAddFriendsListOneSlot(context, afterTap.nodes, selected.row, screenHeight, friendName)) {
+      context.onLog("Add Friends: stopping before another Add tap because a one-row scroll could not be placed safely.");
+      break;
+    }
   }
   context.onLog(`Add Friends: processed ${added}/${requested} Add tap(s) from the Find Friends section.`);
 }
