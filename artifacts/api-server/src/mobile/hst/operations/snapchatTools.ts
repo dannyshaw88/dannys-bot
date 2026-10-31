@@ -106,6 +106,7 @@ const center = (node: UiNode) => ({
   y: Math.round((node.bounds[1] + node.bounds[3]) / 2),
 });
 const BANNER_RECHECK_MS = 120;
+const ADD_FRIENDS_BANNER_RECHECK_MS = 5_000;
 
 async function dump(serial: string): Promise<{ xml: string; nodes: UiNode[] }> {
   const xml = await android.dumpUi(serial).catch(() => "");
@@ -150,9 +151,30 @@ function isAddFriendsPage(xml: string): boolean {
 }
 
 function findAddFriendsEntry(nodes: UiNode[]): UiNode | undefined {
-  return nodes.find(node =>
+  const byResource = nodes.find(node =>
     node.clickable && shortResourceId(node) === "neon_add_friend_button_container",
   );
+  if (byResource) return byResource;
+
+  const label = nodes.find(node => /^add\s+friends?$/i.test(nodeLabel(node)));
+  if (!label) return undefined;
+  if (label.clickable) return label;
+
+  const point = center(label);
+  const labelArea = (label.bounds[2] - label.bounds[0]) * (label.bounds[3] - label.bounds[1]);
+  return nodes
+    .filter(node => {
+      if (!node.clickable) return false;
+      const [left, top, right, bottom] = node.bounds;
+      const area = (right - left) * (bottom - top);
+      return point.x >= left && point.x <= right &&
+        point.y >= top && point.y <= bottom &&
+        area >= labelArea;
+    })
+    .sort((a, b) =>
+      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) -
+      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]),
+    )[0] ?? label;
 }
 
 function hasSnapchatChatComposer(nodes: UiNode[]): boolean {
@@ -256,10 +278,12 @@ async function waitForUnreadTab(context: Context): Promise<Awaited<ReturnType<ty
 
 async function openAddFriends(context: Context): Promise<boolean> {
   let cameraWaitLogged = false;
-  let nativeActivityAttempted = false;
+  let controlWaitLogged = false;
+  let bannerWaitLogged = false;
   let entryAttempts = 0;
   let chatKeyboardDismissAttempted = false;
   let chatExitAttempted = false;
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   while (!context.isAborted()) {
     let state = await dump(context.serial);
     if (isAddFriendsPage(state.xml)) return true;
@@ -316,68 +340,34 @@ async function openAddFriends(context: Context): Promise<boolean> {
     }
     cameraWaitLogged = false;
 
-    if (!nativeActivityAttempted) {
-      nativeActivityAttempted = true;
-      try {
-        context.onLog("Add Friends: trying Snapchat's native AddFriendsActivity.");
-        await android.openSnapchatAddFriends(context.serial);
-      } catch (error: any) {
-        context.onLog(`Add Friends: native activity launch failed (${error?.message ?? String(error)}); using the live Camera control.`);
-      }
-      await context.sleep(500, "exact");
-      state = await dump(context.serial);
-      if (isAddFriendsPage(state.xml)) {
-        context.onLog("Add Friends: Snapchat opened the verified Add Friends page through its native activity.");
-        return true;
-      }
-      if (hasSnapchatChatComposer(state.nodes)) continue;
-      if (!/camera_page/i.test(state.xml)) continue;
-    }
-
     const entry = findAddFriendsEntry(state.nodes);
     if (!entry) {
-      if (!cameraWaitLogged) {
+      if (!controlWaitLogged) {
         context.onLog("Add Friends: waiting for the live Add Friends control on Camera.");
-        cameraWaitLogged = true;
+        controlWaitLogged = true;
       }
-      await context.sleep(BANNER_RECHECK_MS, "exact");
+      await context.sleep(ADD_FRIENDS_BANNER_RECHECK_MS, "exact");
       continue;
     }
-    cameraWaitLogged = false;
+    controlWaitLogged = false;
+
+    if (findOccludingBanner(state.nodes, entry, screenWidth, screenHeight)) {
+      if (!bannerWaitLogged) {
+        context.onLog("Add Friends: a banner is covering the Add control; waiting 5 seconds before checking again.");
+        bannerWaitLogged = true;
+      }
+      await context.sleep(ADD_FRIENDS_BANNER_RECHECK_MS, "exact");
+      continue;
+    }
+    bannerWaitLogged = false;
 
     if (entryAttempts >= 3) {
-      context.onLog("Add Friends: the native launch and three live-control attempts did not open the friend list; skipping only this tool.");
+      context.onLog("Add Friends: three live-control taps did not open the friend list; skipping only this tool.");
       return false;
     }
 
-    const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
-    if (findOccludingBanner(state.nodes, entry, screenWidth, screenHeight)) {
-      await context.sleep(BANNER_RECHECK_MS, "exact");
-      continue;
-    }
-
     entryAttempts++;
-    if (entry.focusable) {
-      const focusResult = await activateFocusedNodeWithTab(
-        context,
-        findAddFriendsEntry,
-        xml => /camera_page/i.test(xml),
-        screenWidth,
-        screenHeight,
-        "Add Friends control",
-      );
-      if (focusResult === "activated") {
-        await context.sleep(500, "exact");
-        continue;
-      }
-      if (focusResult === "covered") {
-        await context.sleep(BANNER_RECHECK_MS, "exact");
-        continue;
-      }
-      if (focusResult === "surface-changed") continue;
-    }
-
-    context.onLog("Add Friends: opening the live Add Friends control using its current on-screen bounds.");
+    context.onLog("Add Friends: banner clear; tapping the live Add Friends control now.");
     if (!await tapNode(context, entry, "open Add Friends from its live accessibility bounds", 500)) return false;
   }
   return false;
@@ -1638,6 +1628,10 @@ async function runViewSnaps(context: Context) {
     }
     viewed++;
     context.onMetric?.("snapchat_snaps");
+  }
+  if (!context.isAborted() && isSnapMediaViewer(state.xml, state.nodes)) {
+    context.onLog("View Snaps: pressing Android Back once to exit the Snap viewer.");
+    await pressAndroidBack(context, 1, "exiting the Snap viewer");
   }
   context.onLog(`View Snaps: viewed ${viewed}/${requested} Snap(s).`);
 }

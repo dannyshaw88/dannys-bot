@@ -1253,18 +1253,6 @@ export async function launchSnapchat(serial: string): Promise<void> {
   }
 }
 
-export async function openSnapchatAddFriends(serial: string): Promise<void> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  const output = await runAdbStrict(adb, [
-    "-s", serial, "shell", "am", "start",
-    "-n", "com.snapchat.android/com.snap.identity.ui.profile.AddFriendsActivity",
-  ], 10000);
-  if (/\b(?:No activity found|unable to resolve|Error(?: type \d+)?|Permission Denial)\b/i.test(output)) {
-    throw new Error(output.trim().slice(0, 240) || "Snapchat did not resolve its native Add Friends activity");
-  }
-}
-
 /**
  * Open a validated web URL with Android's explicit Instagram package
  * constraint. This is separate from launchInstagram(): the Share Reel tool
