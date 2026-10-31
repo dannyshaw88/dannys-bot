@@ -108,11 +108,14 @@ async function dump(serial: string): Promise<{ xml: string; nodes: UiNode[] }> {
   return { xml, nodes: parseNodes(xml) };
 }
 
-async function tapNode(context: Context, node: UiNode, reason: string, settleMs = 700) {
+async function tapNode(context: Context, node: UiNode, reason: string, settleMs = 700, exact = false) {
   if (context.isAborted()) return false;
   const { x, y } = center(node);
-  await android.tap(context.serial, x, y, "bot", `Snapchat: ${reason}`, "automation");
-  await context.sleep(settleMs);
+  await android.tap(
+    context.serial, x, y, "bot", `Snapchat: ${reason}`, "automation",
+    exact ? { exact: true } : undefined,
+  );
+  if (settleMs > 0) await context.sleep(settleMs);
   return !context.isAborted();
 }
 
@@ -839,19 +842,17 @@ async function runAddFriends(context: Context) {
   let added = 0;
   let blockedFriend = "";
   const attemptedFriends = new Set<string>();
-  while (added < requested && !context.isAborted()) {
-    const { xml, nodes } = await dump(context.serial);
-    if (!isAddFriendsPage(xml)) {
-      context.onLog("Add Friends stopped: the verified Add Friends page is no longer open.");
-      break;
-    }
+  const findAddCandidates = (nodes: UiNode[]) => {
     const findFriendsStart = nodes.findIndex(node =>
       shortResourceId(node) === "section-title" &&
       [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
     );
     if (findFriendsStart < 0) {
-      context.onLog("Add Friends stopped: the Find Friends section title was not found.");
-      break;
+      return {
+        findFriendsStart,
+        addButtons: [] as UiNode[],
+        candidates: [] as Array<{ candidate: UiNode; friendName: string; friendKey: string }>,
+      };
     }
     const findFriendsTitle = nodes[findFriendsStart];
     const acceptFriendsStart = nodes.findIndex((node, index) =>
@@ -879,11 +880,22 @@ async function runAddFriends(context: Context) {
       );
       const friendName = username ? nodeLabel(username) : "";
       const friendKey = friendName.toLowerCase().replace(/\s+/g, " ").trim();
-      return friendName && !attemptedFriends.has(friendKey)
-        ? [{ candidate, friendName, friendKey }]
-        : [];
+      return friendName ? [{ candidate, friendName, friendKey }] : [];
     });
-    const selected = candidates[0];
+    return { findFriendsStart, addButtons, candidates };
+  };
+  while (added < requested && !context.isAborted()) {
+    const { xml, nodes } = await dump(context.serial);
+    if (!isAddFriendsPage(xml)) {
+      context.onLog("Add Friends stopped: the verified Add Friends page is no longer open.");
+      break;
+    }
+    const { findFriendsStart, addButtons, candidates } = findAddCandidates(nodes);
+    if (findFriendsStart < 0) {
+      context.onLog("Add Friends stopped: the Find Friends section title was not found.");
+      break;
+    }
+    const selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
     const candidate = selected?.candidate;
     if (!selected || !candidate) {
       context.onLog(addButtons.length
@@ -892,7 +904,19 @@ async function runAddFriends(context: Context) {
       break;
     }
     const { friendName, friendKey } = selected;
-    if (findOccludingBanner(nodes, candidate, screenWidth, screenHeight)) {
+    // Refresh immediately before the coordinate input. The prior hierarchy can
+    // become stale while a Snapchat message banner is entering the screen.
+    const latest = await dump(context.serial);
+    if (!isAddFriendsPage(latest.xml)) {
+      context.onLog("Add Friends: Snapchat changed screens before the Add tap; reopening the list and retrying.");
+      if (!await openAddFriends(context)) break;
+      continue;
+    }
+    const liveSelection = findAddCandidates(latest.nodes).candidates.find(
+      item => item.friendKey === friendKey,
+    );
+    if (!liveSelection) continue;
+    if (findOccludingBanner(latest.nodes, liveSelection.candidate, screenWidth, screenHeight)) {
       if (blockedFriend !== friendName) {
         blockedFriend = friendName;
         context.onLog(`Add Friends: waiting for the banner to clear Add for ${friendName}.`);
@@ -901,7 +925,19 @@ async function runAddFriends(context: Context) {
       continue;
     }
     blockedFriend = "";
-    if (!await tapNode(context, candidate, `tap Add for ${friendName} under Find Friends`)) break;
+    if (!await tapNode(
+      context,
+      liveSelection.candidate,
+      `tap Add for ${friendName} under Find Friends`,
+      0,
+      true,
+    )) break;
+    const afterTap = await dump(context.serial);
+    if (!isAddFriendsPage(afterTap.xml)) {
+      context.onLog(`Add Friends: the tap left the friend list instead of staying on Find Friends; reopening and retrying ${friendName}.`);
+      if (!await openAddFriends(context)) break;
+      continue;
+    }
     attemptedFriends.add(friendKey);
     added++;
     context.onMetric?.("snapchat_add_friends");

@@ -5188,13 +5188,17 @@ export async function tap(
   source?: "manual" | "bot",
   reason?: string,
   origin?: "operator" | "automation",
+  options?: { exact?: boolean },
 ): Promise<void> {
   const tapSource = source ?? "bot";
   const tapOrigin = origin ?? (tapSource === "manual" ? "operator" : "automation");
-  const tapMode = tapSource === "bot" ? "jittered" : "exact";
+  const exact = options?.exact === true;
+  const tapMode = tapSource === "bot" && !exact ? "jittered" : "exact";
   const requestedX = Math.round(x);
   const requestedY = Math.round(y);
-  const dispatched = tapSource === "bot" ? applySmallTapOffset(x, y) : { x: requestedX, y: requestedY, jitterPx: 0 };
+  const dispatched = tapSource === "bot" && !exact
+    ? applySmallTapOffset(x, y)
+    : { x: requestedX, y: requestedY, jitterPx: 0 };
   const tapId = `${process.pid.toString(36)}-${Date.now().toString(36)}-${(++tapTraceSequence).toString(36)}`;
   const tapReason = normalizeTapTraceText(
     reason ?? (tapOrigin === "operator" ? "operator input" : "reason not supplied by caller"),
