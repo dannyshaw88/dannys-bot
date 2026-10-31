@@ -212,23 +212,43 @@ function findAddFriendsBanner(nodes: UiNode[], target: UiNode, screenWidth: numb
   const targetHeight = target.bounds[3] - target.bounds[1];
   const targetArea = targetWidth * targetHeight;
   const screenArea = screenWidth * screenHeight;
-  return nodes.find(node => {
-    if (node === target) return false;
+  const incomingActivity = /\b(?:is|are)\s+typing\b|\btyping(?:\s*\.{1,3}|\s*…)?\b|\b(?:sent|sending|received|delivered)\s+(?:(?:you|me)\s+)?(?:(?:a|an)\s+)?(?:snap|chat|photo|video|message)\b|\bnew\s+(?:snap|chat|message)\b/i;
+  const isLargeTopOverlay = (node: UiNode) => {
     const [left, top, right, bottom] = node.bounds;
     const width = right - left;
     const height = bottom - top;
     const area = width * height;
-    const coversTapPoint = point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
-    if (!coversTapPoint || area < targetArea * 2.5 || area >= screenArea * 0.5) return false;
+    return top <= screenHeight * 0.25 &&
+      bottom <= screenHeight * 0.45 &&
+      width >= screenWidth * 0.4 &&
+      height >= Math.max(targetHeight * 1.4, 36) &&
+      area >= targetArea * 2.5 &&
+      area < screenArea * 0.5;
+  };
+  const coversPoint = (node: UiNode, x: number, y: number) =>
+    x >= node.bounds[0] && x <= node.bounds[2] &&
+    y >= node.bounds[1] && y <= node.bounds[3];
+  const eventLabels = nodes.filter(node =>
+    incomingActivity.test(`${node.text} ${node.desc}`) &&
+    node.bounds[1] <= screenHeight * 0.35 &&
+    node.bounds[3] <= screenHeight * 0.45,
+  );
+
+  // Require a real banner identifier or incoming-event copy inside the same
+  // top overlay. Geometry and generic labels alone misclassify camera controls
+  // such as Snapchat's wide "Flip Camera" accessibility group.
+  return nodes.find(node => {
+    if (node === target) return false;
+    if (!coversPoint(node, point.x, point.y) || !isLargeTopOverlay(node)) return false;
 
     const identity = `${node.packageName} ${node.className} ${node.resourceId}`;
-    const explicitBanner = /banner|snackbar|toast|heads.?up|notification(?:stack|row|panel|popup|overlay)/i.test(identity);
-    const topWideOverlay = top <= screenHeight * 0.25 &&
-      bottom <= screenHeight * 0.4 &&
-      width >= screenWidth * 0.45 &&
-      height >= Math.max(targetHeight * 1.4, 36);
-    const systemNotification = /com\.android\.systemui/i.test(node.packageName) && topWideOverlay;
-    return explicitBanner || systemNotification;
+    const explicitBanner = /camera_sticky_toast|banner|snackbar|toast|heads.?up|notification/i.test(identity);
+    const systemNotification = /com\.android\.systemui/i.test(node.packageName);
+    const containsIncomingActivity = eventLabels.some(label => {
+      const eventPoint = center(label);
+      return coversPoint(node, eventPoint.x, eventPoint.y);
+    });
+    return explicitBanner || systemNotification || containsIncomingActivity;
   });
 }
 
