@@ -5811,14 +5811,24 @@ function _findLabelsInBand(
   refY: number,
   bandPx: number,
   screenWidth: number,
-): Array<{ x: number; y: number; label: string }> {
-  const labels: Array<{ x: number; y: number; label: string }> = [];
+): Array<{ x: number; y: number; swipeY: number | null; label: string }> {
+  const labels: Array<{ x: number; y: number; swipeY: number | null; label: string }> = [];
+  const cardBounds: Array<{ left: number; top: number; right: number; bottom: number }> = [];
   const nodeRe = /<node\b([^>]*)>/gi;
   let match: RegExpExecArray | null;
   while ((match = nodeRe.exec(xml)) !== null) {
     const attrs = match[1];
     const bounds = attrs.match(/\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/i);
     if (!bounds) continue;
+    const resourceId = attrs.match(/\bresource-id="([^"]*)"/i)?.[1] ?? "";
+    if (resourceId.toLowerCase().includes("task_view_thumbnail")) {
+      cardBounds.push({
+        left: Number(bounds[1]),
+        top: Number(bounds[2]),
+        right: Number(bounds[3]),
+        bottom: Number(bounds[4]),
+      });
+    }
     const text = attrs.match(/\btext="([^"]*)"/i)?.[1]?.trim() ?? "";
     const desc = attrs.match(/\bcontent-desc="([^"]*)"/i)?.[1]?.trim() ?? "";
     const label = text || desc;
@@ -5835,14 +5845,20 @@ function _findLabelsInBand(
       if (label.length < existing.label.length) existing.label = label;
       continue;
     }
-    labels.push({ x, y, label });
+    const card = cardBounds.find(rect => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+    labels.push({
+      x,
+      y,
+      swipeY: card ? Math.floor((card.top + card.bottom) / 2) : null,
+      label,
+    });
   }
   return labels.sort((a, b) => a.x - b.x);
 }
 
 /**
  * Closes Instagram the way a person would: open the recent-apps switcher,
- * then drag its card off the LEFT edge of the screen to dismiss it —
+ * then drag its card from the thumbnail center off the LEFT edge to dismiss it —
  * deliberately a real gesture rather than `am force-stop`, per user
  * instruction, so the automation cycle behaves like someone actually using
  * the phone rather than a script killing a process in the background.
@@ -5967,8 +5983,12 @@ export async function closeInstagramViaRecents(
         const vertical = await profileVerticalDismiss();
         method = `attempt ${attempt}/${initialVisibleCardCount}: swiped visible card from (${vertical.from[0]},${vertical.from[1]}) to (${vertical.to[0]},${vertical.to[1]})`;
       } else {
-        const horizontal = await profileHorizontalDismiss(card.x, card.y);
-        method = `attempt ${attempt}/${initialVisibleCardCount}: swiped leftmost visible card "${card.label}" at (${card.x},${card.y}) to (${horizontal.toX},${card.y})`;
+        if (card.swipeY == null) {
+          method = `attempt ${attempt}/${initialVisibleCardCount}: could not locate the thumbnail center for leftmost card "${card.label}"; skipped gesture`;
+          break;
+        }
+        const horizontal = await profileHorizontalDismiss(card.x, card.swipeY);
+        method = `attempt ${attempt}/${initialVisibleCardCount}: swiped leftmost visible card "${card.label}" from its thumbnail center (${card.x},${card.swipeY}) to (${horizontal.toX},${card.swipeY})`;
       }
 
       await new Promise(r => setTimeout(r, 700));

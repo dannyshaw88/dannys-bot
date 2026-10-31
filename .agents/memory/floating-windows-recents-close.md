@@ -6,8 +6,11 @@ description: This device farm's recents/app-switcher is a Xiaomi "floating windo
 ## The rule
 
 To close an app via the recents/app-switcher on these farm phones, drag the
-app's card off the LEFT edge of the screen (long swipe, not a quick flick).
-Swiping up is the stock-Android gesture and is a no-op on this launcher.
+app's card from the center of its thumbnail off the LEFT edge of the screen
+(long swipe, not a quick flick). Use the live `task_view_thumbnail` bounds for
+the swipe's vertical coordinate; the title text sits near the card's top and
+is not the gesture start point. Swiping up is the stock-Android gesture and is
+a no-op on this launcher.
 
 When more than one app is open, the carousel shows at most two cards side by
 side at a time. Closing the left one slides the next app into the left slot
@@ -21,11 +24,14 @@ looked plausible (a normal Android dismiss gesture) but never worked on this
 launcher — every cycle silently fell through to a force-stop despite the
 code intending to look like a real person closing the app. User provided a
 screenshot of the actual "Floating windows" overview confirming the
-left/right card-strip layout.
+left/right card-strip layout. A later inspect dump showed the card thumbnail
+spanning y=805–1926 while the title occupied y=805–915; swiping at the title
+band starts too close to the card header.
 
 **How to apply:** any future recents/app-switcher interaction on this farm
 must use a left-drag of the left-most visible card, not an upward swipe, and
-must repeat if the target app might not be the only (or left-most) card.
+must start at the actual thumbnail center and repeat if the target app might
+not be the only (or left-most) card.
 
 ## Follow search-tab diagnostic rule
 

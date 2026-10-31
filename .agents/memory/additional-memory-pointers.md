@@ -6,7 +6,7 @@ description: Index for less frequently used mobile, UI, and tooling notes.
 Less frequently used project notes:
 
 - [Edit tool regex safety](edit-tool-regex-corruption.md) — avoid regex backslash corruption in templates; use xml.includes() instead of new RegExp()
-- [Floating-windows recents close gesture](floating-windows-recents-close.md) — use a left-drag on the left-most card; repeat per app and poll pidof
+- [Floating-windows recents close gesture](floating-windows-recents-close.md) — left-drag from thumbnail center; repeat on the leftmost card and verify live card count
 - [GitHub PAT push fallback](github-pat-push-fallback.md) — project GITHUB_TOKEN secrets work with GIT_ASKPASS HTTPS pushes, but not the gitPush source-control helper
 - [Chrome manual search sequencing](chrome-manual-search-sequencing.md) — run optional Google history searches after normal Chrome feed work and target live EditText nodes, not toolbar coordinates
 - [Phone filter camera runtime](phone-filter-camera-chrome-launch.md) — use the native CameraX APK; browser camera pages are not an acceptable phone-filter runtime
