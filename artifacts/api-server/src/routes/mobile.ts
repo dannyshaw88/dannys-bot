@@ -1195,6 +1195,30 @@ function setMakePostFolderPath(serial: string, slotIdx: number, folderPath: stri
   } catch { /* best effort */ }
 }
 
+function _snapUploadFolderPathFile(serial: string, slotIdentity: string): string {
+  const safeSerial = serial.replace(/[^a-zA-Z0-9_\-]/g, "_");
+  const safeIdentity = slotIdentity.replace(/[^a-zA-Z0-9_\-]/g, "_");
+  return path.join(FOLDER_PATHS_DIR, `${safeSerial}_${safeIdentity}_snap_upload.txt`);
+}
+
+function getSnapUploadFolderPath(serial: string, slotIdx: number, slotId: string): string {
+  try {
+    return fs.readFileSync(_snapUploadFolderPathFile(serial, slotId), "utf8").trim();
+  } catch {
+    // Read paths written before this setting used stable slot IDs.
+    try { return fs.readFileSync(_snapUploadFolderPathFile(serial, `legacy-index-${slotIdx}`), "utf8").trim(); }
+    catch { return ""; }
+  }
+}
+
+function setSnapUploadFolderPath(serial: string, slotId: string, folderPath: string): void {
+  if (!folderPath) return;
+  try {
+    fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true });
+    fs.writeFileSync(_snapUploadFolderPathFile(serial, slotId), folderPath, "utf8");
+  } catch { /* callers report persistence errors through the settings route */ }
+}
+
 function _postStoryFolderPathFile(serial: string, slotIdx: number): string {
   return path.join(FOLDER_PATHS_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_slot${slotIdx}_post_story.txt`);
 }
@@ -3780,6 +3804,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // original per-tool fields, so the top-level merge alone would omit
       // new activation chances and shuffle state from the response.
       merged.snapchatTools = automationSchema.shape.snapchatTools.parse(merged.snapchatTools ?? {});
+      const snapUploadFolderPath = getSnapUploadFolderPath(
+        serial,
+        slotIdx,
+        accountSlotId(serial, slotIdx, requestedSlotId),
+      );
+      if (snapUploadFolderPath) {
+        merged.snapchatTools.uploadSnap.directoryPath = snapUploadFolderPath;
+      }
       // The dedicated folder-path file is the authoritative source for
       // makePostLocalFolderPath.  It is written directly when the user assigns
       // a folder, so it survives Copy Settings, schema drift, and any autosave
@@ -3855,6 +3887,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               ? existingTools[toolKey]
               : {};
             mergedTools[toolKey] = { ...existingTool, ...incomingTool };
+          }
+        }
+        const incomingUploadSnap = incomingTools.uploadSnap;
+        if (incomingUploadSnap && typeof incomingUploadSnap === "object" && !Array.isArray(incomingUploadSnap)) {
+          const assignedPath = getSnapUploadFolderPath(
+            serial,
+            slotIdx,
+            accountSlotId(serial, slotIdx, requestedSlotId),
+          );
+          if (!incomingUploadSnap.directoryPath && assignedPath) {
+            mergedTools.uploadSnap = { ...mergedTools.uploadSnap, directoryPath: assignedPath };
           }
         }
         body.snapchatTools = mergedTools;
@@ -3947,6 +3990,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }
       if (input.updateProfilePicFolderPath) {
         setProfilePicFolderPath(serial, slotIdx, input.updateProfilePicFolderPath);
+      }
+      if (input.snapchatTools.uploadSnap.directoryPath) {
+        setSnapUploadFolderPath(
+          serial,
+          accountSlotId(serial, slotIdx, requestedSlotId),
+          input.snapchatTools.uploadSnap.directoryPath,
+        );
       }
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save slot automation settings" }); }
@@ -6726,6 +6776,49 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       };
       saveInstanceConfigs(cfg);
     } catch { /* best effort — dedicated file is the real source of truth */ }
+    res.json({ ok: true });
+  });
+
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/snap-upload-folder-path", (req: Request, res: Response) => {
+    const serial = req.params.serial as string;
+    const slotIdx = parseMobileSlotIndex(req.params.slotIdx);
+    if (slotIdx === null) { res.status(400).json({ error: "Invalid slot index" }); return; }
+    const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId : undefined;
+    const folderPath = typeof req.body?.path === "string" ? req.body.path.trim() : "";
+    if (!folderPath) { res.status(400).json({ error: "Choose a directory before saving it." }); return; }
+
+    const stableSlotId = accountSlotId(serial, slotIdx, requestedSlotId);
+    setSnapUploadFolderPath(serial, stableSlotId, folderPath);
+    try {
+      const cfg = loadInstanceConfigs();
+      const stableKey = slotAutomationKey(serial, slotIdx, requestedSlotId);
+      const existing = cfg[serial]?.slotAutomation?.[stableKey]
+        ?? cfg[serial]?.slotAutomation?.[String(slotIdx)]
+        ?? {};
+      const existingTools = existing.snapchatTools && typeof existing.snapchatTools === "object"
+        ? existing.snapchatTools
+        : {};
+      const existingUploadSnap = existingTools.uploadSnap && typeof existingTools.uploadSnap === "object"
+        ? existingTools.uploadSnap
+        : {};
+      cfg[serial] = {
+        ...cfg[serial],
+        slotAutomation: {
+          ...cfg[serial]?.slotAutomation,
+          [stableKey]: {
+            ...existing,
+            snapchatTools: {
+              ...existingTools,
+              uploadSnap: { ...existingUploadSnap, directoryPath: folderPath },
+            },
+          },
+        },
+      };
+      saveInstanceConfigs(cfg);
+    } catch {
+      res.status(500).json({ error: "The directory could not be saved." });
+      return;
+    }
     res.json({ ok: true });
   });
 

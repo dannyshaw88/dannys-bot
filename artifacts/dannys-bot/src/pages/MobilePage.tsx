@@ -7075,6 +7075,20 @@ export function AutomationSettingsPanel({
                           const selected = await api.openFolderDialog(uploadSnap.directoryPath || undefined);
                           if (selected?.canceled || !selected?.folder) return;
                           updateSnapchatTool("uploadSnap", { directoryPath: selected.folder });
+                          if (phone?.serial && slotIdx !== undefined) {
+                            const response = await fetch(
+                              `/api/mobile/devices/${encodeURIComponent(phone.serial)}/slots/${slotIdx}/snap-upload-folder-path`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ path: selected.folder }),
+                              },
+                            );
+                            const result = await response.json().catch(() => null);
+                            if (!response.ok || !result?.ok) {
+                              throw new Error(result?.error ?? "Could not save the Snapchat directory.");
+                            }
+                          }
                         } catch (error) {
                           window.alert(error instanceof Error ? error.message : "Could not open the folder picker.");
                         }
@@ -7093,14 +7107,6 @@ export function AutomationSettingsPanel({
                       />
                       Select at random
                     </label>
-                    {uploadSnap.directoryPath && (
-                      <span
-                        className="max-w-40 truncate text-xs text-muted-foreground"
-                        title={uploadSnap.directoryPath}
-                      >
-                        {uploadSnap.directoryPath}
-                      </span>
-                    )}
                   </div>
                 )}
                 </div>
