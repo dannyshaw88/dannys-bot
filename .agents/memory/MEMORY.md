@@ -73,7 +73,6 @@
 - [Mobile platform account slots](mobile-platform-account-slots.md) — keep Instagram and Snapchat in one platform-tagged slot list so HST timers and collision control stay shared
 - [Manual PC-to-phone media transfer](manual-pc-phone-media-transfer.md) — native PC picker, temporary DCIM copy, manual Instagram post, and explicit phone-side deletion
 - [Random settings single-action flow](random-settings-single-action.md) — tap one validated settings row, optionally scroll once, then Back once; never tap a subsetting
-- [Phone Farm local wallpapers](phone-farm-local-wallpapers.md) — native Electron/browser picker stores a resized image data URL in shared slot customizations
 - [Mobile cycle cross-tool metrics](mobile-cycle-all-likes.md) — aggregate likes, shares, DMs, and saves across every tool; keep pre-switch metrics with the previous account
 - [Accounts Trust Score interaction isolation](accounts-trustscore-no-row-drag.md) — Trust Score badge clicks must not trigger Accounts row drag-to-select or browser focus movement
 - [TrustScore HST lock policy](trustscore-hst-lock-policy.md) — assigned slots need explicit field-level locks; keep Copy Settings visible independently of username count
@@ -87,10 +86,6 @@
 - [TrustScore navigation save](trustscore-duration-navigation-save.md) — debounced TrustScore settings must flush pending writes when the editor unmounts
 - [Trust Score render cache](trust-score-render-cache.md) — deduplicate slot assignment loads and cache trust-level definitions across badge instances
 - [TrustScore expiry promotion](trustscore-expiry-promotion.md) — publish the committed next score directly; never double-write the assignment at timer expiry
-- [Windows installer CI assertions](windows-installer-ci-assertions.md) — keep text-based workflow checks aligned with the current UI, especially after copy changes
-- [Uploaded attachment auto-commit](uploaded-attachment-auto-commit.md) — an uploaded asset may be committed automatically during a later push even when it was not manually staged
-- [GitHub API commits and LFS objects](github-api-lfs-pointers.md) — Git-data API pointer blobs do not upload LFS payloads; Windows smudge then fails with a 404
-- [Windows LFS pointer line endings](windows-lfs-pointer-line-endings.md) — GitHub-written CRLF LFS pointers make Windows checkouts appear dirty; normalize pointers to LF before installer builds
 - [Males Only allowlist filter](males-only-allowlist-filter.md) — explicit comma-separated names match HikerAPI username, full name, or bio; never infer gender
 - [Mobile offline HST gate](mobile-offline-hst-gate.md) — pause all slot cycles on non-ready ADB state while preserving the saved toggle for reconnect resume
 - [Follow exact-target gate](follow-exact-target-gate.md) — match exact username labels even if their text node is disabled; verify profile navigation before follow
@@ -154,6 +149,7 @@
 - [Uncapped quantity maxima](uncapped-quantity-maxima.md) — count/amount maxima stay uncapped while numeric settings fields remain fixed at 3 characters wide
 - [Snapchat idle recovery ordering](snapchat-idle-recovery-ordering.md) — reopen Snapchat from cycle finalization after the stalled tool unwinds, before releasing the device lease
 - [Snapchat Add Friends confirmation](snapchat-add-friends-confirmation.md) — detect incoming banners semantically; tap friend-row Add buttons directly without Tab traversal
+- [Snapchat module isolation](snapchat-tool-isolation.md) — each tool, settings module, and navigation flow stays in its own file; share only low-level helpers and dispatch
 - [Per-device remote input latency](device-remote-input-latency.md) — fast physical touches with slow ADB-injected inputs point to the device/transport path, not the typing profile
 - [Never open Snapchat My AI](snapchat-my-ai-exclusion.md) — exclude the exact My AI row during unread-chat discovery and recheck immediately before tapping
 - [Snapchat tools from an open chat](snapchat-tools-open-chat.md) — dismiss the keyboard, exit the verified chat, then confirm Camera before Add/Accept Friends

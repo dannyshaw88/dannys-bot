@@ -6701,11 +6701,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const cfg = loadInstanceConfigs();
       const stableKey = slotAutomationKey(serial, slotIdx, requestedSlotId);
-      const existing = cfg[serial]?.slotAutomation?.[stableKey]
+      const existing = (cfg[serial]?.slotAutomation?.[stableKey]
         ?? cfg[serial]?.slotAutomation?.[String(slotIdx)]
-        ?? {};
+        ?? {}) as Partial<AutomationSettings>;
       const existingTools = existing.snapchatTools && typeof existing.snapchatTools === "object"
-        ? existing.snapchatTools
+        ? existing.snapchatTools as Partial<SnapchatToolSettings>
         : {};
       const existingUploadSnap = existingTools.uploadSnap && typeof existingTools.uploadSnap === "object"
         ? existingTools.uploadSnap
@@ -6719,8 +6719,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             snapchatTools: {
               ...existingTools,
               uploadSnap: { ...existingUploadSnap, directoryPath: folderPath },
-            },
-          },
+            } as SnapchatToolSettings,
+          } as AutomationSettings,
         },
       };
       saveInstanceConfigs(cfg);
