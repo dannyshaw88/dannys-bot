@@ -4415,7 +4415,7 @@ function NoPhonesPanel({ rawOutput, restarting = false }: { rawOutput?: string |
 // AutomationSettingsData and AUTOMATION_DEFAULTS are imported from mobileShared
 
 // Three-character value area, shared by every numeric field in this panel.
-const NUM_INPUT_CLASS = "box-content w-[3ch] text-center px-0";
+const NUM_INPUT_CLASS = "box-content w-[3ch] text-center px-1";
 
 const Input = BaseInput;
 
@@ -6984,14 +6984,14 @@ export function AutomationSettingsPanel({
                   <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
                     <Label className="text-[11px] text-muted-foreground">Chance %</Label>
                     <Input
-                      type="number" min={0} max={100} className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                      type="number" min={0} max={100} className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                       value={tool.activatePctMin}
                       onChange={e => updateSnapchatTool(key, { activatePctMin: Math.max(0, Math.min(100, clamp4(Number(e.target.value)))) })}
                       disabled={loading || !tool.enabled}
                     />
                     <span className="text-xs text-muted-foreground">–</span>
                     <Input
-                      type="number" min={0} max={100} className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                      type="number" min={0} max={100} className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                       value={tool.activatePctMax}
                       onChange={e => updateSnapchatTool(key, { activatePctMax: Math.max(0, Math.min(100, clamp4(Number(e.target.value)))) })}
                       disabled={loading || !tool.enabled}
@@ -7003,7 +7003,7 @@ export function AutomationSettingsPanel({
                     </Label>
                     <Input
                       type="number" min={countFloor}
-                      className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                      className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                       value={countFloor ? Math.max(1, tool.min) : tool.min}
                       onChange={e => {
                         const value = clamp4(Number(e.target.value));
@@ -7014,7 +7014,7 @@ export function AutomationSettingsPanel({
                     <span className="text-xs text-muted-foreground">–</span>
                     <Input
                       type="number" min={countFloor}
-                      className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                      className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                       value={countFloor ? Math.max(1, tool.max) : tool.max}
                       onChange={e => {
                         const value = clamp4(Number(e.target.value));
@@ -7028,14 +7028,14 @@ export function AutomationSettingsPanel({
                     <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
                       <Label className="text-[11px] text-muted-foreground">Like %</Label>
                       <Input
-                        type="number" min={0} max={100} className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                        type="number" min={0} max={100} className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                         value={settings.snapchatTools.viewStories.likePercentMin}
                         onChange={e => updateSnapchatTool("viewStories", { likePercentMin: Math.max(0, Math.min(100, clamp4(Number(e.target.value)))) })}
                         disabled={loading || !tool.enabled}
                       />
                       <span className="text-xs text-muted-foreground">–</span>
                       <Input
-                        type="number" min={0} max={100} className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                        type="number" min={0} max={100} className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                         value={settings.snapchatTools.viewStories.likePercentMax}
                         onChange={e => updateSnapchatTool("viewStories", { likePercentMax: Math.max(0, Math.min(100, clamp4(Number(e.target.value)))) })}
                         disabled={loading || !tool.enabled}
@@ -7044,14 +7044,14 @@ export function AutomationSettingsPanel({
                     <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
                       <Label className="text-[11px] text-muted-foreground">Seconds</Label>
                       <Input
-                        type="number" min={1} max={60} className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                        type="number" min={1} max={60} className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                         value={settings.snapchatTools.viewStories.watchSecondsMin}
                         onChange={e => updateSnapchatTool("viewStories", { watchSecondsMin: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
                         disabled={loading || !tool.enabled}
                       />
                       <span className="text-xs text-muted-foreground">–</span>
                       <Input
-                        type="number" min={1} max={60} className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                        type="number" min={1} max={60} className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                         value={settings.snapchatTools.viewStories.watchSecondsMax}
                         onChange={e => updateSnapchatTool("viewStories", { watchSecondsMax: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
                         disabled={loading || !tool.enabled}
@@ -7063,14 +7063,14 @@ export function AutomationSettingsPanel({
                   <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
                     <Label className="text-[11px] text-muted-foreground">Seconds</Label>
                     <Input
-                      type="number" min={1} max={60} className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                      type="number" min={1} max={60} className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                       value={settings.snapchatTools.viewSnaps.watchSecondsMin}
                       onChange={e => updateSnapchatTool("viewSnaps", { watchSecondsMin: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
                       disabled={loading || !tool.enabled}
                     />
                     <span className="text-xs text-muted-foreground">–</span>
                     <Input
-                      type="number" min={1} max={60} className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                      type="number" min={1} max={60} className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                       value={settings.snapchatTools.viewSnaps.watchSecondsMax}
                       onChange={e => updateSnapchatTool("viewSnaps", { watchSecondsMax: Math.max(1, Math.min(60, clamp4(Number(e.target.value)))) })}
                       disabled={loading || !tool.enabled}
@@ -7081,7 +7081,7 @@ export function AutomationSettingsPanel({
                   <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
                     <Label className="text-[11px] text-muted-foreground">Swipe (px)</Label>
                     <Input
-                      type="number" min={40} max={1000} className="box-content w-[3ch] h-7 px-0 text-center text-xs"
+                      type="number" min={40} max={1000} className="box-content w-[3ch] h-7 px-1 text-center text-xs"
                       value={settings.snapchatTools.massSnap.contactScrollPixels}
                       onChange={e => updateSnapchatTool("massSnap", {
                         contactScrollPixels: Math.max(40, Math.min(1000, clamp4(Number(e.target.value)))),
@@ -12174,11 +12174,11 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
                 <div className="flex items-center gap-2">
                   <Input type="number" min={0} max={60} value={csMinMin}
                     onChange={e => setCsMinMin(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
-                    className="box-content w-[3ch] px-0 text-center" />
+                    className="box-content w-[3ch] px-1 text-center" />
                   <span className="text-muted-foreground text-sm">to</span>
                   <Input type="number" min={0} max={60} value={csMinMax}
                     onChange={e => setCsMinMax(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
-                    className="box-content w-[3ch] px-0 text-center" />
+                    className="box-content w-[3ch] px-1 text-center" />
                   <span className="text-muted-foreground text-sm">minutes</span>
                 </div>
               </div>
