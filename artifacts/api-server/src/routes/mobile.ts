@@ -5223,6 +5223,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // shared by the cycle runner and the lightweight status endpoint so the
   // account list can show Running on the correct slot.
   const automationCycleActiveSlot = new Map<string, number>();
+  const isActiveSnapchatSlot = (serial: string) => {
+    const slotIdx = automationCycleActiveSlot.get(serial);
+    return slotIdx !== undefined &&
+      loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx]?.platform === "snapchat";
+  };
 
   // Per-cycle abort tracking.  Each new cycle is assigned a random ID that is
   // passed by the frontend in both the cycle POST body and the abort POST body.
@@ -5750,9 +5755,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     history?: { lastMode?: string; streak: number },
     serial?: string,
   ): { duration: number; fromY: number; toY: number; mode: string } {
-    const overrides = serial ? loadInstanceConfigs()[serial]?.devicePrefs?.swipePersonalityOverrides : undefined;
+    const snapchatSlot = Boolean(serial && isActiveSnapchatSlot(serial));
+    const overrides = serial && !snapchatSlot
+      ? loadInstanceConfigs()[serial]?.devicePrefs?.swipePersonalityOverrides
+      : undefined;
     const effective = { ...weights };
-    if (serial) {
+    if (serial && !snapchatSlot) {
       const slot = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
       const attention = [0.80, 0.92, 1, 1.08, 1.18][slot.attention];
       const variety = [0.82, 0.92, 1, 1.08, 1.16][slot.actionVariety];
@@ -5848,16 +5856,25 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // Instagram to recognize the downward viewer-dismiss gesture.
       back: [.90, 1],
     };
-    const slot = ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
-    const slotScale = [1.08, 1.04, 1, .96, .92][slot.attention];
-    const mother = devicePersonality(serial);
+    const snapchatSlot = isActiveSnapchatSlot(serial);
+    const slot = snapchatSlot
+      ? null
+      : ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
+    const slotScale = slot ? [1.08, 1.04, 1, .96, .92][slot.attention] : 1;
+    const mother = snapchatSlot
+      ? { gestureScale: 1, pauseScale: 1, settleScale: 1, xBias: 0, yBias: 0 }
+      : devicePersonality(serial);
     // The caller has already selected the duration for the requested
     // personality (Focused/Slow/Normal/etc.). The device swipe override is
     // calibration data for the gesture path and pacing adjustments, not a
     // replacement duration range. Previously this recomputed duration from
     // the raw calibrated range, so a Focused ~1900ms swipe could be replaced
     // by a 68–78ms swipe and arrive as a tap-like gesture.
-    const durationMs = Math.max(1, Math.round(fallback.durationMs * mother.gestureScale * slotScale));
+    const profileDurationMin = Math.max(1, Math.min(configured.durationMinMs, configured.durationMaxMs));
+    const profileDurationMax = Math.max(profileDurationMin, Math.max(configured.durationMinMs, configured.durationMaxMs));
+    const durationMs = snapchatSlot
+      ? Math.round(profileDurationMin + Math.random() * (profileDurationMax - profileDurationMin))
+      : Math.max(1, Math.round(fallback.durationMs * mother.gestureScale * slotScale));
     const pauseMin = Math.max(0, Math.min(configured.pauseMinMs ?? 0, configured.pauseMaxMs ?? 0));
     const pauseMax = Math.max(pauseMin, configured.pauseMaxMs ?? pauseMin);
     const settleMin = Math.max(0, Math.min(configured.settleMinMs ?? 0, configured.settleMaxMs ?? 0));

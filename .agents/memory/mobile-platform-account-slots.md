@@ -31,6 +31,12 @@ Snapchat HST cycles also need a Step 3: dismiss Snapchat from the floating-windo
 
 **How to apply:** Run this cleanup after Snapchat tools complete, including when a tool errors, but skip stale device input after a cycle abort.
 
+Snapchat swipe input must use the device's saved Swipe Gesture profile only; do not apply Mother Code swipe modifiers, per-device swipe-personality overrides, or account-slot personality scaling to any Snapchat account.
+
+**Why:** The user explicitly requested that Snapchat accounts follow the saved Swipe Gesture profile instead of device or slot swipe-personality overrides.
+
+**How to apply:** Keep Snapchat swipe resolution platform-specific and use the saved gesture's coordinates, duration range, jitter, pause, and settle values without Mother Code or slot scaling.
+
 Keep Snapchat's two viewers distinct: View Spotlights uses the Spotlight tab, counts vertical swipes, waits on each item, and may like with its own Like %; View Snaps opens a circular Story, counts the initial Snap plus each successful right-side advance, and waits only between advances. View Snaps has no Like control.
 
 **Why:** The user explicitly separated Spotlight browsing from Stories and defined Snap-count and right-side-tap behavior.
