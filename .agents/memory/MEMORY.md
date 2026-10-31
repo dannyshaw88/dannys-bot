@@ -153,7 +153,7 @@
 - [Snapchat View Snaps exit](snapchat-view-snaps-exit.md) — send one Android Back at tool completion to leave the Story viewer
 - [Uncapped quantity maxima](uncapped-quantity-maxima.md) — count/amount maxima stay uncapped while numeric settings fields remain fixed at 3 characters wide
 - [Snapchat idle recovery ordering](snapchat-idle-recovery-ordering.md) — reopen Snapchat from cycle finalization after the stalled tool unwinds, before releasing the device lease
-- [Snapchat Add Friends confirmation](snapchat-add-friends-confirmation.md) — detect real banners only; tap when clear and cap waits at ten five-second checks
+- [Snapchat Add Friends confirmation](snapchat-add-friends-confirmation.md) — require incoming-event text or banner IDs; never classify camera controls by geometry alone
 - [Per-device remote input latency](device-remote-input-latency.md) — fast physical touches with slow ADB-injected inputs point to the device/transport path, not the typing profile
 - [Never open Snapchat My AI](snapchat-my-ai-exclusion.md) — exclude the exact My AI row during unread-chat discovery and recheck immediately before tapping
 - [Snapchat tools from an open chat](snapchat-tools-open-chat.md) — dismiss the keyboard, exit the verified chat, then confirm Camera before Add/Accept Friends
