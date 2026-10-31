@@ -1255,6 +1255,7 @@ async function runReplyUnreadChats(context: Context) {
           skipMissingKeys: true,
           compactLogs: true,
           onProgress: context.onProgress,
+          batchTaps: true,
         },
       );
       if (!typed.available) {
@@ -1279,7 +1280,6 @@ async function runReplyUnreadChats(context: Context) {
           `Reply to Unread Chats: skipped unmapped key(s) ${[...new Set(typed.missing)].join(", ")}; continuing with the remaining calibrated keys.`,
         );
       }
-      await context.sleep(450, "exact");
       sendState = await dump(context.serial);
       const composerAfterTyping = sendState.nodes.find(node =>
         /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
@@ -1402,7 +1402,6 @@ async function runViewSpotlights(context: Context) {
     context.onLog(`View Spotlights: waiting ${seconds}s before the next Spotlight swipe.`);
     await context.sleep(seconds * 1000);
     if (context.isAborted() || !await swipeByDeviceGesture(context)) break;
-    await context.sleep(900);
     const afterSwipe = await dump(context.serial);
     if (!isSpotlightSurface(afterSwipe.xml, afterSwipe.nodes)) {
       context.onLog("View Spotlights stopped: the screen left Spotlight after the swipe.");

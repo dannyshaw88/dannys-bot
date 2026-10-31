@@ -4992,6 +4992,47 @@ async function runInputShell(serial: string, args: string[], label: string, tapI
   });
 }
 
+type CalibratedTapBatchItem = { x: number; y: number; pauseMs: number };
+
+async function runCalibratedTapBatch(
+  serial: string,
+  taps: CalibratedTapBatchItem[],
+): Promise<void> {
+  if (taps.length === 0) return;
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const commands = taps.flatMap(({ x, y, pauseMs }) => {
+    const safeX = Math.round(x), safeY = Math.round(y);
+    const tap = `input tap ${safeX} ${safeY}`;
+    const pause = Math.max(0, Math.round(pauseMs));
+    return pause > 0
+      ? [tap, `sleep ${(pause / 1000).toFixed(3)}`]
+      : [tap];
+  });
+  const startedAt = Date.now();
+  try {
+    await runWithDeviceInputGate(serial, async () => {
+      const { stdout, stderr } = await execFileP(adb, [
+        "-s", serial, "shell", commands.join(" && "),
+      ], { encoding: "utf8", timeout: 30_000 } as any);
+      const output = `${stdout ?? ""}${stderr ?? ""}`.trim();
+      if (/error|exception|permission denied/i.test(output)) {
+        throw new Error(output);
+      }
+    });
+    logger.info({
+      serial,
+      tapCount: taps.length,
+      configuredPauseMs: taps.reduce((sum, tap) => sum + tap.pauseMs, 0),
+      elapsedMs: Date.now() - startedAt,
+    }, "[cal-keyboard] calibrated tap batch completed");
+  } catch (error: any) {
+    const output = `${error?.stderr ?? ""}${error?.stdout ?? ""}`.trim();
+    const detail = output || error?.message || "unknown error";
+    throw new Error(`adb calibrated tap batch failed: ${detail}`);
+  }
+}
+
 export async function inputText(serial: string, text: string): Promise<void> {
   const escaped = escapeForAdbInput(text);
   await runInputShell(serial, ["text", escaped], "text");
