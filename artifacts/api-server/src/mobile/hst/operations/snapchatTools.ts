@@ -633,19 +633,44 @@ async function pressAndroidBack(context: Context, count: number, action: string)
 }
 
 async function exitSnapchatConversation(context: Context): Promise<boolean> {
-  context.onLog("Reply to Unread Chats: exiting the current conversation with two Android Back presses.");
-  if (!await pressAndroidBack(context, 2, "exiting the conversation")) {
-    context.onLog(`Reply to Unread Chats: conversation exit Back presses did not complete; aborted=${context.isAborted()}.`);
-    return false;
-  }
-  const after = await dump(context.serial);
-  const chatTabVisible = Boolean(exactClickable(after.nodes, ["Chat"]));
-  const composerVisible = after.nodes.some(node =>
+  const hasComposer = (state: Awaited<ReturnType<typeof dump>>) => state.nodes.some(node =>
     /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
   );
-  const exited = chatTabVisible && !composerVisible;
-  context.onLog(`Reply to Unread Chats: conversation exit verification chatTab=${chatTabVisible}, composer=${composerVisible}, success=${exited}.`);
-  return exited;
+  const isChatTab = (state: Awaited<ReturnType<typeof dump>>) =>
+    Boolean(exactClickable(state.nodes, ["Chat"]));
+
+  let state = await dump(context.serial);
+  if (!hasComposer(state) && !hasNotAddedFriendNotice(state)) {
+    context.onLog("Reply to Unread Chats: refusing Android Back because the current surface is not a confirmed conversation.");
+    return false;
+  }
+
+  context.onLog("Reply to Unread Chats: exiting the confirmed conversation one Android Back press at a time.");
+  for (let press = 1; press <= 2; press++) {
+    if (context.isAborted()) return false;
+    try {
+      await android.keyevent(context.serial, 4); // Android KEYCODE_BACK
+    } catch {
+      context.onLog(`Snapchat: Android Back failed while exiting the conversation (press ${press}).`);
+      return false;
+    }
+    await context.sleep(250, "exact");
+    state = await dump(context.serial);
+
+    const composerVisible = hasComposer(state);
+    const chatTabVisible = isChatTab(state);
+    if (chatTabVisible && !composerVisible) {
+      context.onLog(`Reply to Unread Chats: conversation exit verified after ${press} Back press(es); chatTab=true, composer=false.`);
+      return true;
+    }
+    if (!composerVisible && !hasNotAddedFriendNotice(state)) {
+      context.onLog(`Reply to Unread Chats: stopped after ${press} Back press(es); the conversation closed without confirming the Chat tab, so no further Back was sent.`);
+      return false;
+    }
+  }
+
+  context.onLog("Reply to Unread Chats: the conversation was still open after two verified Back presses.");
+  return false;
 }
 
 async function recoverFromUnreadSnapViewer(
@@ -1525,6 +1550,14 @@ export async function runSnapchatTools(context: Context): Promise<boolean> {
     }
     if ((tool.name === "Add Friends" || tool.name === "Accept Friends") && !context.isAborted()) {
       if (!await collapseAddFriendsBeforeNextTool(context)) return false;
+    }
+    if (
+      tool.name === "Reply to Unread Chats" &&
+      !toolFailed &&
+      index < orderedTools.length - 1 &&
+      !context.isAborted()
+    ) {
+      if (!await returnToCameraBeforeNextTool(context)) return false;
     }
     if (toolFailed) throw toolError;
     if (index < orderedTools.length - 1 &&
