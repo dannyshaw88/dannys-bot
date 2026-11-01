@@ -1,10 +1,10 @@
 ---
 name: Snapchat View Snaps exit
-description: Leave the Snap viewer with one Android Back press after the tool's final viewed Snap.
+description: Advance with an exact right-edge tap and leave the viewer with one Android Back press.
 ---
 
-When View Snaps completes while the story viewer is active, send Android Back exactly once to exit that viewer. Do not substitute a Camera-tab tap for this exit.
+View Snaps advances to the next Snap with an exact (no-jitter) tap at `(screenWidth - 50, screenHeight / 2)`, never on the lower reaction controls. At completion, send Android Back exactly once; do not substitute a Camera-tab tap for this exit.
 
-**Why:** The user explicitly requires Android Back once at the end of View Snaps; a right-side tap only advances to another Snap.
+**Why:** The user explicitly requires the right-edge midpoint to advance and Android Back once at the end; taps near the lower reply/reaction row can accidentally send a reaction.
 
-**How to apply:** After the configured viewing loop, if the Snap viewer is still active and the cycle is not aborted, send one KEYCODE_BACK. Later tool dispatch may navigate from Stories to Camera as a separate step.
+**How to apply:** Use the device's live screen dimensions and disable tap jitter for each next-Snap input. Do not use viewer-node confirmation checks as a reason to suppress the requested next tap. After the configured viewing loop, unless the cycle is aborted, send one KEYCODE_BACK. Later tool dispatch may navigate from Stories to Camera as a separate step.
