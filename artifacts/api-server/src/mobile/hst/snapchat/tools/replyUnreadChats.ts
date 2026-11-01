@@ -79,7 +79,7 @@ async function tapUnreadChatNameArea(
   return !context.isAborted();
 }
 
-function unreadChatRows(nodes: UiNode[]) {
+function unreadChatRows(nodes: UiNode[], onDeliveredRow?: (displayName: string) => void) {
   return nodes.flatMap(marker => {
     const markerLabel = `${marker.text} ${marker.desc}`.trim();
     if (!/ff_item/i.test(shortResourceId(marker))) return [];
@@ -108,6 +108,10 @@ function unreadChatRows(nodes: UiNode[]) {
     const nameNode = names[0];
     const displayName = nameNode?.text.trim();
     if (displayName && isMyAiChat(displayName)) return [];
+    if (displayName && /\bdelivered\b/i.test(rowLabel)) {
+      onDeliveredRow?.(displayName);
+      return [];
+    }
     return nameNode && displayName
       ? [{ marker, nameNode, displayName, chatActionNode: hasMedia ? chatActionNode : undefined }]
       : [];
@@ -169,12 +173,19 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
 
   let replied = 0;
   const visited = new Set<string>();
+  const loggedDeliveredRows = new Set<string>();
+  const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, displayName => {
+    const identity = normalizedText(displayName);
+    if (loggedDeliveredRows.has(identity)) return;
+    loggedDeliveredRows.add(identity);
+    context.onLog(`Reply to Unread Chats: skipping "${displayName}" because its Unread-list status is Delivered, not an incoming chat.`);
+  });
   while (replied < requested && !context.isAborted()) {
-    let rows = unreadChatRows(list.nodes);
+    let rows = readUnreadRows(list.nodes);
     for (let retry = 0; rows.length === 0 && retry < 4 && !context.isAborted(); retry++) {
       await context.sleep(500, "exact");
       list = await dump(context.serial);
-      rows = unreadChatRows(list.nodes);
+      rows = readUnreadRows(list.nodes);
     }
     context.onLog(`Reply to Unread Chats: found ${rows.length} eligible text-chat row(s) in the Unread list.`);
     const row = rows.find(item => !visited.has(normalizedText(item.displayName)));
@@ -218,9 +229,14 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     }
     const transcript = visibleConversation(thread.nodes, composer.bounds[1]);
     if (transcript.length === 0) {
-      context.onLog("Reply to Unread Chats skipped: no readable conversation context was found.");
-      await exitSnapchatConversation(context).catch(() => false);
-      break;
+      context.onLog(`Reply to Unread Chats: no readable conversation context for ${row.displayName}; exiting and continuing to the next Unread row.`);
+      const exited = await exitSnapchatConversation(context).catch(() => false);
+      if (!exited) {
+        context.onLog(`Reply to Unread Chats stopped: could not exit the empty conversation for ${row.displayName}.`);
+        break;
+      }
+      list = await dump(context.serial);
+      continue;
     }
     let reply: string;
     const history = getSnapchatReplyHistory(context.slotId, contactKey);
