@@ -1,6 +1,7 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { isAddFriendsPage, openAddFriends } from "../navigation/openAddFriends";
+import { scrollAcceptFriendsListOneSlot } from "../navigation/scrollAcceptFriendsListOneSlot";
 import { center, dump, findOccludingBanner, nodeLabel, randomCount, randomSeconds, shortResourceId, tapNode } from "../runtime";
 
 export async function runAcceptFriends(context: SnapchatContext): Promise<void> {
@@ -42,7 +43,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
           shortResourceId(node) === "result-title" &&
           node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
         );
-        return row && name ? [{ button, name: nodeLabel(name) }] : [];
+        return row && name ? [{ button, name: nodeLabel(name), row }] : [];
       });
   };
 
@@ -101,9 +102,10 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
   }
 
   let accepted = 0;
-  let pendingAcceptance: string | null = null;
+  let pendingAcceptance: { name: string; row: UiNode } | null = null;
   while (accepted < requested && !context.isAborted()) {
     if (pendingAcceptance) {
+      const currentAcceptance = pendingAcceptance;
       const seconds = randomSeconds(1, 3);
       context.onLog(`Accept Friends: waiting ${seconds}s between accepts.`);
       await context.sleep(seconds * 1000);
@@ -119,14 +121,25 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
         break;
       }
       const pendingStillVisible = getAcceptRows(state.nodes, pendingSection)
-        .some(row => row.name === pendingAcceptance);
+        .some(row => row.name === currentAcceptance.name);
       if (pendingStillVisible) {
-        context.onLog(`Accept Friends stopped: Snapchat still shows Accept for ${pendingAcceptance}.`);
+        context.onLog(`Accept Friends stopped: Snapchat still shows Accept for ${currentAcceptance.name}.`);
         break;
       }
       accepted++;
       context.onMetric?.("snapchat_accept_friends");
       pendingAcceptance = null;
+      const scrolled = await scrollAcceptFriendsListOneSlot(
+        context,
+        state.nodes,
+        currentAcceptance.row,
+        screenHeight,
+        currentAcceptance.name,
+      );
+      if (!scrolled && accepted < requested) {
+        context.onLog("Accept Friends: stopping before another Accept tap because a short list scroll could not be placed safely.");
+        break;
+      }
       if (accepted >= requested) break;
     }
     state = await dump(context.serial);
@@ -154,7 +167,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
     }
     blockedAcceptance = "";
     if (!await tapNode(context, candidate.button, `accept ${candidate.name} under Added Me`, 250)) break;
-    pendingAcceptance = candidate.name;
+    pendingAcceptance = { name: candidate.name, row: candidate.row };
   }
   context.onLog(`Accept Friends: accepted ${accepted}/${requested} visible incoming requests.`);
 }
