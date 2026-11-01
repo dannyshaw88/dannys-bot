@@ -8,3 +8,9 @@ For Make a Post and Random Actions Update Avatar, delete the selected PC source 
 **Why:** The user wants a selected image to stop existing in the tool's PC and device storage so later automation cannot select it again.
 
 **How to apply:** Put cleanup in unconditional finalization, include partial device transfers, and log when deletion cannot be confirmed.
+
+Upload a Snap is an explicit exception: delete the staged device copy whenever the tool finishes, but keep the original image on the local Electron PC.
+
+**Why:** The user wants to prevent phone storage clutter while retaining the local source file.
+
+**How to apply:** Clean up only the returned device path in unconditional finalization; never delete Upload a Snap's local source path.
