@@ -41,7 +41,7 @@ export async function scrollAcceptFriendsListOneSlot(
     return false;
   }
 
-  const scrollDistance = Math.max(1, Math.round(rowHeight * 0.3));
+  const scrollDistance = Math.max(1, Math.round(rowHeight * 0.6));
   const x = center(gestureRow).x;
   const startY = Math.min(
     safeBottom - 6,
@@ -54,7 +54,7 @@ export async function scrollAcceptFriendsListOneSlot(
   }
 
   context.onLog(
-    `Accept Friends: scrolling the Added Me list up 30% of one row height after accepting ${friendName} ` +
+    `Accept Friends: scrolling the Added Me list up 60% of one row height after accepting ${friendName} ` +
     `(from ${x},${startY} to ${x},${endY}); staying above Android's bottom navigation.`,
   );
   await android.swipe(context.serial, x, startY, x, endY, 240, false);

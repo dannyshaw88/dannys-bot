@@ -18,7 +18,7 @@ export async function scrollAddFriendsListOneSlot(
     context.onLog(`Add Friends: could not calculate a safe short scroll after adding ${friendName}.`);
     return false;
   }
-  const scrollDistance = Math.max(1, Math.round(rowHeight * 0.3));
+  const scrollDistance = Math.max(1, Math.round(rowHeight * 0.6));
 
   const listTop = findFriendsTitle.bounds[3];
   const safeBottom = Math.floor(screenHeight * 0.82);
@@ -34,7 +34,7 @@ export async function scrollAddFriendsListOneSlot(
   }
 
   context.onLog(
-    `Add Friends: scrolling the Find Friends list up 30% of one row height after ${friendName} ` +
+    `Add Friends: scrolling the Find Friends list up 60% of one row height after ${friendName} ` +
     `(from ${x},${startY} to ${x},${endY}); staying above Android's bottom navigation.`,
   );
   await android.swipe(context.serial, x, startY, x, endY, 240, false);

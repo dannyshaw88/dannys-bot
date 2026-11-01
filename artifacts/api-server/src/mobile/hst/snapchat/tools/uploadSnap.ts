@@ -1,6 +1,7 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext } from "../context";
-import { dump, exactClickable, shortResourceId, tapNode } from "../runtime";
+import { dump, shortResourceId, tapNode } from "../runtime";
+import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 
 export type UploadSnapResult = "not-started" | "selected" | "failed";
 
@@ -26,37 +27,7 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
     await context.sleep(1000, "exact");
 
     let state = await dump(context.serial);
-    if (!/id="camera_page"/i.test(state.xml)) {
-      const cameraTab = exactClickable(state.nodes, ["Camera"]);
-      if (!cameraTab || !await tapNode(context, cameraTab, "open Snapchat Camera before Upload a Snap")) {
-        context.onLog("Upload a Snap stopped: Snapchat's Camera tab was not available.");
-        await android.removeDeviceFile(context.serial, devicePath).catch(() => {});
-        return "failed";
-      }
-      let cameraReady = false;
-      for (let attempt = 0; attempt < 10; attempt++) {
-        state = await dump(context.serial);
-        if (/id="camera_page"/i.test(state.xml)) {
-          cameraReady = true;
-          break;
-        }
-        if (attempt < 9) await context.sleep(500, "exact");
-      }
-      if (!cameraReady) {
-        context.onLog("Upload a Snap stopped: Snapchat's Camera screen was not confirmed after tapping Camera.");
-        await android.removeDeviceFile(context.serial, devicePath).catch(() => {});
-        return "failed";
-      }
-    } else {
-      context.onLog("Upload a Snap: Snapchat is already on the Camera screen.");
-    }
-
-    const memoriesIcon = state.nodes.find(node =>
-      shortResourceId(node) === "ngs_memories_icon" ||
-      node.desc.trim().toLowerCase() === "memories",
-    );
-    if (!memoriesIcon || !await tapNode(context, memoriesIcon, "open Memories from the Camera screen")) {
-      context.onLog("Upload a Snap stopped: the Memories icon was not available on the Camera screen.");
+    if (!await tapUploadSnapMemories(context, state.nodes)) {
       await android.removeDeviceFile(context.serial, devicePath).catch(() => {});
       return "failed";
     }

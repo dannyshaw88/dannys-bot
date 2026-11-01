@@ -196,6 +196,17 @@ const FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   explore_scrolls:  110,
 };
 
+const SNAPCHAT_FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
+  account: 224,
+  session_tool: 110,
+  cycles: 80,
+  snapchat_add_friends: 110,
+  snapchat_accept_friends: 125,
+  snapchat_replies: 100,
+  snapchat_spotlights: 100,
+  snapchat_snaps: 105,
+};
+
 const MOBILE_METRIC_DEFS: {
   key: string;
   label: string;
@@ -1232,35 +1243,70 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
     (s, d) => ({ ...d, ...s }),
   );
 
-  const nudgeFarmColWidth = (key: string, delta: number) => {
-    const v = Math.max(1, Math.min(600, (farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80) + delta));
-    setFarmColWidths({ ...farmColWidths, [key]: v });
-  };
-
   const [farmVisibleCols, setFarmVisibleCols] = usePersistentSetting<Record<string, boolean>>(
     "farm_visible_cols",
     Object.fromEntries(FARM_STAT_LABELS.map(s => [s.key, true])),
     (stored, defaults) => ({ ...defaults, ...stored }),
   );
 
-  const moveFarmCol = (key: string, dir: -1 | 1) => {
-    const idx = farmColOrder.indexOf(key);
+  const [snapchatColOrder, setSnapchatColOrder] = usePersistentSetting<string[]>(
+    "snapchat_farm_col_order",
+    SNAPCHAT_FARM_STAT_LABELS.map(s => s.key),
+    (stored, defaults) => {
+      const filtered = [...new Set(stored.filter(k => defaults.includes(k)))];
+      return [...filtered, ...defaults.filter(k => !filtered.includes(k))];
+    },
+  );
+  const [snapchatColWidths, setSnapchatColWidths] = usePersistentSetting<Record<string, number>>(
+    "snapchat_farm_col_widths_px",
+    SNAPCHAT_FARM_DEFAULT_COL_WIDTHS,
+    (stored, defaults) => ({ ...defaults, ...stored }),
+  );
+  const [snapchatVisibleCols, setSnapchatVisibleCols] = usePersistentSetting<Record<string, boolean>>(
+    "snapchat_farm_visible_cols",
+    Object.fromEntries(SNAPCHAT_FARM_STAT_LABELS.map(s => [s.key, true])),
+    (stored, defaults) => ({ ...defaults, ...stored }),
+  );
+
+  const statLabels = platform === "snapchat" ? SNAPCHAT_FARM_STAT_LABELS : FARM_STAT_LABELS;
+  const activeColOrder = platform === "snapchat" ? snapchatColOrder : farmColOrder;
+  const activeColWidths = platform === "snapchat" ? snapchatColWidths : farmColWidths;
+  const activeVisibleCols = platform === "snapchat" ? snapchatVisibleCols : farmVisibleCols;
+  const activeDefaultColWidths = platform === "snapchat"
+    ? SNAPCHAT_FARM_DEFAULT_COL_WIDTHS
+    : FARM_DEFAULT_COL_WIDTHS;
+  const setActiveColOrder = (next: string[]) => {
+    if (platform === "snapchat") setSnapchatColOrder(next);
+    else setFarmColOrder(next);
+  };
+  const setActiveColWidths = (next: Record<string, number>) => {
+    if (platform === "snapchat") setSnapchatColWidths(next);
+    else setFarmColWidths(next);
+  };
+  const setActiveVisibleCols = (next: Record<string, boolean>) => {
+    if (platform === "snapchat") setSnapchatVisibleCols(next);
+    else setFarmVisibleCols(next);
+  };
+  const nudgeColumnWidth = (key: string, delta: number) => {
+    const v = Math.max(1, Math.min(600, (activeColWidths[key] ?? activeDefaultColWidths[key] ?? 80) + delta));
+    setActiveColWidths({ ...activeColWidths, [key]: v });
+  };
+  const moveColumn = (key: string, dir: -1 | 1) => {
+    const idx = activeColOrder.indexOf(key);
     if (idx === -1) return;
-    const next = [...farmColOrder];
+    const next = [...activeColOrder];
     const swapIdx = idx + dir;
     if (swapIdx < 0 || swapIdx >= next.length) return;
     [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
-    setFarmColOrder(next);
-    localStorage.setItem("farm_col_order", JSON.stringify(next));
+    setActiveColOrder(next);
   };
 
-  const statLabels = platform === "snapchat" ? SNAPCHAT_FARM_STAT_LABELS : FARM_STAT_LABELS;
-  const orderedLabels = platform === "snapchat"
-    ? SNAPCHAT_FARM_STAT_LABELS
-    : farmColOrder
-        .map(k => FARM_STAT_LABELS.find(s => s.key === k))
-        .filter(Boolean)
-        .filter(s => farmVisibleCols[s!.key] !== false) as typeof FARM_STAT_LABELS;
+  const orderedLabels = activeColOrder
+    .map(k => statLabels.find(s => s.key === k))
+    .filter((label, index, labels) =>
+      Boolean(label) && labels.findIndex(candidate => candidate?.key === label?.key) === index,
+    )
+    .filter(label => label && activeVisibleCols[label.key] !== false) as typeof FARM_STAT_LABELS;
   const colCount = 1 + orderedLabels.length;
 
   return (
@@ -1269,9 +1315,11 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
         <CardTitle className="text-lg flex items-center gap-2">
           <Activity className="w-5 h-5 text-primary" /> Tool Performance
         </CardTitle>
-        <div className={platform === "instagram" ? "relative" : "hidden"}>
+        <div className="relative">
           <button
             onClick={() => setFarmManageColsOpen(o => !o)}
+            data-testid={`button-manage-columns-${platform}`}
+            aria-expanded={farmManageColsOpen}
             className="flex items-center gap-1.5 text-xs text-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded hover:bg-muted/40"
           >
             <Settings2 className="w-3.5 h-3.5" /> MANAGE COLUMNS
@@ -1281,7 +1329,9 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
               <div className="fixed inset-0 z-40" onClick={() => setFarmManageColsOpen(false)} />
               <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto">
                 <div className="px-5 pt-4 pb-3 border-b border-border">
-                  <p className="text-sm font-semibold">Tool Performance Columns</p>
+                  <p className="text-sm font-semibold">
+                    {platform === "snapchat" ? "Snapchat Tool Performance Columns" : "Tool Performance Columns"}
+                  </p>
                 </div>
                 <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-1">
                   {/* Account / Device column width (always shown, not togglable) */}
@@ -1295,39 +1345,40 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
                           <button disabled className="h-4 w-4 flex items-center justify-center rounded text-muted-foreground opacity-20"><ChevronDown className="w-2.5 h-2.5" /></button>
                         </div>
                         <label className="text-xs w-16 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
-                        <button onClick={() => nudgeFarmColWidth(key, -10)} title="Narrow column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronLeft className="w-3 h-3" /></button>
+                        <button onClick={() => nudgeColumnWidth(key, -10)} title="Narrow column" data-testid={`button-narrow-stats-column-${platform}-${key}`} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronLeft className="w-3 h-3" /></button>
                         <input
                           type="number" min={1} max={600}
-                          value={farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key]}
+                          value={activeColWidths[key] ?? activeDefaultColWidths[key] ?? 80}
+                          data-testid={`input-stats-column-width-${platform}-${key}`}
                           onChange={e => {
                             const v = Math.max(1, Math.min(600, Number(e.target.value)));
-                            const next = { ...farmColWidths, [key]: v };
-                            setFarmColWidths(next);
-                            localStorage.setItem("farm_col_widths_px", JSON.stringify(next));
+                            setActiveColWidths({ ...activeColWidths, [key]: v });
                           }}
                           className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
                         />
-                        <button onClick={() => nudgeFarmColWidth(key, 10)} title="Widen column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronRight className="w-3 h-3" /></button>
+                        <button onClick={() => nudgeColumnWidth(key, 10)} title="Widen column" data-testid={`button-widen-stats-column-${platform}-${key}`} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronRight className="w-3 h-3" /></button>
                       </div>
                     );
                   })()}
-                  {farmColOrder.map((key, idx) => {
-                    const col = FARM_STAT_LABELS.find(s => s.key === key);
+                  {activeColOrder.map((key, idx) => {
+                    const col = statLabels.find(s => s.key === key);
                     if (!col) return null;
-                    const visible = farmVisibleCols[key] !== false;
+                    const visible = activeVisibleCols[key] !== false;
                     return (
                       <div key={key} className="flex items-center gap-1 mb-1">
                         <div className="flex flex-col mr-0.5">
                           <button
-                            onClick={() => moveFarmCol(key, -1)}
+                            onClick={() => moveColumn(key, -1)}
                             disabled={idx === 0}
+                            data-testid={`button-move-stats-column-up-${platform}-${key}`}
                             className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"
                           >
                             <ChevronUp className="w-2.5 h-2.5" />
                           </button>
                           <button
-                            onClick={() => moveFarmCol(key, 1)}
-                            disabled={idx === farmColOrder.length - 1}
+                            onClick={() => moveColumn(key, 1)}
+                            disabled={idx === activeColOrder.length - 1}
+                            data-testid={`button-move-stats-column-down-${platform}-${key}`}
                             className="h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 text-muted-foreground disabled:opacity-20 transition-colors"
                           >
                             <ChevronDown className="w-2.5 h-2.5" />
@@ -1337,8 +1388,9 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
                           id={`farm-col-${key}`}
                           checked={visible}
                           onCheckedChange={checked => {
-                            setFarmVisibleCols(prev => ({ ...prev, [key]: !!checked }));
+                            setActiveVisibleCols({ ...activeVisibleCols, [key]: !!checked });
                           }}
+                          data-testid={`checkbox-stats-column-${platform}-${key}`}
                           className="shrink-0"
                         />
                         <label
@@ -1348,19 +1400,18 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
                         >
                           {col.label}
                         </label>
-                        <button onClick={() => nudgeFarmColWidth(key, -10)} title="Narrow column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronLeft className="w-3 h-3" /></button>
+                        <button onClick={() => nudgeColumnWidth(key, -10)} title="Narrow column" data-testid={`button-narrow-stats-column-${platform}-${key}`} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronLeft className="w-3 h-3" /></button>
                         <input
                           type="number" min={1} max={600}
-                          value={farmColWidths[key] ?? FARM_DEFAULT_COL_WIDTHS[key] ?? 80}
+                          value={activeColWidths[key] ?? activeDefaultColWidths[key] ?? 80}
+                          data-testid={`input-stats-column-width-${platform}-${key}`}
                           onChange={e => {
                             const v = Math.max(1, Math.min(600, Number(e.target.value)));
-                            const next = { ...farmColWidths, [key]: v };
-                            setFarmColWidths(next);
-                            localStorage.setItem("farm_col_widths_px", JSON.stringify(next));
+                            setActiveColWidths({ ...activeColWidths, [key]: v });
                           }}
                           className="h-6 w-14 text-xs border border-border rounded px-1.5 bg-background text-center"
                         />
-                        <button onClick={() => nudgeFarmColWidth(key, 10)} title="Widen column" className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronRight className="w-3 h-3" /></button>
+                        <button onClick={() => nudgeColumnWidth(key, 10)} title="Widen column" data-testid={`button-widen-stats-column-${platform}-${key}`} className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"><ChevronRight className="w-3 h-3" /></button>
                       </div>
                     );
                   })}
@@ -1368,11 +1419,18 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
                 <div className="px-4 pb-4">
                   <button
                     onClick={() => {
-                      setFarmColOrder(FARM_STAT_LABELS.map(s => s.key));
-                      setFarmVisibleCols(Object.fromEntries(FARM_STAT_LABELS.map(s => [s.key, true])));
-                      setFarmColWidths(FARM_DEFAULT_COL_WIDTHS);
-                      localStorage.removeItem("farm_col_widths_px");
+                      if (platform === "snapchat") {
+                        setSnapchatColOrder(SNAPCHAT_FARM_STAT_LABELS.map(s => s.key));
+                        setSnapchatVisibleCols(Object.fromEntries(SNAPCHAT_FARM_STAT_LABELS.map(s => [s.key, true])));
+                        setSnapchatColWidths(SNAPCHAT_FARM_DEFAULT_COL_WIDTHS);
+                      } else {
+                        setFarmColOrder(FARM_STAT_LABELS.map(s => s.key));
+                        setFarmVisibleCols(Object.fromEntries(FARM_STAT_LABELS.map(s => [s.key, true])));
+                        setFarmColWidths(FARM_DEFAULT_COL_WIDTHS);
+                        localStorage.removeItem("farm_col_widths_px");
+                      }
                     }}
+                    data-testid={`button-reset-stats-columns-${platform}`}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Reset to defaults
@@ -1387,14 +1445,14 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
         <div className="overflow-x-auto">
           <table className="text-sm table-fixed">
             <colgroup>
-              <col style={{ width: `${farmColWidths.account ?? FARM_DEFAULT_COL_WIDTHS.account}px` }} />
+              <col style={{ width: `${activeColWidths.account ?? activeDefaultColWidths.account}px` }} />
               {orderedLabels.map(s => (
-                <col key={s.key} style={{ width: `${farmColWidths[s.key] ?? FARM_DEFAULT_COL_WIDTHS[s.key] ?? 80}px` }} />
+                <col key={s.key} style={{ width: `${activeColWidths[s.key] ?? activeDefaultColWidths[s.key] ?? 80}px` }} />
               ))}
             </colgroup>
             <thead className="text-xs bg-muted/30 text-foreground border-b border-border/50">
               <tr>
-                <th className="px-4 py-3 font-bold uppercase tracking-wide text-left" style={{ width: `${farmColWidths.account ?? FARM_DEFAULT_COL_WIDTHS.account}px` }}>
+                <th className="px-4 py-3 font-bold uppercase tracking-wide text-left" style={{ width: `${activeColWidths.account ?? activeDefaultColWidths.account}px` }}>
                   Device / Account
                 </th>
                 {orderedLabels.map(s => {
@@ -1412,14 +1470,13 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
                         farmDragColRef.current = null;
                         setFarmDragOverCol(null);
                         if (!from || from === s.key) return;
-                        const fromIdx = farmColOrder.indexOf(from);
-                        const toIdx = farmColOrder.indexOf(s.key);
+                        const fromIdx = activeColOrder.indexOf(from);
+                        const toIdx = activeColOrder.indexOf(s.key);
                         if (fromIdx === -1 || toIdx === -1) return;
-                        const next = [...farmColOrder];
+                        const next = [...activeColOrder];
                         next.splice(fromIdx, 1);
                         next.splice(toIdx, 0, from);
-                        setFarmColOrder(next);
-                        localStorage.setItem("farm_col_order", JSON.stringify(next));
+                        setActiveColOrder(next);
                       }}
                       onDragEnd={() => { farmDragColRef.current = null; setFarmDragOverCol(null); }}
                       onClick={() => { if (s.key !== "trustscore" && s.key !== "session_tool") cycleFarmSort(s.key); }}
