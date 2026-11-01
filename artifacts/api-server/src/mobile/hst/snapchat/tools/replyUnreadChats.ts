@@ -22,6 +22,10 @@ import {
 } from "../runtime";
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+const isEmptyComposerValue = (value: string) => {
+  const normalized = normalizedText(value);
+  return !normalized || normalized === "send a chat" || normalized === "send chat";
+};
 const isMyAiChat = (name: string) => normalizedText(name) === "my ai";
 
 function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
@@ -289,7 +293,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     let sendState: UiState | undefined;
     let enteredReply = "";
     const initialComposerText = verifiedComposer.text.trim();
-    if (initialComposerText && !/^send chat$/i.test(initialComposerText)) {
+    if (!isEmptyComposerValue(initialComposerText)) {
       context.onLog("Reply to Unread Chats stopped: the reply field already contains a draft.");
       await exitSnapchatConversation(context).catch(() => false);
       break;
@@ -337,7 +341,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
         /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
       );
       enteredReply = composerAfterTyping?.text.trim() ?? "";
-      if (!enteredReply || /^send chat$/i.test(enteredReply) || enteredReply === initialComposerText) {
+      if (isEmptyComposerValue(enteredReply) || enteredReply === initialComposerText) {
         context.onLog("Reply to Unread Chats stopped: no new reply text appeared in the composer.");
         await exitSnapchatConversation(context).catch(() => false);
         break;
@@ -365,7 +369,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     const sentTextConfirmed =
       afterConversation.includes(normalizedText(enteredReply)) &&
       !beforeConversation.includes(normalizedText(enteredReply)) &&
-      (!composerAfterSend?.text.trim() || normalizedText(composerAfterSend.text) === "send chat");
+      isEmptyComposerValue(composerAfterSend?.text ?? "");
     if (!sentTextConfirmed) {
       context.onLog(`Reply to Unread Chats: send could not be confirmed for ${row.displayName}; it was not added to the sent count.`);
       await exitSnapchatConversation(context).catch(() => false);
