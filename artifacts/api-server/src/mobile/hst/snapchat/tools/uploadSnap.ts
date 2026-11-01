@@ -1,6 +1,6 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
-import { center, dump, shortResourceId, tapNode } from "../runtime";
+import { center, dump, tapNode } from "../runtime";
 import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
 import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 
@@ -108,27 +108,39 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
       node.desc.trim().toLowerCase() === "introducing your public story",
     );
     if (publicStoryNoticeVisible) {
-      const okayButton = state.nodes.find(node =>
-        node.text.trim().toLowerCase() === "okay" ||
-        node.desc.trim().toLowerCase() === "okay",
+      const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+      const okayX = Math.round(screenWidth * 0.5);
+      const okayY = Math.round(screenHeight * 0.82);
+      context.onLog(`Upload a Snap: Public Story notice is visible; tapping Okay at (${okayX},${okayY}).`);
+      await android.tap(
+        context.serial,
+        okayX,
+        okayY,
+        "bot",
+        "Snapchat: dismiss Introducing Your Public Story with Okay",
+        "automation",
+        { exact: true },
       );
-      if (okayButton) {
-        await tapNode(context, okayButton, "dismiss Public Story notice with Okay", 0, true);
-        context.onLog("Upload a Snap: dismissed the Public Story notice with Okay.");
-      } else {
-        context.onLog("Upload a Snap: Public Story notice appeared, but its Okay button was not exposed.");
-      }
+      await context.sleep(800, "exact");
+      context.onLog("Upload a Snap: tapped Okay on the Public Story notice.");
+    } else {
+      context.onLog("Upload a Snap: no Public Story notice; continuing to the Send chevron.");
     }
 
-    state = await dump(context.serial);
-    const sendButton = state.nodes.find(node =>
-      shortResourceId(node) === "send_to_send_button",
+    const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    const sendX = Math.round(screenWidth * 0.92);
+    const sendY = Math.round(screenHeight * 0.9);
+    context.onLog(`Upload a Snap: tapping the Send chevron at (${sendX},${sendY}) on ${screenWidth}×${screenHeight}.`);
+    await android.tap(
+      context.serial,
+      sendX,
+      sendY,
+      "bot",
+      "Snapchat: send My Story - Public with the bottom-right chevron",
+      "automation",
+      { exact: true },
     );
-    if (!sendButton || !await tapNode(context, sendButton, "send Snap to My Story - Public")) {
-      context.onLog("Upload a Snap stopped: Snapchat's Send arrow was not available after selecting My Story - Public.");
-      return "failed";
-    }
-
+    await context.sleep(1200, "exact");
     context.onLog(`Upload a Snap: tapped Send for "${fileName}" to My Story - Public.`);
     context.onLog("Upload a Snap: pressing Android Back twice after Send.");
     for (let press = 1; press <= 2; press++) {
@@ -138,7 +150,7 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
       } catch (error) {
         context.onLog(`Upload a Snap: Android Back press ${press}/2 failed: ${error instanceof Error ? error.message : "unknown error"}.`);
       }
-      if (press < 2) await context.sleep(250, "exact");
+      if (press < 2) await context.sleep(500, "exact");
     }
     return "selected";
   } catch (error) {
