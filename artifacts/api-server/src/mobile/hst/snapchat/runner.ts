@@ -19,7 +19,7 @@ type SnapchatToolEntry = {
   run: () => Promise<void | UploadSnapResult>;
 };
 
-export async function runSnapchatTools(context: SnapchatContext): Promise<boolean> {
+export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
   const toolList: SnapchatToolEntry[] = [
     { name: "Upload a Snap", settings: context.tools.uploadSnap, run: () => runUploadSnap(context) },
     { name: "Add Friends", settings: context.tools.addFriends, run: () => runAddFriends(context) },
@@ -52,21 +52,19 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<boolea
 
   for (let index = 0; index < orderedTools.length; index++) {
     const tool = orderedTools[index];
-    if (context.isAborted()) return false;
+    if (context.isAborted()) return;
     let toolError: unknown;
     let toolFailed = false;
     let result: void | UploadSnapResult;
     try {
       result = await tool.run();
-      if (tool.name === "Upload a Snap" && result !== "not-started" && result !== undefined) {
-        return result === "selected";
-      }
+      if (tool.name === "Upload a Snap" && result === "failed") return;
     } catch (error) {
       toolError = error;
       toolFailed = true;
     }
     if ((tool.name === "Add Friends" || tool.name === "Accept Friends") && !context.isAborted()) {
-      if (!await closeAddFriendsPanel(context)) return false;
+      if (!await closeAddFriendsPanel(context)) return;
     }
     if (
       tool.name === "Reply to Unread Chats" &&
@@ -74,16 +72,15 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<boolea
       index < orderedTools.length - 1 &&
       !context.isAborted()
     ) {
-      if (!await returnToCameraBeforeNextTool(context)) return false;
+      if (!await returnToCameraBeforeNextTool(context)) return;
     }
     if (toolFailed) throw toolError;
     if (
       index < orderedTools.length - 1 &&
       (tool.name === "View Spotlights" || tool.name === "View Snaps")
     ) {
-      if (context.isAborted()) return false;
-      if (!await returnToCameraBeforeNextTool(context)) return false;
+      if (context.isAborted()) return;
+      if (!await returnToCameraBeforeNextTool(context)) return;
     }
   }
-  return false;
 }

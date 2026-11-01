@@ -4,7 +4,7 @@ import { center, dump, tapNode } from "../runtime";
 import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
 import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 
-export type UploadSnapResult = "not-started" | "selected" | "failed";
+export type UploadSnapResult = "not-started" | "completed" | "failed";
 
 function findLabeledControl(nodes: UiNode[], label: string): UiNode | undefined {
   const normalizedLabel = label.trim().toLowerCase();
@@ -152,7 +152,7 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
       }
       if (press < 2) await context.sleep(500, "exact");
     }
-    return "selected";
+    return "completed";
   } catch (error) {
     context.onLog(`Upload a Snap stopped: ${error instanceof Error ? error.message : "image staging or navigation failed"}.`);
     return "failed";

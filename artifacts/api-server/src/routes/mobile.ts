@@ -7337,7 +7337,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const snapchatTools = automationSchema.shape.snapchatTools.parse(
             effectiveSettings.snapchatTools ?? {},
           );
-          let leaveSnapchatOnSelectedImage = false;
           const snapchatMetricCounts = {
             snapchatAddFriends: 0,
             snapchatAcceptFriends: 0,
@@ -7346,7 +7345,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             snapchatSnaps: 0,
           };
           try {
-            leaveSnapchatOnSelectedImage = await runSnapchatTools({
+            await runSnapchatTools({
               serial,
               slotId: configuredSlot?.slotId,
               slotIdx: incomingSlotIdx,
@@ -7371,10 +7370,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 sleepOrAbort(serial, milliseconds, "navigation", timingMode),
               swipeGesture: devicePrefsForSnapchat.swipeGesture,
             });
-            if (leaveSnapchatOnSelectedImage) {
-              steps.push("snapchat-upload-snap-image-selected");
-              tLog("✓ Upload a Snap image is selected. Leaving Snapchat open for your test.");
-            }
           } finally {
             const snapchatActionTotal = Object.values(snapchatMetricCounts).reduce((sum, count) => sum + count, 0);
             if (resolvedSlotUsername && snapchatActionTotal > 0) {
@@ -7389,7 +7384,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 ...snapchatMetricCounts,
               }).catch((error: any) => logger.warn({ err: error }, "[snapchat-cycle] stat persist error"));
             }
-            if (!isCycleAborted(serial) && !leaveSnapchatOnSelectedImage) {
+            if (!isCycleAborted(serial)) {
               const devicePrefsForDismiss = devicePrefsForSnapchat;
               const effectiveDismiss = dismissDirection !== "auto"
                 ? dismissDirection
