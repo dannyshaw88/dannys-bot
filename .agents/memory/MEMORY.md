@@ -149,7 +149,7 @@
 - [Uncapped quantity maxima](uncapped-quantity-maxima.md) — count/amount maxima stay uncapped while numeric settings fields remain fixed at 3 characters wide
 - [Snapchat idle recovery ordering](snapchat-idle-recovery-ordering.md) — reopen Snapchat from cycle finalization after the stalled tool unwinds, before releasing the device lease
 - [Snapchat Add Friends confirmation](snapchat-add-friends-confirmation.md) — detect incoming banners; tap live Add buttons and scroll only 30% of a row
-- [Snapchat module isolation](snapchat-tool-isolation.md) — each tool, settings module, and navigation flow stays in its own file; share only low-level helpers and dispatch
+- [Snapchat module isolation](snapchat-tool-isolation.md) — each tool/settings/navigation stays isolated; don't abort Upload a Snap on a false resource-ID miss
 - [Per-device remote input latency](device-remote-input-latency.md) — fast physical touches with slow ADB-injected inputs point to the device/transport path, not the typing profile
 - [Never open Snapchat My AI](snapchat-my-ai-exclusion.md) — exclude the exact My AI row during unread-chat discovery and recheck immediately before tapping
 - [Snapchat tools from an open chat](snapchat-tools-open-chat.md) — dismiss the keyboard, exit the verified chat, then confirm Camera before Add/Accept Friends

@@ -63,41 +63,22 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
       return "failed";
     }
 
-    let galleryReady = false;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      state = await dump(context.serial);
-      if (/id="grid_frameable_container"/i.test(state.xml)) {
-        galleryReady = true;
-        break;
-      }
-      if (attempt < 9) await context.sleep(500, "exact");
-    }
-    if (!galleryReady) {
-      context.onLog("Upload a Snap stopped: no Camera Roll gallery image was available to select.");
-      return "failed";
-    }
-
-    const firstImage = state.nodes
-      .filter(node => shortResourceId(node) === "grid_frameable_container")
-      .sort((a, b) => a.bounds[1] - b.bounds[1] || a.bounds[0] - b.bounds[0])[0];
-    if (!firstImage || !await tapNode(context, firstImage, "select the first Camera Roll gallery image")) {
-      context.onLog("Upload a Snap stopped: the first Camera Roll image could not be selected.");
-      return "failed";
-    }
-
-    let imageOpened = false;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      state = await dump(context.serial);
-      if (!/id="memories_grid"/i.test(state.xml)) {
-        imageOpened = true;
-        break;
-      }
-      if (attempt < 9) await context.sleep(500, "exact");
-    }
-    if (!imageOpened) {
-      context.onLog("Upload a Snap stopped: tapping the first image did not leave the Camera Roll; no further control was guessed.");
-      return "failed";
-    }
+    state = await dump(context.serial);
+    const [screenLeft, screenTop, screenRight, screenBottom] = state.nodes[0].bounds;
+    const firstImageX = Math.round(screenLeft + (screenRight - screenLeft) * 0.17);
+    const firstImageY = Math.round(screenTop + (screenBottom - screenTop) * 0.46);
+    context.onLog(`Upload a Snap: tapping the top-left Camera Roll image at (${firstImageX},${firstImageY}).`);
+    await android.tap(
+      context.serial,
+      firstImageX,
+      firstImageY,
+      "bot",
+      "Snapchat: select the top-left Camera Roll image",
+      "automation",
+      { exact: true },
+    );
+    await context.sleep(700, "exact");
+    state = await dump(context.serial);
 
     let sendToButton = findLabeledControl(state.nodes, "send to");
     for (let attempt = 0; !sendToButton && attempt < 10; attempt++) {
