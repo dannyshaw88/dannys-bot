@@ -79,7 +79,10 @@ async function tapUnreadChatNameArea(
   return !context.isAborted();
 }
 
-function unreadChatRows(nodes: UiNode[], onDeliveredRow?: (displayName: string) => void) {
+function unreadChatRows(
+  nodes: UiNode[],
+  onSkippedRow?: (displayName: string, reason: "Delivered" | "empty") => void,
+) {
   return nodes.flatMap(marker => {
     const markerLabel = `${marker.text} ${marker.desc}`.trim();
     if (!/ff_item/i.test(shortResourceId(marker))) return [];
@@ -107,9 +110,33 @@ function unreadChatRows(nodes: UiNode[], onDeliveredRow?: (displayName: string) 
     ).sort((a, b) => a.bounds[1] - b.bounds[1]);
     const nameNode = names[0];
     const displayName = nameNode?.text.trim();
+    const nameBottom = nameNode?.bounds[3];
     if (displayName && isMyAiChat(displayName)) return [];
     if (displayName && /\bdelivered\b/i.test(rowLabel)) {
-      onDeliveredRow?.(displayName);
+      onSkippedRow?.(displayName, "Delivered");
+      return [];
+    }
+    const emptyPreview = /\b(?:you are now friends|double[\s-]+tap to snap|tap to chat|start a chat|say hi|no messages yet)\b/i;
+    const previewValues = rowNodes
+      .filter(node =>
+        nameBottom !== undefined &&
+        node !== nameNode &&
+        !node.clickable &&
+        node.bounds[1] >= nameBottom,
+      )
+      .map(node => node.text.trim())
+      .filter(Boolean);
+    const nonMessagePreview = /^(?:new\s+chats?|unread|received|sent|opened|delivered|camera|chat|call|video|audio|more|today|yesterday|\d+\s*(?:s|sec(?:onds)?|m|min(?:utes)?|h|hr(?:ours)?|d|days?))\b/i;
+    const hasMessagePreview = previewValues.some(value =>
+      !emptyPreview.test(value) &&
+      !nonMessagePreview.test(value) &&
+      !/\b\d+\s*(?:s|m|h|d)\b/i.test(value),
+    );
+    if (
+      displayName &&
+      (emptyPreview.test(rowLabel) || !hasMessagePreview)
+    ) {
+      onSkippedRow?.(displayName, "empty");
       return [];
     }
     return nameNode && displayName
@@ -173,12 +200,15 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
 
   let replied = 0;
   const visited = new Set<string>();
-  const loggedDeliveredRows = new Set<string>();
-  const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, displayName => {
-    const identity = normalizedText(displayName);
-    if (loggedDeliveredRows.has(identity)) return;
-    loggedDeliveredRows.add(identity);
-    context.onLog(`Reply to Unread Chats: skipping "${displayName}" because its Unread-list status is Delivered, not an incoming chat.`);
+  const loggedSkippedRows = new Set<string>();
+  const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, (displayName, reason) => {
+    const identity = `${normalizedText(displayName)}:${reason}`;
+    if (loggedSkippedRows.has(identity)) return;
+    loggedSkippedRows.add(identity);
+    context.onLog(reason === "Delivered"
+      ? `Reply to Unread Chats: skipping "${displayName}" because its Unread-list status is Delivered, not an incoming chat.`
+      : `Reply to Unread Chats: skipping "${displayName}" before tapping because the row has no actual message preview.`,
+    );
   });
   while (replied < requested && !context.isAborted()) {
     let rows = readUnreadRows(list.nodes);
