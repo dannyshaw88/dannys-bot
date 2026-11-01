@@ -40,6 +40,12 @@ import { FaInstagram, FaSnapchatGhost } from "react-icons/fa";
 
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
+import { AppCloseGestureSettings } from "@/components/mobile/AppCloseGestureSettings";
+import {
+  AppCloseGestureRecorderProvider,
+  useAppCloseGestureRecorder,
+  type AppCloseGestureSwipe,
+} from "@/components/mobile/AppCloseGestureRecorder";
 import { TrustScoreCountdown } from "@/components/TrustScoreCountdown";
 import { getTrustLevels, getTrustScore, type TrustLevelEntry } from "@/components/TrustScoreBadge";
 import { MobilePhoneApps, MobilePhoneAppsPanel, DeviceQuickControls, type MobilePhoneAppsPanelHandle } from "@/pages/MobilePhoneApps";
@@ -364,6 +370,9 @@ type PendingPin = {
 };
 
 const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: string; live: boolean; automationActive?: boolean; phoneDims?: { w: number; h: number } | null; onLog?: (msg: string) => void; onDimensions?: (w: number, h: number) => void; inspectMode?: boolean; inspectNodes?: InspectNode[] | null; onInspectResult?: (r: InspectResult) => void; onHoverNode?: (n: InspectNode | null) => void; clickTestMode?: boolean; logRecMode?: boolean; logMarkers?: LogMarker[]; calibrationPosition?: CalibrationPosition; onExpectedTap?: (x: number, y: number, kind?: "expected" | "vicinity") => void; onStatusChange?: (status: MirrorStatus) => void }>(function LiveCanvas({ serial, live, automationActive = false, phoneDims, onLog, onDimensions, inspectMode, inspectNodes, onInspectResult, onHoverNode, clickTestMode, logRecMode, logMarkers, calibrationPosition, onExpectedTap, onStatusChange }, ref) {
+  const appCloseGestureRecorder = useAppCloseGestureRecorder();
+  const appCloseGestureRecorderRef = useRef(appCloseGestureRecorder);
+  appCloseGestureRecorderRef.current = appCloseGestureRecorder;
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   // Cache the 2D context so we don't re-call getContext() every frame.
   const ctxRef       = useRef<CanvasRenderingContext2D | null>(null);
@@ -1617,6 +1626,8 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
     }
 
     addLog(`Swipe → (${drag.startX}, ${drag.startY}) → (${endX}, ${endY}) over ${durationMs}ms`);
+    const recorder = appCloseGestureRecorderRef.current;
+    const captureCloseGesture = recorder?.recording === true && recorder.serial === serial;
     try {
       // Same rescale-input requirement as tap/double-tap: without videoW/videoH
       // the server has nothing to rescale from and silently sends the raw
@@ -1625,7 +1636,6 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       // floating window) went out unscaled while plain taps were correct —
       // exactly the "some clicks are pinpoint, some functions don't work"
       // symptom reported for drag-based interactions.
-      const phoneSize = phoneSizeRef.current;
       const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/input/swipe`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1637,6 +1647,24 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
       if (!r.ok) {
         const body = await r.json().catch(() => null);
         addLog(`Swipe FAILED (${r.status}) — ${body?.error ?? "no error detail"}`);
+      } else if (captureCloseGesture && recorder) {
+        const body = await r.json().catch(() => null);
+        const mapped = body?.mappedSwipe;
+        const screenW = Number(mapped?.screenW) > 0 ? Number(mapped.screenW) : phoneSize.w;
+        const screenH = Number(mapped?.screenH) > 0 ? Number(mapped.screenH) : phoneSize.h;
+        const coordinate = (mappedValue: unknown, fallback: number, size: number) => {
+          const value = Number(mappedValue);
+          const pixel = Number.isFinite(value) ? value : fallback;
+          return Math.max(0, Math.min(1, pixel / Math.max(1, size - 1)));
+        };
+        recorder.record(serial, {
+          x1: coordinate(mapped?.x1, drag.startX, screenW),
+          y1: coordinate(mapped?.y1, drag.startY, screenH),
+          x2: coordinate(mapped?.x2, endX, screenW),
+          y2: coordinate(mapped?.y2, endY, screenH),
+          durationMs: Math.max(1, Math.min(30_000, Math.round(durationMs))),
+        });
+        addLog(`[App close gesture] Recorded swipe from mirror (${screenW}×${screenH})`);
       }
     } catch (err: any) {
       addLog(`Swipe FAILED — ${err?.message ?? "network error"}`);
@@ -11179,9 +11207,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
     }
   }, [serial, simPhoneInputs, typingSimSlot]);
 
-  // App close gesture (dismiss direction)
-  const [dismissDir,    setDismissDir]    = React.useState<"auto" | "left" | "up">("auto");
-  const [dismissSaving, setDismissSaving] = React.useState(false);
   type SwipeGesture = { x1: number; y1: number; x2: number; y2: number; durationMinMs: number; durationMaxMs: number; jitterX: number; jitterY: number; startJitterMinY: number; startJitterMaxY: number; pauseMinMs: number; pauseMaxMs: number; settleMinMs: number; settleMaxMs: number };
   const [swipeGesture, setSwipeGesture] = React.useState<SwipeGesture>({ x1: 540, y1: 2100, x2: 540, y2: 500, durationMinMs: 400, durationMaxMs: 800, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, pauseMinMs: 150, pauseMaxMs: 600, settleMinMs: 100, settleMaxMs: 350 });
   type TypingSpeedProfile = { minMs: number; maxMs: number; errorPercentMin: number; errorPercentMax: number; dwellMinMs: number; dwellMaxMs: number; hesitationMinMs: number; hesitationMaxMs: number };
@@ -11238,7 +11263,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       .then(r => r.json())
       .then(d => {
         if (!active) return;
-        setDismissDir(d.dismissDirection ?? "auto");
         if (d.swipeGesture) setSwipeGesture({
           durationMinMs: 500, jitterX: 0, jitterY: 0, startJitterMinY: 0, startJitterMaxY: 0, pauseMinMs: 150, pauseMaxMs: 600, settleMinMs: 100, settleMaxMs: 350, ...d.swipeGesture,
           durationMaxMs: Number(d.swipeGesture.durationMaxMs ?? 800),
@@ -11389,20 +11413,6 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
       setSwipeProgress(null);
       setSwipeTestPath(null);
       setSwipeTesting(false);
-    }
-  };
-
-  const saveDismissDir = async (val: "auto" | "left" | "up") => {
-    if (!serial) return;
-    setDismissDir(val);
-    setDismissSaving(true);
-    try {
-      await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/device-prefs`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dismissDirection: val }),
-      });
-    } finally {
-      setDismissSaving(false);
     }
   };
 
@@ -11767,27 +11777,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         </div>
       )}
 
-      {/* ── App Close Gesture ───────────────────────────────────────── */}
-      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-        <p className="text-sm font-semibold text-foreground">App Close Gesture</p>
-        <p className="text-xs text-muted-foreground">
-          How to dismiss Instagram in the recents screen at the end of each automation cycle.
-          Different Android launchers require different gestures.
-        </p>
-        <div className="flex items-center gap-3 flex-wrap">
-          <select
-            value={dismissDir}
-            onChange={e => saveDismissDir(e.target.value as "auto" | "left" | "up")}
-            disabled={!serial || dismissSaving}
-            className="text-sm bg-background border border-border rounded px-3 py-1.5 text-foreground disabled:opacity-50"
-          >
-            <option value="auto">Auto — detect by model</option>
-            <option value="left">Swipe left</option>
-            <option value="up">Swipe up</option>
-          </select>
-          {dismissSaving && <span className="text-xs text-muted-foreground animate-pulse">Saving…</span>}
-        </div>
-      </div>
+      <AppCloseGestureSettings serial={serial} />
 
       {/* ── SIM Card ────────────────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-4">
@@ -13236,6 +13226,7 @@ export function MobilePage() {
   const slotNum = farmSlotIndex ?? (targetSerial ? allPhones.findIndex(p => p.serial === targetSerial) + 1 || null : null);
 
   return (
+    <AppCloseGestureRecorderProvider>
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
       {/* h-screen + flex-col + overflow-hidden here (instead of the old
@@ -13521,5 +13512,6 @@ export function MobilePage() {
           </div>
       </main>
     </div>
+    </AppCloseGestureRecorderProvider>
   );
 }

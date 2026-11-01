@@ -108,7 +108,7 @@
 - [Mobile personality hydration](mobile-personality-hydration.md) — account response mappers must preserve persisted personality fields or restart renders Auto despite correct storage
 - [Double-tap media bounds](double-tap-media-bounds.md) — automated double-taps require confirmed media bounds; missing bounds must never fall back to the action row
 - [Electron API child recovery](electron-api-child-recovery.md) — unexpected API exits need bounded, identity-safe restart while normal shutdown remains excluded
-- [HST operation extraction](hst-operation-extraction.md) — extract independent tools behind explicit contexts before touching coupled cycle flows
+- [HST operation extraction](hst-operation-extraction.md) — isolate each tool, setting, and navigation in its own file; keep shared dispatchers thin
 - [Parallel refactor reconciliation](parallel-refactor-reconciliation.md) — after delegated edits, reconcile against the current workspace before trusting module wiring or deletion claims
 - [HST context dependency closure](hst-context-dependency-closure.md) — extracted operations need every shared helper/state binding declared before context construction
 - [HST recovery slot validation](hst-recovery-slot-validation.md) — startup recovery must ignore stable/stale slot keys and retry device-busy turns

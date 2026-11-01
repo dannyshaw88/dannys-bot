@@ -2058,7 +2058,8 @@ export async function runWhatsAppApp(
     userCountMax?: number;
     message: string;
     recentContactKeys?: string[];
-    dismissDirection?: "left" | "up";
+    dismissDirection?: "left" | "up" | "custom";
+    appCloseGestureMacro?: RecordedAppCloseGestureMacro;
     swipeGesture?: {
       x1: number; y1: number; x2: number; y2: number;
       durationMinMs: number; durationMaxMs: number;
@@ -3244,6 +3245,7 @@ export async function runWhatsAppApp(
           opts?.swipeGesture,
           "com.whatsapp",
           "WhatsApp",
+          opts?.appCloseGestureMacro,
         );
         await keyevent(serial, 3 /* KEYCODE_HOME */);
         await _sleep(500);
@@ -3297,7 +3299,8 @@ export async function runChromeApp(
     manualSearchLinkPctMin?: number; manualSearchLinkPctMax?: number;
     manualSearchDwellMin?: number; manualSearchDwellMax?: number;
      tapTrendingStoryMin?: number; tapTrendingStoryMax?: number;
-    dismissDirection?: "left" | "up";
+    dismissDirection?: "left" | "up" | "custom";
+    appCloseGestureMacro?: RecordedAppCloseGestureMacro;
   },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
@@ -4114,12 +4117,17 @@ export async function runChromeApp(
     await openRecentApps(serial);
     await _sleep(1200); // wait for OEM recents overlay to settle
     const rcx = Math.round(rw / 2);
-    if (dismissDir === "up") {
+    if (dismissDir === "custom") {
+      const replayed = await replayRecordedAppCloseGestureMacro(serial, opts?.appCloseGestureMacro);
+      steps.push(replayed > 0
+        ? `Chrome: replayed ${replayed} recorded app-close swipe(s)`
+        : "Chrome: custom close gesture selected, but no recorded swipes are saved");
+    } else if (dismissDir === "up") {
       await swipe(serial, rcx, Math.round(rh * 0.65), rcx, 0, 150);
     } else {
       await swipe(serial, rcx, Math.round(rh * 0.45), Math.round(rw * 0.05), Math.round(rh * 0.45), 400);
     }
-    steps.push(`Chrome: opened recents + swiped away (${dismissDir})`);
+    if (dismissDir !== "custom") steps.push(`Chrome: opened recents + swiped away (${dismissDir})`);
     await _sleep(800);
     // ──────────────────────────────────────────────────────────────────────────
 
@@ -4198,7 +4206,8 @@ export async function runYoutubeApp(
     shortsWatchTimeMin?: number; shortsWatchTimeMax?: number;
     /** Chance (0–100%) to tap the Like button on each Short viewed. */
     shortsLikePctMin?: number; shortsLikePctMax?: number;
-    dismissDirection?: "left" | "up";
+    dismissDirection?: "left" | "up" | "custom";
+    appCloseGestureMacro?: RecordedAppCloseGestureMacro;
   },
 ): Promise<{ ok: boolean; steps: string[]; error?: string }> {
   const tools = detectToolset();
@@ -4470,12 +4479,17 @@ export async function runYoutubeApp(
     await openRecentApps(serial);
     await _sleep(1200);
     const rcx = Math.round(rw / 2);
-    if (dismissDir === "up") {
+    if (dismissDir === "custom") {
+      const replayed = await replayRecordedAppCloseGestureMacro(serial, opts?.appCloseGestureMacro);
+      steps.push(replayed > 0
+        ? `YouTube: replayed ${replayed} recorded app-close swipe(s)`
+        : "YouTube: custom close gesture selected, but no recorded swipes are saved");
+    } else if (dismissDir === "up") {
       await swipe(serial, rcx, Math.round(rh * 0.65), rcx, 0, 150);
     } else {
       await swipe(serial, rcx, Math.round(rh * 0.45), Math.round(rw * 0.05), Math.round(rh * 0.45), 400);
     }
-    steps.push(`YouTube: opened recents + swiped away (${dismissDir})`);
+    if (dismissDir !== "custom") steps.push(`YouTube: opened recents + swiped away (${dismissDir})`);
     await _sleep(800);
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -5873,9 +5887,38 @@ function _findLabelsInBand(
  * more than one app open, the strip shows two cards at a time and you keep
  * dragging the LEFT-MOST card further left until each is gone in turn.
  */
+type RecordedAppCloseGestureMacro = {
+  swipes: Array<{ x1: number; y1: number; x2: number; y2: number; durationMs: number }>;
+};
+
+async function replayRecordedAppCloseGestureMacro(
+  serial: string,
+  macro?: RecordedAppCloseGestureMacro,
+): Promise<number> {
+  const swipes = Array.isArray(macro?.swipes) ? macro.swipes.slice(0, 2) : [];
+  if (swipes.length === 0) return 0;
+  const tools = detectToolset();
+  const adb = requireTool(tools.adb, "adb");
+  const { w, h } = getScreenSize(serial);
+  const pixel = (value: number, size: number) =>
+    Math.max(0, Math.min(size - 1, Math.round(value * (size - 1))));
+  for (let index = 0; index < swipes.length; index++) {
+    const step = swipes[index];
+    const durationMs = Math.max(1, Math.min(30_000, Math.round(step.durationMs)));
+    await runAdbStrict(adb, [
+      "-s", serial, "shell", "input", "swipe",
+      String(pixel(step.x1, w)), String(pixel(step.y1, h)),
+      String(pixel(step.x2, w)), String(pixel(step.y2, h)),
+      String(durationMs),
+    ], Math.min(35_000, Math.max(5_000, durationMs + 5_000)));
+    if (index < swipes.length - 1) await _sleep(650);
+  }
+  return swipes.length;
+}
+
 export async function closeInstagramViaRecents(
   serial: string,
-  dismissDirection: "left" | "up" = "left",
+  dismissDirection: "left" | "up" | "custom" = "left",
   onLog?: (msg: string) => void,
   swipeGesture?: {
     x1: number; y1: number; x2: number; y2: number;
@@ -5887,6 +5930,7 @@ export async function closeInstagramViaRecents(
   },
   appPackage = "com.instagram.android",
   appLabel = "Instagram",
+  customGestureMacro?: RecordedAppCloseGestureMacro,
 ): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -5961,14 +6005,24 @@ export async function closeInstagramViaRecents(
 
   let method = "no recents gesture attempted";
   let attemptsRun = 0;
-  let cardState = await readVisibleCards();
+  let cardState = dismissDirection === "custom"
+    ? { labels: [] as Awaited<ReturnType<typeof readVisibleCards>>["labels"], targetVisible: false }
+    : await readVisibleCards();
   // Never use pidof as a proxy for visible recents cards: Android can keep an
-  // app process alive after its card is dismissed. Only swipe when the live
-  // hierarchy identifies the target card and gives us a count to bound the
-  // actions. If labels are absent, skip blind swipes rather than close every
-  // floating window in the carousel.
+  // app process alive after its card is dismissed. Built-in directional
+  // gestures require a live target-card label; a custom macro is an explicit
+  // user-recorded path and replays its saved swipes without label detection.
   if (!pidof()) {
     method = `${appLabel} already gone before recents swipe`;
+  } else if (dismissDirection === "custom") {
+    attemptsRun = await replayRecordedAppCloseGestureMacro(serial, customGestureMacro);
+    method = attemptsRun > 0
+      ? `replayed ${attemptsRun} recorded app-close swipe(s)`
+      : "custom gesture selected but no recorded swipes are saved";
+    if (attemptsRun > 0) {
+      await new Promise(r => setTimeout(r, 700));
+      cardState = await readVisibleCards();
+    }
   } else if (!cardState.targetVisible || cardState.labels.length === 0) {
     method = `no accessible ${appLabel} card/count found (${cardState.labels.length} visible card labels); skipped recents swipes`;
   } else {

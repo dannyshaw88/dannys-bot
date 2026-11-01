@@ -803,7 +803,10 @@ type DeviceSlot = { slotId?: string; platform?: "instagram" | "snapchat"; snapch
 type DeviceAccount = { slots: DeviceSlot[] };
 type DeviceSettings = { googlePlayEmail?: string; googlePlayPassword?: string; selectedSimSlot?: number; simPhoneNumbers?: Record<string, string> };
 type DevicePrefs = {
-  dismissDirection?: "auto" | "left" | "up";
+  dismissDirection?: "auto" | "left" | "up" | "custom";
+  appCloseGestureMacro?: {
+    swipes: Array<{ x1: number; y1: number; x2: number; y2: number; durationMs: number }>;
+  };
   devicePersonality?: DevicePersonality;
   motherCodeOverrides?: {
     globalDwell?: { minMs: number; maxMs: number };
@@ -4140,7 +4143,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const serial = p(req, "serial");
       const allowed = z.object({
-        dismissDirection: z.enum(["auto", "left", "up"]).optional(),
+        dismissDirection: z.enum(["auto", "left", "up", "custom"]).optional(),
+        appCloseGestureMacro: z.object({
+          swipes: z.array(z.object({
+            x1: z.number().finite().min(0).max(1),
+            y1: z.number().finite().min(0).max(1),
+            x2: z.number().finite().min(0).max(1),
+            y2: z.number().finite().min(0).max(1),
+            durationMs: z.number().int().min(1).max(30_000),
+          })).min(1).max(2),
+        }).optional(),
         regeneratePersonality: z.boolean().optional(),
         devicePersonality: z.object({
           engagement: z.number().int().min(0).max(4),
@@ -7385,7 +7397,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   ? devicePrefsForDismiss.dismissDirection
                   : "auto";
               const rawModel = android.getDeviceModel(serial);
-              const resolvedDismissDir: "left" | "up" = effectiveDismiss !== "auto"
+              const resolvedDismissDir: "left" | "up" | "custom" = effectiveDismiss !== "auto"
                 ? effectiveDismiss
                 : android.getModelDismissDirection(rawModel);
               await android.closeInstagramViaRecents(
@@ -7399,6 +7411,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                 devicePrefsForDismiss.swipeGesture,
                 "com.snapchat.android",
                 "Snapchat",
+                devicePrefsForDismiss.appCloseGestureMacro,
               );
                if (isCycleAborted(serial)) throw new Error("cycle-aborted");
               steps.push("closed-snapchat");
@@ -8983,7 +8996,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           ? devicePrefsForDismiss.dismissDirection
           : "auto";
       const _rawModel = android.getDeviceModel(serial);
-      const resolvedDismissDir: "left" | "up" = effectiveDismiss !== "auto"
+      const resolvedDismissDir: "left" | "up" | "custom" = effectiveDismiss !== "auto"
         ? effectiveDismiss
         : android.getModelDismissDirection(_rawModel);
       tLog(`  dismiss direction: ${resolvedDismissDir} (slot: ${dismissDirection}, device-pref: ${devicePrefsForDismiss.dismissDirection ?? "none"}, model: "${_rawModel}"`);
@@ -8992,6 +9005,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         resolvedDismissDir,
         (msg) => tLog(`  ${msg}`),
         devicePrefsForDismiss.swipeGesture,
+        "com.instagram.android",
+        "Instagram",
+        devicePrefsForDismiss.appCloseGestureMacro,
       );
       steps.push("closed-instagram");
       tLog("  ✓ Instagram closed");
@@ -10499,9 +10515,13 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       const input = swipeSchema.parse(req.body);
       const serial = p(req, "serial");
       let { x1, y1, x2, y2 } = input;
+      let screenW = input.videoW ?? 0;
+      let screenH = input.videoH ?? 0;
       if (input.videoW && input.videoH) {
         try {
           const { w: realW, h: realH } = await android.getScreenSizeAsync(serial);
+          screenW = realW;
+          screenH = realH;
           if (realW !== input.videoW || realH !== input.videoH) {
             // Keep the same letterbox/pillarbox correction as the tap route;
             // reuse the cached device dimensions instead of running `wm size`
@@ -10517,7 +10537,10 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
         } catch { /* fall back to unscaled coordinates */ }
       }
       await android.swipe(serial, x1, y1, x2, y2, input.durationMs);
-      res.json({ ok: true });
+      res.json({
+        ok: true,
+        mappedSwipe: { x1, y1, x2, y2, screenW, screenH },
+      });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
@@ -11358,7 +11381,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       // Resolve dismiss direction (used by Chrome recents close).
       // Priority: device-prefs override → model lookup.
       let devicePrefsPA: any = {};
-      let dismissDir: "left" | "up" = "up";
+      let dismissDir: "left" | "up" | "custom" = "up";
       if (appId !== "sms") {
         devicePrefsPA = (() => {
           try { return loadInstanceConfigs()[serial]?.devicePrefs ?? {}; } catch { return {}; }
@@ -11393,6 +11416,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
           swipeGesture: devicePrefsPA.swipeGesture,
            tapTrendingStoryMin, tapTrendingStoryMax,
           dismissDirection: dismissDir,
+          appCloseGestureMacro: devicePrefsPA.appCloseGestureMacro,
         });
       } else if (appId === "youtube") {
         result = await android.runYoutubeApp(serial, {
@@ -11405,6 +11429,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
           shortsLikePctMin, shortsLikePctMax,
           swipeGesture: devicePrefsPA.swipeGesture,
           dismissDirection: dismissDir,
+          appCloseGestureMacro: devicePrefsPA.appCloseGestureMacro,
         });
       } else if (appId === "whatsapp") {
         if (!message?.trim()) throw new Error("WhatsApp message is empty");
@@ -11424,6 +11449,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
           message,
           recentContactKeys: savedWhatsAppHistory,
           dismissDirection: dismissDir,
+          appCloseGestureMacro: devicePrefsPA.appCloseGestureMacro,
           swipeGesture: devicePrefsPA.swipeGesture,
           media,
           useDeviceGalleryMedia,

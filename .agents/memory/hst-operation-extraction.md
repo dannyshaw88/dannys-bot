@@ -3,8 +3,8 @@ name: HST operation extraction
 description: Safe boundaries for decomposing the Human Session Tool without changing mobile automation behavior
 ---
 
-Independent HST operations can be extracted behind explicit dependency contexts first; the cycle dispatcher and tightly coupled Feed, Stories, Reels, Follow, Post, DM, and lifecycle flows should remain thinly migrated only after their shared device and timing dependencies are isolated.
+Each tool, setting, and navigation should live in its own isolated code file, with shared dispatchers kept thin and connected through explicit interfaces. Independent HST operations can be extracted first; tightly coupled Feed, Stories, Reels, Follow, Post, DM, and lifecycle flows need their shared device and timing dependencies isolated before migration.
 
-**Why:** The mobile automation code has safety-sensitive detector, timing, slot-identity, and lifecycle interactions; a broad mechanical split risks changing behavior while appearing structurally cleaner.
+**Why:** The user requires file-level isolation so changes to one tool, setting, or navigation do not affect sibling behavior.
 
-**How to apply:** Prefer one operation module per independent tool, inject Android/timing/logging services, build the API package after each group, and verify the web preview after frontend section moves.
+**How to apply:** Put each new or revised tool, setting, and navigation in a focused module; inject Android/timing/logging services at boundaries, keep shared dispatchers thin, build the API package, and verify the web preview after frontend moves.
