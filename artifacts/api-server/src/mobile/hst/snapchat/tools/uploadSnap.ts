@@ -56,20 +56,7 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
       return "failed";
     }
 
-    let memoriesReady = false;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      state = await dump(context.serial);
-      if (/id="memories_grid"/i.test(state.xml)) {
-        memoriesReady = true;
-        break;
-      }
-      if (attempt < 9) await context.sleep(500, "exact");
-    }
-    if (!memoriesReady) {
-      context.onLog("Upload a Snap stopped: Snapchat Memories did not open after tapping its Camera icon.");
-      return "failed";
-    }
-
+    state = await dump(context.serial);
     const cameraRollTab = findLabeledControl(state.nodes, "camera roll");
     if (!cameraRollTab || !await tapNode(context, cameraRollTab, "open the Camera Roll tab")) {
       context.onLog("Upload a Snap stopped: the Camera Roll tab was not available in Memories.");
