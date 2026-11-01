@@ -104,8 +104,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<void> {
     context.onMetric?.("snapchat_add_friends");
     context.onLog(`Add Friends: tapped Add for ${friendName}; continuing without waiting for Snapchat's confirmation.`);
     if (!await scrollAddFriendsListOneSlot(context, afterTap.nodes, selected.row, screenHeight, friendName)) {
-      context.onLog("Add Friends: stopping before another Add tap because a one-row scroll could not be placed safely.");
-      break;
+      context.onLog("Add Friends: could not scroll after this Add; continuing with currently visible candidates.");
     }
   }
   context.onLog(`Add Friends: processed ${added}/${requested} Add tap(s) from the Find Friends section.`);

@@ -46,6 +46,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
         return row && name ? [{ button, name: nodeLabel(name), row }] : [];
       });
   };
+  const acceptanceKey = (name: string) => name.toLowerCase().replace(/\s+/g, " ").trim();
 
   let state = await dump(context.serial);
   if (!isAddFriendsPage(state.xml)) {
@@ -103,6 +104,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
 
   let accepted = 0;
   let pendingAcceptance: { name: string; row: UiNode } | null = null;
+  const attemptedAcceptances = new Set<string>();
   while (accepted < requested && !context.isAborted()) {
     if (pendingAcceptance) {
       const currentAcceptance = pendingAcceptance;
@@ -112,19 +114,36 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
       if (context.isAborted()) break;
       state = await dump(context.serial);
       if (!isAddFriendsPage(state.xml)) {
-        context.onLog("Accept Friends stopped: Snapchat left the verified Add Friends screen.");
-        break;
+        attemptedAcceptances.add(acceptanceKey(currentAcceptance.name));
+        pendingAcceptance = null;
+        context.onLog(`Accept Friends: Snapchat left Add Friends after trying ${currentAcceptance.name}; restoring the list to continue.`);
+        if (!await openAddFriends(context)) break;
+        continue;
       }
       const pendingSection = getAddedMeSection(state.nodes);
       if (!pendingSection) {
-        context.onLog("Accept Friends stopped: Added Me could not be confirmed after tapping Accept.");
-        break;
+        attemptedAcceptances.add(acceptanceKey(currentAcceptance.name));
+        pendingAcceptance = null;
+        context.onLog(`Accept Friends: could not confirm ${currentAcceptance.name}; skipping that request and continuing.`);
+        continue;
       }
-      const pendingStillVisible = getAcceptRows(state.nodes, pendingSection)
-        .some(row => row.name === currentAcceptance.name);
-      if (pendingStillVisible) {
-        context.onLog(`Accept Friends stopped: Snapchat still shows Accept for ${currentAcceptance.name}.`);
-        break;
+      const stillPending = getAcceptRows(state.nodes, pendingSection)
+        .find(row => acceptanceKey(row.name) === acceptanceKey(currentAcceptance.name));
+      if (stillPending) {
+        attemptedAcceptances.add(acceptanceKey(currentAcceptance.name));
+        pendingAcceptance = null;
+        context.onLog(`Accept Friends: Snapchat still shows Accept for ${currentAcceptance.name}; skipping that request and continuing with other requests.`);
+        const scrolled = await scrollAcceptFriendsListOneSlot(
+          context,
+          state.nodes,
+          stillPending.row,
+          screenHeight,
+          currentAcceptance.name,
+        );
+        if (!scrolled) {
+          context.onLog("Accept Friends: could not scroll after that request; continuing with currently visible requests.");
+        }
+        continue;
       }
       accepted++;
       context.onMetric?.("snapchat_accept_friends");
@@ -137,8 +156,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
         currentAcceptance.name,
       );
       if (!scrolled && accepted < requested) {
-        context.onLog("Accept Friends: stopping before another Accept tap because a short list scroll could not be placed safely.");
-        break;
+        context.onLog("Accept Friends: could not scroll after accepting; continuing with currently visible requests.");
       }
       if (accepted >= requested) break;
     }
@@ -152,9 +170,10 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
       context.onLog("Accept Friends stopped: the Added Me section is no longer visible.");
       break;
     }
-    const candidate = getAcceptRows(state.nodes, section)[0];
+    const candidate = getAcceptRows(state.nodes, section)
+      .find(row => !attemptedAcceptances.has(acceptanceKey(row.name)));
     if (!candidate) {
-      context.onLog("Accept Friends stopped: no labeled Accept badge was found under Added Me.");
+      context.onLog("Accept Friends: no unattempted Accept requests remain; continuing to the next tool.");
       break;
     }
     if (findOccludingBanner(state.nodes, candidate.button, screenWidth, screenHeight)) {
