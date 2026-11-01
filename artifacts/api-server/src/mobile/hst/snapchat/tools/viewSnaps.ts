@@ -39,7 +39,7 @@ export async function runViewSnaps(context: SnapchatContext): Promise<void> {
       context.onLog("View Snaps stopped: the Snapchat story viewer was no longer active.");
       break;
     }
-    const x = Math.round(screenWidth * 0.86);
+    const x = Math.max(0, Math.round(screenWidth - 50));
     const y = Math.round(screenHeight * 0.5);
     await android.tap(context.serial, x, y, "bot", "Snapchat: advance to next Snap on right side", "automation");
     await context.sleep(700);
