@@ -57,8 +57,10 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
       if (!response.ok) throw new Error(data.error ?? `Request failed (${response.status}).`);
       if (data.reply) {
         setMessages(current => [...current, { role: "assistant", content: data.reply }]);
-      } else if (data.reason === "boundlus_link_already_sent") {
-        setNotice("Luna already sent the link to this contact. No more AI replies will be generated in this chat.");
+      } else if (data.reason === "post_link_limit_reached") {
+        setNotice("Luna has already sent both supporting replies after the link.");
+      } else if (data.reason === "reply_limit_reached") {
+        setNotice("Luna has reached the five-reply limit for this conversation.");
       } else {
         setNotice("Luna skipped this turn. No message was sent.");
       }

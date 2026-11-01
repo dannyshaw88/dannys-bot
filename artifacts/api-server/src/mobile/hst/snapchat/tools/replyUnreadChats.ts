@@ -4,7 +4,6 @@ import {
   appendSnapchatReplyHistory,
   containsSnapchatBoundlusLink,
   getSnapchatReplyHistory,
-  isBoundlusClarificationQuestion,
 } from "../../../snapchatReplyHistory";
 import { generateSnapchatLunaReply } from "../../../snapchatLuna";
 import type { SnapchatContext, UiNode, UiState } from "../context";
@@ -50,19 +49,6 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
       return true;
     })
     .slice(-25);
-}
-
-function findPostLinkMessage(
-  transcript: string[],
-  linkReply: { capturedMessages: string[] },
-): string {
-  const beforeLink = new Set(linkReply.capturedMessages.map(normalizedText));
-  return transcript
-    .filter(message =>
-      !beforeLink.has(normalizedText(message)) &&
-      !containsSnapchatBoundlusLink(message)
-    )
-    .at(-1) ?? "";
 }
 
 async function tapUnreadChatNameArea(
@@ -241,25 +227,25 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     const linkReplyIndex = history.sentReplies.findIndex(entry =>
       containsSnapchatBoundlusLink(entry.sentText),
     );
+    if (history.previousReplyCount >= 5) {
+      context.onLog(`Reply to Unread Chats skipped for ${row.displayName}: the five-reply limit has been reached.`);
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
+    }
     if (linkReplyIndex >= 0) {
-      const alreadyAnswered = history.sentReplies.slice(linkReplyIndex + 1).length > 0;
-      const postLinkMessage = findPostLinkMessage(transcript, history.sentReplies[linkReplyIndex]);
-      if (alreadyAnswered || !isBoundlusClarificationQuestion(postLinkMessage)) {
+      const repliesAfterLink = history.sentReplies.length - linkReplyIndex - 1;
+      if (repliesAfterLink >= 2) {
         context.onLog(
-          alreadyAnswered
-            ? `Reply to Unread Chats skipped for ${row.displayName}: the one post-link clarification was already used.`
-            : `Reply to Unread Chats skipped for ${row.displayName}: the Boundlus link was already sent and the latest message is not a Boundlus question.`,
+          `Reply to Unread Chats skipped for ${row.displayName}: both post-link supporting replies have already been used.`,
         );
         await exitSnapchatConversation(context).catch(() => false);
         list = await dump(context.serial);
         continue;
       }
-      context.onLog(`Reply to Unread Chats: ${row.displayName} asked what Boundlus is; allowing the one post-link clarification.`);
-    } else if (history.previousReplyCount >= 3) {
-      context.onLog(`Reply to Unread Chats skipped for ${row.displayName}: the three ordinary replies have already been used.`);
-      await exitSnapchatConversation(context).catch(() => false);
-      list = await dump(context.serial);
-      continue;
+      context.onLog(
+        `Reply to Unread Chats: allowing post-link supporting reply ${repliesAfterLink + 1}/2 for ${row.displayName}.`,
+      );
     }
     try {
       reply = await generateContextualReply(replyGoal, contactKey, transcript, history);

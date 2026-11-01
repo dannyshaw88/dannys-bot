@@ -43,7 +43,6 @@ import { IgApiClient } from "instagram-private-api";
 import { generateSnapchatLunaReply } from "../mobile/snapchatLuna";
 import {
   containsSnapchatBoundlusLink,
-  isBoundlusClarificationQuestion,
 } from "../mobile/snapchatReplyHistory";
 import {
   getOrCreateSession,
@@ -6019,29 +6018,28 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     const linkMessageIndex = messages.findIndex((message: { role: string; content: string }) =>
       message.role === "assistant" && containsSnapchatBoundlusLink(message.content),
     );
-    if (linkMessageIndex >= 0) {
-      const messagesAfterLink = messages.slice(linkMessageIndex + 1) as Array<{ role: string; content: string }>;
-      const clarificationAlreadySent = messagesAfterLink.some(message => message.role === "assistant");
-      const latestIncomingAfterLink = [...messagesAfterLink]
-        .reverse()
-        .find(message => message.role === "user");
-      if (
-        clarificationAlreadySent ||
-        !latestIncomingAfterLink ||
-        !isBoundlusClarificationQuestion(latestIncomingAfterLink.content)
-      ) {
-        return res.json({
-          reply: null,
-          skipped: true,
-          reason: "boundlus_link_already_sent",
-        });
-      }
-    } else if (messages.filter((message: { role: string }) => message.role === "assistant").length >= 3) {
+    const assistantReplyCount = messages.filter((message: { role: string }) =>
+      message.role === "assistant",
+    ).length;
+    if (assistantReplyCount >= 5) {
       return res.json({
         reply: null,
         skipped: true,
         reason: "reply_limit_reached",
       });
+    }
+    if (linkMessageIndex >= 0) {
+      const supportingRepliesSent = messages
+        .slice(linkMessageIndex + 1)
+        .filter((message: { role: string }) => message.role === "assistant")
+        .length;
+      if (supportingRepliesSent >= 2) {
+        return res.json({
+          reply: null,
+          skipped: true,
+          reason: "post_link_limit_reached",
+        });
+      }
     }
     const settings = await storage.getGlobalSettings();
     const apiKey = String((settings as any).openaiApiKey ?? "").trim() ||
