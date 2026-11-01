@@ -1,6 +1,7 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext } from "../context";
 import { dump, shortResourceId, tapNode } from "../runtime";
+import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
 import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 
 export type UploadSnapResult = "not-started" | "selected" | "failed";
@@ -26,8 +27,8 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
     context.onLog(`Upload a Snap: phone gallery copy staged and scanned (${devicePath}).`);
     await context.sleep(1000, "exact");
 
-    let state = await dump(context.serial);
-    if (!await tapUploadSnapMemories(context, state.nodes)) {
+    let state = await openUploadSnapCamera(context);
+    if (!state || !await tapUploadSnapMemories(context, state.nodes)) {
       await android.removeDeviceFile(context.serial, devicePath).catch(() => {});
       return "failed";
     }
