@@ -69,49 +69,71 @@ export async function selectSnapchatAccountFromCarousel(
     return false;
   }
 
-  const seen = new Set<string>();
-  for (let swipeCount = 0; swipeCount <= 32 && !context.isAborted(); swipeCount++) {
+  const directions = [
+    { label: "right", fromX: Math.round(screen.w * 0.25), toX: Math.round(screen.w * 0.75) },
+    { label: "left", fromX: Math.round(screen.w * 0.75), toX: Math.round(screen.w * 0.25) },
+  ] as const;
+  let lastVerifiedCarouselY: number | undefined;
+
+  const selectVisibleTarget = async (): Promise<"not-found" | "unreadable" | "selected" | "failed"> => {
     const selected = centeredSavedSnapchatUsername(state, screen);
     if (!selected) {
-      context.onLog("Snapchat account switch: no centered saved-account username was exposed; not selecting a profile.");
-      return false;
+      return "unreadable";
     }
     const selectedUsername = normalizedUsername(accountName(selected));
-    if (!selectedUsername) return false;
+    if (!selectedUsername) return "unreadable";
+    lastVerifiedCarouselY = center(selected).y;
 
-    if (selectedUsername === target) {
-      context.onLog(`Snapchat account switch: exact target @${expectedUsername} is centered in the saved-account carousel.`);
-      if (!await tapNode(context, selected, "select matching saved Snapchat account", 500, true)) return false;
-      context.onLog("Snapchat account switch: waiting for login to finish; checking the Camera screen every 5 seconds.");
-      const camera = await waitForCameraAfterAccountTap(context);
-      if (!camera) {
-        context.onLog("Snapchat account switch: Camera did not appear within 30 seconds after selecting the saved profile.");
+    if (selectedUsername !== target) return "not-found";
+
+    context.onLog(`Snapchat account switch: exact target @${expectedUsername} is centered in the saved-account carousel.`);
+    if (!await tapNode(context, selected, "select matching saved Snapchat account", 500, true)) return "failed";
+    context.onLog("Snapchat account switch: waiting for login to finish; checking the Camera screen every 5 seconds.");
+    const camera = await waitForCameraAfterAccountTap(context);
+    if (!camera) {
+      context.onLog("Snapchat account switch: Camera did not appear within 30 seconds after selecting the saved profile.");
+      return "failed";
+    }
+    context.onLog(`Snapchat account switch: Camera appeared for the selected profile @${expectedUsername}.`);
+    return "selected";
+  };
+
+  for (const direction of directions) {
+    for (let swipe = 0; swipe < 4 && !context.isAborted(); swipe++) {
+      const selection = await selectVisibleTarget();
+      if (selection === "selected") return true;
+      if (selection === "failed") return false;
+
+      const selected = centeredSavedSnapchatUsername(state, screen);
+      if (selected) lastVerifiedCarouselY = center(selected).y;
+      if (lastVerifiedCarouselY === undefined) {
+        context.onLog("Snapchat account switch: no saved-account row position was confirmed; not sending a guessed swipe.");
         return false;
       }
-      context.onLog(`Snapchat account switch: Camera appeared for the selected profile @${expectedUsername}.`);
-      return true;
-    }
-
-    if (seen.has(selectedUsername)) {
-      context.onLog(`Snapchat account switch: carousel returned to @${selectedUsername}; @${expectedUsername} is not in its saved profiles.`);
-      return false;
-    }
-    seen.add(selectedUsername);
-    if (swipeCount === 32) break;
-
-    const y = center(selected).y;
-    const fromX = Math.round(screen.w * 0.25);
-    const toX = Math.round(screen.w * 0.75);
-    context.onLog(`Snapchat account switch: @${selectedUsername} is not the target; swiping right to the next saved profile.`);
-    await android.swipe(context.serial, fromX, y, toX, y, 450, false);
-    await context.sleep(600, "exact");
-    state = await dump(context.serial);
-    if (!isSavedSnapchatAccountPicker(state)) {
-      context.onLog("Snapchat account switch: carousel left the saved-account screen before a matching profile was found.");
-      return false;
+      const selectedUsername = selected ? normalizedUsername(accountName(selected)) : "unknown";
+      const y = lastVerifiedCarouselY;
+      if (!selected) {
+        context.onLog("Snapchat account switch: username is temporarily unreadable; continuing the directional search at the last verified row.");
+      }
+      context.onLog(
+        `Snapchat account switch: @${selectedUsername} is not the target; swiping ${direction.label} (${swipe + 1}/4) to search saved profiles.`,
+      );
+      await android.swipe(context.serial, direction.fromX, y, direction.toX, y, 450, false);
+      await context.sleep(600, "exact");
+      state = await dump(context.serial);
+      if (!isSavedSnapchatAccountPicker(state)) {
+        context.onLog("Snapchat account switch: carousel left the saved-account screen before a matching profile was found.");
+        return false;
+      }
     }
   }
 
-  context.onLog(`Snapchat account switch: stopped after the carousel limit; @${expectedUsername} was not found.`);
+  const finalSelection = await selectVisibleTarget();
+  if (finalSelection === "selected") return true;
+  if (finalSelection === "failed") return false;
+
+  context.onLog(
+    `Snapchat account switch: checked four right swipes and four left swipes; @${expectedUsername} was not found in the saved-account carousel.`,
+  );
   return false;
 }
