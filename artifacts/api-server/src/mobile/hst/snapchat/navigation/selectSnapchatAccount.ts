@@ -4,7 +4,12 @@ import { center, dump, shortResourceId, tapNode } from "../runtime";
 import { isSnapchatCameraSurface } from "./openSnapchatProfile";
 
 function normalizedUsername(value: string): string {
-  return value.trim().replace(/^@/, "").toLowerCase();
+  return value
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, "")
+    .replace(/^@/, "")
+    .toLowerCase();
 }
 
 function exactLabel(node: UiNode, wanted: string): boolean {
@@ -74,6 +79,10 @@ export async function selectSnapchatAccountFromCarousel(
     context.onLog("Snapchat account switch: saved-account carousel was not confirmed.");
     return false;
   }
+  const slotLabel = typeof context.slotIdx === "number"
+    ? `Account Slot ${context.slotIdx + 1}`
+    : "the configured account slot";
+  context.onLog(`Snapchat account switch: searching for ${slotLabel} username @${expectedUsername}.`);
 
   const directions = [
     { label: "right", fromX: Math.round(screen.w * 0.25), toX: Math.round(screen.w * 0.75) },
@@ -128,7 +137,7 @@ export async function selectSnapchatAccountFromCarousel(
         context.onLog("Snapchat account switch: username is temporarily unreadable; continuing the directional search at the last verified row.");
       }
       context.onLog(
-        `Snapchat account switch: @${selectedUsername} is not the target; swiping ${direction.label} (${swipe + 1}/4) to search saved profiles.`,
+        `Snapchat account switch: visible username @${selectedUsername} does not match slot target @${expectedUsername}; swiping ${direction.label} (${swipe + 1}/4) to search saved profiles.`,
       );
       await android.swipe(context.serial, direction.fromX, y, direction.toX, y, 450, false);
       await context.sleep(600, "exact");
