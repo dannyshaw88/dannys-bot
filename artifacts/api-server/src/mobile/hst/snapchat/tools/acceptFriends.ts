@@ -1,72 +1,47 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
-import { isAddFriendsPage, openAddFriends } from "../navigation/openAddFriends";
+import { hasSnapchatChatComposer, openAddFriendsForAccepts } from "../navigation/openAddFriends";
 import { scrollAcceptFriendsListOneSlot } from "../navigation/scrollAcceptFriendsListOneSlot";
 import { center, dump, findOccludingBanner, nodeLabel, randomCount, randomSeconds, shortResourceId, tapNode } from "../runtime";
 
-export async function runAcceptFriends(context: SnapchatContext): Promise<void> {
+export async function runAcceptFriends(context: SnapchatContext): Promise<boolean> {
   const requested = randomCount(context.tools.acceptFriends.min, context.tools.acceptFriends.max);
-  if (!context.tools.acceptFriends.enabled || requested === 0) return;
-  if (!await openAddFriends(context)) return;
+  if (!context.tools.acceptFriends.enabled || requested === 0) return false;
+  if (!await openAddFriendsForAccepts(context)) return false;
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let blockedAcceptance = "";
   let viewMoreBannerWaitLogged = false;
 
-  const getAddedMeSection = (nodes: UiNode[]) => {
-    const start = nodes.findIndex(node =>
-      shortResourceId(node) === "section-title" &&
-      [node.text, node.desc].some(value => /^added me$/i.test(value.trim())),
-    );
-    if (start < 0) return null;
-    const nextSection = nodes.findIndex((node, index) =>
-      index > start &&
-      shortResourceId(node) === "section-title" &&
-      [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
-    );
-    return { start, end: nextSection < 0 ? nodes.length : nextSection };
-  };
-  const getAcceptRows = (nodes: UiNode[], section: { start: number; end: number }) => {
-    const sectionNodes = nodes.slice(section.start + 1, section.end);
-    return sectionNodes
-      .filter(node =>
-        shortResourceId(node) === "scu_search_action_button" &&
-        [node.text, node.desc].some(value => /^accept$/i.test(value.trim())) &&
-        node.bounds[3] < screenHeight * 0.95,
-      )
+  const getAcceptRows = (nodes: UiNode[]) =>
+    nodes.filter(node =>
+      shortResourceId(node) === "scu_search_action_button" &&
+      [node.text, node.desc].some(value => /^accept$/i.test(value.trim())) &&
+      node.bounds[3] < screenHeight * 0.95,
+    )
       .flatMap(button => {
         const y = center(button).y;
-        const row = sectionNodes.find(node =>
+        const row = nodes.find(node =>
           shortResourceId(node) === "scu_search_friend_cell" &&
           y >= node.bounds[1] && y <= node.bounds[3],
         );
-        const name = row && sectionNodes.find(node =>
+        const name = row && nodes.find(node =>
           shortResourceId(node) === "result-title" &&
           node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
         );
         return row && name ? [{ button, name: nodeLabel(name), row }] : [];
       });
-  };
   const acceptanceKey = (name: string) => name.toLowerCase().replace(/\s+/g, " ").trim();
 
   let state = await dump(context.serial);
-  if (!isAddFriendsPage(state.xml)) {
-    context.onLog("Accept Friends stopped: the live Add Friends screen was not confirmed.");
-    return;
-  }
 
   for (let expansion = 0; expansion < 10 && !context.isAborted(); expansion++) {
-    const section = getAddedMeSection(state.nodes);
-    if (!section) {
-      context.onLog("Accept Friends stopped: the Added Me section was not found.");
-      return;
-    }
-    const moreButton = state.nodes.slice(section.start + 1, section.end).find(node =>
+    const moreButton = state.nodes.find(node =>
       shortResourceId(node) === "add_friends_view_more_cell" &&
       [node.text, node.desc].some(value => /^view\s+\d+\s+more$/i.test(value.trim())),
     );
     if (!moreButton) break;
     const beforeLabel = nodeLabel(moreButton);
-    const beforeCount = getAcceptRows(state.nodes, section).length;
+    const beforeCount = getAcceptRows(state.nodes).length;
     if (findOccludingBanner(state.nodes, moreButton, screenWidth, screenHeight)) {
       if (!viewMoreBannerWaitLogged) {
         context.onLog("Accept Friends: waiting for the banner to clear View More.");
@@ -78,26 +53,19 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
       continue;
     }
     viewMoreBannerWaitLogged = false;
-    if (!await tapNode(context, moreButton, `expand Added Me (${beforeLabel})`)) return;
+    if (!await tapNode(context, moreButton, `expand Added Me (${beforeLabel})`)) return true;
+    await context.sleep(700, "exact");
     const expanded = await dump(context.serial);
-    if (!isAddFriendsPage(expanded.xml)) {
-      context.onLog("Accept Friends stopped: Snapchat left the Add Friends screen while expanding requests.");
-      return;
-    }
-    const expandedSection = getAddedMeSection(expanded.nodes);
-    if (!expandedSection) {
-      context.onLog("Accept Friends stopped: Added Me disappeared after tapping View More.");
-      return;
-    }
-    const expandedMore = expanded.nodes.slice(expandedSection.start + 1, expandedSection.end).find(node =>
+    const expandedMore = expanded.nodes.find(node =>
       shortResourceId(node) === "add_friends_view_more_cell" &&
       [node.text, node.desc].some(value => /^view\s+\d+\s+more$/i.test(value.trim())),
     );
-    const afterCount = getAcceptRows(expanded.nodes, expandedSection).length;
+    const afterCount = getAcceptRows(expanded.nodes).length;
     const afterLabel = expandedMore ? nodeLabel(expandedMore) : "";
     if (afterCount <= beforeCount && afterLabel === beforeLabel) {
-      context.onLog("Accept Friends stopped: View More did not reveal additional request rows.");
-      return;
+      context.onLog("Accept Friends: View More did not expose additional Accept controls; continuing with the visible requests.");
+      state = expanded;
+      break;
     }
     state = expanded;
   }
@@ -113,21 +81,15 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
       await context.sleep(seconds * 1000);
       if (context.isAborted()) break;
       state = await dump(context.serial);
-      if (!isAddFriendsPage(state.xml)) {
+      if (hasSnapchatChatComposer(state.nodes)) {
         attemptedAcceptances.add(acceptanceKey(currentAcceptance.name));
         pendingAcceptance = null;
-        context.onLog(`Accept Friends: Snapchat left Add Friends after trying ${currentAcceptance.name}; restoring the list to continue.`);
-        if (!await openAddFriends(context)) break;
+        context.onLog(`Accept Friends: a chat opened after tapping Accept for ${currentAcceptance.name}; leaving it and continuing.`);
+        await android.keyevent(context.serial, 4);
+        await context.sleep(400, "exact");
         continue;
       }
-      const pendingSection = getAddedMeSection(state.nodes);
-      if (!pendingSection) {
-        attemptedAcceptances.add(acceptanceKey(currentAcceptance.name));
-        pendingAcceptance = null;
-        context.onLog(`Accept Friends: could not confirm ${currentAcceptance.name}; skipping that request and continuing.`);
-        continue;
-      }
-      const stillPending = getAcceptRows(state.nodes, pendingSection)
+      const stillPending = getAcceptRows(state.nodes)
         .find(row => acceptanceKey(row.name) === acceptanceKey(currentAcceptance.name));
       if (stillPending) {
         attemptedAcceptances.add(acceptanceKey(currentAcceptance.name));
@@ -161,16 +123,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
       if (accepted >= requested) break;
     }
     state = await dump(context.serial);
-    if (!isAddFriendsPage(state.xml)) {
-      context.onLog("Accept Friends stopped: Snapchat left the verified Add Friends screen.");
-      break;
-    }
-    const section = getAddedMeSection(state.nodes);
-    if (!section) {
-      context.onLog("Accept Friends stopped: the Added Me section is no longer visible.");
-      break;
-    }
-    const candidate = getAcceptRows(state.nodes, section)
+    const candidate = getAcceptRows(state.nodes)
       .find(row => !attemptedAcceptances.has(acceptanceKey(row.name)));
     if (!candidate) {
       context.onLog("Accept Friends: no unattempted Accept requests remain; continuing to the next tool.");
@@ -189,4 +142,5 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<void> 
     pendingAcceptance = { name: candidate.name, row: candidate.row };
   }
   context.onLog(`Accept Friends: accepted ${accepted}/${requested} visible incoming requests.`);
+  return true;
 }

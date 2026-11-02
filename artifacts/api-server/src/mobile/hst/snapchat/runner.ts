@@ -17,7 +17,7 @@ type SnapchatToolEntry = {
     activatePctMax: number;
     directoryPath?: string;
   };
-  run: () => Promise<void | UploadSnapResult>;
+  run: () => Promise<void | UploadSnapResult | boolean>;
 };
 
 export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
@@ -61,7 +61,7 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
     if (context.isAborted()) return;
     let toolError: unknown;
     let toolFailed = false;
-    let result: void | UploadSnapResult;
+    let result: void | UploadSnapResult | boolean = undefined;
     try {
       result = await tool.run();
       if (tool.name === "Upload a Snap" && result === "failed") return;
@@ -69,7 +69,11 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
       toolError = error;
       toolFailed = true;
     }
-    if ((tool.name === "Add Friends" || tool.name === "Accept Friends") && !context.isAborted()) {
+    if (
+      (tool.name === "Add Friends" || tool.name === "Accept Friends") &&
+      result === true &&
+      !context.isAborted()
+    ) {
       if (!await closeAddFriendsPanel(context)) return;
     }
     if (

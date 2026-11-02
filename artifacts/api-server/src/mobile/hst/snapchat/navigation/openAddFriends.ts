@@ -2,19 +2,12 @@ import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import {
   ADD_FRIENDS_BANNER_RECHECK_MS,
-  BANNER_RECHECK_MS,
   center,
   dump,
   nodeLabel,
   shortResourceId,
   tapNode,
 } from "../runtime";
-
-export function isAddFriendsPage(xml: string): boolean {
-  return /add_friends_root/i.test(xml) &&
-    /add_friends_title/i.test(xml) &&
-    /find friends/i.test(xml);
-}
 
 export function hasSnapchatChatComposer(nodes: UiNode[]): boolean {
   return nodes.some(node =>
@@ -97,98 +90,62 @@ export function findAddFriendsBanner(
   });
 }
 
-export async function openAddFriends(context: SnapchatContext): Promise<boolean> {
-  let cameraWaitLogged = false;
-  let controlChecks = 0;
-  let bannerChecks = 0;
-  let entryAttempts = 0;
-  let chatKeyboardDismissAttempted = false;
-  let chatExitAttempted = false;
-  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
-  while (!context.isAborted()) {
-    const state = await dump(context.serial);
-    if (isAddFriendsPage(state.xml)) return true;
-
+async function openAddFriendsForAction(
+  context: SnapchatContext,
+  actionLabel: "Add" | "Accept",
+  toolName: "Add Friends" | "Accept Friends",
+): Promise<boolean> {
+  let state = await dump(context.serial);
+  if (hasSnapchatChatComposer(state.nodes)) {
+    if (await android.isKeyboardShown(context.serial).catch(() => false)) {
+      await android.keyevent(context.serial, 4);
+      await context.sleep(300, "exact");
+      state = await dump(context.serial);
+    }
     if (hasSnapchatChatComposer(state.nodes)) {
-      const keyboardShown = await android.isKeyboardShown(context.serial).catch(() => false);
-      if (keyboardShown) {
-        if (chatKeyboardDismissAttempted) {
-          context.onLog("Snapchat stopped: the chat keyboard stayed open after one Back press; refusing to navigate from an unverified surface.");
-          return false;
-        }
-        chatKeyboardDismissAttempted = true;
-        context.onLog("Snapchat: dismissing the open chat keyboard before returning to Camera.");
-        await android.keyevent(context.serial, 4);
-        await context.sleep(300, "exact");
-        continue;
-      }
-
-      if (chatExitAttempted) {
-        context.onLog("Snapchat stopped: the active chat remained open after one Back press; refusing to continue on the wrong screen.");
-        return false;
-      }
-      chatExitAttempted = true;
-      context.onLog("Snapchat: leaving the verified open chat before returning to Camera.");
       await android.keyevent(context.serial, 4);
       await context.sleep(400, "exact");
-      const afterBack = await dump(context.serial);
-      if (hasSnapchatChatComposer(afterBack.nodes)) {
-        context.onLog("Snapchat stopped: Android Back did not close the active chat.");
-        return false;
-      }
-      chatKeyboardDismissAttempted = false;
-      continue;
+      state = await dump(context.serial);
     }
+    if (hasSnapchatChatComposer(state.nodes)) return false;
+  }
 
-    if (!/camera_page/i.test(state.xml)) {
-      const cameraTab = state.nodes.find(node =>
-        node.clickable && shortResourceId(node) === "ngs_camera_icon_container",
-      );
-      if (cameraTab) {
-        cameraWaitLogged = false;
-        if (!await tapNode(context, cameraTab, "return to Camera before retrying Add Friends")) return false;
-      } else if (!cameraWaitLogged) {
-        context.onLog("Add Friends: waiting for Snapchat's Camera tab to become available; will retry.");
-        cameraWaitLogged = true;
-      }
-      await context.sleep(BANNER_RECHECK_MS, "exact");
-      continue;
-    }
-    cameraWaitLogged = false;
+  const friendActionIsVisible = (nodes: UiNode[]) => nodes.some(node =>
+    shortResourceId(node) === "scu_search_action_button" &&
+    [node.text, node.desc].some(value => value.trim().toLowerCase() === actionLabel.toLowerCase()),
+  );
+  const friendRowIsVisible = (nodes: UiNode[]) =>
+    nodes.some(node => shortResourceId(node) === "scu_search_friend_cell");
+  if (friendActionIsVisible(state.nodes) || friendRowIsVisible(state.nodes)) return true;
 
-    const entry = findAddFriendsEntry(state.nodes);
-    if (!entry) {
-      controlChecks++;
-      if (controlChecks >= 10) {
-        context.onLog("Add Friends: the live control was not exposed after 10 checks; skipping only this tool.");
-        return false;
-      }
-      context.onLog(`Add Friends: live control not exposed (check ${controlChecks}/10); checking again in 5 seconds.`);
-      await context.sleep(ADD_FRIENDS_BANNER_RECHECK_MS, "exact");
-      continue;
+  let entry = findAddFriendsEntry(state.nodes);
+  if (!entry) return false;
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+  for (let check = 1; check <= 10; check++) {
+    if (!findAddFriendsBanner(state.nodes, entry, screenWidth, screenHeight)) {
+      context.onLog(`${toolName}: tapping the live entry control; proceeding without checking a page marker.`);
+      if (!await tapNode(context, entry, "open Add Friends from its live accessibility bounds", 0)) return false;
+      await context.sleep(3_000, "exact");
+      return true;
     }
-    controlChecks = 0;
-
-    const bannerCheck = bannerChecks + 1;
-    if (findAddFriendsBanner(state.nodes, entry, screenWidth, screenHeight)) {
-      bannerChecks = bannerCheck;
-      if (bannerChecks >= 10) {
-        context.onLog("Add Friends: a banner still covers the control after 10 checks; skipping only this tool.");
-        return false;
-      }
-      context.onLog(`Add Friends: banner covers the control (check ${bannerChecks}/10); checking again in 5 seconds.`);
-      await context.sleep(ADD_FRIENDS_BANNER_RECHECK_MS, "exact");
-      continue;
-    }
-    context.onLog(`Add Friends: banner check ${bannerCheck}/10 is clear; tapping the live control now.`);
-    bannerChecks = 0;
-
-    if (entryAttempts >= 3) {
-      context.onLog("Add Friends: three live-control taps did not open the friend list; skipping only this tool.");
-      return false;
-    }
-    entryAttempts++;
-    if (!await tapNode(context, entry, "open Add Friends from its live accessibility bounds", 500)) return false;
+    if (check === 10) return false;
+    await context.sleep(ADD_FRIENDS_BANNER_RECHECK_MS, "exact");
+    state = await dump(context.serial);
+    if (friendActionIsVisible(state.nodes) || friendRowIsVisible(state.nodes)) return true;
+    entry = findAddFriendsEntry(state.nodes);
+    if (!entry) return false;
   }
   return false;
+}
+
+/**
+ * Navigate from Snapchat Camera when needed, then let each tool use its live
+ * row-level Add or Accept controls without page/resource-marker confirmation.
+ */
+export function openAddFriendsForSuggestions(context: SnapchatContext): Promise<boolean> {
+  return openAddFriendsForAction(context, "Add", "Add Friends");
+}
+
+export function openAddFriendsForAccepts(context: SnapchatContext): Promise<boolean> {
+  return openAddFriendsForAction(context, "Accept", "Accept Friends");
 }

@@ -9,6 +9,8 @@ For Upload a Snap, do not abort solely because a resource-ID check fails when th
 
 After selecting a Camera Roll image, expand the editor's More tools, identify the Crop control by its crop-corners shape when it has no useful label, tap Zoom to fill, and confirm with Finish before opening Send To. Prefer My Story - Public; if it is unavailable, select My Story - Friends Only.
 
+For Add Friends and Accept Friends, do not gate the operation on exact Add Friends page/resource markers. Use live friend-row action controls directly; preserve row-to-button targeting so unrelated controls are never tapped.
+
 Successful Upload a Snap is normal tool completion, not a request to leave Snapchat open or stop the dispatcher. Continue remaining enabled tools and run normal app-close cleanup at cycle end.
 
 Before dispatching Snapchat tools, reconcile the app session with the configured Snapchat slot username. If already signed in, open the top-left profile, verify its Username, and only log out when it differs. Pass the confirmed profile tree directly to logout navigation to avoid a redundant dump before the Settings gear tap. After confirming logout, wait up to 60 seconds for the saved-account carousel. Before swiping, match the exact target username from live nodes and tap that username text directly, even when Android marks it non-clickable; use the visible centered account name only to choose the swipe row. Search right up to four times, then left up to four times; a repeated username after one swipe is not grounds to abort. Tap a match once, then check for Camera every five seconds for the full 60-second login window; do not tap again while login is in progress. Once the exact target row has been tapped and Camera appears, proceed directly to that slot's tools without reopening the profile or pressing Back. If identity cannot be confirmed from an already-signed-in profile or the target row cannot be selected, skip all Snapchat tools for that cycle.
@@ -34,3 +36,7 @@ For Snapchat switching, always refresh the Camera UI immediately before tapping 
 **Why:** The user specified a required crop-to-fill sequence after gallery selection and a Friends Only fallback when Public is not offered.
 
 **How to apply:** Keep this behavior inside Upload a Snap. Resolve the crop action semantically when possible, otherwise match the live crop-corners icon rather than its toolbar order or a fixed screen coordinate.
+
+**Why:** A device log showed Snapchat visibly on its Add Friends screen while the exact XML page check failed, preventing the tool from examining visible friend rows; the same brittle page gate existed in Accept Friends.
+
+**How to apply:** Keep page-marker confirmation out of both friend-list flows. Use each live Add or Accept action and its enclosing friend row as the actionable evidence.
