@@ -27,6 +27,10 @@ For Snapchat switching, always refresh the Camera UI immediately before tapping 
 
 **How to apply:** Put action behavior only in that tool's module, settings schema and UI in that setting's own modules, and each navigation flow in its own module. Do not route an edit for one tool through another tool's flow. Keep Snapchat account reconciliation before tool dispatch; never log out a matching account, and never use credentials or an unverified carousel row. Treat Upload a Snap success as normal tool completion; reserve early exits for failure or abort, and always run cycle cleanup when not aborted. For Upload a Snap, if the live Camera shutter and Memories icon are both present, tap Memories directly without touching the bottom Camera tab. Otherwise tap the clickable `ngs_camera_icon_container`, wait for both controls, then tap the live `ngs_memories_icon`/“Memories” node left of and vertically aligned with the shutter. Do not search for a generic “Camera” label. At the final Send To step, use the visual screen-relative Okay and Send tap locations when accessibility nodes are missing, allow time for each transition, and never press Back before the Send chevron. The user's Tab exploration was only for the Camera Add Friends icon; friend-list Add actions remain direct live-button taps.
 
+**Why:** A device log showed the two post-send Android Back presses were only about half a second apart, after which Snapchat was still on the gallery surface when the next tool began.
+
+**How to apply:** After Send, allow the transition to settle, pause between the two required Back presses, and allow the final navigation to settle before cleaning up the staged phone image or dispatching the next tool.
+
 **Why:** The user specified a required crop-to-fill sequence after gallery selection and a Friends Only fallback when Public is not offered.
 
 **How to apply:** Keep this behavior inside Upload a Snap. Resolve the crop action semantically when possible, otherwise match the live crop-corners icon rather than its toolbar order or a fixed screen coordinate.
