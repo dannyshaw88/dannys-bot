@@ -90,46 +90,19 @@ function isSavedAccountPicker(state: UiState): boolean {
     state.nodes.some(node => exactLabel(node, "Switch Account"));
 }
 
-function logoutConfirmationPoint(
-  state: UiState,
-  screenHeight: number,
-): { x: number; y: number; uiHeight: number; offsetY: number; label: UiNode; cancel: UiNode } | undefined {
+function logoutConfirmationButton(state: UiState): UiNode | undefined {
   const title = state.nodes.find(node =>
     /are you sure[\s\S]{0,100}log out/i.test(`${node.text} ${node.desc}`),
   );
-  const cancel = state.nodes.find(node => exactLabel(node, "Cancel"));
-  if (!cancel) return undefined;
-
-  const cancelCenter = center(cancel);
-  const labels = state.nodes
+  const titleCenter = title ? center(title) : null;
+  return state.nodes
     .filter(node => exactLabel(node, "Log Out"))
     .sort((a, b) => {
+      if (!titleCenter) return center(a).y - center(b).y;
       const distance = (node: UiNode) =>
-        Math.abs(center(node).x - cancelCenter.x) + Math.abs(center(node).y - cancelCenter.y);
+        Math.abs(center(node).x - titleCenter.x) + Math.abs(center(node).y - titleCenter.y);
       return distance(a) - distance(b);
-    });
-  const label = labels[0];
-  if (!label) return undefined;
-
-  // The accessibility label's bounds have repeatedly landed outside the
-  // visible grey button on this Snapchat dialog. The button is centered above
-  // Cancel; derive its center from that live dialog anchor and the UI dump's
-  // root height, which is in the same coordinate space as adb input tap.
-  const root = state.nodes.find(node =>
-    node.bounds[0] === 0 &&
-    node.bounds[1] === 0 &&
-    node.bounds[2] > 0 &&
-    node.bounds[3] > 0,
-  );
-  const uiHeight = root ? root.bounds[3] - root.bounds[1] : screenHeight;
-  if (uiHeight <= 0) return undefined;
-
-  const x = cancelCenter.x;
-  const offsetY = Math.round(uiHeight * 0.065);
-  const y = cancelCenter.y - offsetY;
-  if (title && y <= center(title).y) return undefined;
-  if (y >= cancelCenter.y || y < 0 || y >= uiHeight) return undefined;
-  return { x, y, uiHeight, offsetY, label, cancel };
+    })[0];
 }
 
 export async function logoutSnapchatAccount(context: SnapchatContext): Promise<boolean> {
@@ -147,9 +120,9 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
     return false;
   }
   context.onLog(`Snapchat account switch: opening profile Settings at (${center(gear).x}, ${center(gear).y}).`);
-  if (!await tapNode(context, gear, "open Snapchat profile settings", 0, true)) return false;
-  await context.sleep(1_000, "exact");
-  state = await dump(context.serial);
+  if (!await tapNode(context, gear, "open Snapchat profile settings", 500, true)) return false;
+
+  state = await waitFor(context, isSettingsPage, 10_000) ?? await dump(context.serial);
   if (!isSettingsPage(state)) {
     context.onLog("Snapchat account switch: Settings page was not confirmed.");
     return false;
@@ -160,6 +133,7 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
   let bottomConfirmed = false;
   const seenScrollStates = new Set<string>();
   for (let swipe = 0; swipe < 8 && !context.isAborted(); swipe++) {
+    state = await dump(context.serial);
     if (!isSettingsPage(state)) {
       context.onLog("Snapchat account switch: Settings closed while locating Log Out.");
       return false;
@@ -247,27 +221,13 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
     }
   }
 
-  const confirm = logoutConfirmationPoint(dialog, screen.h);
+  const confirm = logoutConfirmationButton(dialog);
   if (!confirm || !isLogoutConfirmation(dialog)) {
     context.onLog("Snapchat account switch: the explicit logout confirmation button was not found.");
     return false;
   }
-  const labelCenter = center(confirm.label);
-  context.onLog(
-    `Snapchat account switch: tapping the grey Log Out button at (${confirm.x}, ${confirm.y}); UI height=${confirm.uiHeight}, offset=${confirm.offsetY}, Cancel center=(${center(confirm.cancel).x}, ${center(confirm.cancel).y}), label node=(${labelCenter.x}, ${labelCenter.y}).`,
-  );
-  if (context.isAborted()) return false;
-  await android.tap(
-    context.serial,
-    confirm.x,
-    confirm.y,
-    "bot",
-    "Snapchat: confirm logout by tapping the grey Log Out button",
-    "automation",
-    { exact: true },
-  );
-  await context.sleep(500, "exact");
-  if (context.isAborted()) return false;
+  context.onLog(`Snapchat account switch: tapping the visible logout confirmation at (${center(confirm).x}, ${center(confirm).y}).`);
+  if (!await tapNode(context, confirm, "confirm Snapchat logout", 500, true)) return false;
 
   const accountPicker = await waitFor(context, isSavedAccountPicker, 20_000);
   if (!accountPicker) {
