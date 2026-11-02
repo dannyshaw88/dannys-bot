@@ -38,7 +38,7 @@ When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB 
 
 **Why:** The user explicitly requires the editable prompt to be the sole source of truth for prompts and replies; hardcoded wording can conflict with their saved instructions.
 
-**How to apply:** Edit the saved prompt for conversational behavior. Keep only generic automation concerns in code, such as calibrated typing and confirmation that text was entered and sent; do not enforce wording, link timing, or semantic phrases in the sender.
+**How to apply:** Edit the saved prompt for conversational behavior. Do not hardcode prompt-specific wording or semantic checks by default. When the user explicitly requires a guard against a specific failure, derive its expected text from the editable goal and keep the validation narrow.
 
 **Link reply content:** The editable reply goal is the source of truth for Boundlus wording: answer the latest message briefly, use its exact call to action and URL, and do not add claims about Snap being overwhelming or private conversations.
 
@@ -50,7 +50,9 @@ When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB 
 
 **Why:** The user changed the post-link behavior from one clarification to two additional supporting messages and raised the conversation cap from three to five.
 
-**How to apply:** Keep the post-link message wording and conversational instructions in the editable prompt. Enforce only the generic limits in code: no more than five replies total and no more than two after the first Boundlus-link reply. Do not restrict follow-ups to questions about Boundlus.
+**How to apply:** Keep post-link wording in the editable prompt. The user specifically requires follow-up replies not to resend the link/call to action and to include the prompt-defined support sentence; validate those values by parsing the editable goal, retry once, then skip an invalid draft. Do not hardcode the copy or widen this into general semantic checks. Keep the generic five-reply and two-post-link-reply limits.
+
+**Why:** A live reply repeated the entire Boundlus call to action and URL despite the prompt explicitly requiring a supporting message. The model can ignore prompt instructions, so this narrow validation prevents the same spam-like duplicate from being sent.
 
 **Unread list eligibility:** Treat the Snapchat Unread tab itself as the unread signal; do not require a row status to say “New Chat.” Keep “Received” and “Opened” rows eligible only when an actual readable message preview is present; skip “Delivered” rows because that indicates an outgoing message, not an incoming chat to answer. Never tap rows with an empty-chat/system placeholder or no readable message preview; status labels alone are not enough. Ignore pure Snap/photo/video rows, but allow a mixed media-and-chat row only through its separate chat-only right-side action icon. If a row passes the list check but opening it yields no readable conversation, exit it and continue to the next row rather than ending the tool.
 
