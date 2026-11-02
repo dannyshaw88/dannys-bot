@@ -52,7 +52,7 @@ function exactSavedAccountUsername(state: UiState, username: string): UiNode | u
 
 async function waitForCameraAfterAccountTap(
   context: SnapchatContext,
-  timeoutMs = 30_000,
+  timeoutMs = 60_000,
 ): Promise<UiState | null> {
   const deadline = Date.now() + timeoutMs;
   let check = 0;
@@ -101,7 +101,7 @@ export async function selectSnapchatAccountFromCarousel(
     context.onLog("Snapchat account switch: waiting for login to finish; checking the Camera screen every 5 seconds.");
     const camera = await waitForCameraAfterAccountTap(context);
     if (!camera) {
-      context.onLog("Snapchat account switch: Camera did not appear within 30 seconds after selecting the saved profile.");
+      context.onLog("Snapchat account switch: Camera did not appear within 60 seconds after selecting the saved profile.");
       return "failed";
     }
     context.onLog(`Snapchat account switch: Camera appeared for the selected profile @${expectedUsername}.`);
