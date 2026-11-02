@@ -128,7 +128,7 @@ export async function ensureSnapchatAccount(context: SnapchatContext): Promise<b
     }
 
     context.onLog(`Snapchat account check: slot expects @${expectedUsername}; current profile is @${actualUsername}.`);
-    if (!await logoutSnapchatAccount(context)) return false;
+    if (!await logoutSnapchatAccount(context, profile)) return false;
     if (!await selectSnapchatAccountFromCarousel(context, expectedUsername)) return false;
     return await verifyTargetAndReturnToCamera(context, expectedUsername);
   } catch (error) {

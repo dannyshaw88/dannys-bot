@@ -128,11 +128,17 @@ export function logoutConfirmationButton(state: UiState): UiNode | undefined {
     .sort((a, b) => center(a).y - center(b).y)[0];
 }
 
-export async function logoutSnapchatAccount(context: SnapchatContext): Promise<boolean> {
-  let state = await dump(context.serial);
+export async function logoutSnapchatAccount(
+  context: SnapchatContext,
+  confirmedProfileState?: UiState,
+): Promise<boolean> {
+  let state = confirmedProfileState ?? await dump(context.serial);
   if (!state.nodes.some(node => shortResourceId(node) === "profile-username")) {
     context.onLog("Snapchat account switch: profile identity screen was not confirmed; not opening Settings.");
     return false;
+  }
+  if (confirmedProfileState) {
+    context.onLog("Snapchat account switch: reusing the just-confirmed profile screen to open Settings without another UI dump.");
   }
 
   const gear = state.nodes.find(node =>
@@ -254,9 +260,10 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
   );
   if (!await tapNode(context, confirm, "confirm Snapchat logout", 500, true)) return false;
 
-  const accountPicker = await waitFor(context, isSavedAccountPicker, 20_000);
+  context.onLog("Snapchat account switch: waiting up to 60 seconds for logout to reach the saved-account carousel.");
+  const accountPicker = await waitFor(context, isSavedAccountPicker, 60_000);
   if (!accountPicker) {
-    context.onLog("Snapchat account switch: Snapchat did not show its saved-account selector after logout.");
+    context.onLog("Snapchat account switch: Snapchat did not show its saved-account selector within 60 seconds after logout.");
     return false;
   }
   context.onLog("Snapchat account switch: logout completed; saved-account carousel is open.");
