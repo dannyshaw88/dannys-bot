@@ -60,10 +60,12 @@ function findAvatarOverlay(
     const identity = `${node.resourceId} ${node.text} ${node.desc}`;
     if (/banner|toast|snackbar|notification|chat|message|incoming/i.test(identity)) return true;
 
-    // The tight clickable parent around the avatar is expected. Any other
-    // clickable or labeled target at its center may intercept the tap.
+    // The avatar's clickable accessibility wrapper often has an obfuscated
+    // resource ID. Clickability by itself does not identify a banner and was
+    // causing ordinary avatar controls to block the profile tap. Keep the
+    // obstruction gate for explicit overlay IDs and visible labels/descriptions.
     if (isAvatarTapWrapper(node, avatar)) return false;
-    return node.clickable || Boolean(node.text.trim() || node.desc.trim());
+    return Boolean(node.text.trim() || node.desc.trim());
   });
 }
 
