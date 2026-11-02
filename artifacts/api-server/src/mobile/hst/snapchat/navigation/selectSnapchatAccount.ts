@@ -37,6 +37,12 @@ function accountName(node: UiNode): string {
   return [node.text, node.desc].find(value => /^[a-z0-9._-]{2,32}$/i.test(value.trim()))?.trim() ?? "";
 }
 
+function exactSavedAccountUsername(state: UiState, username: string): UiNode | undefined {
+  return state.nodes.find(node =>
+    [node.text, node.desc].some(value => normalizedUsername(value) === username),
+  );
+}
+
 async function waitForCameraAfterAccountTap(
   context: SnapchatContext,
   timeoutMs = 30_000,
@@ -76,6 +82,23 @@ export async function selectSnapchatAccountFromCarousel(
   let lastVerifiedCarouselY: number | undefined;
 
   const selectVisibleTarget = async (): Promise<"not-found" | "unreadable" | "selected" | "failed"> => {
+    const exactUsername = exactSavedAccountUsername(state, target);
+    if (exactUsername) {
+      const point = center(exactUsername);
+      context.onLog(
+        `Snapchat account switch: exact target username @${expectedUsername} is visible; tapping its username text at (${point.x}, ${point.y}).`,
+      );
+      if (!await tapNode(context, exactUsername, "tap exact saved-account username", 500, true)) return "failed";
+      context.onLog("Snapchat account switch: waiting for login to finish; checking the Camera screen every 5 seconds.");
+      const camera = await waitForCameraAfterAccountTap(context);
+      if (!camera) {
+        context.onLog("Snapchat account switch: Camera did not appear within 30 seconds after selecting the saved profile.");
+        return "failed";
+      }
+      context.onLog(`Snapchat account switch: Camera appeared for the selected profile @${expectedUsername}.`);
+      return "selected";
+    }
+
     const selected = centeredSavedSnapchatUsername(state, screen);
     if (!selected) {
       return "unreadable";
@@ -84,18 +107,7 @@ export async function selectSnapchatAccountFromCarousel(
     if (!selectedUsername) return "unreadable";
     lastVerifiedCarouselY = center(selected).y;
 
-    if (selectedUsername !== target) return "not-found";
-
-    context.onLog(`Snapchat account switch: exact target @${expectedUsername} is centered in the saved-account carousel.`);
-    if (!await tapNode(context, selected, "select matching saved Snapchat account", 500, true)) return "failed";
-    context.onLog("Snapchat account switch: waiting for login to finish; checking the Camera screen every 5 seconds.");
-    const camera = await waitForCameraAfterAccountTap(context);
-    if (!camera) {
-      context.onLog("Snapchat account switch: Camera did not appear within 30 seconds after selecting the saved profile.");
-      return "failed";
-    }
-    context.onLog(`Snapchat account switch: Camera appeared for the selected profile @${expectedUsername}.`);
-    return "selected";
+    return "not-found";
   };
 
   for (const direction of directions) {
