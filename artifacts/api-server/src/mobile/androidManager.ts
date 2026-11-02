@@ -7613,7 +7613,12 @@ async function _captureScreenPixels(serial: string): Promise<{ width: number; he
   }
 }
 
-type ScreenPixels = { width: number; height: number; channels: number; pixels: Buffer };
+export type ScreenPixels = { width: number; height: number; channels: number; pixels: Buffer };
+
+/** In-memory device screenshot for focused visual control detection. */
+export async function captureScreenPixels(serial: string): Promise<ScreenPixels | null> {
+  return _captureScreenPixels(serial);
+}
 
 /**
  * Finds the system keyboard's emoji key from the live screenshot.

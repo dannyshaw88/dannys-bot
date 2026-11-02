@@ -3,14 +3,17 @@ import type { SnapchatContext, UiNode } from "../context";
 import { center, dump, tapNode } from "../runtime";
 import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
 import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
+import { applySnapImageCrop } from "../navigation/applySnapImageCrop";
 
 export type UploadSnapResult = "not-started" | "completed" | "failed";
 
 function findLabeledControl(nodes: UiNode[], label: string): UiNode | undefined {
-  const normalizedLabel = label.trim().toLowerCase();
+  const normalize = (value: string) =>
+    value.trim().toLowerCase().replace(/[·•–—-]/g, " ").replace(/\s+/g, " ");
+  const normalizedLabel = normalize(label);
   const labelNode = nodes.find(node =>
-    node.text.trim().toLowerCase() === normalizedLabel ||
-    node.desc.trim().toLowerCase() === normalizedLabel,
+    normalize(node.text) === normalizedLabel ||
+    normalize(node.desc) === normalizedLabel,
   );
   if (!labelNode || labelNode.clickable) return labelNode;
 
@@ -78,6 +81,7 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
       { exact: true },
     );
     await context.sleep(700, "exact");
+    if (!await applySnapImageCrop(context)) return "failed";
     state = await dump(context.serial);
 
     let sendToButton = findLabeledControl(state.nodes, "send to");
@@ -91,19 +95,28 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
       return "failed";
     }
 
-    let publicStory = findLabeledControl(state.nodes, "my story · public");
+    let publicStory: UiNode | undefined;
+    let friendsStory: UiNode | undefined;
     for (let attempt = 0; !publicStory && attempt < 10; attempt++) {
-      if (attempt > 0) await context.sleep(500, "exact");
       state = await dump(context.serial);
-      publicStory = findLabeledControl(state.nodes, "my story · public");
+      publicStory = findLabeledControl(state.nodes, "my story public");
+      if (!publicStory) {
+        friendsStory = findLabeledControl(state.nodes, "my story friends only") ?? friendsStory;
+        if (friendsStory && attempt >= 1) break;
+      }
+      if (!publicStory && attempt < 9) await context.sleep(500, "exact");
     }
-    if (!publicStory || !await tapNode(context, publicStory, "select My Story - Public")) {
-      context.onLog("Upload a Snap stopped: My Story - Public was not available in Snapchat's Send To list.");
+    const selectedAudience = publicStory ? "My Story - Public" : "My Story - Friends Only";
+    const audienceControl = publicStory ?? friendsStory;
+    if (!audienceControl) {
+      context.onLog("Upload a Snap stopped: neither My Story - Public nor My Story - Friends Only was available.");
       return "failed";
     }
+    if (!publicStory) context.onLog("Upload a Snap: My Story - Public is unavailable; using My Story - Friends Only.");
+    if (!await tapNode(context, audienceControl, `select ${selectedAudience}`)) return "failed";
 
     state = await dump(context.serial);
-    const publicStoryNoticeVisible = state.nodes.some(node =>
+    const publicStoryNoticeVisible = Boolean(publicStory) && state.nodes.some(node =>
       node.text.trim().toLowerCase() === "introducing your public story" ||
       node.desc.trim().toLowerCase() === "introducing your public story",
     );
@@ -124,7 +137,11 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
       await context.sleep(800, "exact");
       context.onLog("Upload a Snap: tapped Okay on the Public Story notice.");
     } else {
-      context.onLog("Upload a Snap: no Public Story notice; continuing to the Send chevron.");
+      context.onLog(
+        publicStory
+          ? "Upload a Snap: no Public Story notice; continuing to the Send chevron."
+          : "Upload a Snap: Friends Only selected; continuing to the Send chevron.",
+      );
     }
 
     const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
@@ -136,12 +153,12 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
       sendX,
       sendY,
       "bot",
-      "Snapchat: send My Story - Public with the bottom-right chevron",
+      `Snapchat: send ${selectedAudience} with the bottom-right chevron`,
       "automation",
       { exact: true },
     );
     await context.sleep(1200, "exact");
-    context.onLog(`Upload a Snap: tapped Send for "${fileName}" to My Story - Public.`);
+    context.onLog(`Upload a Snap: tapped Send for "${fileName}" to ${selectedAudience}.`);
     context.onLog("Upload a Snap: pressing Android Back twice after Send.");
     for (let press = 1; press <= 2; press++) {
       try {
