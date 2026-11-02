@@ -77,6 +77,14 @@ export async function applySnapImageCrop(context: SnapchatContext): Promise<bool
     context.onLog("Upload a Snap: expanding the editor tools with the right-side More chevron.");
     if (!await tapNode(context, moreControl, "expand the Snap editor tool list", 600, true)) return false;
     state = await dump(context.serial);
+    for (let attempt = 0; attempt < 4 && !context.isAborted(); attempt++) {
+      cropControl = state.nodes.find(node => isNamedCropControl(node, screen.w, screen.h));
+      if (cropControl) break;
+      if (attempt < 3) {
+        await context.sleep(300, "exact");
+        state = await dump(context.serial);
+      }
+    }
   }
 
   if (!cropControl) {

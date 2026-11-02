@@ -27,10 +27,9 @@ const TEMPLATE = [
 ] as const;
 
 const FOREGROUND: Array<{ x: number; y: number }> = [];
-const BACKGROUND: Array<{ x: number; y: number }> = [];
 for (let y = 0; y < TEMPLATE.length; y++) {
   for (let x = 0; x < TEMPLATE[y].length; x++) {
-    (TEMPLATE[y][x] === "#" ? FOREGROUND : BACKGROUND).push({ x, y });
+    if (TEMPLATE[y][x] === "#") FOREGROUND.push({ x, y });
   }
 }
 
