@@ -50,23 +50,41 @@ export function overlappingAvatarBanner(
 ): UiNode | undefined {
   const point = center(target);
   const targetArea = (target.bounds[2] - target.bounds[0]) * (target.bounds[3] - target.bounds[1]);
-  const screenArea = screenWidth * screenHeight;
+  const treeLeft = Math.min(...nodes.map(node => node.bounds[0]));
+  const treeTop = Math.min(...nodes.map(node => node.bounds[1]));
+  const treeRight = Math.max(...nodes.map(node => node.bounds[2]));
+  const treeBottom = Math.max(...nodes.map(node => node.bounds[3]));
+  const treeWidth = Math.max(1, treeRight - treeLeft);
+  const treeHeight = Math.max(1, treeBottom - treeTop);
   return nodes.find(node => {
     if (node === target) return false;
     const [left, top, right, bottom] = node.bounds;
-    const area = (right - left) * (bottom - top);
+    const width = right - left;
+    const height = bottom - top;
+    const area = width * height;
     const fullyInsideAvatar = left >= target.bounds[0] && top >= target.bounds[1] &&
       right <= target.bounds[2] && bottom <= target.bounds[3];
     if (fullyInsideAvatar || area <= targetArea * 0.3) return false;
+    // Android exposes an unlabeled, clickable root for Snapchat's whole window
+    // on some devices. Its bounds can look like an overlay when `wm size` and
+    // accessibility coordinates use different resolutions; it is not a banner.
+    const wholeScreenSurface = left <= treeLeft + treeWidth * 0.02 &&
+      top <= treeTop + treeHeight * 0.02 &&
+      right >= treeLeft + treeWidth * 0.9 &&
+      bottom >= treeTop + treeHeight * 0.8;
+    if (wholeScreenSurface) return false;
     const coversTap = point.x >= left && point.x <= right &&
       point.y >= top && point.y <= bottom;
     const hasLabel = Boolean(node.text.trim() || node.desc.trim());
-    const hasBannerIdentity = /banner|toast|snackbar|notification|chat|message/i.test(
+    const hasBannerIdentity = /banner|toast|snackbar|notification|heads.?up/i.test(
       `${node.resourceId} ${node.text} ${node.desc}`,
     );
-    const largeClickableOverlay = node.clickable &&
-      area > targetArea * 2.5 && area < screenArea * 0.7;
-    return coversTap && (hasLabel || hasBannerIdentity || largeClickableOverlay);
+    const bannerGeometry = width >= Math.max(screenWidth * 0.45, treeWidth * 0.55) &&
+      height <= treeHeight * 0.3 &&
+      top <= treeTop + treeHeight * 0.35 &&
+      area > targetArea * 2.5;
+    const clickableBanner = node.clickable && bannerGeometry;
+    return coversTap && (hasBannerIdentity || hasLabel || clickableBanner);
   });
 }
 
