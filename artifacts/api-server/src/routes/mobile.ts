@@ -7349,6 +7349,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               serial,
               slotId: configuredSlot?.slotId,
               slotIdx: incomingSlotIdx,
+              targetUsername: configuredSlot?.username?.trim() || resolvedSlotUsername,
               path,
               pickLocalFolderImage,
               tools: snapchatTools,

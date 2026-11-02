@@ -1,5 +1,6 @@
 import type { SnapchatContext } from "./context";
 import { closeAddFriendsPanel } from "./navigation/closeAddFriendsPanel";
+import { ensureSnapchatAccount } from "./navigation/ensureSnapchatAccount";
 import { returnToCameraBeforeNextTool } from "./navigation/returnToCamera";
 import { runAcceptFriends } from "./tools/acceptFriends";
 import { runAddFriends } from "./tools/addFriends";
@@ -20,6 +21,11 @@ type SnapchatToolEntry = {
 };
 
 export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
+  if (!await ensureSnapchatAccount(context)) {
+    context.onLog("Snapchat tool dispatcher skipped because the configured slot account was not confirmed.");
+    return;
+  }
+
   const toolList: SnapchatToolEntry[] = [
     { name: "Upload a Snap", settings: context.tools.uploadSnap, run: () => runUploadSnap(context) },
     { name: "Add Friends", settings: context.tools.addFriends, run: () => runAddFriends(context) },

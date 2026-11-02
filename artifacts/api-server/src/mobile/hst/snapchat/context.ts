@@ -36,6 +36,7 @@ export type SnapchatContext = {
   serial: string;
   slotId?: string;
   slotIdx?: number;
+  targetUsername?: string;
   path: any;
   pickLocalFolderImage: (
     serial: string,
