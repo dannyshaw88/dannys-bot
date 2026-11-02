@@ -162,7 +162,6 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
   let bottomConfirmed = false;
   const seenScrollStates = new Set<string>();
   for (let swipe = 0; swipe < 8 && !context.isAborted(); swipe++) {
-    state = await dump(context.serial);
     if (!isSettingsPage(state)) {
       context.onLog("Snapchat account switch: Settings closed while locating Log Out.");
       return false;
@@ -255,7 +254,9 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
     context.onLog("Snapchat account switch: the explicit logout confirmation button was not found.");
     return false;
   }
-  context.onLog(`Snapchat account switch: tapping the visible logout confirmation at (${center(confirm).x}, ${center(confirm).y}).`);
+  context.onLog(
+    `Snapchat account switch: tapping the visible logout confirmation at (${center(confirm).x}, ${center(confirm).y}) using ${confirm.clickable ? "button bounds" : "label bounds"}.`,
+  );
   if (!await tapNode(context, confirm, "confirm Snapchat logout", 500, true)) return false;
 
   const accountPicker = await waitFor(context, isSavedAccountPicker, 20_000);
