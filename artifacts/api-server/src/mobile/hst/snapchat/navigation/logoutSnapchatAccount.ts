@@ -37,6 +37,11 @@ function visibleLogoutRow(state: UiState, screenHeight: number): UiNode | undefi
     })[0];
 }
 
+function isNearSettingsBottom(node: UiNode, container: UiNode): boolean {
+  const [, top, , bottom] = container.bounds;
+  return center(node).y >= bottom - (bottom - top) * 0.14;
+}
+
 function hasSettingsBottomMarker(state: UiState, screenHeight: number): boolean {
   return state.nodes.some(node =>
     /snapchat v\d|made in los angeles/i.test(`${node.text} ${node.desc}`) &&
@@ -86,7 +91,18 @@ function isSavedAccountPicker(state: UiState): boolean {
 }
 
 function logoutConfirmationButton(state: UiState): UiNode | undefined {
-  return state.nodes.find(node => node.clickable && exactLabel(node, "Log Out"));
+  const title = state.nodes.find(node =>
+    /are you sure[\s\S]{0,100}log out/i.test(`${node.text} ${node.desc}`),
+  );
+  const titleCenter = title ? center(title) : null;
+  return state.nodes
+    .filter(node => exactLabel(node, "Log Out"))
+    .sort((a, b) => {
+      if (!titleCenter) return center(a).y - center(b).y;
+      const distance = (node: UiNode) =>
+        Math.abs(center(node).x - titleCenter.x) + Math.abs(center(node).y - titleCenter.y);
+      return distance(a) - distance(b);
+    })[0];
 }
 
 export async function logoutSnapchatAccount(context: SnapchatContext): Promise<boolean> {
@@ -116,7 +132,7 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
   let logoutRow: UiNode | undefined;
   let bottomConfirmed = false;
   const seenScrollStates = new Set<string>();
-  for (let swipe = 0; swipe < 14 && !context.isAborted(); swipe++) {
+  for (let swipe = 0; swipe < 8 && !context.isAborted(); swipe++) {
     state = await dump(context.serial);
     if (!isSettingsPage(state)) {
       context.onLog("Snapchat account switch: Settings closed while locating Log Out.");
@@ -133,9 +149,11 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
     const startY = Math.round(top + (bottom - top) * 0.82);
     const endY = Math.round(top + (bottom - top) * 0.18);
     const beforeSignature = scrollSignature(state);
-    context.onLog(`Snapchat account switch: scrolling Settings toward the bottom (${swipe + 1}/14).`);
-    await android.swipe(context.serial, startX, startY, startX, endY, 650, false);
-    await context.sleep(400, "exact");
+    context.onLog(`Snapchat account switch: sending four fast upward Settings swipes (${swipe + 1}/8 batches).`);
+    for (let stroke = 0; stroke < 4 && !context.isAborted(); stroke++) {
+      await android.swipe(context.serial, startX, startY, startX, endY, 180, false);
+    }
+    if (context.isAborted()) return false;
     const after = await dump(context.serial);
     if (!isSettingsPage(after)) {
       context.onLog("Snapchat account switch: Settings changed during the scroll; stopping before Logout.");
@@ -143,16 +161,18 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
     }
     const afterSignature = scrollSignature(after);
     logoutRow = visibleLogoutRow(after, screen.h);
+    const afterContainer = scrollContainer(after);
+    if (
+      logoutRow &&
+      afterContainer &&
+      (hasSettingsBottomMarker(after, screen.h) || isNearSettingsBottom(logoutRow, afterContainer))
+    ) {
+      context.onLog("Snapchat account switch: Log Out is visible at the bottom of Settings.");
+      bottomConfirmed = true;
+      state = after;
+      break;
+    }
     if (afterSignature === beforeSignature) {
-      const bounds = container.bounds;
-      const nearBottom = Boolean(logoutRow) &&
-        center(logoutRow!).y >= bounds[3] - (bounds[3] - bounds[1]) * 0.14;
-      if (logoutRow && (nearBottom || hasSettingsBottomMarker(after, screen.h))) {
-        context.onLog("Snapchat account switch: Log Out is visible and the Settings scroll is at its bottom.");
-        bottomConfirmed = true;
-        state = after;
-        break;
-      }
       context.onLog("Snapchat account switch: Settings did not move and the bottom was not confirmed.");
       return false;
     }
@@ -161,12 +181,6 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
       return false;
     }
     seenScrollStates.add(beforeSignature);
-    if (logoutRow && hasSettingsBottomMarker(after, screen.h)) {
-      // The footer is only exposed once the list reaches its end. Make one
-      // additional upward swipe; an unchanged tree then confirms the bottom.
-      state = after;
-      continue;
-    }
     state = after;
   }
 
@@ -193,7 +207,7 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
   }
 
   if (hasNumberVerificationNotice(dialog)) {
-    const notNow = dialog.nodes.find(node => node.clickable && exactLabel(node, "Not Now"));
+    const notNow = dialog.nodes.find(node => exactLabel(node, "Not Now"));
     if (!notNow) {
       context.onLog("Snapchat account switch: number-verification notice appeared without its Not Now button.");
       return false;
@@ -212,7 +226,7 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
     context.onLog("Snapchat account switch: the explicit logout confirmation button was not found.");
     return false;
   }
-  context.onLog("Snapchat account switch: confirming Log Out.");
+  context.onLog(`Snapchat account switch: tapping the visible logout confirmation at (${center(confirm).x}, ${center(confirm).y}).`);
   if (!await tapNode(context, confirm, "confirm Snapchat logout", 500, true)) return false;
 
   const accountPicker = await waitFor(context, isSavedAccountPicker, 20_000);

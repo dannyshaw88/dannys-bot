@@ -42,8 +42,11 @@ function avatarTapTarget(state: UiState, width: number, height: number): UiNode 
   return containingTapTarget;
 }
 
-export async function openSnapchatProfile(context: SnapchatContext): Promise<UiState | null> {
-  let state = await dump(context.serial);
+export async function openSnapchatProfile(
+  context: SnapchatContext,
+  initialState?: UiState,
+): Promise<UiState | null> {
+  let state = initialState ?? await dump(context.serial);
   if (isSnapchatProfileSurface(state)) return state;
   if (!isSnapchatCameraSurface(state)) {
     context.onLog("Snapchat account check: Camera screen was not confirmed; not tapping the top-left control.");
@@ -51,42 +54,53 @@ export async function openSnapchatProfile(context: SnapchatContext): Promise<UiS
   }
 
   const screen = android.getScreenSize(context.serial);
-  const deadline = Date.now() + 10_000;
   let target: UiNode | undefined;
-  while (!context.isAborted()) {
-    state = await dump(context.serial);
-    if (isSnapchatProfileSurface(state)) return state;
-    if (!isSnapchatCameraSurface(state)) {
-      context.onLog("Snapchat account check: Camera screen changed before the profile tap.");
-      return null;
-    }
+  const findClearAvatar = (current: UiState): {
+    profile: UiState | null;
+    target?: UiNode;
+    banner: boolean;
+  } => {
+    if (isSnapchatProfileSurface(current)) return { profile: current, banner: false };
+    if (!isSnapchatCameraSurface(current)) return { profile: null, banner: false };
+    const tapTarget = avatarTapTarget(current, screen.w, screen.h);
+    if (!tapTarget) return { profile: null, banner: false };
+    const banner = findOccludingBanner(current.nodes, tapTarget, screen.w, screen.h);
+    return {
+      profile: null,
+      target: banner ? undefined : tapTarget,
+      banner: Boolean(banner),
+    };
+  };
 
-    target = avatarTapTarget(state, screen.w, screen.h);
-    if (!target) {
+  let result = findClearAvatar(state);
+  if (result.profile) return result.profile;
+  target = result.target;
+  if (!target) {
+    if (!result.banner) {
       context.onLog("Snapchat account check: the top-left avatar tap target was not exposed.");
       return null;
     }
-    const banner = findOccludingBanner(state.nodes, target, screen.w, screen.h);
-    if (!banner) break;
-    if (Date.now() >= deadline) {
-      context.onLog("Snapchat account check: a banner kept covering the avatar ring; stopping before tapping it.");
+    context.onLog("Snapchat account check: a banner covers the avatar ring; waiting briefly for it to clear.");
+    const bannerDeadline = Date.now() + 3_000;
+    while (!context.isAborted() && Date.now() < bannerDeadline) {
+      await context.sleep(150, "exact");
+      state = await dump(context.serial);
+      result = findClearAvatar(state);
+      if (result.profile) return result.profile;
+      if (!isSnapchatCameraSurface(state)) {
+        context.onLog("Snapchat account check: Camera screen changed before the profile tap.");
+        return null;
+      }
+      target = result.target;
+      if (target) break;
+    }
+    if (!target) {
+      context.onLog("Snapchat account check: the avatar ring remained covered or unavailable; stopping before tapping.");
       return null;
     }
-    context.onLog("Snapchat account check: a banner covers the avatar ring; waiting for it to clear.");
-    await context.sleep(350, "exact");
-  }
-  if (context.isAborted() || !target) return null;
-
-  // Take one final fresh dump immediately before input so a banner that appeared
-  // during the wait cannot turn the avatar tap into a tap on the overlay.
-  state = await dump(context.serial);
-  if (!isSnapchatCameraSurface(state)) return null;
-  target = avatarTapTarget(state, screen.w, screen.h);
-  if (!target || findOccludingBanner(state.nodes, target, screen.w, screen.h)) {
-    context.onLog("Snapchat account check: avatar ring was not clear on the final check; no tap sent.");
-    return null;
   }
 
+  if (context.isAborted()) return null;
   context.onLog(`Snapchat account check: tapping the clear top-left avatar ring at (${center(target).x}, ${center(target).y}).`);
   if (!await tapNode(context, target, "open Snapchat profile for account verification", 500, true)) return null;
 

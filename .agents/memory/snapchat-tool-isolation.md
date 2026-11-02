@@ -11,6 +11,12 @@ Successful Upload a Snap is normal tool completion, not a request to leave Snapc
 
 Before dispatching Snapchat tools, reconcile the app session with the configured Snapchat slot username. Open the top-left profile, verify its Username, and only log out when it differs. After logout, traverse the saved-account carousel to the exact slot username, tap it once, and check for Camera every five seconds for up to 30 seconds; do not tap again while login is in progress. Verify identity again, then press Android Back once to Camera. If identity cannot be confirmed, skip all Snapchat tools for that cycle.
 
+For Snapchat switching, reuse the already-confirmed Camera UI tree and tap the avatar immediately when clear; wait only for a detected banner. Scroll Settings with four fast upward swipes per check, and tap the exact visible Log Out label nearest the confirmation title even if its node is not marked clickable.
+
+**Why:** A real-device switch showed redundant UI dumps delaying the avatar tap, one short Settings swipe per expensive read, and a visible gray logout-confirmation button exposed as non-clickable text.
+
+**How to apply:** Keep each of these optimizations inside Snapchat navigation. Do not add shared Android gesture changes; preserve the explicit account identity check and live popup text targeting.
+
 **Why:** The user explicitly required isolation after edits to shared Snapchat logic caused unrelated tool behavior to change. False-negative resource-ID checks have stopped Upload a Snap even when the requested control was visible. A Stories-screen inspect dump confirmed the Camera tab is a clickable `ngs_camera_icon_container`; Upload a Snap can run after tools that leave Snapchat on Chat, Stories, Spotlight, or another non-Camera screen. The Camera page marker may be absent even when the live shutter and Memories controls are visible, so use those controls as the surface evidence.
 
 **Why:** A stale test-only success flag previously stopped later tools and skipped configured app-close cleanup even though the image had been sent and the two Back presses completed.

@@ -55,7 +55,7 @@ async function verifyTargetAndReturnToCamera(
     }
   }
 
-  const profile = isSnapchatProfileSurface(state) ? state : await openSnapchatProfile(context);
+  const profile = isSnapchatProfileSurface(state) ? state : await openSnapchatProfile(context, state);
   if (!profile) {
     context.onLog("Snapchat account check: could not open the profile to confirm the logged-in username.");
     return false;
@@ -104,7 +104,7 @@ export async function ensureSnapchatAccount(context: SnapchatContext): Promise<b
       }
     }
 
-    const profile = isSnapchatProfileSurface(state) ? state : await openSnapchatProfile(context);
+    const profile = isSnapchatProfileSurface(state) ? state : await openSnapchatProfile(context, state);
     if (!profile) {
       context.onLog("Snapchat tools not started: could not confirm the active Snapchat profile.");
       return false;
