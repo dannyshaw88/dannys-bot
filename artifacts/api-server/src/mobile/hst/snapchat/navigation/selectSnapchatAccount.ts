@@ -92,22 +92,26 @@ export async function selectSnapchatAccountFromCarousel(
   ] as const;
   let lastVerifiedCarouselY: number | undefined;
 
+  const tapAndConfirmTarget = async (node: UiNode): Promise<"selected" | "failed"> => {
+    const point = center(node);
+    context.onLog(
+      `Snapchat account switch: target username @${expectedUsername} is visible; tapping its username text at (${point.x}, ${point.y}).`,
+    );
+    if (!await tapNode(context, node, "tap exact saved-account username", 500, true)) return "failed";
+    context.onLog("Snapchat account switch: waiting for login to finish; checking the Camera screen every 5 seconds.");
+    const camera = await waitForCameraAfterAccountTap(context);
+    if (!camera) {
+      context.onLog("Snapchat account switch: Camera did not appear within 30 seconds after selecting the saved profile.");
+      return "failed";
+    }
+    context.onLog(`Snapchat account switch: Camera appeared for the selected profile @${expectedUsername}.`);
+    return "selected";
+  };
+
   const selectVisibleTarget = async (): Promise<"not-found" | "unreadable" | "selected" | "failed"> => {
     const exactUsername = exactSavedAccountUsername(state, target);
     if (exactUsername) {
-      const point = center(exactUsername);
-      context.onLog(
-        `Snapchat account switch: exact target username @${expectedUsername} is visible; tapping its username text at (${point.x}, ${point.y}).`,
-      );
-      if (!await tapNode(context, exactUsername, "tap exact saved-account username", 500, true)) return "failed";
-      context.onLog("Snapchat account switch: waiting for login to finish; checking the Camera screen every 5 seconds.");
-      const camera = await waitForCameraAfterAccountTap(context);
-      if (!camera) {
-        context.onLog("Snapchat account switch: Camera did not appear within 30 seconds after selecting the saved profile.");
-        return "failed";
-      }
-      context.onLog(`Snapchat account switch: Camera appeared for the selected profile @${expectedUsername}.`);
-      return "selected";
+      return await tapAndConfirmTarget(exactUsername);
     }
 
     const selected = centeredSavedSnapchatUsername(state, screen);
@@ -117,6 +121,13 @@ export async function selectSnapchatAccountFromCarousel(
     const selectedUsername = normalizedUsername(accountName(selected));
     if (!selectedUsername) return "unreadable";
     lastVerifiedCarouselY = center(selected).y;
+
+    if (selectedUsername === target) {
+      context.onLog(
+        `Snapchat account switch: centered carousel username @${selectedUsername} matches slot target @${target}; tapping it now.`,
+      );
+      return await tapAndConfirmTarget(selected);
+    }
 
     return "not-found";
   };
