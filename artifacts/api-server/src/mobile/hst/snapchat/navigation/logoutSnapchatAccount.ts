@@ -90,48 +90,46 @@ function isSavedAccountPicker(state: UiState): boolean {
     state.nodes.some(node => exactLabel(node, "Switch Account"));
 }
 
-function logoutConfirmationButton(
+function logoutConfirmationPoint(
   state: UiState,
-  screenWidth: number,
   screenHeight: number,
-): UiNode | undefined {
+): { x: number; y: number; uiHeight: number; offsetY: number; label: UiNode; cancel: UiNode } | undefined {
   const title = state.nodes.find(node =>
     /are you sure[\s\S]{0,100}log out/i.test(`${node.text} ${node.desc}`),
   );
   const cancel = state.nodes.find(node => exactLabel(node, "Cancel"));
-  const anchor = cancel ?? title;
-  const anchorCenter = anchor ? center(anchor) : null;
+  if (!cancel) return undefined;
+
+  const cancelCenter = center(cancel);
   const labels = state.nodes
     .filter(node => exactLabel(node, "Log Out"))
     .sort((a, b) => {
-      if (!anchorCenter) return center(a).y - center(b).y;
       const distance = (node: UiNode) =>
-        Math.abs(center(node).x - anchorCenter.x) + Math.abs(center(node).y - anchorCenter.y);
+        Math.abs(center(node).x - cancelCenter.x) + Math.abs(center(node).y - cancelCenter.y);
       return distance(a) - distance(b);
     });
   const label = labels[0];
   if (!label) return undefined;
 
-  const labelCenter = center(label);
-  const screenArea = screenWidth * screenHeight;
-  const button = state.nodes
-    .filter(node => {
-      const [left, top, right, bottom] = node.bounds;
-      const area = (right - left) * (bottom - top);
-      return node.clickable &&
-        labelCenter.x >= left && labelCenter.x <= right &&
-        labelCenter.y >= top && labelCenter.y <= bottom &&
-        area > 0 && area < screenArea * 0.08;
-    })
-    .sort((a, b) =>
-      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) -
-      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]),
-    )[0];
+  // The accessibility label's bounds have repeatedly landed outside the
+  // visible grey button on this Snapchat dialog. The button is centered above
+  // Cancel; derive its center from that live dialog anchor and the UI dump's
+  // root height, which is in the same coordinate space as adb input tap.
+  const root = state.nodes.find(node =>
+    node.bounds[0] === 0 &&
+    node.bounds[1] === 0 &&
+    node.bounds[2] > 0 &&
+    node.bounds[3] > 0,
+  );
+  const uiHeight = root ? root.bounds[3] - root.bounds[1] : screenHeight;
+  if (uiHeight <= 0) return undefined;
 
-  // The button text can be non-clickable in Snapchat's popup. Prefer its
-  // clickable button-sized parent; otherwise tap the exact visible label.
-  if (button) return button;
-  return label;
+  const x = cancelCenter.x;
+  const offsetY = Math.round(uiHeight * 0.065);
+  const y = cancelCenter.y - offsetY;
+  if (title && y <= center(title).y) return undefined;
+  if (y >= cancelCenter.y || y < 0 || y >= uiHeight) return undefined;
+  return { x, y, uiHeight, offsetY, label, cancel };
 }
 
 export async function logoutSnapchatAccount(context: SnapchatContext): Promise<boolean> {
@@ -249,15 +247,27 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
     }
   }
 
-  const confirm = logoutConfirmationButton(dialog, screen.w, screen.h);
+  const confirm = logoutConfirmationPoint(dialog, screen.h);
   if (!confirm || !isLogoutConfirmation(dialog)) {
     context.onLog("Snapchat account switch: the explicit logout confirmation button was not found.");
     return false;
   }
+  const labelCenter = center(confirm.label);
   context.onLog(
-    `Snapchat account switch: tapping the visible logout confirmation at (${center(confirm).x}, ${center(confirm).y}) using ${confirm.clickable ? "button bounds" : "label bounds"}.`,
+    `Snapchat account switch: tapping the grey Log Out button at (${confirm.x}, ${confirm.y}); UI height=${confirm.uiHeight}, offset=${confirm.offsetY}, Cancel center=(${center(confirm.cancel).x}, ${center(confirm.cancel).y}), label node=(${labelCenter.x}, ${labelCenter.y}).`,
   );
-  if (!await tapNode(context, confirm, "confirm Snapchat logout", 500, true)) return false;
+  if (context.isAborted()) return false;
+  await android.tap(
+    context.serial,
+    confirm.x,
+    confirm.y,
+    "bot",
+    "Snapchat: confirm logout by tapping the grey Log Out button",
+    "automation",
+    { exact: true },
+  );
+  await context.sleep(500, "exact");
+  if (context.isAborted()) return false;
 
   const accountPicker = await waitFor(context, isSavedAccountPicker, 20_000);
   if (!accountPicker) {
