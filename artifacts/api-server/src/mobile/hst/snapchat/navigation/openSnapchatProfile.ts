@@ -1,6 +1,6 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode, UiState } from "../context";
-import { center, dump, findOccludingBanner, shortResourceId, tapNode } from "../runtime";
+import { center, dump, shortResourceId, tapNode } from "../runtime";
 
 export function isSnapchatCameraSurface(state: UiState): boolean {
   return state.nodes.some(node => [
@@ -42,6 +42,34 @@ function avatarTapTarget(state: UiState, width: number, height: number): UiNode 
   return containingTapTarget;
 }
 
+export function overlappingAvatarBanner(
+  nodes: UiNode[],
+  target: UiNode,
+  screenWidth: number,
+  screenHeight: number,
+): UiNode | undefined {
+  const point = center(target);
+  const targetArea = (target.bounds[2] - target.bounds[0]) * (target.bounds[3] - target.bounds[1]);
+  const screenArea = screenWidth * screenHeight;
+  return nodes.find(node => {
+    if (node === target) return false;
+    const [left, top, right, bottom] = node.bounds;
+    const area = (right - left) * (bottom - top);
+    const fullyInsideAvatar = left >= target.bounds[0] && top >= target.bounds[1] &&
+      right <= target.bounds[2] && bottom <= target.bounds[3];
+    if (fullyInsideAvatar || area <= targetArea * 0.3) return false;
+    const coversTap = point.x >= left && point.x <= right &&
+      point.y >= top && point.y <= bottom;
+    const hasLabel = Boolean(node.text.trim() || node.desc.trim());
+    const hasBannerIdentity = /banner|toast|snackbar|notification|chat|message/i.test(
+      `${node.resourceId} ${node.text} ${node.desc}`,
+    );
+    const largeClickableOverlay = node.clickable &&
+      area > targetArea * 2.5 && area < screenArea * 0.7;
+    return coversTap && (hasLabel || hasBannerIdentity || largeClickableOverlay);
+  });
+}
+
 export async function openSnapchatProfile(
   context: SnapchatContext,
   initialState?: UiState,
@@ -54,50 +82,50 @@ export async function openSnapchatProfile(
   }
 
   const screen = android.getScreenSize(context.serial);
-  let target: UiNode | undefined;
-  const findClearAvatar = (current: UiState): {
-    profile: UiState | null;
-    target?: UiNode;
-    banner: boolean;
-  } => {
-    if (isSnapchatProfileSurface(current)) return { profile: current, banner: false };
-    if (!isSnapchatCameraSurface(current)) return { profile: null, banner: false };
-    const tapTarget = avatarTapTarget(current, screen.w, screen.h);
-    if (!tapTarget) return { profile: null, banner: false };
-    const banner = findOccludingBanner(current.nodes, tapTarget, screen.w, screen.h);
-    return {
-      profile: null,
-      target: banner ? undefined : tapTarget,
-      banner: Boolean(banner),
-    };
-  };
+  // The Camera state supplied by the caller can predate an incoming chat banner.
+  // Refresh it immediately before deciding whether to tap the avatar.
+  context.onLog("Snapchat account check: refreshing Camera and checking the avatar for an overlapping banner.");
+  state = await dump(context.serial);
+  if (isSnapchatProfileSurface(state)) return state;
+  if (!isSnapchatCameraSurface(state)) {
+    context.onLog("Snapchat account check: Camera screen changed before the banner check.");
+    return null;
+  }
 
-  let result = findClearAvatar(state);
-  if (result.profile) return result.profile;
-  target = result.target;
+  let target = avatarTapTarget(state, screen.w, screen.h);
   if (!target) {
-    if (!result.banner) {
-      context.onLog("Snapchat account check: the top-left avatar tap target was not exposed.");
-      return null;
-    }
-    context.onLog("Snapchat account check: a banner covers the avatar ring; waiting briefly for it to clear.");
-    const bannerDeadline = Date.now() + 3_000;
+    context.onLog("Snapchat account check: the top-left avatar tap target was not exposed.");
+    return null;
+  }
+  let banner = overlappingAvatarBanner(state.nodes, target, screen.w, screen.h);
+  if (banner) {
+    const bannerDeadline = Date.now() + 8_000;
+    context.onLog(
+      `Snapchat account check: blocking the avatar tap; overlapping banner "${banner.text || banner.desc || banner.resourceId}" at ${banner.bounds.join(",")}.`,
+    );
     while (!context.isAborted() && Date.now() < bannerDeadline) {
-      await context.sleep(150, "exact");
+      await context.sleep(300, "exact");
       state = await dump(context.serial);
-      result = findClearAvatar(state);
-      if (result.profile) return result.profile;
+      if (isSnapchatProfileSurface(state)) return state;
       if (!isSnapchatCameraSurface(state)) {
-        context.onLog("Snapchat account check: Camera screen changed before the profile tap.");
+        context.onLog("Snapchat account check: Camera screen changed while waiting for the banner to clear.");
         return null;
       }
-      target = result.target;
-      if (target) break;
+      target = avatarTapTarget(state, screen.w, screen.h);
+      if (!target) {
+        context.onLog("Snapchat account check: the avatar target disappeared while a banner was present.");
+        return null;
+      }
+      banner = overlappingAvatarBanner(state.nodes, target, screen.w, screen.h);
+      if (!banner) break;
     }
-    if (!target) {
-      context.onLog("Snapchat account check: the avatar ring remained covered or unavailable; stopping before tapping.");
+    if (banner) {
+      context.onLog("Snapchat account check: the overlapping banner did not clear; avatar was not tapped.");
       return null;
     }
+    context.onLog("Snapchat account check: fresh Camera tree confirms the banner cleared before tapping.");
+  } else {
+    context.onLog("Snapchat account check: fresh Camera tree confirms no banner overlaps the avatar.");
   }
 
   if (context.isAborted()) return null;
