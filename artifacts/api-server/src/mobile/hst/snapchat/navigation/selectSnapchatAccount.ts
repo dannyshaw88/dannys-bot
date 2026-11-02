@@ -29,7 +29,7 @@ export function centeredSavedSnapchatUsername(
   const usernamePattern = /^[a-z0-9._-]{2,32}$/i;
   return state.nodes
     .filter(node => {
-      const label = [node.text, node.desc].find(value => usernamePattern.test(value.trim()));
+      const label = [node.text, node.desc].find(value => usernamePattern.test(normalizedUsername(value)));
       if (!label) return false;
       const point = center(node);
       return Math.abs(point.x - centerX) <= screen.w * 0.32 &&
@@ -39,7 +39,9 @@ export function centeredSavedSnapchatUsername(
 }
 
 function accountName(node: UiNode): string {
-  return [node.text, node.desc].find(value => /^[a-z0-9._-]{2,32}$/i.test(value.trim()))?.trim() ?? "";
+  return [node.text, node.desc]
+    .map(normalizedUsername)
+    .find(value => /^[a-z0-9._-]{2,32}$/i.test(value)) ?? "";
 }
 
 function exactSavedAccountUsername(state: UiState, username: string): UiNode | undefined {
