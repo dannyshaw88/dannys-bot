@@ -90,19 +90,48 @@ function isSavedAccountPicker(state: UiState): boolean {
     state.nodes.some(node => exactLabel(node, "Switch Account"));
 }
 
-function logoutConfirmationButton(state: UiState): UiNode | undefined {
+function logoutConfirmationButton(
+  state: UiState,
+  screenWidth: number,
+  screenHeight: number,
+): UiNode | undefined {
   const title = state.nodes.find(node =>
     /are you sure[\s\S]{0,100}log out/i.test(`${node.text} ${node.desc}`),
   );
-  const titleCenter = title ? center(title) : null;
-  return state.nodes
+  const cancel = state.nodes.find(node => exactLabel(node, "Cancel"));
+  const anchor = cancel ?? title;
+  const anchorCenter = anchor ? center(anchor) : null;
+  const labels = state.nodes
     .filter(node => exactLabel(node, "Log Out"))
     .sort((a, b) => {
-      if (!titleCenter) return center(a).y - center(b).y;
+      if (!anchorCenter) return center(a).y - center(b).y;
       const distance = (node: UiNode) =>
-        Math.abs(center(node).x - titleCenter.x) + Math.abs(center(node).y - titleCenter.y);
+        Math.abs(center(node).x - anchorCenter.x) + Math.abs(center(node).y - anchorCenter.y);
       return distance(a) - distance(b);
-    })[0];
+    });
+  const label = labels[0];
+  if (!label) return undefined;
+
+  const labelCenter = center(label);
+  const screenArea = screenWidth * screenHeight;
+  const button = state.nodes
+    .filter(node => {
+      const [left, top, right, bottom] = node.bounds;
+      const area = (right - left) * (bottom - top);
+      return node.clickable &&
+        labelCenter.x >= left && labelCenter.x <= right &&
+        labelCenter.y >= top && labelCenter.y <= bottom &&
+        area > 0 && area < screenArea * 0.08;
+    })
+    .sort((a, b) =>
+      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) -
+      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]),
+    )[0];
+
+  // The button text can be non-clickable in Snapchat's popup. Prefer its
+  // clickable button-sized parent; otherwise tap the exact visible label.
+  if (button) return button;
+  return label;
 }
 
 export async function logoutSnapchatAccount(context: SnapchatContext): Promise<boolean> {
@@ -120,9 +149,9 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
     return false;
   }
   context.onLog(`Snapchat account switch: opening profile Settings at (${center(gear).x}, ${center(gear).y}).`);
-  if (!await tapNode(context, gear, "open Snapchat profile settings", 500, true)) return false;
-
-  state = await waitFor(context, isSettingsPage, 10_000) ?? await dump(context.serial);
+  if (!await tapNode(context, gear, "open Snapchat profile settings", 0, true)) return false;
+  await context.sleep(1_000, "exact");
+  state = await dump(context.serial);
   if (!isSettingsPage(state)) {
     context.onLog("Snapchat account switch: Settings page was not confirmed.");
     return false;
@@ -221,7 +250,7 @@ export async function logoutSnapchatAccount(context: SnapchatContext): Promise<b
     }
   }
 
-  const confirm = logoutConfirmationButton(dialog);
+  const confirm = logoutConfirmationButton(dialog, screen.w, screen.h);
   if (!confirm || !isLogoutConfirmation(dialog)) {
     context.onLog("Snapchat account switch: the explicit logout confirmation button was not found.");
     return false;
