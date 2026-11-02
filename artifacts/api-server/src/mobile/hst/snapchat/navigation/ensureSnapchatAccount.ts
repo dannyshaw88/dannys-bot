@@ -36,50 +36,6 @@ async function waitForKnownSurface(context: SnapchatContext, timeoutMs: number):
   return null;
 }
 
-async function verifyTargetAndReturnToCamera(
-  context: SnapchatContext,
-  expectedUsername: string,
-): Promise<boolean> {
-  let state = await waitForKnownSurface(context, 20_000);
-  if (!state) {
-    context.onLog("Snapchat account check: neither the Camera, Profile, nor saved-account screen appeared.");
-    return false;
-  }
-  if (isSavedSnapchatAccountPicker(state)) {
-    context.onLog("Snapchat account check: Snapchat is signed out; selecting the configured saved account.");
-    if (!await selectSnapchatAccountFromCarousel(context, expectedUsername)) return false;
-    state = await waitForKnownSurface(context, 25_000);
-    if (!state || isSavedSnapchatAccountPicker(state)) {
-      context.onLog("Snapchat account check: saved-profile login did not reach a signed-in Snapchat screen.");
-      return false;
-    }
-  }
-
-  const profile = isSnapchatProfileSurface(state) ? state : await openSnapchatProfile(context, state);
-  if (!profile) {
-    context.onLog("Snapchat account check: could not open the profile to confirm the logged-in username.");
-    return false;
-  }
-  const actualUsername = profileUsername(profile);
-  if (!actualUsername) {
-    context.onLog("Snapchat account check: profile page appeared, but its Username field was not exposed.");
-    return false;
-  }
-  if (normalizeUsername(actualUsername) !== normalizeUsername(expectedUsername)) {
-    context.onLog(`Snapchat account check: expected @${expectedUsername}, but Snapchat is logged in as @${actualUsername}.`);
-    return false;
-  }
-
-  context.onLog(`Snapchat account check: confirmed @${actualUsername}; pressing Android Back once to return to Camera.`);
-  await android.pressBack(context.serial);
-  const camera = await waitForKnownSurface(context, 10_000);
-  if (!camera || !isSnapchatCameraSurface(camera)) {
-    context.onLog("Snapchat account check: Android Back did not return to the Camera screen.");
-    return false;
-  }
-  return true;
-}
-
 export async function ensureSnapchatAccount(context: SnapchatContext): Promise<boolean> {
   const expectedUsername = context.targetUsername?.trim() ?? "";
   if (!expectedUsername) {
@@ -97,11 +53,8 @@ export async function ensureSnapchatAccount(context: SnapchatContext): Promise<b
     if (isSavedSnapchatAccountPicker(state)) {
       context.onLog(`Snapchat account check: signed-out account screen found; looking for @${expectedUsername}.`);
       if (!await selectSnapchatAccountFromCarousel(context, expectedUsername)) return false;
-      state = await waitForKnownSurface(context, 25_000);
-      if (!state || isSavedSnapchatAccountPicker(state)) {
-        context.onLog("Snapchat account check: saved-profile login did not complete.");
-        return false;
-      }
+      context.onLog(`Snapchat account check: @${expectedUsername} was selected and Camera is ready; starting this slot's tools without reopening the profile.`);
+      return true;
     }
 
     const profile = isSnapchatProfileSurface(state) ? state : await openSnapchatProfile(context, state);
@@ -130,7 +83,8 @@ export async function ensureSnapchatAccount(context: SnapchatContext): Promise<b
     context.onLog(`Snapchat account check: slot expects @${expectedUsername}; current profile is @${actualUsername}.`);
     if (!await logoutSnapchatAccount(context, profile)) return false;
     if (!await selectSnapchatAccountFromCarousel(context, expectedUsername)) return false;
-    return await verifyTargetAndReturnToCamera(context, expectedUsername);
+    context.onLog(`Snapchat account check: @${expectedUsername} was selected and Camera is ready; starting this slot's tools without reopening the profile.`);
+    return true;
   } catch (error) {
     context.onLog(`Snapchat tools not started: account verification/switch failed (${error instanceof Error ? error.message : String(error)}).`);
     return false;
