@@ -54,7 +54,9 @@ When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB 
 
 **Post-link supporting replies:** Allow up to two supporting replies after the Boundlus link, for a maximum of five replies when the link is reply 3. The editable prompt defines the two supporting messages; each is generated from the conversation context.
 
-**Why:** The user changed the post-link behavior from one clarification to two additional supporting messages and raised the conversation cap from three to five.
+Each supporting reply must explain that Boundlus is a new social media platform that pays people for uploading content, then invite the contact to create an account and add/connect with the sender. Keep this wording in the editable prompt; do not hardcode it.
+
+**Why:** The user changed the post-link behavior from one clarification to two additional supporting messages, raised the conversation cap from three to five, and specified the value proposition each support reply should communicate.
 
 **How to apply:** Keep the post-link message wording and conversational instructions in the editable prompt. Enforce only the generic limits in code: no more than five replies total and no more than two after the first Boundlus-link reply. Do not restrict follow-ups to questions about Boundlus.
 
