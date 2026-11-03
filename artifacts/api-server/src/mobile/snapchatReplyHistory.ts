@@ -91,6 +91,47 @@ export function exportSnapchatReplyHistory(slotId: string): string {
   ].join("\n")).join("\n");
 }
 
+export function exportAllSnapchatReplyHistory(): string {
+  const entries = readEntries();
+  if (!entries.length) return "No Snapchat reply history has been recorded.\n";
+
+  const groups = new Map<string, SnapchatReplyHistoryEntry[]>();
+  for (const entry of entries) {
+    const key = `${entry.serial}\u0000${entry.slotId}`;
+    const group = groups.get(key) ?? [];
+    group.push(entry);
+    groups.set(key, group);
+  }
+
+  return [...groups.values()].map(slotEntries => {
+    const first = slotEntries[0];
+    return [
+      `Device: ${first.serial}`,
+      `Account slot: @${first.username}`,
+      "",
+      exportEntries(slotEntries),
+    ].join("\n");
+  }).join("\n\n");
+}
+
+function exportEntries(entries: SnapchatReplyHistoryEntry[]): string {
+  return entries.map(entry => [
+    `Contact: ${normalizeContactKey(entry.username) === normalizeContactKey(entry.displayName)
+      ? entry.displayName
+      : `@${entry.username} (${entry.displayName})`}`,
+    `Reply number: ${entry.replyNumber}`,
+    `Boundlus link sent: ${containsSnapchatBoundlusLink(entry.sentText) ? "Yes" : "No"}`,
+    `Sent at: ${entry.sentAt}`,
+    "Captured conversation:",
+    ...entry.capturedMessages.map(message => `  ${message}`),
+    "GPT-6 Luna sent:",
+    `  ${entry.sentText}`,
+    "",
+    "------------------------------------------------------------",
+    "",
+  ].join("\n")).join("\n");
+}
+
 export function clearSnapchatReplyHistory(slotId: string): void {
   const remaining = readEntries().filter(entry => entry.slotId !== slotId);
   const filePath = historyPath();

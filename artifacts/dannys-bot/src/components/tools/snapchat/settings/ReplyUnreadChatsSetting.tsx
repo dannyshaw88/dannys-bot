@@ -67,6 +67,28 @@ export function ReplyUnreadChatsSetting({
             type="button"
             variant="outline"
             size="sm"
+            disabled={loading}
+            onClick={async () => {
+              const response = await fetch("/api/mobile/snapchat/reply-history");
+              if (!response.ok) {
+                window.alert("Could not download all Snapchat reply history.");
+                return;
+              }
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "snapchat-reply-history-all.txt";
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            Download All
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
             disabled={loading || !phoneSerial}
             onClick={async () => {
               if (!phoneSerial || !window.confirm("Clear the saved reply history for this Snapchat slot?")) return;

@@ -12,7 +12,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { WebSocketServer } from "ws";
 import * as android from "../mobile/androidManager";
 import { getDebugScreenshotFolderName } from "../mobile/debugScreenshotPaths";
-import { clearSnapchatReplyHistory, exportSnapchatReplyHistory } from "../mobile/snapchatReplyHistory";
+import {
+  clearSnapchatReplyHistory,
+  exportAllSnapchatReplyHistory,
+  exportSnapchatReplyHistory,
+} from "../mobile/snapchatReplyHistory";
 import * as proxyRelay from "../mobile/proxyRelay";
 import * as sessionRecorder from "../mobile/sessionRecorder";
 import { getDeviceLabel } from "./usb-phones";
@@ -2821,6 +2825,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     dismissDirection: z.enum(["auto", "left", "up"]).default("auto"),
     // Snapchat controls are composed from per-setting modules.
     snapchatTools: snapchatToolsSettingsSchema,
+  });
+  app.get("/api/mobile/snapchat/reply-history", (_req: Request, res: Response) => {
+    return res.type("text/plain").attachment("snapchat-reply-history-all.txt")
+      .send(exportAllSnapchatReplyHistory());
   });
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/snapchat/reply-history", (req: Request, res: Response) => {
     const serial = String(req.params.serial);
