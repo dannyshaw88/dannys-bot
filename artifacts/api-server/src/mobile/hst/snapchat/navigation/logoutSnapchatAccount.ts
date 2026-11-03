@@ -130,11 +130,15 @@ export function logoutConfirmationButton(state: UiState): UiNode | undefined {
 
 export async function logoutSnapchatAccount(
   context: SnapchatContext,
+  confirmedProfileState?: UiState,
 ): Promise<boolean> {
-  let state = await dump(context.serial);
+  let state = confirmedProfileState ?? await dump(context.serial);
   if (!state.nodes.some(node => shortResourceId(node) === "profile-username")) {
     context.onLog("Snapchat account switch: profile identity screen was not confirmed; not opening Settings.");
     return false;
+  }
+  if (confirmedProfileState) {
+    context.onLog("Snapchat account switch: reusing the just-confirmed profile screen to open Settings without another UI dump.");
   }
 
   const gear = state.nodes.find(node =>
@@ -147,27 +151,9 @@ export async function logoutSnapchatAccount(
   context.onLog(`Snapchat account switch: opening profile Settings at (${center(gear).x}, ${center(gear).y}).`);
   if (!await tapNode(context, gear, "open Snapchat profile settings", 500, true)) return false;
 
-  context.onLog("Snapchat account switch: Settings tap sent; waiting up to 10 seconds for the Settings page.");
-  let settingsState = await waitFor(context, isSettingsPage, 10_000);
-  if (!settingsState && !context.isAborted()) {
-    state = await dump(context.serial);
-    const stillOnProfile = state.nodes.some(node => shortResourceId(node) === "profile-username");
-    const retryGear = state.nodes.find(node =>
-      shortResourceId(node) === "unified_profile_icon_button_settings",
-    );
-    if (stillOnProfile && retryGear) {
-      context.onLog(
-        `Snapchat account switch: fresh screen is still the profile; retrying the live Settings gear once at (${center(retryGear).x}, ${center(retryGear).y}).`,
-      );
-      if (!await tapNode(context, retryGear, "retry opening Snapchat profile settings", 700, true)) return false;
-      context.onLog("Snapchat account switch: waiting up to 15 seconds for Settings after the single guarded retry.");
-      settingsState = await waitFor(context, isSettingsPage, 15_000);
-    }
-  }
-  if (context.isAborted()) return false;
-  state = settingsState ?? await dump(context.serial);
+  state = await waitFor(context, isSettingsPage, 10_000) ?? await dump(context.serial);
   if (!isSettingsPage(state)) {
-    context.onLog("Snapchat account switch: Settings page was not confirmed after the tap and any safe retry.");
+    context.onLog("Snapchat account switch: Settings page was not confirmed.");
     return false;
   }
 
