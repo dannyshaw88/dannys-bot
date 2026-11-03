@@ -72,11 +72,11 @@ Reply 4 should use the user's exact wording: “It’s a new social platform whe
 
 **How to apply:** Keep the claim and wording in the editable prompt. Do not append the generic Reply 5 invitation to this answer.
 
-**Snapchat Quick Add source:** Mention Quick Add only for explicit questions about where the contact was found or added. For identity questions such as “Who’s this?” or “Who are you?”, answer as Danielle without mentioning Quick Add; “Where are you from?” refers to Leeds.
+**Multi-part Snapchat messages:** Answer every direct question in a combined message, in order, even when the reply is longer than the usual 3–5 word limit. Danielle is 22, from Leeds, and single. Include Quick Add only if the message separately asks where the contact was found or added.
 
-**Why:** The user clarified that “where have you added me from?” is a source question, while “who’s this?” is a separate identity question and must not trigger Quick Add.
+**Why:** A test combined identity, origin, age, relationship status, and Snapchat source questions; the reply omitted two requested answers.
 
-**How to apply:** Keep this distinction in the editable prompt. Answer explicit source questions briefly with “From Quick Add”; do not append it to identity or location replies.
+**How to apply:** Keep this rule in the editable prompt. For identity-only messages, do not mention Quick Add; if a separate source question is also present, answer it separately with “From Quick Add.” Answer “Where are you from?” with Leeds.
 
 **Unread list eligibility:** Treat the Snapchat Unread tab itself as the unread signal; do not require a row status to say “New Chat.” Keep “Received” and “Opened” rows eligible only when an actual readable message preview is present; skip “Delivered” rows because that indicates an outgoing message, not an incoming chat to answer. Never tap rows with an empty-chat/system placeholder or no readable message preview; status labels alone are not enough. Ignore pure Snap/photo/video rows, but allow a mixed media-and-chat row only through its separate chat-only right-side action icon. If a row passes the list check but opening it yields no readable conversation, exit it and continue to the next row rather than ending the tool.
 
