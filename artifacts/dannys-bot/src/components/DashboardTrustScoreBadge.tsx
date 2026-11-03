@@ -11,6 +11,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useQuery } from "@tanstack/react-query";
 import { getTrustLevels, type TrustLevelEntry } from "./TrustScoreBadge";
 import { getIconByKey } from "./trustscore/iconRegistry";
 import { CUSTOM_ICONS } from "./TrustScoreBadge";
@@ -108,19 +109,35 @@ export function DashboardSlotTrustScoreBadge({
   );
   const [open, setOpen] = useState(false);
   const [levels, setLevels] = useState<TrustLevelEntry[]>(() => getDashboardTrustLevels());
+  const { data: slotScoreDisplay, isLoading: slotScoreDisplayLoading } = useQuery<
+    { platform: "instagram" } | { platform: "snapchat"; label: string }
+  >({
+    queryKey: ["/api/mobile/devices", serial, "slots", slotIdx, "trust-score-display"],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/trust-score-display`,
+        { credentials: "include" },
+      );
+      if (!response.ok) throw new Error(`Slot TrustScore display request failed (${response.status})`);
+      return response.json();
+    },
+    enabled: Boolean(serial) && Number.isInteger(slotIdx) && slotIdx >= 0,
+    staleTime: 10_000,
+  });
 
   const btnRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
-  // Hydrate from the database when serial/slotIdx changes. Existing
-  // localStorage values are migrated by the shared loader.
+  // Instagram assignments use the TrustScore store. Snapchat's independent
+  // built-in label is supplied by the slot display endpoint above.
   useEffect(() => {
+    if (slotScoreDisplayLoading || slotScoreDisplay?.platform === "snapchat") return;
     let active = true;
     loadSlotTrustScore(serial, slotIdx).then(id => {
       if (active) setScoreId(id);
     });
     return () => { active = false; };
-  }, [serial, slotIdx]);
+  }, [serial, slotIdx, slotScoreDisplay?.platform, slotScoreDisplayLoading]);
 
   useEffect(() => {
     const key = slotTrustScoreKey(serial, slotIdx);
@@ -204,6 +221,29 @@ export function DashboardSlotTrustScoreBadge({
   };
 
   const current = levels.find(l => l.id === scoreId) ?? null;
+  if (slotScoreDisplay?.platform === "snapchat") {
+    return (
+      <div
+        className="inline-flex shrink-0 items-center justify-center rounded-md border border-yellow-500 bg-yellow-300 px-2 text-center text-[9px] font-extrabold tracking-wide text-black"
+        style={{ width, minWidth: width, maxWidth: width, height }}
+        title="Snapchat display-only label"
+        aria-label={`Snapchat TrustScore label: ${slotScoreDisplay.label}`}
+      >
+        {slotScoreDisplay.label}
+      </div>
+    );
+  }
+  if (slotScoreDisplayLoading) {
+    return (
+      <div
+        className="inline-flex shrink-0 items-center justify-center rounded-md border border-border text-[10px] text-muted-foreground"
+        style={{ width, minWidth: width, maxWidth: width, height }}
+        aria-label="Loading account TrustScore"
+      >
+        …
+      </div>
+    );
+  }
 
   return (
     <div className="relative inline-block shrink-0" onMouseDown={e => e.stopPropagation()}>

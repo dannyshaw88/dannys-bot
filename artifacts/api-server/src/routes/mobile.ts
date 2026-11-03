@@ -4271,6 +4271,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message ?? "Swipe test failed" }); }
   });
 
+  app.get("/api/mobile/devices/:serial/slots/:slotIdx/trust-score-display", (req: Request, res: Response) => {
+    const serial = p(req, "serial");
+    const slotIdx = parseInt(String(req.params.slotIdx), 10);
+    if (!Number.isInteger(slotIdx) || slotIdx < 0) {
+      res.status(400).json({ error: "Invalid slot index" });
+      return;
+    }
+    const slot = loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx];
+    if (!slot) {
+      res.status(404).json({ error: "Account slot not found" });
+      return;
+    }
+    if (slot.platform === "snapchat") {
+      const labels = ["WARMUP", "SLOW", "MODERATE", "SUPER", "GOD"] as const;
+      const label = labels.includes(slot.snapchatTrustScoreLabel as typeof labels[number])
+        ? slot.snapchatTrustScoreLabel
+        : "WARMUP";
+      res.json({ platform: "snapchat", label });
+      return;
+    }
+    res.json({ platform: "instagram" });
+  });
+
   // ── Per-slot trust score ────────────────────────────────────────────────────
   // Trust scores used to live only in browser localStorage, so navigating away
   // from Phone Farm (or using another browser) made the badge appear to reset.
