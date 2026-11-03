@@ -5,7 +5,7 @@ description: Keep each Snapchat tool, its settings, and its navigation flow isol
 
 Each Snapchat tool, its settings, and each navigation flow belongs in its own dedicated module. Keep shared code limited to low-level utilities and explicit dispatch. For Upload a Snap, tap Memories directly when already on Camera; from another screen, tap the live `ngs_camera_icon_container` first, wait for Camera, then tap Memories.
 
-For Upload a Snap, do not abort solely because a resource-ID check fails when the user reports a control is visibly present. Use the requested screen-relative tap and keep the flow moving. On Send To, dismiss the optional Public Story notice with its Okay button when shown, then tap the bottom-right Send chevron whether the notice appeared or not; press Android Back twice only after that tap.
+For Upload a Snap, do not abort solely because a resource-ID check fails when the user reports a control is visibly present. Use the requested screen-relative tap and keep the flow moving. On Send To, dismiss the optional Public Story notice with its Okay button when shown, then tap the bottom-right Send chevron whether the notice appeared or not; press Android Back three times only after that tap.
 
 After selecting a Camera Roll image, expand the editor's More tools, identify the Crop control by its crop-corners shape when it has no useful label, tap Zoom to fill, and confirm with Finish before opening Send To. Prefer My Story - Public; if it is unavailable, select My Story - Friends Only.
 
@@ -29,9 +29,9 @@ For Snapchat switching, always refresh the Camera UI immediately before tapping 
 
 **How to apply:** Put action behavior only in that tool's module, settings schema and UI in that setting's own modules, and each navigation flow in its own module. Do not route an edit for one tool through another tool's flow. Keep Snapchat account reconciliation before tool dispatch; never log out a matching account, and never use credentials or an unverified carousel row. Treat Upload a Snap success as normal tool completion; reserve early exits for failure or abort, and always run cycle cleanup when not aborted. For Upload a Snap, if the live Camera shutter and Memories icon are both present, tap Memories directly without touching the bottom Camera tab. Otherwise tap the clickable `ngs_camera_icon_container`, wait for both controls, then tap the live `ngs_memories_icon`/“Memories” node left of and vertically aligned with the shutter. Do not search for a generic “Camera” label. At the final Send To step, use the visual screen-relative Okay and Send tap locations when accessibility nodes are missing, allow time for each transition, and never press Back before the Send chevron. The user's Tab exploration was only for the Camera Add Friends icon; friend-list Add actions remain direct live-button taps.
 
-**Why:** A device log showed the two post-send Android Back presses were only about half a second apart, after which Snapchat was still on the gallery surface when the next tool began.
+**Why:** A device log showed that two post-send Android Back presses still left Snapchat on a surface where the next tool could not find Chat or restore Camera.
 
-**How to apply:** After Send, allow the transition to settle, pause between the two required Back presses, and allow the final navigation to settle before cleaning up the staged phone image or dispatching the next tool.
+**How to apply:** After Send, allow the transition to settle, pause between all three Back presses, and allow the final navigation to settle before cleaning up the staged phone image or dispatching the next tool.
 
 **Why:** The user specified a required crop-to-fill sequence after gallery selection and a Friends Only fallback when Public is not offered.
 

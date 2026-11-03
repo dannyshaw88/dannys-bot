@@ -159,15 +159,15 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
     );
     await context.sleep(3_000, "exact");
     context.onLog(`Upload a Snap: tapped Send for "${fileName}" to ${selectedAudience}.`);
-    context.onLog("Upload a Snap: allowing Send to settle, then pressing Android Back twice with a pause between presses.");
-    for (let press = 1; press <= 2; press++) {
+    context.onLog("Upload a Snap: allowing Send to settle, then pressing Android Back three times with pauses between presses.");
+    for (let press = 1; press <= 3; press++) {
       try {
         await android.keyevent(context.serial, 4);
-        context.onLog(`Upload a Snap: Android Back press ${press}/2 sent.`);
+        context.onLog(`Upload a Snap: Android Back press ${press}/3 sent.`);
       } catch (error) {
-        context.onLog(`Upload a Snap: Android Back press ${press}/2 failed: ${error instanceof Error ? error.message : "unknown error"}.`);
+        context.onLog(`Upload a Snap: Android Back press ${press}/3 failed: ${error instanceof Error ? error.message : "unknown error"}.`);
       }
-      if (press < 2) {
+      if (press < 3) {
         await context.sleep(2_500, "exact");
       } else {
         await context.sleep(2_000, "exact");
