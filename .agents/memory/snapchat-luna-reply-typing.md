@@ -54,11 +54,17 @@ When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB 
 
 **Post-link supporting replies:** Allow up to two supporting replies after the Boundlus link, for a maximum of five replies when the link is reply 3. The editable prompt defines the two supporting messages; each is generated from the conversation context.
 
-Reply 4 should use the user's exact concise wording: “It’s a new social platform where people get paid for uploading content, add me on it.” Reply 5 should be a distinct, natural supporting message that explains the same value and invites the contact to add the sender.
+Reply 4 should use the user's exact wording: “It’s a new social platform where people get paid for uploading content, add me on it.” Here, “it” refers to Boundlus in the same sentence. Reply 5 should be distinct and natural.
 
-**Why:** The user specified the value proposition for both post-link replies, then clarified that Reply 4 must use this shorter wording rather than a formal “create an account and connect with me” sentence.
+**Why:** The user specified this exact concise Boundlus invitation after rejecting a longer, more formal signup sentence.
 
 **How to apply:** Keep these wordings in the editable prompt. Do not hardcode them in software. Enforce only generic limits in code: no more than five replies total and no more than two after the first Boundlus-link reply. Do not restrict follow-ups to questions about Boundlus.
+
+**Snapchat Quick Add source:** If asked where a contact was found or added from on Snapchat, answer “From Quick Add.” Either person may have initiated the add; do not assume who added whom or confuse the question with Danielle's home city in Leeds.
+
+**Why:** The user clarified that test messages asking “where have you added me from?” refer to Snapchat's Quick Add source, not the persona's location or the separate Boundlus invitation.
+
+**How to apply:** Keep this context in the editable prompt and answer briefly, e.g. “From Quick Add.” Do not invent a different source.
 
 **Unread list eligibility:** Treat the Snapchat Unread tab itself as the unread signal; do not require a row status to say “New Chat.” Keep “Received” and “Opened” rows eligible only when an actual readable message preview is present; skip “Delivered” rows because that indicates an outgoing message, not an incoming chat to answer. Never tap rows with an empty-chat/system placeholder or no readable message preview; status labels alone are not enough. Ignore pure Snap/photo/video rows, but allow a mixed media-and-chat row only through its separate chat-only right-side action icon. If a row passes the list check but opening it yields no readable conversation, exit it and continue to the next row rather than ending the tool.
 
