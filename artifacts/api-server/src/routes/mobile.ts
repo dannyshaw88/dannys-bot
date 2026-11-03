@@ -7349,7 +7349,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
             snapchatAddFriends: 0,
             snapchatAcceptFriends: 0,
             snapchatReplies: 0,
+            snapchatUploads: 0,
             snapchatSpotlights: 0,
+            snapchatSpotlightLikes: 0,
             snapchatSnaps: 0,
           };
           try {
@@ -7368,7 +7370,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   snapchat_add_friends: "snapchatAddFriends",
                   snapchat_accept_friends: "snapchatAcceptFriends",
                   snapchat_replies: "snapchatReplies",
+                  snapchat_uploads: "snapchatUploads",
                   snapchat_spotlights: "snapchatSpotlights",
+                  snapchat_spotlight_likes: "snapchatSpotlightLikes",
                   snapchat_snaps: "snapchatSnaps",
                 } as const)[key];
                 snapchatMetricCounts[metricKey] += count;

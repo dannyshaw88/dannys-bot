@@ -159,6 +159,7 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
     );
     await context.sleep(3_000, "exact");
     context.onLog(`Upload a Snap: tapped Send for "${fileName}" to ${selectedAudience}.`);
+    context.onMetric?.("snapchat_uploads");
     context.onLog("Upload a Snap: allowing Send to settle, then pressing Android Back three times with pauses between presses.");
     for (let press = 1; press <= 3; press++) {
       try {

@@ -34,6 +34,7 @@ export async function runViewSpotlights(context: SnapchatContext): Promise<void>
         const y = Math.round(favorite.bounds[1] + (favorite.bounds[3] - favorite.bounds[1]) * 0.37);
         await android.tap(context.serial, x, y, "bot", "Snapchat: like current Spotlight media", "automation");
         await context.sleep(500);
+        context.onMetric?.("snapchat_spotlight_likes");
         context.onLog(`View Spotlights: liked current media (roll ${roll.toFixed(1)} < ${likeChance}%).`);
       }
     } else {

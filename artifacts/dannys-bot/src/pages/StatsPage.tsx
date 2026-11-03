@@ -175,7 +175,9 @@ const SNAPCHAT_FARM_STAT_LABELS: typeof FARM_STAT_LABELS = [
   { key: "snapchat_add_friends", label: "Add Friends", icon: <UserPlus className="w-3 h-3" />, color: "text-blue-500" },
   { key: "snapchat_accept_friends", label: "Accept Friends", icon: <UserPlus className="w-3 h-3" />, color: "text-green-500" },
   { key: "snapchat_replies", label: "Chat Replies", icon: <Mail className="w-3 h-3" />, color: "text-violet-500" },
+  { key: "snapchat_uploads", label: "Snaps Uploaded", icon: <ImagePlus className="w-3 h-3" />, color: "text-yellow-500" },
   { key: "snapchat_spotlights", label: "Spotlights", icon: <Eye className="w-3 h-3" />, color: "text-purple-500", showEye: true },
+  { key: "snapchat_spotlight_likes", label: "Spotlight Likes", icon: <Heart className="w-3 h-3" />, color: "text-rose-500" },
   { key: "snapchat_snaps", label: "Snaps Viewed", icon: <BookOpen className="w-3 h-3" />, color: "text-indigo-500", showEye: true },
 ];
 
@@ -203,7 +205,9 @@ const SNAPCHAT_FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   snapchat_add_friends: 110,
   snapchat_accept_friends: 125,
   snapchat_replies: 100,
+  snapchat_uploads: 115,
   snapchat_spotlights: 100,
+  snapchat_spotlight_likes: 120,
   snapchat_snaps: 105,
 };
 
@@ -659,8 +663,10 @@ export function StatsPage() {
   });
 
   // ── Metrics tab state ────────────────────────────────────────────────────────
-  const [accountPlatform, setAccountPlatform] = useState<"instagram" | "snapchat">(() =>
+  const [accountPlatform, setAccountPlatform] = usePersistentSetting<"instagram" | "snapchat">(
+    "stats:accountPlatform",
     new URLSearchParams(window.location.search).get("platform") === "snapchat" ? "snapchat" : "instagram",
+    (stored, fallback) => stored === "snapchat" || stored === "instagram" ? stored : fallback,
   );
   const [activeTab, setActiveTab] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -895,26 +901,24 @@ export function StatsPage() {
       <div className="mb-3">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Automation Stats</h1>
         <p className="text-muted-foreground mt-1">Daily and lifetime performance metrics for all accounts.</p>
-        <div className="flex gap-2 mt-4" role="group" aria-label="Account platform">
+        <div className="flex gap-2 mt-4" role="tablist" aria-label="Statistics platform">
           {(["instagram", "snapchat"] as const).map(platform => (
             <button
               key={platform}
               type="button"
               onClick={() => setAccountPlatform(platform)}
-              aria-pressed={accountPlatform === platform}
+              role="tab"
+              aria-selected={accountPlatform === platform}
               aria-label={platform === "instagram" ? "Instagram accounts" : "Snapchat accounts"}
               title={platform === "instagram" ? "Instagram accounts" : "Snapchat accounts"}
-              className={`inline-flex h-10 w-10 items-center justify-center rounded-md border transition-colors ${
-                accountPlatform === platform
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background text-muted-foreground hover:text-foreground"
-              }`}
+              className="group relative inline-flex h-9 w-9 items-center justify-center border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               {platform === "instagram" ? (
-                <FaInstagram className="h-5 w-5" aria-hidden="true" />
+                <FaInstagram className={`h-5 w-5 transition-colors ${accountPlatform === platform ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} aria-hidden="true" />
               ) : (
-                <FaSnapchatGhost className="h-5 w-5 rounded-full bg-[#FFFC00] p-0.5 text-black" aria-hidden="true" />
+                <FaSnapchatGhost className={`h-5 w-5 rounded-full bg-[#FFFC00] p-0.5 transition-opacity ${accountPlatform === platform ? "text-black" : "text-black opacity-60 group-hover:opacity-100"}`} aria-hidden="true" />
               )}
+              <span className={`absolute -bottom-1 h-0.5 w-5 rounded-full bg-primary transition-opacity ${accountPlatform === platform ? "opacity-100" : "opacity-0"}`} />
             </button>
           ))}
         </div>

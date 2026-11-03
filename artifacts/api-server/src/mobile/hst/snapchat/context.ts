@@ -52,7 +52,14 @@ export type SnapchatContext = {
   onLog: (message: string) => void;
   onProgress: () => void;
   onMetric?: (
-    key: "snapchat_add_friends" | "snapchat_accept_friends" | "snapchat_replies" | "snapchat_spotlights" | "snapchat_snaps",
+    key:
+      | "snapchat_add_friends"
+      | "snapchat_accept_friends"
+      | "snapchat_replies"
+      | "snapchat_uploads"
+      | "snapchat_spotlights"
+      | "snapchat_spotlight_likes"
+      | "snapchat_snaps",
     count?: number,
   ) => void;
   isAborted: () => boolean;
