@@ -133,7 +133,7 @@ export async function selectSnapchatAccountFromCarousel(
   };
 
   for (const direction of directions) {
-    for (let swipe = 0; swipe < 4 && !context.isAborted(); swipe++) {
+    for (let swipe = 0; swipe < 5 && !context.isAborted(); swipe++) {
       const selection = await selectVisibleTarget();
       if (selection === "selected") return true;
       if (selection === "failed") return false;
@@ -150,7 +150,7 @@ export async function selectSnapchatAccountFromCarousel(
         context.onLog("Snapchat account switch: username is temporarily unreadable; continuing the directional search at the last verified row.");
       }
       context.onLog(
-        `Snapchat account switch: visible username @${selectedUsername} does not match slot target @${expectedUsername}; swiping ${direction.label} (${swipe + 1}/4) to search saved profiles.`,
+        `Snapchat account switch: visible username @${selectedUsername} does not match slot target @${expectedUsername}; swiping ${direction.label} (${swipe + 1}/5) to search saved profiles.`,
       );
       await android.swipe(context.serial, direction.fromX, y, direction.toX, y, 450, false);
       await context.sleep(600, "exact");
@@ -167,7 +167,7 @@ export async function selectSnapchatAccountFromCarousel(
   if (finalSelection === "failed") return false;
 
   context.onLog(
-    `Snapchat account switch: checked four right swipes and four left swipes; @${expectedUsername} was not found in the saved-account carousel.`,
+    `Snapchat account switch: checked five right swipes and five left swipes; @${expectedUsername} was not found in the saved-account carousel.`,
   );
   return false;
 }
