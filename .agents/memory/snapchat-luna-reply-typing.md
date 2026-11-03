@@ -54,9 +54,9 @@ When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB 
 
 **Post-link supporting replies:** Allow up to two supporting replies after the Boundlus link, for a maximum of five replies when the link is reply 3. The editable prompt defines the two supporting messages; each is generated from the conversation context.
 
-Reply 4 should use the user's exact wording: “It’s a new social platform where people get paid for uploading content, add me on it.” Here, “it” refers to Boundlus in the same sentence. Reply 5 should be distinct and natural.
+Reply 4 should use the user's exact wording: “It’s a new social platform where people get paid for uploading content, add me on it.” Here, “it” refers to Boundlus in the same sentence. Reply 5 should first address the newest message, then use a distinct supporting message: “Just make an account and add me on it. You don’t make money on here, but on there you do.” Here, “here” means Snapchat and “it/on there” means Boundlus.
 
-**Why:** The user specified this exact concise Boundlus invitation after rejecting a longer, more formal signup sentence.
+**Why:** The user wants Reply 5 to respond to the contact and add a new reason to join, not repeat Reply 4's description of Boundlus.
 
 **How to apply:** Keep these wordings in the editable prompt. Do not hardcode them in software. Enforce only generic limits in code: no more than five replies total and no more than two after the first Boundlus-link reply. Do not restrict follow-ups to questions about Boundlus.
 
