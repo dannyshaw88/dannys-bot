@@ -86,9 +86,6 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
               <MessageCircle className="h-6 w-6 text-cyan-500" />
               <h1 className="text-2xl font-bold tracking-tight">Prompt Test</h1>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              A text-only Snapchat simulation using Luna’s real reply generator. It never opens a phone or sends a message.
-            </p>
           </div>
           <Button variant="outline" onClick={resetConversation} disabled={!messages.length && !input}>
             <RotateCcw className="mr-2 h-4 w-4" />
@@ -103,9 +100,6 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
                 <Sparkles className="h-4 w-4 text-cyan-500" />
                 Test prompt
               </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Paste or edit the prompt you want Luna to follow. It is remembered in this browser.
-              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <label className="block text-xs font-semibold text-foreground" htmlFor="luna-test-prompt">
@@ -123,31 +117,25 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
                 <span>Requires a ChatGPT API key saved in Settings → Security.</span>
                 <span>{prompt.length.toLocaleString()} / 12,000</span>
               </div>
-              <div className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-950">
-                The prompt is remembered in this browser. Test messages stay on this page and are not written to Aura Farming’s live reply-history file.
-              </div>
             </CardContent>
           </Card>
 
-          <Card className="mx-auto flex min-h-[68vh] w-full max-w-[440px] flex-col overflow-hidden rounded-[2rem] border-[8px] border-slate-900 bg-white shadow-xl">
+          <Card className="mx-auto flex h-[48.62vh] min-h-0 w-full max-w-[440px] flex-col overflow-hidden rounded-[2rem] border-[8px] border-slate-900 bg-white shadow-xl">
             <div className="flex h-6 shrink-0 items-center justify-between bg-slate-900 px-4 text-[10px] font-medium tracking-wide text-white">
               <span>SNAPCHAT · SIMULATED</span>
               <span>TEST ONLY</span>
             </div>
-            <CardHeader className="border-b bg-[#fffc00] pb-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">Chat with {peer || "Test user"}</CardTitle>
-                  <p className="mt-1 text-xs text-slate-700">Mock conversation · no phone connected</p>
-                </div>
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CardHeader className="border-b bg-[#fffc00] px-3 py-2">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <CardTitle className="min-w-0 truncate text-sm sm:text-base">Chat with {peer || "Test user"}</CardTitle>
+                <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                   Contact
                   <input
                     value={peer}
                     onChange={event => setPeer(event.target.value)}
                     disabled={loading || messages.length > 0}
                     maxLength={80}
-                    className="h-8 w-32 rounded-md border border-yellow-700/30 bg-white/80 px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-8 w-24 rounded-md border border-yellow-700/30 bg-white/80 px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-28"
                   />
                 </label>
               </div>
