@@ -66,6 +66,12 @@ Reply 4 should use the user's exact wording: “It’s a new social platform whe
 
 **How to apply:** Keep this as an editable-prompt route. Do not promise to provide media. Sexual propositions without a media request continue to use the normal link reply.
 
+**Boundlus earnings questions:** When asked how much money can be made on Boundlus, answer with the user's specified wording: earnings depend on uploads and views; there is no algorithm restriction; adding thousands of people means more money. This direct answer replaces generic Reply 4/5 copy for that turn.
+
+**Why:** The user specified this response to answer “how much?” questions instead of repeating the generic platform invitation.
+
+**How to apply:** Keep the claim and wording in the editable prompt. Do not append the generic Reply 5 invitation to this answer.
+
 **Snapchat Quick Add source:** Mention Quick Add only for explicit questions about where the contact was found or added. For identity questions such as “Who’s this?” or “Who are you?”, answer as Danielle without mentioning Quick Add; “Where are you from?” refers to Leeds.
 
 **Why:** The user clarified that “where have you added me from?” is a source question, while “who’s this?” is a separate identity question and must not trigger Quick Add.
