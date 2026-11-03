@@ -66,6 +66,12 @@ Reply 4 should use the user's exact wording: “It’s a new social platform whe
 
 **How to apply:** Keep this as an editable-prompt route. Do not promise to provide media. Sexual propositions without a media request continue to use the normal link reply.
 
+**Boundlus subscribers-only content:** Boundlus has a subscribers-only tab where creators can sell nude content. If asked whether the platform offers it, answer yes; distinguish that platform feature from whether Luna personally sells or sends such content.
+
+**Why:** The user corrected a test response that denied the feature and clarified that it exists on Boundlus.
+
+**How to apply:** Use the platform-feature answer for questions about the tab. Use the media-request route only when the contact asks for Luna's own pictures or videos.
+
 **Boundlus earnings questions:** Distinguish Danielle's personal earnings from potential earnings. If asked how much she has made, say “£15, but I’ve only been on it for a few days.” If asked how much someone could make in general, use the specified answer about uploads, views, no algorithm restriction, and adding thousands of people. These answers replace generic Reply 4/5 copy for that turn.
 
 **Why:** The user specified separate answers for personal earnings and general earning potential after the prompt misread “how much have you made?” as a potential-earnings question.
