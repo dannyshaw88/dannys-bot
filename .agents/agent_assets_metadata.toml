@@ -267,3 +267,17 @@ mtime_ms = 1793700928240
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/d62cd06e-12e5-4f7d-a354-7b4b2d2fccd9/2fd8e760-5bc3-4045-aecb-adbe564cda17"
 storage_version_token = "1793700936957922"
 content_type = "text/plain"
+
+[[outputs]]
+id = "PBloaIgoVyAe3-8NidxAu"
+uri = "file://generated-artifacts/snapchat-luna-reply-prompt-corrected.txt"
+type = "text"
+title = "Corrected Snapchat reply prompt"
+description = "Replacement prompt with a mandatory full Reply 3 example and the Reply 4–5 support rules."
+logical_id = "bb32453d-00ed-434a-ac79-e58b4763d985"
+content_hash = "sha256:5ece768cfc5e18540b33c070c16263ee4dcda26a5ac01e1b2a08939ac0a94513"
+size = 5846
+mtime_ms = 1793702511856
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/bb32453d-00ed-434a-ac79-e58b4763d985/04af6f86-93ea-43d9-aff5-bb1948aaf978"
+storage_version_token = "1793702522537984"
+content_type = "text/plain"
