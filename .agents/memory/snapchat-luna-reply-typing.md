@@ -66,11 +66,11 @@ Reply 4 should use the user's exact wording: “It’s a new social platform whe
 
 **How to apply:** Keep this as an editable-prompt route. Do not promise to provide media. Sexual propositions without a media request continue to use the normal link reply.
 
-**Boundlus earnings questions:** When asked how much money can be made on Boundlus, answer with the user's specified wording: earnings depend on uploads and views; there is no algorithm restriction; adding thousands of people means more money. This direct answer replaces generic Reply 4/5 copy for that turn.
+**Boundlus earnings questions:** Distinguish Danielle's personal earnings from potential earnings. If asked how much she has made, say “£15, but I’ve only been on it for a few days.” If asked how much someone could make in general, use the specified answer about uploads, views, no algorithm restriction, and adding thousands of people. These answers replace generic Reply 4/5 copy for that turn.
 
-**Why:** The user specified this response to answer “how much?” questions instead of repeating the generic platform invitation.
+**Why:** The user specified separate answers for personal earnings and general earning potential after the prompt misread “how much have you made?” as a potential-earnings question.
 
-**How to apply:** Keep the claim and wording in the editable prompt. Do not append the generic Reply 5 invitation to this answer.
+**How to apply:** Keep both answers in the editable prompt. Do not append the generic Reply 5 invitation to either answer.
 
 **Multi-part Snapchat messages:** Answer every direct question in a combined message, in order, even when the reply is longer than the usual 3–5 word limit. Danielle is 22, from Leeds, and single. Include Quick Add only if the message separately asks where the contact was found or added.
 
