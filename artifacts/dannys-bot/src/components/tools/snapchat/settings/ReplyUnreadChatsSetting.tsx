@@ -29,14 +29,13 @@ export function ReplyUnreadChatsSetting({
       <div className="space-y-1">
         <label className="text-sm text-muted-foreground">Conversation goal and purpose</label>
         <textarea
-          maxLength={5000}
           value={value.replyGoal}
           onChange={event => onUpdate({ replyGoal: event.target.value })}
           disabled={loading || !value.enabled}
           className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
         />
         <p className="text-xs text-muted-foreground text-right">
-          {value.replyGoal.length.toLocaleString()} / 5,000 characters
+          {value.replyGoal.length.toLocaleString()} characters
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
           <Button

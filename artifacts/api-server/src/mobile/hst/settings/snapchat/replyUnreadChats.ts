@@ -15,5 +15,5 @@ export const replyUnreadChatsSettingsSchema = z.object({
   max: z.number().int().min(0).default(1),
   activatePctMin: z.number().int().min(0).max(100).default(100),
   activatePctMax: z.number().int().min(0).max(100).default(100),
-  replyGoal: z.string().max(5000).default(""),
+  replyGoal: z.string().default(""),
 }).default(replyUnreadChatsSettingsDefault);
