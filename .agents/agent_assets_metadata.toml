@@ -239,3 +239,17 @@ mtime_ms = 1793578333260
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/05724b04-8b32-4a84-ac12-6a49f8650843/af21de06-13a0-4f98-9886-fcfe6c21e741"
 storage_version_token = "1793578374023939"
 content_type = "text/plain"
+
+[[outputs]]
+id = "XduEq2VvbuT4K5dKXrE_2"
+uri = "file://generated-artifacts/Boundlus-post-link-support.txt"
+type = "text"
+title = "Updated Boundlus reply 4–5 prompt"
+description = "Replacement POST-LINK SUPPORT instructions for the editable Snapchat reply goal."
+logical_id = "9f5419d7-1bb1-40d8-935d-4ab2a46f643f"
+content_hash = "sha256:6a7105e459bcb27e36df0cddc4925fb896a9503db6d2ecec1275a880ff5d7c08"
+size = 1037
+mtime_ms = 1793699441388
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/9f5419d7-1bb1-40d8-935d-4ab2a46f643f/f24fc561-6ce6-4274-a0c0-ba7df2772619"
+storage_version_token = "1793699449166606"
+content_type = "text/plain"
