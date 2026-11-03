@@ -60,11 +60,11 @@ Reply 4 should use the user's exact wording: “It’s a new social platform whe
 
 **How to apply:** Keep these wordings in the editable prompt. Do not hardcode them in software. Enforce only generic limits in code: no more than five replies total and no more than two after the first Boundlus-link reply. Do not restrict follow-ups to questions about Boundlus.
 
-**Snapchat Quick Add source:** If asked where a contact was found or added from on Snapchat, answer “From Quick Add.” Either person may have initiated the add; do not assume who added whom or confuse the question with Danielle's home city in Leeds.
+**Snapchat Quick Add source:** Mention Quick Add only for explicit questions about where the contact was found or added. For identity questions such as “Who’s this?” or “Who are you?”, answer as Danielle without mentioning Quick Add; “Where are you from?” refers to Leeds.
 
-**Why:** The user clarified that test messages asking “where have you added me from?” refer to Snapchat's Quick Add source, not the persona's location or the separate Boundlus invitation.
+**Why:** The user clarified that “where have you added me from?” is a source question, while “who’s this?” is a separate identity question and must not trigger Quick Add.
 
-**How to apply:** Keep this context in the editable prompt and answer briefly, e.g. “From Quick Add.” Do not invent a different source.
+**How to apply:** Keep this distinction in the editable prompt. Answer explicit source questions briefly with “From Quick Add”; do not append it to identity or location replies.
 
 **Unread list eligibility:** Treat the Snapchat Unread tab itself as the unread signal; do not require a row status to say “New Chat.” Keep “Received” and “Opened” rows eligible only when an actual readable message preview is present; skip “Delivered” rows because that indicates an outgoing message, not an incoming chat to answer. Never tap rows with an empty-chat/system placeholder or no readable message preview; status labels alone are not enough. Ignore pure Snap/photo/video rows, but allow a mixed media-and-chat row only through its separate chat-only right-side action icon. If a row passes the list check but opening it yields no readable conversation, exit it and continue to the next row rather than ending the tool.
 
