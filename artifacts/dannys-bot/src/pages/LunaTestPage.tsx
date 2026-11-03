@@ -120,7 +120,7 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
             </CardContent>
           </Card>
 
-          <Card className="mx-auto flex h-[48.62vh] min-h-0 w-full max-w-[440px] flex-col overflow-hidden rounded-[2rem] border-[8px] border-slate-900 bg-white shadow-xl">
+          <Card className="mx-auto flex h-[53.482vh] min-h-0 w-full max-w-[440px] flex-col overflow-hidden rounded-[2rem] border-[8px] border-slate-900 bg-white shadow-xl">
             <div className="flex h-6 shrink-0 items-center justify-between bg-slate-900 px-4 text-[10px] font-medium tracking-wide text-white">
               <span>SNAPCHAT · SIMULATED</span>
               <span>TEST ONLY</span>
