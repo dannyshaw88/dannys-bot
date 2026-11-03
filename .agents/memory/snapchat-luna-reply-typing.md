@@ -54,11 +54,11 @@ When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB 
 
 **Post-link supporting replies:** Allow up to two supporting replies after the Boundlus link, for a maximum of five replies when the link is reply 3. The editable prompt defines the two supporting messages; each is generated from the conversation context.
 
-Each supporting reply must explain that Boundlus is a new social media platform that pays people for uploading content, then invite the contact to create an account and add/connect with the sender. Keep this wording in the editable prompt; do not hardcode it.
+Reply 4 should use the user's exact concise wording: “It’s a new social platform where people get paid for uploading content, add me on it.” Reply 5 should be a distinct, natural supporting message that explains the same value and invites the contact to add the sender.
 
-**Why:** The user changed the post-link behavior from one clarification to two additional supporting messages, raised the conversation cap from three to five, and specified the value proposition each support reply should communicate.
+**Why:** The user specified the value proposition for both post-link replies, then clarified that Reply 4 must use this shorter wording rather than a formal “create an account and connect with me” sentence.
 
-**How to apply:** Keep the post-link message wording and conversational instructions in the editable prompt. Enforce only the generic limits in code: no more than five replies total and no more than two after the first Boundlus-link reply. Do not restrict follow-ups to questions about Boundlus.
+**How to apply:** Keep these wordings in the editable prompt. Do not hardcode them in software. Enforce only generic limits in code: no more than five replies total and no more than two after the first Boundlus-link reply. Do not restrict follow-ups to questions about Boundlus.
 
 **Unread list eligibility:** Treat the Snapchat Unread tab itself as the unread signal; do not require a row status to say “New Chat.” Keep “Received” and “Opened” rows eligible only when an actual readable message preview is present; skip “Delivered” rows because that indicates an outgoing message, not an incoming chat to answer. Never tap rows with an empty-chat/system placeholder or no readable message preview; status labels alone are not enough. Ignore pure Snap/photo/video rows, but allow a mixed media-and-chat row only through its separate chat-only right-side action icon. If a row passes the list check but opening it yields no readable conversation, exit it and continue to the next row rather than ending the tool.
 
