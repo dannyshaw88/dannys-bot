@@ -253,3 +253,17 @@ mtime_ms = 1793699441388
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/9f5419d7-1bb1-40d8-935d-4ab2a46f643f/f24fc561-6ce6-4274-a0c0-ba7df2772619"
 storage_version_token = "1793699449166606"
 content_type = "text/plain"
+
+[[outputs]]
+id = "EbOUs9ceCvL3VvR1Tvr3a"
+uri = "file://generated-artifacts/Boundlus-reply-goal-full.txt"
+type = "text"
+title = "Full revised Snapchat reply prompt"
+description = "Complete editable goal with the revised Reply 4 and 5 Boundlus-support instructions."
+logical_id = "d62cd06e-12e5-4f7d-a354-7b4b2d2fccd9"
+content_hash = "sha256:d677e5b07b6eac160f20062a07becd53705d9c1df7858678aac38db6ad44d94b"
+size = 4874
+mtime_ms = 1793699711969
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/d62cd06e-12e5-4f7d-a354-7b4b2d2fccd9/ed1cbb6c-6264-4b0b-8d3d-a9a89d4540ba"
+storage_version_token = "1793699720274362"
+content_type = "text/plain"
