@@ -17,7 +17,7 @@ export function AddFriendsSetting({ value, loading, onUpdate }: AddFriendsSettin
       value={value}
       loading={loading}
       onUpdate={onUpdate}
-      childrenBelow={
+      children={
         <ActionDelayRange
           minSeconds={value.delayMinSeconds}
           maxSeconds={value.delayMaxSeconds}

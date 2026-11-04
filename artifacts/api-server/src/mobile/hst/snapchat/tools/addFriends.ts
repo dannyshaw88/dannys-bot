@@ -2,7 +2,7 @@ import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForSuggestions } from "../navigation/openAddFriends";
 import { scrollAddFriendsListOneSlot } from "../navigation/scrollAddFriendsListOneSlot";
-import { center, dump, nodeLabel, randomCount, randomSeconds, shortResourceId, tapNode } from "../runtime";
+import { center, dump, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
 
 export async function runAddFriends(context: SnapchatContext): Promise<boolean> {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
@@ -49,12 +49,12 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean> 
       break;
     }
     if (added > 0) {
-      const seconds = randomSeconds(
+      await waitBetweenActions(
+        context,
         context.tools.addFriends.delayMinSeconds,
         context.tools.addFriends.delayMaxSeconds,
+        "Add Friends",
       );
-      context.onLog(`Add Friends: waiting ${seconds}s between adds.`);
-      await context.sleep(seconds * 1000);
       if (context.isAborted()) break;
       state = await dump(context.serial);
       ({ addButtons, candidates } = findAddCandidates(state.nodes));

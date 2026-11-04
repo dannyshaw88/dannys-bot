@@ -2,7 +2,7 @@ import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForAccepts } from "../navigation/openAddFriends";
 import { scrollAcceptFriendsListOneSlot } from "../navigation/scrollAcceptFriendsListOneSlot";
-import { center, dump, findOccludingBanner, nodeLabel, randomCount, randomSeconds, shortResourceId, tapNode } from "../runtime";
+import { center, dump, findOccludingBanner, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
 
 export async function runAcceptFriends(context: SnapchatContext): Promise<boolean> {
   const requested = randomCount(context.tools.acceptFriends.min, context.tools.acceptFriends.max);
@@ -76,12 +76,12 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
   while (accepted < requested && !context.isAborted()) {
     if (pendingAcceptance) {
       const currentAcceptance = pendingAcceptance;
-      const seconds = randomSeconds(
+      await waitBetweenActions(
+        context,
         context.tools.acceptFriends.delayMinSeconds,
         context.tools.acceptFriends.delayMaxSeconds,
+        "Accept Friends",
       );
-      context.onLog(`Accept Friends: waiting ${seconds}s between accepts.`);
-      await context.sleep(seconds * 1000);
       if (context.isAborted()) break;
       state = await dump(context.serial);
       if (hasSnapchatChatComposer(state.nodes)) {

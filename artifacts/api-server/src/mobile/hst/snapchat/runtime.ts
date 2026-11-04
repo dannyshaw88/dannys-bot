@@ -112,6 +112,28 @@ export function randomSeconds(min: number, max: number): number {
   return low + Math.floor(Math.random() * (high - low + 1));
 }
 
+export function randomActionDelaySeconds(min: number, max: number): number {
+  const low = Math.max(1, Math.trunc(Math.min(min, max)));
+  const high = Math.max(low, Math.trunc(Math.max(min, max)));
+  return low + Math.floor(Math.random() * (high - low + 1));
+}
+
+export async function waitBetweenActions(
+  context: SnapchatContext,
+  minSeconds: number,
+  maxSeconds: number,
+  toolName: string,
+): Promise<void> {
+  let remainingMs = randomActionDelaySeconds(minSeconds, maxSeconds) * 1000;
+  context.onLog(`${toolName}: waiting ${remainingMs / 1000}s between actions.`);
+  const maxTimeoutMs = 2_147_000_000;
+  while (remainingMs > 0 && !context.isAborted()) {
+    const chunkMs = Math.min(remainingMs, maxTimeoutMs);
+    await context.sleep(chunkMs, "exact");
+    remainingMs -= chunkMs;
+  }
+}
+
 export function randomPercent(min: number, max: number): number {
   const low = Math.max(0, Math.min(100, Math.min(min, max)));
   const high = Math.max(low, Math.min(100, Math.max(min, max)));
