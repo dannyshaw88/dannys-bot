@@ -286,12 +286,54 @@ content_type = "text/plain"
 id = "FFK98bj9M1BC0U02IWAlB"
 uri = "file://artifacts/dannys-bot/public/snapchat-reply-goal-improved.txt"
 type = "text"
-title = "Improved Snapchat reply prompt"
-description = "A corrected Lisa Berry prompt with consistent identity details, complete answers to multi-question messages, clear Quick Add routing, and revised Reply 4/5 and media/sexual-message rules."
+title = "Danielle Mathers reply prompt"
+description = "Corrected prompt using Danielle Mathers’s provided profile: 22, Leeds, single, likes gaming and the gym, with the Boundlus URL www.boundlus.com/@daniellemathers. All reply-routing rules are retained."
 logical_id = "b7086c93-40e8-4805-9633-5c7cd99c4c04"
-content_hash = "sha256:c456a59bd0350b4085918bbb34b9786491e72a7d3d289d4c306bf0d496dc63a2"
-size = 9877
-mtime_ms = 1793751103174
-storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/b7086c93-40e8-4805-9633-5c7cd99c4c04/dd798059-7d00-4622-a03c-802888a29b45"
-storage_version_token = "1793751350097499"
+content_hash = "sha256:be712e7ca5c0295974d522c6d70312463f3bbb5f5ce25251c1999b337e4ef157"
+size = 10024
+mtime_ms = 1793751855716
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/b7086c93-40e8-4805-9633-5c7cd99c4c04/90e751dd-df60-4d9d-8a1d-f0bdf2e4556a"
+storage_version_token = "1793751861438415"
+content_type = "text/plain"
+
+[[outputs]]
+id = "KcvKH7coIuKY604kKANLM"
+uri = "file://artifacts/dannys-bot/public/snapchat-reply-goal-amy.txt"
+type = "text"
+title = "Amy Clemment reply prompt"
+description = "Amy’s prompt using the details provided: 22, Sheffield, loves lorries, trucks, and cars, with www.boundlus.com/@amyclement. Relationship status and personal earnings are not assumed."
+logical_id = "f5abae81-73bf-4046-9e76-10fb5581534e"
+content_hash = "sha256:6ccdd618479e2a9ac58f9c5b57afda981370633e4145b5c852e855a4f2f60c83"
+size = 10089
+mtime_ms = 1793751978135
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/f5abae81-73bf-4046-9e76-10fb5581534e/b28f02b8-d453-44e1-a55a-f11f3667ea00"
+storage_version_token = "1793751998519905"
+content_type = "text/plain"
+
+[[outputs]]
+id = "0T4LnSYxKF4myB5LEuEe0"
+uri = "file://artifacts/dannys-bot/public/snapchat-reply-goal-jenni.txt"
+type = "text"
+title = "Jenni Hackett reply prompt"
+description = "Jenni’s prompt using the details provided: 20, Liverpool, loves the gym, being active, and being healthy, with www.boundlus.com/@jhackett. Relationship status and personal earnings are not assumed."
+logical_id = "f354b7ca-78d1-4036-a9d1-b047206cc794"
+content_hash = "sha256:82e41f74fd89b1edb133ba7271f492ed2a5a38395e52c52edb9997e8d13ccce4"
+size = 10162
+mtime_ms = 1793752085357
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/f354b7ca-78d1-4036-a9d1-b047206cc794/7f924535-9861-470c-8856-4534ed474d95"
+storage_version_token = "1793752098337378"
+content_type = "text/plain"
+
+[[outputs]]
+id = "zz5z9ASJpGuVBe-ArP8-P"
+uri = "file://artifacts/dannys-bot/public/snapchat-reply-goal-kylie.txt"
+type = "text"
+title = "Kylie Bosnan reply prompt"
+description = "Kylie’s prompt using the details provided: 20, Birmingham, loves the gym and raves, with www.boundlus.com/@kylieeee. Relationship status and personal earnings are not assumed."
+logical_id = "5a15f9b5-38eb-41ad-8285-5914f409fb15"
+content_hash = "sha256:24d78bc145f0e885d6fd3f9464c96e6c103f4f74a665f1bbf0daad57e7fc3ba1"
+size = 10111
+mtime_ms = 1793752202230
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/5a15f9b5-38eb-41ad-8285-5914f409fb15/2eff8bdc-c028-4856-b578-526f0dcb9220"
+storage_version_token = "1793752217225091"
 content_type = "text/plain"

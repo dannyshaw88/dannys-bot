@@ -78,17 +78,23 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
     setNotice("");
   };
 
-  const loadCorrectedPrompt = async () => {
+  const loadPersonaPrompt = async (persona: "Danielle" | "Amy" | "Jenni" | "Kylie") => {
+    const promptAsset = {
+      Danielle: "/snapchat-reply-goal-improved.txt",
+      Amy: "/snapchat-reply-goal-amy.txt",
+      Jenni: "/snapchat-reply-goal-jenni.txt",
+      Kylie: "/snapchat-reply-goal-kylie.txt",
+    }[persona];
     if (!window.confirm(
-      "Replace the browser-stored Prompt Test text with the corrected Lisa prompt and reset this test chat? Snapchat account-slot prompts will not change.",
+      `Replace the browser-stored Prompt Test text with the corrected ${persona} prompt and reset this test chat? Snapchat account-slot prompts will not change.`,
     )) return;
     setError("");
     try {
-      const response = await fetch("/snapchat-reply-goal-improved.txt", { cache: "no-store" });
+      const response = await fetch(promptAsset, { cache: "no-store" });
       if (!response.ok) throw new Error(`Could not load the corrected prompt (${response.status}).`);
       updatePrompt(await response.text());
       resetConversation();
-      setNotice("Corrected Lisa prompt loaded in Prompt Test only.");
+      setNotice(`Corrected ${persona} prompt loaded in Prompt Test only.`);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load the corrected prompt.");
     }
@@ -104,9 +110,21 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={loadCorrectedPrompt} disabled={loading}>
+            <Button variant="outline" onClick={() => loadPersonaPrompt("Danielle")} disabled={loading}>
               <Sparkles className="mr-2 h-4 w-4" />
-              Load corrected Lisa prompt
+              Load corrected Danielle prompt
+            </Button>
+            <Button variant="outline" onClick={() => loadPersonaPrompt("Amy")} disabled={loading}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Load corrected Amy prompt
+            </Button>
+            <Button variant="outline" onClick={() => loadPersonaPrompt("Jenni")} disabled={loading}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Load corrected Jenni prompt
+            </Button>
+            <Button variant="outline" onClick={() => loadPersonaPrompt("Kylie")} disabled={loading}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Load corrected Kylie prompt
             </Button>
             <Button variant="outline" onClick={resetConversation} disabled={!messages.length && !input}>
               <RotateCcw className="mr-2 h-4 w-4" />
