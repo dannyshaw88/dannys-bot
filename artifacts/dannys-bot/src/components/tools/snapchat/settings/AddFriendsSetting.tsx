@@ -1,4 +1,5 @@
 import type { AddFriendsSettings } from "@/pages/snapchatSettings/addFriends";
+import { ActionDelayRange } from "./ActionDelayRange";
 import { ToolSettingFrame } from "./ToolSettingFrame";
 
 type AddFriendsSettingProps = {
@@ -16,6 +17,14 @@ export function AddFriendsSetting({ value, loading, onUpdate }: AddFriendsSettin
       value={value}
       loading={loading}
       onUpdate={onUpdate}
+      childrenBelow={
+        <ActionDelayRange
+          minSeconds={value.delayMinSeconds}
+          maxSeconds={value.delayMaxSeconds}
+          disabled={loading || !value.enabled}
+          onChange={onUpdate}
+        />
+      }
     />
   );
 }

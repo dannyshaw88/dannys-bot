@@ -2,7 +2,7 @@ import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForSuggestions } from "../navigation/openAddFriends";
 import { scrollAddFriendsListOneSlot } from "../navigation/scrollAddFriendsListOneSlot";
-import { center, dump, nodeLabel, randomCount, shortResourceId, tapNode } from "../runtime";
+import { center, dump, nodeLabel, randomCount, randomSeconds, shortResourceId, tapNode } from "../runtime";
 
 export async function runAddFriends(context: SnapchatContext): Promise<boolean> {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
@@ -38,9 +38,9 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean> 
   };
 
   while (added < requested && !context.isAborted()) {
-    const { nodes } = await dump(context.serial);
-    const { addButtons, candidates } = findAddCandidates(nodes);
-    const selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
+    let state = await dump(context.serial);
+    let { addButtons, candidates } = findAddCandidates(state.nodes);
+    let selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
     const candidate = selected?.candidate;
     if (!selected || !candidate) {
       context.onLog(addButtons.length
@@ -48,9 +48,23 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean> 
         : "Add Friends: no friend-row Add controls are currently exposed; continuing to the next tool.");
       break;
     }
+    if (added > 0) {
+      const seconds = randomSeconds(
+        context.tools.addFriends.delayMinSeconds,
+        context.tools.addFriends.delayMaxSeconds,
+      );
+      context.onLog(`Add Friends: waiting ${seconds}s between adds.`);
+      await context.sleep(seconds * 1000);
+      if (context.isAborted()) break;
+      state = await dump(context.serial);
+      ({ addButtons, candidates } = findAddCandidates(state.nodes));
+      selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
+      if (!selected) continue;
+    }
+    const currentCandidate = selected.candidate;
     const { friendName, friendKey } = selected;
     if (context.isAborted()) break;
-    if (!await tapNode(context, candidate, `tap Add for ${friendName} under Find Friends`, 0, true)) break;
+    if (!await tapNode(context, currentCandidate, `tap Add for ${friendName} under Find Friends`, 0, true)) break;
 
     const afterTap = await dump(context.serial);
     if (hasSnapchatChatComposer(afterTap.nodes)) {

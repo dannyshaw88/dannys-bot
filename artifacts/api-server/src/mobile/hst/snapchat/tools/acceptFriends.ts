@@ -76,7 +76,10 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
   while (accepted < requested && !context.isAborted()) {
     if (pendingAcceptance) {
       const currentAcceptance = pendingAcceptance;
-      const seconds = randomSeconds(1, 3);
+      const seconds = randomSeconds(
+        context.tools.acceptFriends.delayMinSeconds,
+        context.tools.acceptFriends.delayMaxSeconds,
+      );
       context.onLog(`Accept Friends: waiting ${seconds}s between accepts.`);
       await context.sleep(seconds * 1000);
       if (context.isAborted()) break;
