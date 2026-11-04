@@ -337,3 +337,73 @@ mtime_ms = 1793752202230
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/5a15f9b5-38eb-41ad-8285-5914f409fb15/2eff8bdc-c028-4856-b578-526f0dcb9220"
 storage_version_token = "1793752217225091"
 content_type = "text/plain"
+
+[[outputs]]
+id = "7jEF8dqOVN_qEFT7EWY9k"
+uri = "file://fixed-prompts/Amy-fixed-prompt.txt"
+type = "text"
+title = "Amy fixed Snapchat prompt"
+description = "Corrected standalone prompt with shared routing rules and persona-specific details."
+logical_id = "aa83f422-00e1-4b5e-b9d2-ff7c576d41ea"
+content_hash = "sha256:8fc3992db32531539f27060bbe942a0aa5f916d58f5036e6a3e75470ba034b5a"
+size = 12937
+mtime_ms = 1793791936797
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/aa83f422-00e1-4b5e-b9d2-ff7c576d41ea/123c22eb-fd87-4984-afce-2efe606f883c"
+storage_version_token = "1793791938153462"
+content_type = "text/plain"
+
+[[outputs]]
+id = "Q4n5dY7qI6aE3Tqcyyp6l"
+uri = "file://fixed-prompts/Danielle-fixed-prompt.txt"
+type = "text"
+title = "Danielle fixed Snapchat prompt"
+description = "Corrected standalone prompt with shared routing rules and persona-specific details."
+logical_id = "f3599d8e-f7f8-44b9-94d5-e65420fca038"
+content_hash = "sha256:9748b807cd30701f72892d6bd02a89fd10d735f7033d9f5358742b8c84a9e6c6"
+size = 12968
+mtime_ms = 1793791936999
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/f3599d8e-f7f8-44b9-94d5-e65420fca038/6b320474-4249-4aad-8a11-577db5be0816"
+storage_version_token = "1793791939027423"
+content_type = "text/plain"
+
+[[outputs]]
+id = "Y-NPF6EPd2mmqkwlut5Wa"
+uri = "file://fixed-prompts/Jenni-fixed-prompt.txt"
+type = "text"
+title = "Jenni fixed Snapchat prompt"
+description = "Corrected standalone prompt with shared routing rules and persona-specific details."
+logical_id = "12596e99-72c0-4adf-b9fb-a70cef689a45"
+content_hash = "sha256:00bf833397463d12f406f35272a74cc88530e62b2db109568926e18d693ec6c4"
+size = 12949
+mtime_ms = 1793791937103
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/12596e99-72c0-4adf-b9fb-a70cef689a45/73731e28-74da-4acf-b7e0-901bfaac216c"
+storage_version_token = "1793791939757588"
+content_type = "text/plain"
+
+[[outputs]]
+id = "x0pp9G9AnILWI3IEuCi4h"
+uri = "file://fixed-prompts/Kylie-fixed-prompt.txt"
+type = "text"
+title = "Kylie fixed Snapchat prompt"
+description = "Corrected standalone prompt with shared routing rules and persona-specific details."
+logical_id = "8fa784f8-825b-46a7-a5f5-9c0548d4c00a"
+content_hash = "sha256:17849c61da6e225c9abf044b87068a58ef01e6a2b4f8cb5c383f406c52768c93"
+size = 12926
+mtime_ms = 1793791937179
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/8fa784f8-825b-46a7-a5f5-9c0548d4c00a/1fa7012a-891a-4846-8d7b-5d96f107a996"
+storage_version_token = "1793791940460071"
+content_type = "text/plain"
+
+[[outputs]]
+id = "gDC36pkoMUEGWB5WofhmV"
+uri = "file://fixed-prompts/Lisa-fixed-prompt.txt"
+type = "text"
+title = "Lisa fixed Snapchat prompt"
+description = "Corrected standalone prompt with shared routing rules and persona-specific details."
+logical_id = "41ab7d20-f09d-4019-b47e-b90611484e83"
+content_hash = "sha256:23b09ce773647ca58ca32440278875bb6fa3340763dd501ca60c2fc0ec983305"
+size = 12952
+mtime_ms = 1793791937255
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/41ab7d20-f09d-4019-b47e-b90611484e83/ba766d1e-1757-4444-9bf6-3ed01d548c14"
+storage_version_token = "1793791941465519"
+content_type = "text/plain"
