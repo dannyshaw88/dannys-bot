@@ -7387,6 +7387,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               pickLocalFolderImage,
               tools: snapchatTools,
               onLog: tLog,
+              onAccountNotFound: async username => {
+                tLog(`Account not found: @${username}`);
+                await storage.createSessionAction({
+                  profileId: mobileProfileId ?? 0,
+                  toolId: 0,
+                  action: "tool_complete",
+                  targetUsername: username.replace(/^@/, ""),
+                  detail: "Account not found",
+                  result: "error",
+                  sourceValue: `${serial}:${incomingSlotIdx}`,
+                  sourceType: "phone",
+                  timestamp: new Date().toISOString(),
+                }).catch(error => logger.warn(
+                  { err: error, serial, slotId, username },
+                  "[snapchat-cycle] account-not-found activity log failed",
+                ));
+              },
               onProgress: () => {},
               onMetric: (key, count = 1) => {
                 const metricKey = ({

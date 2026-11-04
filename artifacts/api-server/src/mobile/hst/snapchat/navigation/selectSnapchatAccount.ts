@@ -169,5 +169,6 @@ export async function selectSnapchatAccountFromCarousel(
   context.onLog(
     `Snapchat account switch: checked five right swipes and five left swipes; @${expectedUsername} was not found in the saved-account carousel.`,
   );
+  await context.onAccountNotFound?.(expectedUsername);
   return false;
 }

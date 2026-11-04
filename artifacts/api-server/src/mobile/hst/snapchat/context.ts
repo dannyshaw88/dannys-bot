@@ -50,6 +50,7 @@ export type SnapchatContext = {
   ) => Promise<string | null>;
   tools: SnapchatToolSettings;
   onLog: (message: string) => void;
+  onAccountNotFound?: (username: string) => Promise<void>;
   onProgress: () => void;
   onMetric?: (
     key:
