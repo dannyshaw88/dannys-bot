@@ -78,6 +78,22 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
     setNotice("");
   };
 
+  const loadCorrectedPrompt = async () => {
+    if (!window.confirm(
+      "Replace the browser-stored Prompt Test text with the corrected Lisa prompt and reset this test chat? Snapchat account-slot prompts will not change.",
+    )) return;
+    setError("");
+    try {
+      const response = await fetch("/snapchat-reply-goal-improved.txt", { cache: "no-store" });
+      if (!response.ok) throw new Error(`Could not load the corrected prompt (${response.status}).`);
+      updatePrompt(await response.text());
+      resetConversation();
+      setNotice("Corrected Lisa prompt loaded in Prompt Test only.");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load the corrected prompt.");
+    }
+  };
+
   const content = (
       <div className="space-y-5 pb-8">
         <header className="flex flex-wrap items-start justify-between gap-3">
@@ -87,10 +103,16 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
               <h1 className="text-2xl font-bold tracking-tight">Prompt Test</h1>
             </div>
           </div>
-          <Button variant="outline" onClick={resetConversation} disabled={!messages.length && !input}>
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Reset chat
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={loadCorrectedPrompt} disabled={loading}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Load corrected Lisa prompt
+            </Button>
+            <Button variant="outline" onClick={resetConversation} disabled={!messages.length && !input}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Reset chat
+            </Button>
+          </div>
         </header>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.9fr)_minmax(420px,1.1fr)]">

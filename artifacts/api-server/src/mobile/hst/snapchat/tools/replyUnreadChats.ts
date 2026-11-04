@@ -151,7 +151,7 @@ function unreadChatRows(
       return [];
     }
     return nameNode && displayName
-      ? [{ marker, nameNode, displayName, chatActionNode: hasMedia ? chatActionNode : undefined }]
+      ? [{ marker, nameNode, displayName, chatActionNode: hasMedia ? chatActionNode : undefined, preview: previewValues }]
       : [];
   });
 }
@@ -198,12 +198,16 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     return;
   }
   const recordedSkips = new Set<string>();
+  let activeContact: { displayName: string; stage: string; capturedMessages: string[] } | null = null;
   const recordNotReplied = (
     displayName: string,
     stage: string,
     reason: string,
     capturedMessages: string[] = [],
   ) => {
+    if (activeContact && normalizedText(activeContact.displayName) === normalizedText(displayName)) {
+      activeContact = null;
+    }
     const identity = `${normalizedText(displayName)}:${stage}:${reason}`;
     if (recordedSkips.has(identity)) return;
     recordedSkips.add(identity);
@@ -212,7 +216,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       appendSnapchatUnansweredAudit({
         slotId,
         serial: context.serial,
-        accountUsername: context.targetUsername?.trim() || slotId,
+        accountUsername: context.targetUsername?.trim() || undefined,
         contactName: displayName,
         stage,
         reason,
@@ -249,6 +253,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     };
     recordNotReplied(displayName, "unread-list", explanations[reason], preview);
   });
+  try {
   while (replied < requested && !context.isAborted()) {
     let rows = readUnreadRows(list.nodes);
     for (let retry = 0; rows.length === 0 && retry < 4 && !context.isAborted(); retry++) {
@@ -265,9 +270,19 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     const identity = normalizedText(row.displayName);
     if (visited.has(identity)) break;
     visited.add(identity);
+    activeContact = {
+      displayName: row.displayName,
+      stage: "opening-chat",
+      capturedMessages: row.preview,
+    };
     context.onLog(`Reply to Unread Chats: noted unread contact name "${row.displayName}" from the list.`);
     if (!await tapUnreadChatNameArea(context, row, screenWidth)) {
-      recordNotReplied(row.displayName, "opening-chat", "automation was aborted or the chat could not be opened.");
+      recordNotReplied(
+        row.displayName,
+        "opening-chat",
+        "automation was aborted or the chat could not be opened.",
+        row.preview,
+      );
       break;
     }
     const openedThread = await dump(context.serial);
@@ -279,6 +294,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
         snapRecovery.list
           ? "a Snap viewer opened instead of the chat, so this contact was skipped."
           : "a Snap viewer opened instead of the chat and the Unread list could not be restored.",
+        row.preview,
       );
       if (!snapRecovery.list) break;
       list = snapRecovery.list;
@@ -340,6 +356,11 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       break;
     }
     const transcript = visibleConversation(thread.nodes, composer.bounds[1]);
+    activeContact = {
+      displayName: row.displayName,
+      stage: "reading-conversation",
+      capturedMessages: transcript,
+    };
     if (transcript.length === 0) {
       recordNotReplied(
         row.displayName,
@@ -388,6 +409,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
         `Reply to Unread Chats: allowing post-link supporting reply ${repliesAfterLink + 1}/2 for ${row.displayName}.`,
       );
     }
+    if (activeContact) activeContact.stage = "drafting-reply";
     try {
       reply = await generateContextualReply(replyGoal, contactKey, transcript, history);
     } catch (error) {
@@ -459,6 +481,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
+    if (activeContact) activeContact.stage = "typing-reply";
     context.onLog("Reply to Unread Chats: typing Luna's draft into the composer focused by opening the chat.");
     try {
       const typed = await android.typeViaSavedCalibrationMap(
@@ -476,18 +499,23 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
         },
       );
       if (!typed.available) {
-        context.onLog(
-          `Reply to Unread Chats stopped: this device has no saved keyboard calibration map` +
-          `${typed.missing.length ? `; missing keys: ${typed.missing.join(", ")}` : ""}.`,
+        recordNotReplied(
+          row.displayName,
+          "typing-reply",
+          `the device has no saved keyboard calibration map${typed.missing.length ? `; missing keys: ${typed.missing.join(", ")}` : ""}.`,
+          transcript,
         );
         await exitSnapchatConversation(context).catch(() => false);
         break;
       }
       if (typed.fatal) {
-        context.onLog(
+        recordNotReplied(
+          row.displayName,
+          "typing-reply",
           typed.missing.includes("abc")
-            ? "Reply to Unread Chats stopped: this device's ABC key is not calibrated; the partial draft was not sent."
-            : "Reply to Unread Chats stopped: the calibrated keyboard could not return to letters; the partial draft was not sent.",
+            ? "the device's ABC key is not calibrated; the partial draft was not sent."
+            : "the calibrated keyboard could not return to letters; the partial draft was not sent.",
+          transcript,
         );
         await exitSnapchatConversation(context).catch(() => false);
         break;
@@ -503,20 +531,36 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       );
       enteredReply = composerAfterTyping?.text.trim() ?? "";
       if (isEmptyComposerValue(enteredReply) || enteredReply === initialComposerText) {
-        context.onLog("Reply to Unread Chats stopped: no new reply text appeared in the composer.");
+        recordNotReplied(
+          row.displayName,
+          "typing-reply",
+          "no new reply text appeared in the composer after typing.",
+          transcript,
+        );
         await exitSnapchatConversation(context).catch(() => false);
         break;
       }
-    } catch {
-      context.onLog("Reply to Unread Chats stopped: calibrated keyboard typing failed; the reply was not sent.");
+    } catch (error) {
+      recordNotReplied(
+        row.displayName,
+        "typing-reply",
+        `calibrated keyboard typing failed; the reply was not sent${error instanceof Error ? ` (${error.message})` : ""}.`,
+        transcript,
+      );
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
+    if (activeContact) activeContact.stage = "sending-reply";
     context.onLog("Reply to Unread Chats: draft verified in the composer; sending.");
     try {
       await android.keyevent(context.serial, 66);
-    } catch {
-      context.onLog("Reply to Unread Chats stopped: Android Enter could not be sent; the reply was not confirmed sent.");
+    } catch (error) {
+      recordNotReplied(
+        row.displayName,
+        "sending-reply",
+        `Android Enter could not be sent; the reply was not confirmed sent${error instanceof Error ? ` (${error.message})` : ""}.`,
+        transcript,
+      );
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
@@ -532,15 +576,22 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       !beforeConversation.includes(normalizedText(enteredReply)) &&
       isEmptyComposerValue(composerAfterSend?.text ?? "");
     if (!sentTextConfirmed) {
-      context.onLog(`Reply to Unread Chats: send could not be confirmed for ${row.displayName}; it was not added to the sent count.`);
+      recordNotReplied(
+        row.displayName,
+        "sending-reply",
+        "Snapchat did not confirm the reply was sent, so it was not counted as replied.",
+        [...transcript, `Draft intended: ${enteredReply}`],
+      );
       await exitSnapchatConversation(context).catch(() => false);
       list = await dump(context.serial);
       continue;
     }
+    activeContact = null;
     try {
       const record = appendSnapchatReplyHistory({
-        slotId: context.slotId,
+        slotId,
         serial: context.serial,
+        accountUsername: context.targetUsername?.trim() || slotId,
         username: contactKey,
         displayName: row.displayName,
         capturedMessages: transcript,
@@ -571,6 +622,26 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     if (replied < requested) {
       context.onLog("Reply to Unread Chats: continuing in the existing Unread list without tapping Chat or Unread again.");
     }
+  }
+  } catch (error) {
+    if (activeContact) {
+      recordNotReplied(
+        activeContact.displayName,
+        activeContact.stage,
+        `an unexpected automation error occurred before a reply was confirmed sent${error instanceof Error ? ` (${error.message})` : ""}.`,
+        activeContact.capturedMessages,
+      );
+    }
+    throw error;
+  }
+  const remainingReason = context.isAborted()
+    ? "the automation was aborted before this unread contact was reached."
+    : replied >= requested
+      ? `the selected run target of ${requested} replies was reached before this contact was processed.`
+      : "the run stopped before this unread contact could be processed.";
+  for (const row of readUnreadRows(list.nodes)) {
+    if (visited.has(normalizedText(row.displayName))) continue;
+    recordNotReplied(row.displayName, "run-ended", remainingReason, row.preview);
   }
   context.onLog(`Reply to Unread Chats: confirmed ${replied}/${requested} GPT-6 Luna replies.`);
 }

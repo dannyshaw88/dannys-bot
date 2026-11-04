@@ -91,19 +91,22 @@ export function ReplyUnreadChatsSetting({
             size="sm"
             disabled={loading || !phoneSerial}
             onClick={async () => {
-              if (!phoneSerial || !window.confirm("Clear the saved reply history for this Snapchat slot?")) return;
+              if (!phoneSerial || !window.confirm("Clear the saved reply history and skipped-contact records for this Snapchat slot?")) return;
               const response = await fetch(
                 `/api/mobile/devices/${encodeURIComponent(phoneSerial)}/slots/${slotIdx}/snapchat/reply-history`,
                 { method: "DELETE" },
               );
               window.alert(response.ok
-                ? "Saved reply history cleared for this slot."
-                : "Could not clear this slot's reply history.");
+                ? "Saved reply and skipped-contact history cleared for this slot."
+                : "Could not clear this slot's history.");
             }}
           >
-            Clear reply history
+            Clear reply and skip history
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Reply-history downloads also include unread contacts skipped by the tool and the reason no reply was sent.
+        </p>
       </div>
       )}
     />

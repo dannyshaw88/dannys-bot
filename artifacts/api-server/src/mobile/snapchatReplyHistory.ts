@@ -5,6 +5,7 @@ import { sqlite } from "@workspace/db";
 export type SnapchatReplyHistoryEntry = {
   slotId: string;
   serial: string;
+  accountUsername?: string;
   username: string;
   displayName: string;
   capturedMessages: string[];
@@ -16,7 +17,7 @@ export type SnapchatReplyHistoryEntry = {
 export type SnapchatUnansweredAuditEntry = {
   slotId: string;
   serial: string;
-  accountUsername: string;
+  accountUsername?: string;
   contactName: string;
   stage: string;
   reason: string;
@@ -147,9 +148,13 @@ export function exportAllSnapchatReplyHistory(): string {
   return [...groups.values()].map(group => {
     const firstReply = group.replies[0];
     const firstAudit = group.unanswered[0];
+    const accountUsername = firstReply?.accountUsername ?? firstAudit?.accountUsername;
+    const accountHeading = accountUsername
+      ? `Account slot: ${formatAccountUsername(accountUsername)}`
+      : `Account slot ID: ${firstReply?.slotId ?? firstAudit?.slotId ?? "Unknown"}`;
     return [
       `Device: ${firstReply?.serial ?? firstAudit?.serial ?? "Unknown"}`,
-      `Account slot: @${firstReply?.username ?? firstAudit?.accountUsername ?? firstAudit?.slotId ?? "Unknown"}`,
+      accountHeading,
       "",
       exportEntries(group.replies),
       group.unanswered.length ? formatUnansweredAudit(group.unanswered) : "",
@@ -173,6 +178,10 @@ function exportEntries(entries: SnapchatReplyHistoryEntry[]): string {
     "------------------------------------------------------------",
     "",
   ].join("\n")).join("\n");
+}
+
+function formatAccountUsername(username: string): string {
+  return username.startsWith("@") ? username : `@${username}`;
 }
 
 function formatUnansweredAudit(entries: SnapchatUnansweredAuditEntry[]): string {

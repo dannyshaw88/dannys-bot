@@ -54,7 +54,7 @@ When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB 
 
 **Post-link supporting replies:** Allow up to two supporting replies after the Boundlus link, for a maximum of five replies when the link is reply 3. The editable prompt defines the two supporting messages; each is generated from the conversation context.
 
-Reply 4 should use the user's exact wording: “It’s a new social platform where people get paid for uploading content, add me on it.” Here, “it” refers to Boundlus in the same sentence. Reply 5 should first address the newest message, then use a distinct supporting message: “Just make an account and add me on it. You don’t make money on here, but on there you do.” Here, “here” means Snapchat and “it/on there” means Boundlus.
+Reply 4 should retain the user's exact wording: “It’s a new social platform where people get paid for uploading content, add me on it.” If needed to answer or acknowledge the newest message naturally, add a short response before that exact sentence. Here, “it” refers to Boundlus in the same sentence. Reply 5 should first address the newest message, then use a distinct supporting message: “Just make an account and add me on it. You don’t make money on here, but on there you do.” Here, “here” means Snapchat and “it/on there” means Boundlus.
 
 **Why:** The user wants Reply 5 to respond to the contact and add a new reason to join, not repeat Reply 4's description of Boundlus.
 
@@ -78,11 +78,11 @@ Reply 4 should use the user's exact wording: “It’s a new social platform whe
 
 **How to apply:** Keep both answers in the editable prompt. Do not append the generic Reply 5 invitation to either answer.
 
-**Multi-part Snapchat messages:** Answer every direct question in a combined message, in order, even when the reply is longer than the usual 3–5 word limit. Danielle is 22, from Leeds, and single. Include Quick Add only if the message separately asks where the contact was found or added.
+**Persona and multi-part replies:** Persona facts belong to each editable account-slot goal. Treat that goal's PERSONA section as authoritative, keep examples consistent with it, and answer every direct question in the newest message in order, even when the reply must exceed the usual short-reply limit. Mention Quick Add only when the contact asks where they were found or added.
 
-**Why:** A test combined identity, origin, age, relationship status, and Snapchat source questions; the reply omitted two requested answers.
+**Why:** A prompt test exposed conflicting identity details between the persona and examples, and a combined message asked several questions that the reply did not all answer. Slot-specific prompts may represent different personas, so one account's identity must not become a global default.
 
-**How to apply:** Keep this rule in the editable prompt. For identity-only messages, do not mention Quick Add; if a separate source question is also present, answer it separately with “From Quick Add.” Answer “Where are you from?” with Leeds.
+**How to apply:** Keep the persona, source-of-add rules, and reply wording in the editable prompt. When editing a slot prompt, align every example with that slot's PERSONA. Answer identity-only messages without mentioning Quick Add; answer a separate source question with “From Quick Add.” Avoid hardcoding slot-specific identity facts in shared generation code.
 
 **Unread list eligibility:** Treat the Snapchat Unread tab itself as the unread signal; do not require a row status to say “New Chat.” Keep “Received” and “Opened” rows eligible only when an actual readable message preview is present; skip “Delivered” rows because that indicates an outgoing message, not an incoming chat to answer. Never tap rows with an empty-chat/system placeholder or no readable message preview; status labels alone are not enough. Ignore pure Snap/photo/video rows, but allow a mixed media-and-chat row only through its separate chat-only right-side action icon. If a row passes the list check but opening it yields no readable conversation, exit it and continue to the next row rather than ending the tool.
 

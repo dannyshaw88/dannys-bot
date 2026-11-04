@@ -281,3 +281,17 @@ mtime_ms = 1793704928328
 storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/bb32453d-00ed-434a-ac79-e58b4763d985/5b4fe7c8-8b24-42b5-a57f-67de4fc5ddcb"
 storage_version_token = "1793704961413455"
 content_type = "text/plain"
+
+[[outputs]]
+id = "FFK98bj9M1BC0U02IWAlB"
+uri = "file://artifacts/dannys-bot/public/snapchat-reply-goal-improved.txt"
+type = "text"
+title = "Improved Snapchat reply prompt"
+description = "A corrected Lisa Berry prompt with consistent identity details, complete answers to multi-question messages, clear Quick Add routing, and revised Reply 4/5 and media/sexual-message rules."
+logical_id = "b7086c93-40e8-4805-9633-5c7cd99c4c04"
+content_hash = "sha256:c456a59bd0350b4085918bbb34b9786491e72a7d3d289d4c306bf0d496dc63a2"
+size = 9877
+mtime_ms = 1793751103174
+storage_uri = "gcs://replit-rams-assets-archer/rams/assets/repl:8ef6709f-4851-4e78-b32c-32b227ce9ec8/b7086c93-40e8-4805-9633-5c7cd99c4c04/dd798059-7d00-4622-a03c-802888a29b45"
+storage_version_token = "1793751350097499"
+content_type = "text/plain"
