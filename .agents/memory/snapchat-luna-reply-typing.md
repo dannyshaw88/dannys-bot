@@ -60,6 +60,12 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 
 **How to apply:** Keep these wordings in the editable prompt. Do not hardcode them in software. Enforce only generic limits in code: no more than five replies total and no more than two after the first Boundlus-link reply. Do not restrict follow-ups to questions about Boundlus.
 
+**Early-link reply numbering:** A media-request link sent before the ordinary third outgoing message completes the logical Reply 3 link step. Keep the real outgoing counter unchanged; count only new Luna replies after the actual URL, then use logical Reply 4 and Reply 5 support once each.
+
+**Why:** The user needs a media request at physical reply 1 or 2 to take the link route immediately, while the following two replies still use the designated post-link messages. Altering the actual count would conflict with the five-outgoing-reply cap and reply-history records.
+
+**How to apply:** In prompts, inspect actual `sentReplies` for the persona URL before using `nextOutgoingReplyNumber`. If the URL is present, use up to two supports based on replies after that first link, without another URL. If no link is in history by physical reply 4 or 5, do not send the support pitch or claim the link was sent.
+
 **Early media-request link:** Requests for pictures, photos, videos, nudes, or to see Luna skip directly to the link step and use “All of it’s on [Boundlus link]” without the usual Snapchat call to action. Treat it as the link reply, then use the next two post-link support replies after a new incoming message.
 
 **Why:** The user wants media requests to skip straight to message 3 and direct the contact to the Boundlus link, rather than using the ordinary link-reply wording.
@@ -72,11 +78,23 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 
 **How to apply:** Use the platform-feature answer for questions about the tab. Use the media-request route only when the contact asks for Luna's own pictures or videos.
 
-**Boundlus earnings questions:** Distinguish Danielle's personal earnings from potential earnings. If asked how much she has made, say “£15, but I’ve only been on it for a few days.” If asked how much someone could make in general, use the specified answer about uploads, views, no algorithm restriction, and adding thousands of people. These answers replace generic Reply 4/5 copy for that turn.
+**Boundlus earnings questions:** Distinguish personal earnings from potential earnings across all five persona prompts. If asked how much the persona has made, say “£15, but I’ve only been on it for a few days.” If asked how much someone could make in general, use the specified answer about uploads, views, no algorithm restriction, and adding thousands of people. These answers replace generic Reply 4/5 copy for that turn.
 
 **Why:** The user specified separate answers for personal earnings and general earning potential after the prompt misread “how much have you made?” as a potential-earnings question.
 
 **How to apply:** Keep both answers in the editable prompt. Do not append the generic Reply 5 invitation to either answer.
+
+**Unknown persona facts:** Never fill in missing appearance, relationship, or biography details from examples, chat context, or assumptions. Avoid prompt-revealing phrases such as “not specified”; use a short neutral reply instead. For phone/video call requests and voice notes, reply exactly “No, not right now.”
+
+**Why:** Luna has produced invented persona details and meta-commentary about missing fields, and misunderstood call/voice-note requests.
+
+**How to apply:** Treat each prompt's PERSONA as an allowlist. Keep the no-invention fallback and exact call/voice-note reply in each editable persona prompt. Prompt rules can reduce these errors but cannot guarantee model compliance.
+
+**Prompt length:** Do not impose an application-level character cap on Snapchat reply prompts or the Prompt Test.
+
+**Why:** The user explicitly said prompt text should have no character limit and uses the Prompt Test to validate longer persona prompts.
+
+**How to apply:** Keep required/non-empty validation, but avoid `maxLength`, schema `.max()`, and route-level prompt-length rejection in the settings or test flow. Infrastructure request-body limits are separate.
 
 **Persona and multi-part replies:** Persona facts belong to each editable account-slot goal. Treat that goal's PERSONA section as authoritative, keep examples consistent with it, and answer every direct question in the newest message in order, even when the reply must exceed the usual short-reply limit. Mention Quick Add only when the contact asks where they were found or added.
 

@@ -78,25 +78,26 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
     setNotice("");
   };
 
-  const loadPersonaPrompt = async (persona: "Danielle" | "Amy" | "Jenni" | "Kylie") => {
+  const loadPersonaPrompt = async (persona: "Danielle" | "Amy" | "Jenni" | "Kylie" | "Lisa") => {
     const promptAsset = {
       Danielle: "/snapchat-reply-goal-improved.txt",
       Amy: "/snapchat-reply-goal-amy.txt",
       Jenni: "/snapchat-reply-goal-jenni.txt",
       Kylie: "/snapchat-reply-goal-kylie.txt",
+      Lisa: "/snapchat-reply-goal-lisa.txt",
     }[persona];
     if (!window.confirm(
-      `Replace the browser-stored Prompt Test text with the corrected ${persona} prompt and reset this test chat? Snapchat account-slot prompts will not change.`,
+      `Replace the browser-stored Prompt Test text with the revised ${persona} prompt and reset this test chat? Snapchat account-slot prompts will not change.`,
     )) return;
     setError("");
     try {
       const response = await fetch(promptAsset, { cache: "no-store" });
-      if (!response.ok) throw new Error(`Could not load the corrected prompt (${response.status}).`);
+      if (!response.ok) throw new Error(`Could not load the revised prompt (${response.status}).`);
       updatePrompt(await response.text());
       resetConversation();
-      setNotice(`Corrected ${persona} prompt loaded in Prompt Test only.`);
+      setNotice(`Revised ${persona} prompt loaded in Prompt Test only.`);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Could not load the corrected prompt.");
+      setError(loadError instanceof Error ? loadError.message : "Could not load the revised prompt.");
     }
   };
 
@@ -112,19 +113,23 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => loadPersonaPrompt("Danielle")} disabled={loading}>
               <Sparkles className="mr-2 h-4 w-4" />
-              Load corrected Danielle prompt
+              Load revised Danielle prompt
             </Button>
             <Button variant="outline" onClick={() => loadPersonaPrompt("Amy")} disabled={loading}>
               <Sparkles className="mr-2 h-4 w-4" />
-              Load corrected Amy prompt
+              Load revised Amy prompt
             </Button>
             <Button variant="outline" onClick={() => loadPersonaPrompt("Jenni")} disabled={loading}>
               <Sparkles className="mr-2 h-4 w-4" />
-              Load corrected Jenni prompt
+              Load revised Jenni prompt
             </Button>
             <Button variant="outline" onClick={() => loadPersonaPrompt("Kylie")} disabled={loading}>
               <Sparkles className="mr-2 h-4 w-4" />
-              Load corrected Kylie prompt
+              Load revised Kylie prompt
+            </Button>
+            <Button variant="outline" onClick={() => loadPersonaPrompt("Lisa")} disabled={loading}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Load revised Lisa prompt
             </Button>
             <Button variant="outline" onClick={resetConversation} disabled={!messages.length && !input}>
               <RotateCcw className="mr-2 h-4 w-4" />
@@ -151,11 +156,9 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
                 onChange={event => updatePrompt(event.target.value)}
                 placeholder="Paste the Snapchat reply prompt you want to test…"
                 className="min-h-[360px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                maxLength={12_000}
               />
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <div className="flex items-center text-xs text-muted-foreground">
                 <span>Requires a ChatGPT API key saved in Settings → Security.</span>
-                <span>{prompt.length.toLocaleString()} / 12,000</span>
               </div>
             </CardContent>
           </Card>

@@ -3,6 +3,8 @@ export type SnapchatLunaHistory = {
   sentReplies: Array<{ replyNumber: number; capturedMessages: string[]; sentText: string }>;
 };
 
+const BOUNDLUS_URL_PATTERN = /(?:https?:\/\/)?(?:www\.)?boundlus\.com\b/i;
+
 function normalizeComparableText(value: string): string {
   return value
     .toLowerCase()
@@ -55,6 +57,12 @@ export async function generateSnapchatLunaReply(
   transcript: string[],
   history: SnapchatLunaHistory,
 ): Promise<string> {
+  const linkReplyIndex = history.sentReplies.findIndex(({ sentText }) => BOUNDLUS_URL_PATTERN.test(sentText));
+  const linkAlreadySent = linkReplyIndex >= 0;
+  const postLinkRepliesSent = linkAlreadySent ? history.sentReplies.length - linkReplyIndex - 1 : 0;
+  const nextOutgoingReplyNumber = history.previousReplyCount + 1;
+  if (history.previousReplyCount >= 5 || (linkAlreadySent && postLinkRepliesSent >= 2)) return "";
+
   const priorQuestions = getPriorQuestions(history.sentReplies);
   const localClock = getCurrentLocalClock();
   const baseMessages = [

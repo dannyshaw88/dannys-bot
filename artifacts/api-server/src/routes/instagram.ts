@@ -6002,8 +6002,8 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
     const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
     const peer = (typeof req.body?.peer === "string" ? req.body.peer.trim().slice(0, 80) : "") || "Test user";
     const messages = req.body?.messages;
-    if (!prompt || prompt.length > 12_000) {
-      return res.status(400).json({ error: "Enter a prompt of up to 12,000 characters." });
+    if (!prompt) {
+      return res.status(400).json({ error: "Enter a prompt to test." });
     }
     if (!Array.isArray(messages) || messages.length === 0 || messages.length > 50 ||
         messages.some(message =>
