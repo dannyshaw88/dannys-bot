@@ -6954,12 +6954,28 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // abort POST that arrives after this cycle started will NOT match and is
     // safely ignored.
     const incomingCycleId: string = req.body?.cycleId ?? `fallback-${Date.now()}`;
-    const incomingSlotIdx: number = typeof req.body?.slotIdx === "number" ? req.body.slotIdx : 0;
-    const configuredSlot = loadInstanceConfigs()[serial]?.account?.slots?.[incomingSlotIdx];
+    const requestedSlotIdx: number = typeof req.body?.slotIdx === "number" ? req.body.slotIdx : 0;
     const incomingSlotId = typeof req.body?.slotId === "string" ? req.body.slotId.trim() : "";
+    const accountSlots = loadInstanceConfigs()[serial]?.account?.slots ?? [];
+    const matchingSlotIndexes = incomingSlotId
+      ? accountSlots.flatMap((slot, index) => slot?.slotId?.trim() === incomingSlotId ? [index] : [])
+      : [];
+    // The stable slot ID is authoritative. If accounts were reordered after a
+    // timer captured its visible index, resolve the same account at its current
+    // index instead of rejecting every retry or risking another account.
+    const incomingSlotIdx = matchingSlotIndexes.length === 1
+      ? matchingSlotIndexes[0]
+      : requestedSlotIdx;
+    const configuredSlot = accountSlots[incomingSlotIdx];
     const configuredSlotId = configuredSlot?.slotId?.trim() ?? "";
     const slotId = incomingSlotId || configuredSlotId;
-    if (!configuredSlotId || !incomingSlotId || incomingSlotId !== configuredSlotId) {
+    if (matchingSlotIndexes.length !== 1 || !configuredSlotId || incomingSlotId !== configuredSlotId) {
+      logger.warn({
+        serial,
+        requestedSlotIdx,
+        resolvedSlotIdx: matchingSlotIndexes.length === 1 ? matchingSlotIndexes[0] : null,
+        matchingSlotCount: matchingSlotIndexes.length,
+      }, "[HST] rejecting automation cycle because the account slot ID does not uniquely match");
       res.status(409).json({ error: "The account slot changed; refresh the mobile page and retry" });
       return;
     }
