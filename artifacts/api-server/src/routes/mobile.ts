@@ -830,7 +830,7 @@ type DevicePersonality = {
   discovery: number;
   actionVariety: number;
 };
-type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; accountTabPreferences?: { order: ("instagram" | "snapchat")[]; landing: "instagram" | "snapchat" }; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
+type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; deviceProxy?: { enabled: boolean; protocol: "https"; host: string; port: number | null; username?: string; password?: string; relayPort?: number }; automation?: AutomationSettings; account?: DeviceAccount; accountTabPreferences?: { order: ("instagram" | "snapchat")[]; landing: "instagram" | "snapchat" }; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 function configFilePath(): string {
@@ -9462,37 +9462,79 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
-  // Return only the saved assignment and non-secret proxy labels for the Phone
-  // Farm device dialog. Proxy credentials stay on the server.
-  app.get("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
+  // Save the direct HTTPS proxy configured from the My Device settings panel.
+  // A local relay adds optional proxy authentication; Android only receives a
+  // plain host:port system proxy and does not need an extra device-side app.
+  const directDeviceProxySchema = z.object({
+    enabled: z.boolean(),
+    protocol: z.literal("https").default("https"),
+    host: z.string().trim().max(253).refine(value => !/[\s\r\n]/.test(value), "Invalid proxy host").default(""),
+    port: z.number().int().min(1).max(65535).nullable().default(null),
+    username: z.string().max(512).default(""),
+    password: z.string().max(2048).default(""),
+  });
+  app.get("/api/mobile/devices/:serial/network-proxy", (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const cfg = loadInstanceConfigs();
-      const proxies = await storage.getProxies();
+      const saved = loadInstanceConfigs()[serial]?.deviceProxy ?? null;
       res.json({
-        proxyId: cfg[serial]?.proxyId ?? null,
-        proxies: proxies.map(({ id, name, host, port, proxyType }) => ({
-          id, name, host, port, proxyType: proxyType ?? null,
-        })),
+        proxy: saved
+          ? { enabled: saved.enabled, protocol: saved.protocol, host: saved.host, port: saved.port, username: saved.username ?? "", password: saved.password ?? "" }
+          : { enabled: false, protocol: "https", host: "", port: null, username: "", password: "" },
       });
     } catch (e: any) {
-      res.status(500).json({ error: e?.message ?? "Could not load device proxies" });
+      res.status(500).json({ error: e?.message ?? "Could not load device proxy settings" });
+    }
+  });
+  app.post("/api/mobile/devices/:serial/network-proxy", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const input = directDeviceProxySchema.parse(req.body);
+      const cfg = loadInstanceConfigs();
+      const previousRelayPort = cfg[serial]?.deviceProxy?.relayPort ?? proxyRelay.getRelayPortForDevice(serial);
+      if (input.enabled && (!input.host || !input.port)) {
+        res.status(400).json({ ok: false, error: "Enter a proxy host and port, or choose No proxy." });
+        return;
+      }
+
+      let relayPort: number | null = null;
+      if (input.enabled) {
+        if (previousRelayPort !== null) await android.adbReverseRemove(serial, previousRelayPort);
+        relayPort = await proxyRelay.startRelay(serial, {
+          host: input.host,
+          port: input.port!,
+          user: input.username || undefined,
+          pass: input.password || undefined,
+          protocol: input.protocol,
+        });
+        try {
+          await android.adbReverse(serial, relayPort);
+          await android.setDeviceProxy(serial, { host: "127.0.0.1", port: relayPort });
+        } catch (applyError) {
+          proxyRelay.stopRelayForDevice(serial);
+          await android.adbReverseRemove(serial, relayPort).catch(() => {});
+          await android.setDeviceProxy(serial, null).catch(() => {});
+          throw applyError;
+        }
+      } else {
+        proxyRelay.stopRelayForDevice(serial);
+        if (previousRelayPort !== null) await android.adbReverseRemove(serial, previousRelayPort);
+        await android.setDeviceProxy(serial, null);
+      }
+
+      cfg[serial] = { ...cfg[serial], deviceProxy: { ...input, ...(relayPort === null ? {} : { relayPort }) } };
+      saveInstanceConfigs(cfg);
+      res.json({ ok: true, proxy: { enabled: input.enabled, protocol: input.protocol, host: input.host, port: input.port, username: input.username, hasPassword: !!input.password } });
+    } catch (e: any) {
+      res.status(400).json({ ok: false, error: e?.message ?? "Could not apply device proxy" });
     }
   });
 
-  // Save proxy assignment for a device.
-  const deviceProxySchema = z.object({ proxyId: z.number().int().positive().nullable() });
+  const deviceProxySchema = z.object({ proxyId: z.number().nullable() });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
     try {
       const input = deviceProxySchema.parse(req.body);
       const serial = p(req, "serial");
-      if (input.proxyId !== null) {
-        const proxies = await storage.getProxies();
-        if (!proxies.some(proxy => proxy.id === input.proxyId)) {
-          res.status(404).json({ error: "Proxy not found" });
-          return;
-        }
-      }
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], proxyId: input.proxyId ?? null };
       saveInstanceConfigs(cfg);
@@ -10856,10 +10898,14 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       await android.setDeviceProxy(serial, null);
 
       // 4. Stop the relay, remove adb reverse tunnel, and clear instance config
-      android.adbReverseRemove(serial);
+      await android.adbReverseRemove(serial);
       proxyRelay.stopRelayForDevice(serial);
       const cfg = loadInstanceConfigs();
-      cfg[serial] = { ...cfg[serial], proxyId: null };
+      cfg[serial] = {
+        ...cfg[serial],
+        proxyId: null,
+        deviceProxy: { enabled: false, protocol: "https", host: "", port: null, username: "", password: "" },
+      };
       saveInstanceConfigs(cfg);
 
       // 5. Disconnect the device from ADB so it disappears from the device list
@@ -10901,10 +10947,16 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       steps.push("✓ Proxy cleared");
 
       // 4. Stop relay, remove adb reverse tunnel, and clear instance config
-      android.adbReverseRemove(serial);
+       await android.adbReverseRemove(serial);
       proxyRelay.stopRelayForDevice(serial);
       const cfg = loadInstanceConfigs();
-      cfg[serial] = { ...cfg[serial], proxyId: null, proxyPort: null, proxyProtocol: null as any };
+      cfg[serial] = {
+        ...cfg[serial],
+        proxyId: null,
+        proxyPort: null,
+        proxyProtocol: null as any,
+        deviceProxy: { enabled: false, protocol: "https", host: "", port: null, username: "", password: "" },
+      };
       saveInstanceConfigs(cfg);
 
       // 5. Disconnect ADB
@@ -10996,33 +11048,20 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
     try {
       const serial = p(req, "serial");
       const { proxyId, proxyType } = z.object({
-        proxyId: z.number().int().positive(),
-        proxyType: z.enum(["HTTP", "HTTPS", "SOCKS4", "SOCKS5"]).optional(),
+        proxyId: z.number(),
+        proxyType: z.string().optional(),
       }).parse(req.body);
-      if (!await android.isDronyInstalled(serial)) {
-        res.status(409).json({ ok: false, error: "Drony is not installed on this device." });
-        return;
-      }
       const proxies = await storage.getProxies();
       const proxy = proxies.find(pr => pr.id === proxyId);
-      if (!proxy) {
-        res.status(404).json({ error: "Proxy not found" });
-        return;
-      }
+      if (!proxy) return res.status(404).json({ error: "Proxy not found" });
       const result = await android.configureDrony(serial, {
         host: proxy.host,
         port: proxy.port,
         user: proxy.username ?? undefined,
         pass: proxy.password ?? undefined,
-        proxyType: proxyType ?? "HTTPS",
+        proxyType: proxyType ?? "SOCKS5",
       });
-      const active = result.ok && await android.isDronyVpnActive(serial);
-      res.status(active ? 200 : 502).json({
-        ...result,
-        ok: active,
-        active,
-        ...(!active && result.ok ? { error: "Drony finished setup but its VPN is not active." } : {}),
-      });
+      res.json(result);
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Configuration failed" });
     }

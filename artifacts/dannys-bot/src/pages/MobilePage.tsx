@@ -11143,6 +11143,184 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
 // ─── Phone Settings Panel ──────────────────────────────────────────────────────
 
+type DirectDeviceProxySettings = {
+  enabled: boolean;
+  host: string;
+  port: string;
+  username: string;
+  password: string;
+};
+
+function DeviceNetworkProxySettings({ serial }: { serial: string | null }) {
+  const [settings, setSettings] = React.useState<DirectDeviceProxySettings>({
+    enabled: false, host: "", port: "", username: "", password: "",
+  });
+  const [loading, setLoading] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [message, setMessage] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let current = true;
+    if (!serial) {
+      setSettings({ enabled: false, host: "", port: "", username: "", password: "" });
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+    fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/network-proxy`)
+      .then(async response => {
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.error ?? "Could not load proxy settings");
+        return body?.proxy;
+      })
+      .then(proxy => {
+        if (!current) return;
+        setSettings({
+          enabled: proxy?.enabled === true,
+          host: typeof proxy?.host === "string" ? proxy.host : "",
+          port: proxy?.port == null ? "" : String(proxy.port),
+          username: typeof proxy?.username === "string" ? proxy.username : "",
+          password: typeof proxy?.password === "string" ? proxy.password : "",
+        });
+      })
+      .catch(loadError => {
+        if (current) setError(loadError instanceof Error ? loadError.message : "Could not load proxy settings");
+      })
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [serial]);
+
+  const save = async () => {
+    if (!serial) return;
+    const host = settings.host.trim();
+    const port = settings.port.trim() ? Number(settings.port) : null;
+    if (settings.enabled && (!host || !Number.isInteger(port) || port! < 1 || port! > 65535)) {
+      setError("Enter a proxy host and a port from 1 to 65535, or switch to No proxy.");
+      setMessage(null);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/network-proxy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: settings.enabled,
+          protocol: "https",
+          host,
+          port,
+          username: settings.username,
+          password: settings.password,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || body?.ok !== true) {
+        throw new Error(body?.error ?? "Could not apply proxy settings");
+      }
+      setMessage(settings.enabled
+        ? "HTTPS proxy applied to this device."
+        : "No proxy — Android’s system proxy has been cleared.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not apply proxy settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form
+      className="bg-card border border-border rounded-xl p-5 space-y-4"
+      onSubmit={event => { event.preventDefault(); void save(); }}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">HTTPS Proxy</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Set a proxy for this device, or turn it off to use the normal network connection.
+            This uses Android’s built-in proxy setting; no extra app is installed on the phone.
+          </p>
+        </div>
+        <label className="flex shrink-0 items-center gap-2 text-sm text-foreground">
+          <span>{settings.enabled ? "Use proxy" : "No proxy"}</span>
+          <Switch
+            checked={settings.enabled}
+            onCheckedChange={enabled => {
+              setSettings(previous => ({ ...previous, enabled }));
+              setError(null);
+              setMessage(null);
+            }}
+            disabled={!serial || loading || saving}
+            aria-label="Use HTTPS proxy on this device"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="device-proxy-host" className="text-xs text-muted-foreground">Proxy host</Label>
+          <BaseInput
+            id="device-proxy-host"
+            value={settings.host}
+            onChange={event => setSettings(previous => ({ ...previous, host: event.target.value }))}
+            placeholder="proxy.example.com"
+            autoComplete="off"
+            disabled={!settings.enabled || loading || saving}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="device-proxy-port" className="text-xs text-muted-foreground">Port</Label>
+          <BaseInput
+            id="device-proxy-port"
+            type="number"
+            min={1}
+            max={65535}
+            value={settings.port}
+            onChange={event => setSettings(previous => ({ ...previous, port: event.target.value }))}
+            placeholder="443"
+            inputMode="numeric"
+            disabled={!settings.enabled || loading || saving}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="device-proxy-username" className="text-xs text-muted-foreground">Username (optional)</Label>
+          <BaseInput
+            id="device-proxy-username"
+            value={settings.username}
+            onChange={event => setSettings(previous => ({ ...previous, username: event.target.value }))}
+            autoComplete="off"
+            disabled={!settings.enabled || loading || saving}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="device-proxy-password" className="text-xs text-muted-foreground">Password (optional)</Label>
+          <BaseInput
+            id="device-proxy-password"
+            type="password"
+            value={settings.password}
+            onChange={event => setSettings(previous => ({ ...previous, password: event.target.value }))}
+            autoComplete="new-password"
+            disabled={!settings.enabled || loading || saving}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" disabled={!serial || loading || saving}>
+          {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Applying…</> : "Apply Settings"}
+        </Button>
+        {loading && <span className="text-xs text-muted-foreground">Loading saved settings…</span>}
+        {error && <span role="alert" className="text-xs text-destructive">{error}</span>}
+        {message && <span role="status" className="text-xs text-emerald-600">{message}</span>}
+      </div>
+    </form>
+  );
+}
+
 function PhoneSettingsPanel({ serial }: { serial: string | null }) {
   interface BatteryScheduleConfig { enabled: boolean; unplugMinutes: number; cycleHours: number; spoofLevel: number; }
   interface BatteryInfo {
@@ -11777,6 +11955,7 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
         </div>
       )}
 
+      <DeviceNetworkProxySettings serial={serial} />
       <AppCloseGestureSettings serial={serial} />
 
       {/* ── SIM Card ────────────────────────────────────────────────── */}
