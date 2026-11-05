@@ -60,6 +60,7 @@ interface UsbPhone {
   androidVersion?: string;
 }
 
+
 // ─── Model code → friendly name lookup ───────────────────────────────────────
 // Maps raw Android model codes (ro.product.model) to human-readable names.
 // Used to display "Xiaomi Redmi Note 12" instead of "Xiaomi 23076RN8DY" for

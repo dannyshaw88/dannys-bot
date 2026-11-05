@@ -16,12 +16,10 @@
  */
 
 import * as net from "net";
-import * as tls from "tls";
 
 interface Upstream {
   host: string;
   port: number;
-  protocol?: "http" | "https";
   user?: string;
   pass?: string;
 }
@@ -36,25 +34,6 @@ const relays = new Map<string, RelayEntry>();
 function authHeader(user?: string, pass?: string): string | null {
   if (!user) return null;
   return `Basic ${Buffer.from(`${user}:${pass ?? ""}`).toString("base64")}`;
-}
-
-function connectUpstream(upstream: Upstream): net.Socket {
-  if (upstream.protocol !== "https") {
-    return net.createConnection(upstream.port, upstream.host);
-  }
-  return tls.connect({
-    host: upstream.host,
-    port: upstream.port,
-    ...(net.isIP(upstream.host) ? {} : { servername: upstream.host }),
-  });
-}
-
-function onUpstreamConnected(upstream: Upstream, socket: net.Socket, callback: () => void): void {
-  if (upstream.protocol === "https") {
-    (socket as tls.TLSSocket).once("secureConnect", callback);
-  } else {
-    socket.once("connect", callback);
-  }
 }
 
 export async function startRelay(serial: string, upstream: Upstream): Promise<number> {
@@ -79,10 +58,6 @@ export function stopRelayForDevice(serial: string): void {
     try { entry.server.close(); } catch {}
     relays.delete(serial);
   }
-}
-
-export function getRelayPortForDevice(serial: string): number | null {
-  return relays.get(serial)?.port ?? null;
 }
 
 export async function stopRelay(
@@ -130,11 +105,11 @@ function handleConnect(
   upstream: Upstream,
   auth: string | null,
 ): void {
-  const up = connectUpstream(upstream);
+  const up = net.createConnection(upstream.port, upstream.host);
   up.on("error", () => { try { client.destroy(); } catch {} });
   client.on("error", () => { try { up.destroy(); } catch {} });
 
-  onUpstreamConnected(upstream, up, () => {
+  up.once("connect", () => {
     let req = connectLine + "\r\n";
     if (auth) req += `Proxy-Authorization: ${auth}\r\n`;
     req += "Proxy-Connection: keep-alive\r\n\r\n";
@@ -184,11 +159,11 @@ function handleHttp(
   );
   if (auth) lines.splice(1, 0, `Proxy-Authorization: ${auth}`);
 
-  const up = connectUpstream(upstream);
+  const up = net.createConnection(upstream.port, upstream.host);
   up.on("error", () => { try { client.destroy(); } catch {} });
   client.on("error", () => { try { up.destroy(); } catch {} });
 
-  onUpstreamConnected(upstream, up, () => {
+  up.once("connect", () => {
     up.write(lines.join("\r\n") + "\r\n\r\n");
     if (trailing.length > 0) up.write(trailing);
   });
