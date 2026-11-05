@@ -13,6 +13,33 @@ function normalizeComparableText(value: string): string {
     .trim();
 }
 
+function isBoundlusIdentificationQuestion(value: string): boolean {
+  const lastLabelledText = value.includes(":") ? value.slice(value.lastIndexOf(":") + 1) : value;
+  const question = normalizeComparableText(lastLabelledText);
+  return [
+    /^(?:so )?(?:what is|whats) (?:that|this|it|boundlus)(?: (?:link|site|platform|about|for))?$/,
+    /^(?:so )?what is (?:the )?(?:boundlus )?(?:link|site|platform)$/,
+    /^(?:so )?what does (?:that|this|it|the link|boundlus) mean$/,
+    /^(?:so )?what do you mean by (?:that|this|it)$/,
+  ].some(pattern => pattern.test(question));
+}
+
+function getPostLinkSupportMessage(goal: string, slot: 1 | 2): string {
+  const pattern = new RegExp(`^POST-LINK SLOT ${slot}[^\\r\\n]*\\r?\\n[“"]([^”"]+)[”"]`, "m");
+  return goal.match(pattern)?.[1]?.trim() ?? "";
+}
+
+function getBoundlusIdentificationReply(goal: string, postLinkRepliesSent: number): string {
+  const firstSupport = getPostLinkSupportMessage(goal, 1);
+  if (postLinkRepliesSent === 0) return firstSupport;
+  if (postLinkRepliesSent !== 1 || !firstSupport) return "";
+
+  const secondSupport = getPostLinkSupportMessage(goal, 2);
+  if (!secondSupport) return "";
+  const platformDescription = firstSupport.split(/,\s*/)[0].replace(/[.!?]+$/, "").trim();
+  return platformDescription ? `${platformDescription}. ${secondSupport}` : "";
+}
+
 function getCurrentLocalClock() {
   const now = new Date();
   return {
@@ -56,6 +83,7 @@ export async function generateSnapchatLunaReply(
   peer: string,
   transcript: string[],
   history: SnapchatLunaHistory,
+  latestIncomingMessage = transcript[transcript.length - 1] ?? "",
 ): Promise<string> {
   const linkReplyIndex = history.sentReplies.findIndex(({ sentText }) => BOUNDLUS_URL_PATTERN.test(sentText));
   const linkAlreadySent = linkReplyIndex >= 0;
@@ -63,8 +91,18 @@ export async function generateSnapchatLunaReply(
   const nextOutgoingReplyNumber = history.previousReplyCount + 1;
   if (history.previousReplyCount >= 5 || (linkAlreadySent && postLinkRepliesSent >= 2)) return "";
 
+  if (linkAlreadySent && isBoundlusIdentificationQuestion(latestIncomingMessage)) {
+    const directAnswer = getBoundlusIdentificationReply(goal, postLinkRepliesSent);
+    if (directAnswer) return directAnswer.slice(0, 500);
+  }
+
   const priorQuestions = getPriorQuestions(history.sentReplies);
   const localClock = getCurrentLocalClock();
+  const conversationState = {
+    boundlusLinkAlreadySent: linkAlreadySent,
+    repliesAfterLink: postLinkRepliesSent,
+    nextPostLinkSupportSlot: linkAlreadySent ? postLinkRepliesSent + 1 : null,
+  };
   const baseMessages = [
     {
       role: "system",
@@ -84,6 +122,12 @@ export async function generateSnapchatLunaReply(
       ].join(" "),
     },
     {
+      role: "system",
+      content: linkAlreadySent
+        ? `Computed conversation state: the Boundlus URL was already sent. Do not repeat the URL or its original link call to action. ${postLinkRepliesSent} post-link support replies have been sent; the next logical support slot is ${postLinkRepliesSent + 1}. Resolve “that,” “it,” or “this” in a follow-up question as referring to Boundlus, and answer it using the goal before the support message.`
+        : "Computed conversation state: no Boundlus URL has been sent yet. Follow the goal's link timing rules.",
+    },
+    {
       role: "user",
       content: JSON.stringify({
         contact: peer,
@@ -91,6 +135,8 @@ export async function generateSnapchatLunaReply(
         nextOutgoingReplyNumber: history.previousReplyCount + 1,
         currentLocalDateTime: localClock.currentLocalDateTime,
         currentTimeZone: localClock.currentTimeZone,
+        conversationState,
+        latestIncomingMessage,
         sentReplies: history.sentReplies,
         transcript,
         goal,
@@ -107,7 +153,7 @@ export async function generateSnapchatLunaReply(
             role: "system",
             content: `The previous draft repeated a question already sent: "${rejectedQuestion}". Write a different reply to the newest incoming message and do not include that question.`,
           },
-          baseMessages[1],
+          ...baseMessages.slice(1),
         ];
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

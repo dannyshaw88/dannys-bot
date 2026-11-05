@@ -176,11 +176,12 @@ async function generateContextualReply(
   peer: string,
   transcript: string[],
   history: ReturnType<typeof getSnapchatReplyHistory>,
+  latestIncomingMessage: string,
 ): Promise<string> {
   const settings = await storage.getGlobalSettings();
   const apiKey = String((settings as any).openaiApiKey ?? "").trim() || (process.env.OPENAI_API_KEY ?? "").trim();
   if (!apiKey) throw new Error("Add an OpenAI API key in Settings → Security.");
-  return generateSnapchatLunaReply(apiKey, goal, peer, transcript, history);
+  return generateSnapchatLunaReply(apiKey, goal, peer, transcript, history, latestIncomingMessage);
 }
 
 export async function runReplyUnreadChats(context: SnapchatContext): Promise<void> {
@@ -411,7 +412,13 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     }
     if (activeContact) activeContact.stage = "drafting-reply";
     try {
-      reply = await generateContextualReply(replyGoal, contactKey, transcript, history);
+      reply = await generateContextualReply(
+        replyGoal,
+        contactKey,
+        transcript,
+        history,
+        transcript[transcript.length - 1] ?? "",
+      );
     } catch (error) {
       recordNotReplied(
         row.displayName,

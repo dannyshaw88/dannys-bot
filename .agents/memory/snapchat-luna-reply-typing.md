@@ -119,3 +119,9 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 **Why:** The user explicitly clarified that every third outgoing reply must contain the link; ordinary acknowledgments such as “OK” must not bypass the link step.
 
 **How to apply:** Keep this unconditional routing rule in every editable persona prompt, including special-answer turns. Do not weaken it to ordinary-chat context or hardcode persona-specific wording in software.
+
+**Post-link Boundlus questions:** After the URL has already been sent, interpret a direct “what’s that/it/this?” question as referring to Boundlus. Answer the platform question and use the remaining post-link support slot; do not restart the normal link step or repeat its URL/call to action.
+
+**Why:** The user showed an early media-request link followed by “what’s that?”; the model repeated the link pitch or gave a vague answer despite the conversation history.
+
+**How to apply:** Use the exact prior-link state and post-link count. For this narrow referential question, a deterministic fallback may use the active prompt’s own support text so wording stays editable and the answer cannot be replaced by another link pitch.

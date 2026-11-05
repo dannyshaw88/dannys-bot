@@ -6051,6 +6051,8 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
       `${message.role === "assistant" ? "Luna" : peer}: ${message.content}`,
     );
     const priorAssistantMessages = messages.filter((message: { role: string }) => message.role === "assistant");
+    const latestIncomingMessage = [...messages].reverse()
+      .find((message: { role: string }) => message.role === "user")?.content ?? "";
     const sentReplies = messages.flatMap((message: { role: string; content: string }, index: number) => {
       if (message.role !== "assistant") return [];
       const replyNumber = messages.slice(0, index + 1)
@@ -6070,6 +6072,7 @@ If asked about something outside Aura Farming, say: "I can only help with Aura F
         peer,
         transcript,
         { previousReplyCount: priorAssistantMessages.length, sentReplies },
+        latestIncomingMessage,
       );
       return res.json({ reply, skipped: !reply });
     } catch (error) {
