@@ -1,3 +1,13 @@
+## [1.2.678] — 2026-11-05
+
+### Fixed
+
+- Resolve queued automation cycles by stable account slot ID when slot positions change, while rejecting missing or duplicate IDs.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.678`.
+
 ## [1.2.677] — 2026-10-23
 
 ### Fixed
