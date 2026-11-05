@@ -9462,12 +9462,37 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
-  // Save proxy assignment for a device (no relay — user configures proxy directly in LD Player)
-  const deviceProxySchema = z.object({ proxyId: z.number().nullable() });
+  // Return only the saved assignment and non-secret proxy labels for the Phone
+  // Farm device dialog. Proxy credentials stay on the server.
+  app.get("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const cfg = loadInstanceConfigs();
+      const proxies = await storage.getProxies();
+      res.json({
+        proxyId: cfg[serial]?.proxyId ?? null,
+        proxies: proxies.map(({ id, name, host, port, proxyType }) => ({
+          id, name, host, port, proxyType: proxyType ?? null,
+        })),
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Could not load device proxies" });
+    }
+  });
+
+  // Save proxy assignment for a device.
+  const deviceProxySchema = z.object({ proxyId: z.number().int().positive().nullable() });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
     try {
       const input = deviceProxySchema.parse(req.body);
       const serial = p(req, "serial");
+      if (input.proxyId !== null) {
+        const proxies = await storage.getProxies();
+        if (!proxies.some(proxy => proxy.id === input.proxyId)) {
+          res.status(404).json({ error: "Proxy not found" });
+          return;
+        }
+      }
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], proxyId: input.proxyId ?? null };
       saveInstanceConfigs(cfg);
@@ -10971,20 +10996,33 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
     try {
       const serial = p(req, "serial");
       const { proxyId, proxyType } = z.object({
-        proxyId: z.number(),
-        proxyType: z.string().optional(),
+        proxyId: z.number().int().positive(),
+        proxyType: z.enum(["HTTP", "HTTPS", "SOCKS4", "SOCKS5"]).optional(),
       }).parse(req.body);
+      if (!await android.isDronyInstalled(serial)) {
+        res.status(409).json({ ok: false, error: "Drony is not installed on this device." });
+        return;
+      }
       const proxies = await storage.getProxies();
       const proxy = proxies.find(pr => pr.id === proxyId);
-      if (!proxy) return res.status(404).json({ error: "Proxy not found" });
+      if (!proxy) {
+        res.status(404).json({ error: "Proxy not found" });
+        return;
+      }
       const result = await android.configureDrony(serial, {
         host: proxy.host,
         port: proxy.port,
         user: proxy.username ?? undefined,
         pass: proxy.password ?? undefined,
-        proxyType: proxyType ?? "SOCKS5",
+        proxyType: proxyType ?? "HTTPS",
       });
-      res.json(result);
+      const active = result.ok && await android.isDronyVpnActive(serial);
+      res.status(active ? 200 : 502).json({
+        ...result,
+        ok: active,
+        active,
+        ...(!active && result.ok ? { error: "Drony finished setup but its VPN is not active." } : {}),
+      });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Configuration failed" });
     }

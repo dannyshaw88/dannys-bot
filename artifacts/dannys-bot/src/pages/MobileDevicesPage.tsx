@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check, Sun } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check, Sun, Globe } from "lucide-react";
 import { FaInstagram, FaSnapchatGhost } from "react-icons/fa";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
@@ -58,6 +58,231 @@ interface UsbPhone {
   marketName?:     string;
   manufacturer?:   string;
   androidVersion?: string;
+}
+
+interface DeviceProxyOption {
+  id: number;
+  name: string;
+  host: string;
+  port: number;
+  proxyType: string | null;
+}
+
+function DeviceProxyDialog({
+  device,
+  online,
+  open,
+  onOpenChange,
+}: {
+  device: FarmDevice;
+  online: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [proxies, setProxies] = useState<DeviceProxyOption[]>([]);
+  const [selectedProxyId, setSelectedProxyId] = useState("");
+  const [dronyStatus, setDronyStatus] = useState<{ installed: boolean; active: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    void (async () => {
+      try {
+        const [proxyResponse, dronyResponse] = await Promise.all([
+          fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/proxy`),
+          fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/drony`).catch(() => null),
+        ]);
+        const proxyData = await proxyResponse.json().catch(() => null);
+        if (!proxyResponse.ok) throw new Error(proxyData?.error ?? "Could not load this device’s proxy settings");
+        if (cancelled) return;
+        setProxies(Array.isArray(proxyData?.proxies) ? proxyData.proxies : []);
+        setSelectedProxyId(proxyData?.proxyId == null ? "" : String(proxyData.proxyId));
+
+        if (dronyResponse?.ok) {
+          const status = await dronyResponse.json().catch(() => null);
+          if (!cancelled && typeof status?.installed === "boolean") {
+            setDronyStatus({ installed: status.installed, active: status.active === true });
+          }
+        } else if (!cancelled) {
+          setDronyStatus(null);
+        }
+      } catch (loadError) {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load proxy settings");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [open, device.serial]);
+
+  const saveAssignment = async (proxyId: number | null) => {
+    const response = await fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/proxy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proxyId }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || data?.ok !== true) {
+      throw new Error(data?.error ?? "Could not save this device’s proxy assignment");
+    }
+  };
+
+  const handleSave = async () => {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await saveAssignment(selectedProxyId ? Number(selectedProxyId) : null);
+      setMessage("Proxy assignment saved for this device.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not save proxy assignment");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleApply = async () => {
+    if (!online) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      if (selectedProxyId) {
+        const proxyId = Number(selectedProxyId);
+        await saveAssignment(proxyId);
+        const response = await fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/drony/configure`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ proxyId, proxyType: "HTTPS" }),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok || data?.ok !== true || data?.active !== true) {
+          throw new Error(data?.error ?? "The HTTPS proxy could not be confirmed active on this device");
+        }
+        setDronyStatus({ installed: true, active: true });
+        setMessage("HTTPS proxy saved and active on this device.");
+      } else {
+        await saveAssignment(null);
+        const clearResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/apply-proxy`, {
+          method: "POST",
+        });
+        const clearData = await clearResponse.json().catch(() => null);
+        if (!clearResponse.ok || clearData?.ok !== true) {
+          throw new Error(clearData?.error ?? "Could not clear the Android proxy setting");
+        }
+
+        let active = dronyStatus?.active === true;
+        if (active) {
+          const stopResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/drony/deactivate`, {
+            method: "POST",
+          });
+          const stopData = await stopResponse.json().catch(() => null);
+          if (!stopResponse.ok || stopData?.ok !== true) {
+            throw new Error(stopData?.error ?? "The saved proxy was cleared, but Drony could not be stopped");
+          }
+          const statusResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(device.serial)}/drony`);
+          const status = statusResponse.ok ? await statusResponse.json().catch(() => null) : null;
+          active = status?.active === true;
+        }
+        setDronyStatus(previous => previous ? { ...previous, active } : previous);
+        setMessage(active
+          ? "Proxy assignment cleared, but Drony still reports active."
+          : "Proxy cleared from this device.");
+      }
+    } catch (applyError) {
+      setError(applyError instanceof Error ? applyError.message : "Could not apply proxy");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md" onClick={event => event.stopPropagation()}>
+        <DialogHeader>
+          <DialogTitle>Device {device.slotIndex} HTTPS proxy</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Choose a proxy from Proxy Manager. This assignment applies only to {resolveDisplayName(device)}.
+            Applying it uses Drony to route Android traffic through the HTTPS proxy.
+          </p>
+
+          {loading ? (
+            <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading device proxy settings…
+            </div>
+          ) : (
+            <>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-foreground">Proxy</span>
+                <select
+                  value={selectedProxyId}
+                  onChange={event => setSelectedProxyId(event.target.value)}
+                  disabled={busy}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="">No proxy</option>
+                  {proxies.map(proxy => (
+                    <option key={proxy.id} value={String(proxy.id)}>
+                      {proxy.name} — {proxy.host}:{proxy.port}
+                    </option>
+                  ))}
+                </select>
+                {proxies.length === 0 && (
+                  <span className="block text-xs text-muted-foreground">
+                    Add a proxy in Proxy Manager first.
+                  </span>
+                )}
+              </label>
+
+              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Device status: </span>
+                {!online
+                  ? <span className="text-muted-foreground">Offline — connect it to apply changes</span>
+                  : dronyStatus?.installed === false
+                    ? <span className="text-amber-600">Drony is not installed</span>
+                    : dronyStatus?.active
+                      ? <span className="text-emerald-600">HTTPS proxy active</span>
+                      : dronyStatus?.installed
+                        ? <span className="text-muted-foreground">Drony installed, proxy inactive</span>
+                        : <span className="text-muted-foreground">Proxy status unavailable</span>}
+              </div>
+            </>
+          )}
+
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {message && <p role="status" className="text-sm text-emerald-600">{message}</p>}
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+              Close
+            </Button>
+            <Button variant="outline" onClick={() => void handleSave()} disabled={loading || busy}>
+              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save assignment
+            </Button>
+            <Button
+              onClick={() => void handleApply()}
+              disabled={loading || busy || !online || (Boolean(selectedProxyId) && proxies.length === 0)}
+            >
+              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {selectedProxyId ? "Save & Apply HTTPS" : "Clear from Device"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 
@@ -1174,6 +1399,7 @@ function DeviceCard({
   onCustomize: (c: SlotCustomization) => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
+  const [proxyDialogOpen, setProxyDialogOpen] = useState(false);
   const [rebooting, setRebooting] = useState(false);
   const [brightnessAdjusting, setBrightnessAdjusting] = useState<"up" | "down" | null>(null);
   const phoneAreaRef = useRef<HTMLDivElement>(null);
@@ -1438,6 +1664,14 @@ function DeviceCard({
           <Power className="w-3 h-3" />
         </button>
         <button
+          onClick={e => { e.stopPropagation(); setProxyDialogOpen(true); }}
+          title="Set this device’s HTTPS proxy"
+          aria-label="Set this device’s HTTPS proxy"
+          className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground"
+        >
+          <Globe className="w-3 h-3" />
+        </button>
+        <button
           onClick={e => { e.stopPropagation(); setPanelOpen(true); }}
           title="Customise wallpaper & text"
           aria-label="Customise wallpaper & text"
@@ -1461,6 +1695,12 @@ function DeviceCard({
         custom={custom}
         onChange={onCustomize}
         label={resolveDisplayName(device, phone)}
+      />
+      <DeviceProxyDialog
+        device={device}
+        online={online}
+        open={proxyDialogOpen}
+        onOpenChange={setProxyDialogOpen}
       />
     </div>
   );
