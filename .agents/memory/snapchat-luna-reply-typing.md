@@ -113,3 +113,9 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 **Why:** The user explicitly said there should be no maximum number of unread chats to reply to.
 
 **How to apply:** Keep the UI, API validation, and run-count selection uncapped for this tool. The run still ends when it reaches the selected count or Snapchat has no more eligible unread chats.
+
+**Universal third-reply link:** When the next outgoing reply is actual Reply 3 and this contact has not already received the Boundlus URL, include the URL in that reply regardless of the incoming message or conversation context. If an early media route already sent the URL, do not repeat it.
+
+**Why:** The user explicitly clarified that every third outgoing reply must contain the link; ordinary acknowledgments such as “OK” must not bypass the link step.
+
+**How to apply:** Keep this unconditional routing rule in every editable persona prompt, including special-answer turns. Do not weaken it to ordinary-chat context or hardcode persona-specific wording in software.
