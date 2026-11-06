@@ -6979,6 +6979,29 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       res.status(409).json({ error: "The account slot changed; refresh the mobile page and retry" });
       return;
     }
+    const savedSlotSettings: Record<string, any> =
+      loadInstanceConfigs()[serial]?.slotAutomation?.[slotAutomationKey(serial, incomingSlotIdx, slotId)]
+      ?? loadInstanceConfigs()[serial]?.slotAutomation?.[String(incomingSlotIdx)]
+      ?? {};
+    // The client timer and its persisted toggle can briefly disagree (for
+    // example, a stale/background timer may fire while an OFF event is being
+    // delivered). Treat the saved slot toggle as the execution authority so
+    // an inactive account can never enter the device cycle.
+    if (savedSlotSettings.enabled !== true) {
+      logger.info({
+        serial,
+        slotId,
+        slotIdx: incomingSlotIdx,
+        cycleId: incomingCycleId,
+      }, "[HST] refusing cycle for disabled account slot");
+      res.status(409).json({
+        error: "Account slot is disabled",
+        slotDisabled: true,
+        slotId,
+        slotIdx: incomingSlotIdx,
+      });
+      return;
+    }
     automationCycleCurrentId.set(serial, incomingCycleId);
     automationCycleAbortedId.delete(serial); // clear any abort from a previous cycle
     automationCycleInProgress.add(serial);
@@ -7107,10 +7130,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // normally sends the same effective values it displayed, but the server
       // must remain authoritative when a template was edited in another tab
       // or the request came from the background runner.
-      const savedSlotSettings =
-        loadInstanceConfigs()[serial]?.slotAutomation?.[slotAutomationKey(serial, incomingSlotIdx, slotId)]
-        ?? loadInstanceConfigs()[serial]?.slotAutomation?.[String(incomingSlotIdx)]
-        ?? {};
       const effectiveCycle = configuredSlot?.platform === "snapchat"
         ? { settings: { ...savedSlotSettings, ...parsedCycle }, scoreId: null, configured: false }
         : await resolveTrustScoreSettings(serial, incomingSlotIdx, {

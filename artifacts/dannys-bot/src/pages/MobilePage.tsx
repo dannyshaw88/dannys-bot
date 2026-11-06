@@ -5539,7 +5539,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           }
         }
         if (!r.ok || !body?.ok) {
-          if (r.status === 409) {
+          if (body?.slotDisabled === true) {
+            // The API is authoritative if this runtime's toggle snapshot was
+            // stale. Stop the local loop and reflect the persisted OFF state
+            // instead of retrying the refused cycle on the next interval.
+            _hstStop.add(key);
+            _hstNextRunAt.delete(key);
+            markOnlyEnabledAsSaved(false);
+            setSettings(current => current.enabled ? { ...current, enabled: false } : current);
+            setNextRunAt(null);
+            srvLog(`${_dbgTag} — server refused cycle because the account slot is disabled; local loop stopped`);
+            onLog?.(`[HST-TOGGLE] ${_dbgTag} — cycle stopped because this account slot is disabled`);
+          } else if (r.status === 409) {
             // Server already has a cycle running (e.g. we just remounted while
             // one was in progress). Not an error — retry shortly instead of
             // waiting for the full HST interval and appearing inactive.

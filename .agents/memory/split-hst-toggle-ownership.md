@@ -63,6 +63,19 @@ back into the same store.
 **How to apply:** Destructure stable command functions from the context and use
 those functions in callback dependency arrays; keep store selectors separate.
 
+Every automation-cycle API entry must re-read the persisted slot master toggle
+before starting device work; an enabled client timer is not sufficient
+authority. Background-owned cycles must retain their cycle ID so an accepted
+OFF event can abort only that cycle.
+
+**Why:** A stale or delayed background timer can submit a cycle after the slot
+was disabled, and background-owned in-flight cycles otherwise do not receive
+the mounted UI's abort signal.
+
+**How to apply:** Enforce `enabled === true` at the server cycle boundary, stop
+background timers on OFF, and use the cycle-ID-matched abort endpoint for any
+background cycle already submitted.
+
 Reels watch duration is personality-adjusted at the shared effective-settings
 layer, so the visible editor and automation payload receive the same slot-specific range.
 

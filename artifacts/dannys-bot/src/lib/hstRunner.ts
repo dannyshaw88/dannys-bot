@@ -13,6 +13,10 @@ import { requestDeviceDebugLogClear } from "../contexts/DeviceLogContext";
 export const _hstTimers   = new Map<string, ReturnType<typeof setTimeout>>();
 export const _hstStop     = new Set<string>();
 export const _hstNextRunAt = new Map<string, number>();
+// Background-owned cycles need the same precise stop behavior as mounted
+// MobilePage cycles. Keep the active cycle ID so an accepted OFF toggle can
+// ask the API to abort only this cycle, without risking a later one.
+const _hstActiveCycleIds = new Map<string, string>();
 // Slot runtimes mounted by MobilePage own their timers. The app-level listener
 // must not start a second background owner for the same broadcast while one of
 // these runtimes is present; all owners share collisionCoordinator.ts.
@@ -195,6 +199,19 @@ export function stopHstLoop(serial: string, slotIdx: number): void {
   _hstStop.add(key);
   _hstNextRunAt.delete(key);
   cancelCollisionSlot(serial, slotIdx);
+  const cycleId = _hstActiveCycleIds.get(key);
+  if (cycleId) {
+    void fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle/abort`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cycleId }),
+      keepalive: true,
+    }).catch(() => {
+      // The server also checks the persisted slot toggle before starting a
+      // cycle, so an abort request failure cannot revive a disabled slot.
+    });
+    logBackgroundHst("active-cycle-abort-requested", serial, slotIdx, { key, cycleId });
+  }
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -447,6 +464,7 @@ async function runCycleBg(
       cycleId,
       count,
     });
+    _hstActiveCycleIds.set(key, cycleId);
     const cycleResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -647,12 +665,22 @@ async function runCycleBg(
         dismissDirection: s.dismissDirection,
       }),
     });
+    const cycleBody = await cycleResponse.json().catch(() => null);
     logBackgroundHst("cycle-post-response", serial, slotIdx, {
       key,
       cycleId,
       status: cycleResponse.status,
       ok: cycleResponse.ok,
     });
+    if (cycleBody?.slotDisabled === true) {
+      _hstStop.add(key);
+      _hstNextRunAt.delete(key);
+      logBackgroundHst("cycle-refused-disabled-slot", serial, slotIdx, {
+        key,
+        cycleId,
+      });
+      return;
+    }
     if (cycleResponse.status === 409) {
       // Another slot on this device is currently running. Keep this slot's
       // turn alive and retry shortly rather than waiting for the full interval
@@ -680,6 +708,7 @@ async function runCycleBg(
     scheduleNextBg(serial, slotIdx, key, 60_000);
     return;
   } finally {
+    if (_hstActiveCycleIds.get(key) === cycleId) _hstActiveCycleIds.delete(key);
     releaseCollisionSlot(serial, collisionLease);
   }
 

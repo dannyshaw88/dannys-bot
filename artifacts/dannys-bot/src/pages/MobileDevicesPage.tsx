@@ -388,7 +388,8 @@ function SimCardSelector({
   const [openMenu, setOpenMenu] = useState<"country" | "provider" | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const country = getSimCountry(custom.simCountryCode);
-  const selectedProvider = country.providers.includes(custom.simProvider ?? "")
+  const providers = [...country.providers, "Wi-Fi"];
+  const selectedProvider = providers.includes(custom.simProvider ?? "")
     ? custom.simProvider
     : null;
 
@@ -473,7 +474,7 @@ function SimCardSelector({
           className="absolute left-1/2 top-[calc(100%+4px)] z-40 max-h-[7.5rem] w-36 -translate-x-1/2 overflow-y-auto rounded-md border border-border bg-white p-1 text-black opacity-100 shadow-xl"
           style={{ backgroundColor: "#ffffff", opacity: 1 }}
         >
-          {country.providers.map(provider => (
+          {providers.map(provider => (
             <button
               key={provider}
               type="button"
