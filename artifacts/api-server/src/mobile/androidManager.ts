@@ -10855,17 +10855,26 @@ export async function pushFileToDevice(
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const requestedExt = path.extname(fileName).toLowerCase();
-  const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp"].includes(requestedExt)
-    ? requestedExt
-    : ".jpg";
+  const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp"]);
+  const videoExtensions = new Set([".mp4", ".mov", ".m4v", ".3gp", ".3g2", ".webm", ".mkv"]);
+  const isVideo = videoExtensions.has(requestedExt);
+  const safeExt = imageExtensions.has(requestedExt) || isVideo ? requestedExt : ".jpg";
   // Never preserve the PC source basename on the phone. Source names can
   // contain provider/folder markers (for example "wavespeed") that become
   // visible to gallery/media-picker consumers. The extension is retained
-  // only so Android can identify the media type.
-  const deviceFileName = `IMG_${randomBytes(12).toString("hex")}${safeExt}`;
+  // only so Android can identify the media type. Use Android's conventional
+  // video prefix so media apps classify the staged file consistently.
+  const deviceFileName = `${isVideo ? "VID" : "IMG"}_${randomBytes(12).toString("hex")}${safeExt}`;
   const devicePath = `/sdcard/DCIM/Camera/${deviceFileName}`;
   try {
-    await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], 20000);
+    const fileSize = (await fs.promises.stat(localPath)).size;
+    // Videos can take longer than the old fixed 20-second image-transfer
+    // timeout. Allow transfer time to scale with file size, capped at 10 min.
+    const transferTimeoutMs = Math.min(
+      10 * 60_000,
+      Math.max(20_000, 20_000 + Math.ceil(fileSize / (2 * 1024 * 1024)) * 1000),
+    );
+    await runAdbStrict(adb, ["-s", serial, "push", localPath, devicePath], transferTimeoutMs);
     if (scan) await scanMediaFile(serial, devicePath, strictMediaScan);
     return devicePath;
   } catch (error) {

@@ -4,12 +4,14 @@ import { massSnapSettingsDefault, type MassSnapSettings } from "./massSnap";
 import { replyUnreadChatsSettingsDefault, type ReplyUnreadChatsSettings } from "./replyUnreadChats";
 import { shuffleToolOrderDefault } from "./shuffleToolOrder";
 import { uploadSnapSettingsDefault, type UploadSnapSettings } from "./uploadSnap";
+import { uploadVideoSettingsDefault, type UploadVideoSettings } from "./uploadVideo";
 import { viewSnapsSettingsDefault, type ViewSnapsSettings } from "./viewSnaps";
 import { viewStoriesSettingsDefault, type ViewStoriesSettings } from "./viewStories";
 
 export type SnapchatToolSettings = {
   shuffleToolOrder: boolean;
   uploadSnap: UploadSnapSettings;
+  uploadVideo: UploadVideoSettings;
   addFriends: AddFriendsSettings;
   massSnap: MassSnapSettings;
   acceptFriends: AcceptFriendsSettings;
@@ -21,6 +23,7 @@ export type SnapchatToolSettings = {
 export const snapchatToolSettingsDefaults: SnapchatToolSettings = {
   shuffleToolOrder: shuffleToolOrderDefault,
   uploadSnap: uploadSnapSettingsDefault,
+  uploadVideo: uploadVideoSettingsDefault,
   addFriends: addFriendsSettingsDefault,
   massSnap: massSnapSettingsDefault,
   acceptFriends: acceptFriendsSettingsDefault,
@@ -35,6 +38,7 @@ export type {
   MassSnapSettings,
   ReplyUnreadChatsSettings,
   UploadSnapSettings,
+  UploadVideoSettings,
   ViewSnapsSettings,
   ViewStoriesSettings,
 };

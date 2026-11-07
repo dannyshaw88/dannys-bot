@@ -1461,32 +1461,23 @@ async function createWindow() {
   });
 
   // Open a native OS media-file picker for manual phone uploads.
-  // The selected path stays on the Windows machine; the API server pushes a
-  // temporary copy to the connected Android device when the user presses Load.
+  // Return paths only: the API server pushes the file to Android after the
+  // user presses Load. Reading the bytes here would copy large videos into
+  // Electron IPC memory unnecessarily.
   ipcMain.handle("open-media-file-dialog", async () => {
     const result = await dialog.showOpenDialog({
-      title: "Choose images",
+      title: "Choose media",
       properties: ["openFile", "multiSelections"],
       filters: [
-        { name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif", "bmp"] },
+        { name: "Images and Videos", extensions: ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif", "bmp", "mp4", "mov", "m4v", "3gp", "3g2", "webm", "mkv"] },
         { name: "All Files", extensions: ["*"] },
       ],
     });
     if (result.canceled || !result.filePaths.length) return { canceled: true };
-    const files = result.filePaths.map(filePath => {
-      const ext = path.extname(filePath).toLowerCase();
-      const mime = ({
-        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-        ".webp": "image/webp", ".gif": "image/gif", ".bmp": "image/bmp",
-        ".avif": "image/avif", ".heic": "image/heic", ".heif": "image/heif",
-      } as Record<string, string>)[ext] ?? "application/octet-stream";
-      const data = fs.readFileSync(filePath);
-      return {
-        filePath,
-        fileName: path.basename(filePath),
-        dataUrl: `data:${mime};base64,${data.toString("base64")}`,
-      };
-    });
+    const files = result.filePaths.map(filePath => ({
+      filePath,
+      fileName: path.basename(filePath),
+    }));
     return {
       canceled: false,
       files,

@@ -1220,6 +1220,29 @@ function setSnapUploadFolderPath(serial: string, slotId: string, folderPath: str
   } catch { /* callers report persistence errors through the settings route */ }
 }
 
+function _snapVideoUploadFolderPathFile(serial: string, slotIdentity: string): string {
+  const safeSerial = serial.replace(/[^a-zA-Z0-9_\-]/g, "_");
+  const safeIdentity = slotIdentity.replace(/[^a-zA-Z0-9_\-]/g, "_");
+  return path.join(FOLDER_PATHS_DIR, `${safeSerial}_${safeIdentity}_snap_video_upload.txt`);
+}
+
+function getSnapVideoUploadFolderPath(serial: string, slotIdx: number, slotId: string): string {
+  try {
+    return fs.readFileSync(_snapVideoUploadFolderPathFile(serial, slotId), "utf8").trim();
+  } catch {
+    try { return fs.readFileSync(_snapVideoUploadFolderPathFile(serial, `legacy-index-${slotIdx}`), "utf8").trim(); }
+    catch { return ""; }
+  }
+}
+
+function setSnapVideoUploadFolderPath(serial: string, slotId: string, folderPath: string): void {
+  if (!folderPath) return;
+  try {
+    fs.mkdirSync(FOLDER_PATHS_DIR, { recursive: true });
+    fs.writeFileSync(_snapVideoUploadFolderPathFile(serial, slotId), folderPath, "utf8");
+  } catch { /* callers report persistence errors through the settings route */ }
+}
+
 function _postStoryFolderPathFile(serial: string, slotIdx: number): string {
   return path.join(FOLDER_PATHS_DIR, `${serial.replace(/[^a-zA-Z0-9_\-]/g, "_")}_slot${slotIdx}_post_story.txt`);
 }
@@ -2371,8 +2394,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   // ── Manual PC → phone media transfer ─────────────────────────────────────
   // This is intentionally separate from automated Make a Post. The user
-  // chooses one image, loads it into DCIM/Camera, completes the Instagram post
-  // manually in the mirror, and explicitly deletes the phone copy afterward.
+  // chooses media, loads it into DCIM/Camera, completes the post manually in
+  // the mirror, and explicitly deletes the phone copy afterward.
   app.post("/api/mobile/devices/:serial/manual-media/load", async (req: Request, res: Response) => {
     let tempPath: string | null = null;
     try {
@@ -2384,9 +2407,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       }).refine(v => !!v.localPath || !!v.fileData, { message: "localPath or fileData is required" }).parse(req.body);
 
       const ext = path.extname(body.fileName).toLowerCase();
-      const allowedExts = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp"]);
+      const allowedExts = new Set([
+        ".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif", ".avif", ".bmp",
+        ".mp4", ".mov", ".m4v", ".3gp", ".3g2", ".webm", ".mkv",
+      ]);
       if (!allowedExts.has(ext)) {
-        res.status(400).json({ ok: false, error: "Choose an image file (JPG, PNG, WEBP, GIF, HEIC, HEIF, AVIF, or BMP)." });
+        res.status(400).json({ ok: false, error: "Choose a supported image or video file." });
         return;
       }
 
@@ -2395,21 +2421,26 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const safeName = body.fileName.replace(/[^a-zA-Z0-9_.-]/g, "_");
         tempPath = path.join(os.tmpdir(), `equinox-manual-media-${Date.now()}-${safeName}`);
         const buffer = Buffer.from(body.fileData.replace(/^data:[^;]+;base64,/, ""), "base64");
-        if (!buffer.length) throw new Error("Selected image data was empty");
+        if (!buffer.length) throw new Error("Selected media data was empty");
         await fsPromises.writeFile(tempPath, buffer);
         sourcePath = tempPath;
       }
-      if (!sourcePath) throw new Error("No image source was provided");
+      if (!sourcePath) throw new Error("No media source was provided");
       const stat = await fsPromises.stat(sourcePath);
-      if (!stat.isFile()) throw new Error("Selected image path is not a file");
-      if (stat.size > 100 * 1024 * 1024) throw new Error("Image is larger than 100 MB");
+      if (!stat.isFile()) throw new Error("Selected media path is not a file");
+      const maxBytes = body.localPath ? 1024 * 1024 * 1024 : 70 * 1024 * 1024;
+      if (stat.size > maxBytes) {
+        throw new Error(body.localPath
+          ? "Media file is larger than 1 GB"
+          : "Browser uploads are limited to 70 MB; use the Windows app for larger media files");
+      }
 
       const devicePath = await android.pushFileToDevice(serial, sourcePath, body.fileName);
-      logger.info({ serial, fileName: body.fileName, devicePath }, "[manual-media] loaded image onto phone");
+      logger.info({ serial, fileName: body.fileName, devicePath }, "[manual-media] loaded media onto phone");
       res.json({ ok: true, fileName: body.fileName, devicePath });
     } catch (e: any) {
       logger.warn({ err: e }, "[manual-media] load failed");
-      res.status(400).json({ ok: false, error: e?.message ?? "Could not load image onto phone" });
+      res.status(400).json({ ok: false, error: e?.message ?? "Could not load media onto phone" });
     } finally {
       if (tempPath) await fsPromises.unlink(tempPath).catch(() => {});
     }
@@ -2420,16 +2451,16 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const devicePath = z.string()
         .regex(
-          /^\/sdcard\/DCIM\/Camera\/(?:IMG_[a-f0-9]{24}|equinox_\d{13}_[a-zA-Z0-9_.-]+)\.(jpg|jpeg|png|webp|gif|heic|heif|avif|bmp)$/i,
+          /^\/sdcard\/DCIM\/Camera\/(?:IMG_[a-f0-9]{24}|VID_[a-f0-9]{24}|equinox_\d{13}_[a-zA-Z0-9_.-]+)\.(?:jpg|jpeg|png|webp|gif|heic|heif|avif|bmp|mp4|mov|m4v|3gp|3g2|webm|mkv)$/i,
           "Invalid manual media path",
         )
         .parse(req.body?.devicePath);
       await android.removeDeviceFile(serial, devicePath);
-      logger.info({ serial, devicePath }, "[manual-media] deleted image from phone");
+      logger.info({ serial, devicePath }, "[manual-media] deleted media from phone");
       res.json({ ok: true, devicePath });
     } catch (e: any) {
       logger.warn({ err: e }, "[manual-media] delete failed");
-      res.status(400).json({ ok: false, error: e?.message ?? "Could not delete image from phone" });
+      res.status(400).json({ ok: false, error: e?.message ?? "Could not delete media from phone" });
     }
   });
 
@@ -3736,6 +3767,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (snapUploadFolderPath) {
         merged.snapchatTools.uploadSnap.directoryPath = snapUploadFolderPath;
       }
+      const snapVideoUploadFolderPath = getSnapVideoUploadFolderPath(
+        serial,
+        slotIdx,
+        accountSlotId(serial, slotIdx, requestedSlotId),
+      );
+      if (snapVideoUploadFolderPath) {
+        merged.snapchatTools.uploadVideo.directoryPath = snapVideoUploadFolderPath;
+      }
       // The dedicated folder-path file is the authoritative source for
       // makePostLocalFolderPath.  It is written directly when the user assigns
       // a folder, so it survives Copy Settings, schema drift, and any autosave
@@ -3804,7 +3843,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           : {};
         const incomingTools = body.snapchatTools;
         const mergedTools: Record<string, any> = { ...existingTools, ...incomingTools };
-        for (const toolKey of ["uploadSnap", "addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"]) {
+        for (const toolKey of ["uploadSnap", "uploadVideo", "addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"]) {
           const incomingTool = incomingTools[toolKey];
           if (incomingTool && typeof incomingTool === "object" && !Array.isArray(incomingTool)) {
             const existingTool = existingTools[toolKey] && typeof existingTools[toolKey] === "object"
@@ -3822,6 +3861,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           );
           if (!incomingUploadSnap.directoryPath && assignedPath) {
             mergedTools.uploadSnap = { ...mergedTools.uploadSnap, directoryPath: assignedPath };
+          }
+        }
+        const incomingUploadVideo = incomingTools.uploadVideo;
+        if (incomingUploadVideo && typeof incomingUploadVideo === "object" && !Array.isArray(incomingUploadVideo)) {
+          const assignedPath = getSnapVideoUploadFolderPath(
+            serial,
+            slotIdx,
+            accountSlotId(serial, slotIdx, requestedSlotId),
+          );
+          if (!incomingUploadVideo.directoryPath && assignedPath) {
+            mergedTools.uploadVideo = { ...mergedTools.uploadVideo, directoryPath: assignedPath };
           }
         }
         body.snapchatTools = mergedTools;
@@ -3920,6 +3970,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           serial,
           accountSlotId(serial, slotIdx, requestedSlotId),
           input.snapchatTools.uploadSnap.directoryPath,
+        );
+      }
+      if (input.snapchatTools.uploadVideo.directoryPath) {
+        setSnapVideoUploadFolderPath(
+          serial,
+          accountSlotId(serial, slotIdx, requestedSlotId),
+          input.snapchatTools.uploadVideo.directoryPath,
         );
       }
       res.json({ ok: true });
@@ -5684,6 +5741,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   };
 
   const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+  const SNAPCHAT_VIDEO_EXTS = new Set([".mp4", ".mov", ".m4v", ".3gp", ".3g2", ".webm", ".mkv"]);
 
   /**
    * Picks the next image to post from `folderPath` per the user's Local
@@ -5719,6 +5777,36 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
     const ordered = random ? [...images].sort(() => Math.random() - 0.5) : [...images].sort((a, b) => a.localeCompare(b));
     return ordered[0];
+  }
+
+  async function pickLocalFolderVideo(serial: string, opts: {
+    folderPath: string;
+    random: boolean;
+    excludeFileNames?: string[];
+    onLog?: (msg: string) => void;
+  }): Promise<string | null> {
+    const { folderPath, random, excludeFileNames = [], onLog } = opts;
+    let entries: string[];
+    try {
+      entries = await fsPromises.readdir(folderPath);
+    } catch (error: any) {
+      onLog?.(`Upload a Video: could not read the video directory on ${serial} — ${error?.message ?? "unknown error"}`);
+      return null;
+    }
+    const excluded = new Set(excludeFileNames);
+    const videos = entries.filter(fileName =>
+      SNAPCHAT_VIDEO_EXTS.has(path.extname(fileName).toLowerCase()) && !excluded.has(fileName),
+    );
+    if (videos.length === 0) {
+      onLog?.(
+        excludeFileNames.length
+          ? `Upload a Video: no unused supported videos remain in "${folderPath}".`
+          : `Upload a Video: no supported video files found in "${folderPath}".`,
+      );
+      return null;
+    }
+    if (random) return videos[Math.floor(Math.random() * videos.length)];
+    return videos.sort((a, b) => a.localeCompare(b))[0];
   }
 
   /**
@@ -6934,6 +7022,49 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ ok: true });
   });
 
+  app.post("/api/mobile/devices/:serial/slots/:slotIdx/snap-video-upload-folder-path", (req: Request, res: Response) => {
+    const serial = req.params.serial as string;
+    const slotIdx = parseMobileSlotIndex(req.params.slotIdx);
+    if (slotIdx === null) { res.status(400).json({ error: "Invalid slot index" }); return; }
+    const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId : undefined;
+    const folderPath = typeof req.body?.path === "string" ? req.body.path.trim() : "";
+    if (!folderPath) { res.status(400).json({ error: "Choose a directory before saving it." }); return; }
+
+    const stableSlotId = accountSlotId(serial, slotIdx, requestedSlotId);
+    setSnapVideoUploadFolderPath(serial, stableSlotId, folderPath);
+    try {
+      const cfg = loadInstanceConfigs();
+      const stableKey = slotAutomationKey(serial, slotIdx, requestedSlotId);
+      const existing = (cfg[serial]?.slotAutomation?.[stableKey]
+        ?? cfg[serial]?.slotAutomation?.[String(slotIdx)]
+        ?? {}) as Partial<AutomationSettings>;
+      const existingTools = existing.snapchatTools && typeof existing.snapchatTools === "object"
+        ? existing.snapchatTools as Partial<SnapchatToolSettings>
+        : {};
+      const existingUploadVideo = existingTools.uploadVideo && typeof existingTools.uploadVideo === "object"
+        ? existingTools.uploadVideo
+        : {};
+      cfg[serial] = {
+        ...cfg[serial],
+        slotAutomation: {
+          ...cfg[serial]?.slotAutomation,
+          [stableKey]: {
+            ...existing,
+            snapchatTools: {
+              ...existingTools,
+              uploadVideo: { ...existingUploadVideo, directoryPath: folderPath },
+            } as SnapchatToolSettings,
+          } as AutomationSettings,
+        },
+      };
+      saveInstanceConfigs(cfg);
+    } catch {
+      res.status(500).json({ error: "The video directory could not be saved." });
+      return;
+    }
+    res.json({ ok: true });
+  });
+
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/post-story-folder-path", (req: Request, res: Response) => {
     const serial = req.params.serial as string;
     const slotIdx = parseInt(req.params.slotIdx, 10);
@@ -7643,6 +7774,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               targetUsername: configuredSlot?.username?.trim() || resolvedSlotUsername,
               path,
               pickLocalFolderImage,
+              pickLocalFolderVideo,
               tools: snapchatTools,
               onLog: tLog,
               onAccountNotFound: async username => {

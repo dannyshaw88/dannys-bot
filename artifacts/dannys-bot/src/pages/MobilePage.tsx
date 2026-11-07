@@ -3381,10 +3381,10 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
       if (Array.isArray(saved?.media)) {
         setLoadedMedia(saved.media.filter((item: any) => item?.devicePath).map((item: any) => ({
           devicePath: String(item.devicePath),
-          fileName: String(item.fileName ?? "image"),
+          fileName: String(item.fileName ?? "media"),
         })));
       } else if (saved?.devicePath) {
-        setLoadedMedia([{ devicePath: String(saved.devicePath), fileName: String(saved.fileName ?? "image") }]);
+        setLoadedMedia([{ devicePath: String(saved.devicePath), fileName: String(saved.fileName ?? "media") }]);
       }
     } catch {}
   }, [storageKey]);
@@ -3410,7 +3410,7 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
         path: String(file.filePath),
         name: String(file.fileName ?? file.filePath.split(/[\\/]/).pop() ?? "image"),
       })));
-      onLog?.(`Manual media: selected ${files.length} image${files.length === 1 ? "" : "s"}`);
+      onLog?.(`Manual media: selected ${files.length} file${files.length === 1 ? "" : "s"}`);
       return;
     }
     browserFileRef.current?.click();
@@ -3421,7 +3421,7 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
     if (!files.length) return;
     setSelectedFiles(files.map(file => ({ name: file.name, file })));
     setMessage(null);
-    onLog?.(`Manual media: selected ${files.length} image${files.length === 1 ? "" : "s"}`);
+    onLog?.(`Manual media: selected ${files.length} file${files.length === 1 ? "" : "s"}`);
   };
 
   const loadToPhone = async () => {
@@ -3450,9 +3450,9 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
       }
       setSelectedFiles([]);
       if (browserFileRef.current) browserFileRef.current.value = "";
-      setMessage(`Loaded ${selectedFiles.length} image${selectedFiles.length === 1 ? "" : "s"} onto phone.`);
+      setMessage(`Loaded ${selectedFiles.length} media file${selectedFiles.length === 1 ? "" : "s"} onto phone.`);
     } catch (e: any) {
-      setMessage(e?.message ?? "Could not load image onto phone");
+      setMessage(e?.message ?? "Could not load media onto phone");
       onLog?.(`Manual media: load failed — ${e?.message ?? "unknown error"}`);
     } finally {
       setBusy(false);
@@ -3481,7 +3481,7 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
        });
        setMessage(`Deleted ${media.fileName} from phone.`);
     } catch (e: any) {
-      setMessage(e?.message ?? "Could not delete image from phone");
+      setMessage(e?.message ?? "Could not delete media from phone");
       onLog?.(`Manual media: delete failed — ${e?.message ?? "unknown error"}`);
     } finally {
       setBusy(false);
@@ -3493,14 +3493,14 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
       <input
         ref={browserFileRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         multiple
         className="hidden"
         onChange={e => onBrowserFile(e.target.files)}
       />
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <span className="text-[10px] font-semibold text-white/70 flex items-center gap-1.5">
-          <ImagePlus className="w-3.5 h-3.5 text-cyan-300" /> Manual post image
+          <ImagePlus className="w-3.5 h-3.5 text-cyan-300" /> Manual media
         </span>
         <button
           type="button"
@@ -3518,7 +3518,7 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
           onClick={selectFromPc}
           disabled={busy}
           className="inline-flex items-center gap-1.5 rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-400/20 disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Choose another image from the Windows PC"
+          title="Choose media from the PC"
         >
           <FolderOpen className="w-3 h-3" /> Select from PC
         </button>
@@ -3533,12 +3533,12 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
         </button>
         {selectedFiles.length > 0 && (
           <span className="text-[10px] text-white/55 truncate max-w-[260px]">
-            Selected: {selectedFiles.length} image{selectedFiles.length === 1 ? "" : "s"}
+            Selected: {selectedFiles.length} media file{selectedFiles.length === 1 ? "" : "s"}
           </span>
         )}
       </div>
        <p className="mt-1 text-[9px] text-white/35">
-         Select and load as many images as needed. They remain in Instagram’s gallery until you delete them individually.
+          Select and load images or videos. They remain in the phone gallery until you delete them individually.
       </p>
       {loadedMedia.length > 0 && (
         <div className="mt-1.5 space-y-1 border-t border-white/10 pt-1.5">
@@ -4255,7 +4255,7 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       {isReady && phone && (
         <div ref={navRef} className="relative flex items-center justify-center gap-2 px-2 py-2 bg-zinc-900 border-t border-white/6 shrink-0">
           <NavBtn icon={<ChevronLeft className="w-3.5 h-3.5" />} label="Back"   onClick={() => sendKey(phone.serial, 4,   "Back",   onLog)} />
-          <NavBtn icon={<ImagePlus className="w-3.5 h-3.5" />} label="Image" onClick={() => setShowManualMedia(v => !v)} />
+          <NavBtn icon={<ImagePlus className="w-3.5 h-3.5" />} label="Media" onClick={() => setShowManualMedia(v => !v)} />
           <NavBtn icon={<Home        className="w-3.5 h-3.5" />} label="Home"   onClick={() => sendKey(phone.serial, 3,   "Home",   onLog)} />
           <div className="w-px h-4 bg-white/10" />
            <NavBtn icon={<Power       className="w-3 h-3" />}     label={manualPowerActuallyOn ? "Power off" : "Power on"}  onClick={toggleManualPower} />
@@ -5943,6 +5943,7 @@ const SNAPCHAT_COPY_OPTIONS = [
   { key: "step1", label: "Step 1 enabled state, interval and time window" },
   { key: "shuffleToolOrder", label: "Shuffle tool order" },
   { key: "uploadSnap", label: "Upload a Snap" },
+  { key: "uploadVideo", label: "Upload a Video" },
   { key: "addFriends", label: "Add Friends" },
   { key: "acceptFriends", label: "Accept Friends" },
   { key: "viewStories", label: "View Spotlights" },
@@ -6244,7 +6245,7 @@ function CopySettingsDialog({
       if (selectedSnapchatCopyKeys.has("shuffleToolOrder")) {
         snapchatTools.shuffleToolOrder = settings.snapchatTools.shuffleToolOrder;
       }
-      for (const key of ["uploadSnap", "addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"] as const) {
+      for (const key of ["uploadSnap", "uploadVideo", "addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"] as const) {
         if (selectedSnapchatCopyKeys.has(key)) {
           const toolSettings = { ...settings.snapchatTools[key] } as Record<string, unknown>;
           if (key === "replyUnreadChats" && !copyReplyPrompt) delete toolSettings.replyGoal;

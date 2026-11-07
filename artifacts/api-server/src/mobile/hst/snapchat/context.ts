@@ -48,6 +48,15 @@ export type SnapchatContext = {
       onLog?: (message: string) => void;
     },
   ) => Promise<string | null>;
+  pickLocalFolderVideo: (
+    serial: string,
+    opts: {
+      folderPath: string;
+      random: boolean;
+      excludeFileNames?: string[];
+      onLog?: (message: string) => void;
+    },
+  ) => Promise<string | null>;
   tools: SnapchatToolSettings;
   onLog: (message: string) => void;
   onAccountNotFound?: (username: string) => Promise<void>;

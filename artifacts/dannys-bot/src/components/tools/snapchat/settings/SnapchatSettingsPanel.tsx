@@ -5,6 +5,7 @@ import { MassSnapSetting } from "./MassSnapSetting";
 import { ReplyUnreadChatsSetting } from "./ReplyUnreadChatsSetting";
 import { ShuffleToolOrderSetting } from "./ShuffleToolOrderSetting";
 import { UploadSnapSetting } from "./UploadSnapSetting";
+import { UploadVideoSetting } from "./UploadVideoSetting";
 import { ViewSnapsSetting } from "./ViewSnapsSetting";
 import { ViewSpotlightsSetting } from "./ViewSpotlightsSetting";
 
@@ -46,6 +47,13 @@ export function SnapchatSettingsPanel({
         phoneSerial={phoneSerial}
         slotIdx={slotIdx}
         onUpdate={patch => onToolUpdate("uploadSnap", patch as Record<string, unknown>)}
+      />
+      <UploadVideoSetting
+        value={settings.uploadVideo}
+        loading={loading}
+        phoneSerial={phoneSerial}
+        slotIdx={slotIdx}
+        onUpdate={patch => onToolUpdate("uploadVideo", patch as Record<string, unknown>)}
       />
       <AddFriendsSetting
         value={settings.addFriends}

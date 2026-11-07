@@ -3,6 +3,7 @@
 ### Fixed
 
 - Prevent Snapchat account slots from sharing execution windows or appearing locked after copying settings by repairing duplicate slot IDs and targeting copy operations by stable slot identity.
+- Rename the mirror upload control to Media and allow supported video files, including MP4, to be loaded with images.
 
 ### Release
 

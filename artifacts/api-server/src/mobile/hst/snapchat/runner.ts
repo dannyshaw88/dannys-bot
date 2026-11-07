@@ -6,6 +6,7 @@ import { runAcceptFriends } from "./tools/acceptFriends";
 import { runAddFriends } from "./tools/addFriends";
 import { runReplyUnreadChats } from "./tools/replyUnreadChats";
 import { runUploadSnap, type UploadSnapResult } from "./tools/uploadSnap";
+import { runUploadVideo, type UploadVideoResult } from "./tools/uploadVideo";
 import { runViewSnaps } from "./tools/viewSnaps";
 import { runViewSpotlights } from "./tools/viewSpotlights";
 
@@ -17,7 +18,7 @@ type SnapchatToolEntry = {
     activatePctMax: number;
     directoryPath?: string;
   };
-  run: () => Promise<void | UploadSnapResult | boolean>;
+  run: () => Promise<void | UploadSnapResult | UploadVideoResult | boolean>;
 };
 
 export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
@@ -28,6 +29,7 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
 
   const toolList: SnapchatToolEntry[] = [
     { name: "Upload a Snap", settings: context.tools.uploadSnap, run: () => runUploadSnap(context) },
+    { name: "Upload a Video", settings: context.tools.uploadVideo, run: () => runUploadVideo(context) },
     { name: "Add Friends", settings: context.tools.addFriends, run: () => runAddFriends(context) },
     { name: "Accept Friends", settings: context.tools.acceptFriends, run: () => runAcceptFriends(context) },
     { name: "Reply to Unread Chats", settings: context.tools.replyUnreadChats, run: () => runReplyUnreadChats(context) },
@@ -37,7 +39,10 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
 
   const orderedTools = toolList.filter(tool => {
     if (!tool.settings.enabled) return false;
-    if (tool.name === "Upload a Snap" && !tool.settings.directoryPath?.trim()) return false;
+    if (
+      (tool.name === "Upload a Snap" || tool.name === "Upload a Video") &&
+      !tool.settings.directoryPath?.trim()
+    ) return false;
     const min = Math.max(0, Math.min(100, Math.round(tool.settings.activatePctMin)));
     const max = Math.max(0, Math.min(100, Math.round(tool.settings.activatePctMax)));
     const low = Math.min(min, max);
@@ -61,10 +66,10 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
     if (context.isAborted()) return;
     let toolError: unknown;
     let toolFailed = false;
-    let result: void | UploadSnapResult | boolean = undefined;
+    let result: void | UploadSnapResult | UploadVideoResult | boolean = undefined;
     try {
       result = await tool.run();
-      if (tool.name === "Upload a Snap" && result === "failed") return;
+      if ((tool.name === "Upload a Snap" || tool.name === "Upload a Video") && result === "failed") return;
     } catch (error) {
       toolError = error;
       toolFailed = true;

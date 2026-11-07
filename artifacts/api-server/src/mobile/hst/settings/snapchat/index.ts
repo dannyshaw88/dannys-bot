@@ -5,12 +5,14 @@ import { massSnapSettingsDefault, massSnapSettingsSchema } from "./massSnap";
 import { replyUnreadChatsSettingsDefault, replyUnreadChatsSettingsSchema } from "./replyUnreadChats";
 import { shuffleToolOrderDefault, shuffleToolOrderSchema } from "./shuffleToolOrder";
 import { uploadSnapSettingsDefault, uploadSnapSettingsSchema } from "./uploadSnap";
+import { uploadVideoSettingsDefault, uploadVideoSettingsSchema } from "./uploadVideo";
 import { viewSnapsSettingsDefault, viewSnapsSettingsSchema } from "./viewSnaps";
 import { viewStoriesSettingsDefault, viewStoriesSettingsSchema } from "./viewStories";
 
 export const snapchatToolsSettingsDefault = {
   shuffleToolOrder: shuffleToolOrderDefault,
   uploadSnap: uploadSnapSettingsDefault,
+  uploadVideo: uploadVideoSettingsDefault,
   addFriends: addFriendsSettingsDefault,
   massSnap: massSnapSettingsDefault,
   acceptFriends: acceptFriendsSettingsDefault,
@@ -22,6 +24,7 @@ export const snapchatToolsSettingsDefault = {
 export const snapchatToolsSettingsSchema = z.object({
   shuffleToolOrder: shuffleToolOrderSchema,
   uploadSnap: uploadSnapSettingsSchema,
+  uploadVideo: uploadVideoSettingsSchema,
   addFriends: addFriendsSettingsSchema,
   massSnap: massSnapSettingsSchema,
   acceptFriends: acceptFriendsSettingsSchema,
@@ -39,6 +42,7 @@ export {
   replyUnreadChatsSettingsSchema,
   shuffleToolOrderSchema,
   uploadSnapSettingsSchema,
+  uploadVideoSettingsSchema,
   viewSnapsSettingsSchema,
   viewStoriesSettingsSchema,
 };
