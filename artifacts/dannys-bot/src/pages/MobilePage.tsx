@@ -5937,8 +5937,8 @@ function useCollisionPreventer(serial: string | null) {
 // ── Copy Settings dialog ──────────────────────────────────────────────────────
 // CopySubSetting, CopySection, and COPY_SECTIONS are imported from mobileShared
 
-type CopyTarget = { serial: string; slotIdx: number };
-type DeviceSlots = { phone: UsbPhone; slots: Array<{ username: string; platform?: AccountPlatform; snapchatTrustScoreLabel?: SnapchatTrustScoreLabel }> };
+type CopyTarget = { serial: string; slotIdx: number; slotId?: string };
+type DeviceSlots = { phone: UsbPhone; slots: Array<{ slotId?: string; username: string; platform?: AccountPlatform; snapchatTrustScoreLabel?: SnapchatTrustScoreLabel }> };
 const SNAPCHAT_COPY_OPTIONS = [
   { key: "step1", label: "Step 1 enabled state, interval and time window" },
   { key: "shuffleToolOrder", label: "Shuffle tool order" },
@@ -6061,6 +6061,7 @@ function CopySettingsDialog({
               const r = await fetch(`/api/mobile/devices/${encodeURIComponent(p.serial)}/account`);
               const data = await r.json();
               const slots: DeviceSlots["slots"] = (data?.slots ?? []).map((s: any) => ({
+                slotId: typeof s?.slotId === "string" ? s.slotId : undefined,
                 username: s?.username ?? "",
                 platform: s?.platform === "snapchat" ? "snapchat" : "instagram",
                 snapchatTrustScoreLabel: s?.platform === "snapchat" && SNAPCHAT_TRUST_SCORE_LABELS.includes(s?.snapchatTrustScoreLabel)
@@ -6087,16 +6088,22 @@ function CopySettingsDialog({
 
         // Restore targets from session memory, filtered to currently-present valid slots
         if (restoredTargets) {
-          const validSet = new Set(
-            sorted.flatMap(ds => ds.slots.map((_, i) => `${ds.phone.serial}:${i}`))
-          );
-          setSelectedTargets(
-            restoredTargets.filter(t =>
-              validSet.has(`${t.serial}:${t.slotIdx}`) &&
-              sorted.find(ds => ds.phone.serial === t.serial)?.slots[t.slotIdx]?.platform === slotPlatform &&
-              !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx)
-            )
-          );
+          const restored = restoredTargets.flatMap(target => {
+            const device = sorted.find(ds => ds.phone.serial === target.serial);
+            if (!device) return [];
+            const slotIdx = target.slotId
+              ? device.slots.findIndex(slot => slot.slotId === target.slotId)
+              : target.slotIdx;
+            const slot = device.slots[slotIdx];
+            if (
+              slotIdx < 0 ||
+              !slot ||
+              slot.platform !== slotPlatform ||
+              (target.serial === phone?.serial && slotIdx === currentSlotIdx)
+            ) return [];
+            return [{ serial: target.serial, slotIdx, slotId: slot.slotId }];
+          });
+          setSelectedTargets(restored);
         } else {
           setSelectedTargets([]);
         }
@@ -6106,14 +6113,22 @@ function CopySettingsDialog({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, slotPlatform, phone?.serial, currentSlotIdx]);
 
-  const isSelected = (serial: string, slotIdx: number) =>
-    selectedTargets.some(t => t.serial === serial && t.slotIdx === slotIdx);
+  const isSelected = (serial: string, slotIdx: number) => {
+    const slotId = deviceSlots.find(ds => ds.phone.serial === serial)?.slots[slotIdx]?.slotId;
+    return selectedTargets.some(t =>
+      t.serial === serial &&
+      (slotId && t.slotId ? t.slotId === slotId : t.slotIdx === slotIdx),
+    );
+  };
 
-  const toggleTarget = (serial: string, slotIdx: number, checked: boolean) =>
+  const toggleTarget = (serial: string, slotIdx: number, slotId: string | undefined, checked: boolean) =>
     setSelectedTargets(prev => {
+      const matchesTarget = (target: CopyTarget) =>
+        target.serial === serial &&
+        (slotId && target.slotId ? target.slotId === slotId : target.slotIdx === slotIdx);
       const next = checked
-        ? [...prev, { serial, slotIdx }]
-        : prev.filter(t => !(t.serial === serial && t.slotIdx === slotIdx));
+        ? [...prev.filter(target => !matchesTarget(target)), { serial, slotIdx, slotId }]
+        : prev.filter(target => !matchesTarget(target));
       sessionStorage.setItem("copySettings_targets", JSON.stringify(next));
       return next;
     });
@@ -6126,7 +6141,7 @@ function CopySettingsDialog({
         return rest;
       }
       const add: CopyTarget[] = ds.slots
-        .map((slot, i) => ({ serial: ds.phone.serial, slotIdx: i, platform: slot.platform }))
+        .map((slot, i) => ({ serial: ds.phone.serial, slotIdx: i, slotId: slot.slotId, platform: slot.platform }))
         .filter(t => t.platform === slotPlatform)
         .filter(t => !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx));
       const next = [...rest, ...add];
@@ -6149,7 +6164,7 @@ function CopySettingsDialog({
 
   const allTargets: CopyTarget[] = deviceSlots.flatMap(ds =>
     ds.slots
-      .map((slot, i) => ({ serial: ds.phone.serial, slotIdx: i, platform: slot.platform }))
+      .map((slot, i) => ({ serial: ds.phone.serial, slotIdx: i, slotId: slot.slotId, platform: slot.platform }))
       .filter(t => t.platform === slotPlatform)
       .filter(t => !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx))
   );
@@ -6189,11 +6204,22 @@ function CopySettingsDialog({
   };
 
   const handleCopy = async () => {
-    const effectiveTargets = selectedTargets.length > 0
-      ? selectedTargets.filter(target =>
-          deviceSlots.find(ds => ds.phone.serial === target.serial)?.slots[target.slotIdx]?.platform === slotPlatform,
-        )
-      : allTargets;
+    const effectiveTargets = (selectedTargets.length > 0 ? selectedTargets : allTargets)
+      .flatMap(target => {
+        const device = deviceSlots.find(ds => ds.phone.serial === target.serial);
+        if (!device) return [];
+        const slotIdx = target.slotId
+          ? device.slots.findIndex(slot => slot.slotId === target.slotId)
+          : target.slotIdx;
+        const slot = device.slots[slotIdx];
+        if (
+          slotIdx < 0 ||
+          !slot ||
+          slot.platform !== slotPlatform ||
+          (target.serial === phone?.serial && slotIdx === currentSlotIdx)
+        ) return [];
+        return [{ serial: target.serial, slotIdx, slotId: slot.slotId }];
+      });
     if (effectiveTargets.length === 0) return;
     setCopying(true);
     setResult(null);
@@ -6247,8 +6273,9 @@ function CopySettingsDialog({
     const localSucceeded: number[] = [];
     for (const target of effectiveTargets) {
       try {
+        const slotIdQuery = target.slotId ? `?slotId=${encodeURIComponent(target.slotId)}` : "";
         const r = await fetch(
-          `/api/mobile/devices/${encodeURIComponent(target.serial)}/slots/${target.slotIdx}/automation-settings`,
+          `/api/mobile/devices/${encodeURIComponent(target.serial)}/slots/${target.slotIdx}/automation-settings${slotIdQuery}`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...partial, trustScoreCopy: true }) },
         );
         if (r.ok) {
@@ -6330,17 +6357,17 @@ function CopySettingsDialog({
                     </label>
                     {/* Slot rows */}
                     <div className="divide-y divide-border/30">
-                      {ds.slots.map((slot, i) => ({ ...slot, i })).filter(slot => slot.platform === slotPlatform).map(({ username, platform, snapchatTrustScoreLabel, i }) => {
+                      {ds.slots.map((slot, i) => ({ ...slot, i })).filter(slot => slot.platform === slotPlatform).map(({ slotId, username, platform, snapchatTrustScoreLabel, i }) => {
                         const isSelf = isCurrentDevice && i === currentSlotIdx;
                         return (
-                          <label key={i}
+                          <label key={slotId ?? i}
                             className={`flex items-center gap-2 px-3 pl-6 py-1 select-none ${isSelf ? "opacity-40 cursor-default" : "cursor-pointer hover:bg-muted/20 transition-colors"}`}>
                             <input
                               type="checkbox"
                               className="w-3 h-3 accent-primary shrink-0"
                               checked={!isSelf && isSelected(ds.phone.serial, i)}
                               disabled={isSelf}
-                              onChange={e => toggleTarget(ds.phone.serial, i, e.target.checked)}
+                              onChange={e => toggleTarget(ds.phone.serial, i, slotId, e.target.checked)}
                             />
                             <span className="text-xs shrink-0" style={{
                               width: "6.5rem",

@@ -3020,16 +3020,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const trustScoreDurationKey = (trustScoreId: string) =>
     `trust_score_duration_hours_${trustScoreId}`;
   const accountSlotId = (serial: string, slotIdx: number, requestedSlotId?: string): string => {
+    const slots = loadInstanceConfigs()[serial]?.account?.slots ?? [];
     if (requestedSlotId && requestedSlotId.length >= 8) {
-      const matchingSlot = loadInstanceConfigs()[serial]?.account?.slots?.find(
+      const matchingSlots = slots.filter(
         slot => slot.slotId === requestedSlotId,
       );
-      if (matchingSlot) return requestedSlotId;
+      if (matchingSlots.length === 1) return requestedSlotId;
     }
-    const slot = loadInstanceConfigs()[serial]?.account?.slots?.[slotIdx];
-    return typeof slot?.slotId === "string" && slot.slotId.length >= 8
-      ? slot.slotId
-      : `legacy-index-${slotIdx}`;
+    const slotId = slots[slotIdx]?.slotId;
+    return typeof slotId === "string" &&
+      slotId.length >= 8 &&
+      slots.filter(slot => slot.slotId === slotId).length === 1
+        ? slotId
+        : `legacy-index-${slotIdx}`;
   };
   const slotAutomationKey = (serial: string, slotIdx: number, requestedSlotId?: string) =>
     accountSlotId(serial, slotIdx, requestedSlotId);
@@ -4704,39 +4707,155 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     ]);
   };
   const emptySlots = (): DeviceSlot[] => Array.from({ length: SLOT_COUNT }, () => ({ username: "", password: "" }));
-  const migrateAccount = (raw: any): DeviceAccount => {
+  type SlotIdentityRepair = {
+    slotIdx: number;
+    sourceSlotIdx: number;
+    previousSlotId: string;
+    slotId: string;
+    platform: "instagram" | "snapchat";
+    sourcePlatform: "instagram" | "snapchat";
+  };
+  const ensureUniqueAccountSlotIds = (slots: DeviceSlot[]) => {
+    const firstSlotById = new Map<string, { slotIdx: number; platform: "instagram" | "snapchat" }>();
+    const repairs: SlotIdentityRepair[] = [];
+    const normalizedSlots = slots.map((slot, slotIdx) => {
+      const platform = slot.platform === "snapchat" ? "snapchat" : "instagram";
+      const previousSlotId = typeof slot.slotId === "string" && slot.slotId.length >= 8
+        ? slot.slotId
+        : undefined;
+      const firstMatch = previousSlotId ? firstSlotById.get(previousSlotId) : undefined;
+      let slotId = previousSlotId;
+      if (!slotId || firstMatch) {
+        do {
+          slotId = crypto.randomUUID();
+        } while (firstSlotById.has(slotId));
+        if (previousSlotId && firstMatch) {
+          repairs.push({
+            slotIdx,
+            sourceSlotIdx: firstMatch.slotIdx,
+            previousSlotId,
+            slotId,
+            platform,
+            sourcePlatform: firstMatch.platform,
+          });
+        }
+      }
+      firstSlotById.set(slotId, { slotIdx, platform });
+      return { ...slot, slotId };
+    });
+    return { slots: normalizedSlots, repairs };
+  };
+  const copySlotIdentityState = async (
+    serial: string,
+    repairs: SlotIdentityRepair[],
+    existingAutomation: Record<string, AutomationSettings> = {},
+  ) => {
+    const slotAutomation = { ...existingAutomation };
+    if (repairs.length === 0) return slotAutomation;
+    const globalSettings = await storage.getGlobalSettings();
+    let globalSettingsChanged = false;
+
+    for (const repair of repairs) {
+      if (!Object.prototype.hasOwnProperty.call(slotAutomation, repair.slotId)) {
+        const automationSources = [
+          `legacy-index-${repair.slotIdx}`,
+          String(repair.slotIdx),
+          ...(repair.platform === repair.sourcePlatform
+            ? [repair.previousSlotId, `${serial}:${repair.previousSlotId}`]
+            : []),
+        ];
+        const sourceKey = automationSources.find(key =>
+          Object.prototype.hasOwnProperty.call(slotAutomation, key),
+        );
+        if (sourceKey) {
+          slotAutomation[repair.slotId] = JSON.parse(JSON.stringify(slotAutomation[sourceKey]));
+        }
+      }
+
+      const samePlatform = repair.platform === repair.sourcePlatform;
+      const identitySources = samePlatform ? [repair.previousSlotId] : [];
+      const copyPairs: Array<{ destination: string; sources: string[] }> = [
+        {
+          destination: `mobile_trust_score_${serial}_${repair.slotId}`,
+          sources: [
+            `mobile_trust_score_${serial}_${repair.slotIdx}`,
+            ...identitySources.map(id => `mobile_trust_score_${serial}_${id}`),
+          ],
+        },
+        {
+          destination: `mobile_trust_score_timer_${serial}_${repair.slotId}`,
+          sources: [
+            `mobile_trust_score_timer_${serial}_${repair.slotIdx}`,
+            ...identitySources.map(id => `mobile_trust_score_timer_${serial}_${id}`),
+          ],
+        },
+        {
+          destination: slotPersonalityKey(serial, repair.slotId),
+          sources: identitySources.map(id => slotPersonalityKey(serial, id)),
+        },
+        {
+          destination: slotPersonalityOverridesKey(serial, repair.slotId),
+          sources: identitySources.map(id => slotPersonalityOverridesKey(serial, id)),
+        },
+      ];
+      for (const { destination, sources } of copyPairs) {
+        if (Object.prototype.hasOwnProperty.call(globalSettings, destination)) continue;
+        const source = sources.find(key => Object.prototype.hasOwnProperty.call(globalSettings, key));
+        if (!source) continue;
+        await storage.setGlobalSetting(destination, globalSettings[source]);
+        globalSettings[destination] = globalSettings[source];
+        globalSettingsChanged = true;
+      }
+    }
+    if (globalSettingsChanged) {
+      logger.info({ serial, repairedSlotCount: repairs.length }, "[mobile-account] copied shared state to repaired slot identities");
+    }
+    return slotAutomation;
+  };
+  const migrateAccount = (raw: any): { account: DeviceAccount; repairs: SlotIdentityRepair[] } => {
+    let account: DeviceAccount;
     if (raw && Array.isArray(raw.slots)) {
-      return {
+      account = {
         ...raw,
         slots: raw.slots.map((slot: any) => ({
           ...slot,
           platform: slot?.platform === "snapchat" ? "snapchat" : "instagram",
-          slotId: typeof slot?.slotId === "string" && slot.slotId.length >= 8
-            ? slot.slotId
-            : crypto.randomUUID(),
         })),
       } as DeviceAccount;
-    }
-    // Legacy single-account format → migrate into slot 0
-    if (raw && typeof raw.username === "string") {
+    } else if (raw && typeof raw.username === "string") {
+      // Legacy single-account format → migrate into slot 0
       const slots = emptySlots();
       slots[0] = { slotId: crypto.randomUUID(), username: raw.username, password: raw.password ?? "", totpSecret: raw.totpSecret };
-      return { slots };
+      account = { slots };
+    } else {
+      account = { slots: emptySlots() };
     }
-    return { slots: emptySlots() };
+    const unique = ensureUniqueAccountSlotIds(account.slots);
+    return { account: { ...account, slots: unique.slots }, repairs: unique.repairs };
   };
   app.get("/api/mobile/devices/:serial/account", async (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
     const serial = p(req, "serial");
     const raw = cfg[serial]?.account ?? null;
     const migrated = migrateAccount(raw);
-    const hydratedSlots = await loadSlotPersonalityFromDatabase(serial, migrated.slots);
-    const hydrated = { ...migrated, slots: hydratedSlots };
+    const hydratedSlots = await loadSlotPersonalityFromDatabase(serial, migrated.account.slots);
+    const hydrated = { ...migrated.account, slots: hydratedSlots };
     // Persist generated IDs immediately. Otherwise a legacy slot would get
     // a fresh identity on every reload before the UI had a chance to save.
-    if (JSON.stringify(raw) !== JSON.stringify(hydrated)) {
-      cfg[serial] = { ...cfg[serial], account: hydrated };
+    if (JSON.stringify(raw) !== JSON.stringify(hydrated) || migrated.repairs.length > 0) {
+      const slotAutomation = await copySlotIdentityState(
+        serial,
+        migrated.repairs,
+        cfg[serial]?.slotAutomation,
+      );
+      cfg[serial] = { ...cfg[serial], account: hydrated, slotAutomation };
       saveInstanceConfigs(cfg);
+      if (migrated.repairs.length > 0) {
+        logger.warn(
+          { serial, repairedSlotCount: migrated.repairs.length },
+          "[mobile-account] repaired duplicate account slot IDs",
+        );
+      }
     }
     res.json(hydrated);
   });
@@ -4782,34 +4901,57 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           .filter(slot => typeof slot?.slotId === "string" && slot.slotId.length >= 8)
           .map(slot => [slot.slotId!, slot.slotId!] as const),
       );
+      const seenIncomingSlotIds = new Set<string>();
+      const mappedSlots = parsed.slots.map((slot, slotIdx) => {
+        // Prefer the currently persisted identity when the incoming save
+        // contains the same slot. This protects imported saves and stale
+        // account-panel writes from replacing a slotId and orphaning its
+        // TrustScore assignment/countdown.
+        const incomingSlotId = typeof slot.slotId === "string" && slot.slotId.length >= 8
+          ? slot.slotId
+          : undefined;
+        const duplicateIncomingId = Boolean(incomingSlotId && seenIncomingSlotIds.has(incomingSlotId));
+        if (incomingSlotId) seenIncomingSlotIds.add(incomingSlotId);
+        const platform = slot.platform ?? "instagram";
+        const previousAtIndex = previousSlots[slotIdx];
+        const sameIndexedAccount = previousAtIndex &&
+          (previousAtIndex.platform === "snapchat" ? "snapchat" : "instagram") === platform &&
+          (
+            normalizeUsername(previousAtIndex.username) === normalizeUsername(slot.username) ||
+            (!normalizeUsername(previousAtIndex.username) && !normalizeUsername(slot.username))
+          );
+        const indexedSlotId = duplicateIncomingId && sameIndexedAccount &&
+          typeof previousAtIndex.slotId === "string" && previousAtIndex.slotId.length >= 8
+            ? previousAtIndex.slotId
+            : undefined;
+        const slotId = indexedSlotId
+          ?? (incomingSlotId && previousBySlotId.get(incomingSlotId))
+          ?? previousByUsername.get(`${slot.platform === "snapchat" ? "snapchat" : "instagram"}:${normalizeUsername(slot.username)}`)
+          ?? incomingSlotId
+          ?? crypto.randomUUID();
+        const normalizedSlot = { ...slot, platform: slot.platform ?? "instagram", slotId };
+        if (normalizedSlot.platform === "snapchat") {
+          delete normalizedSlot.personality;
+          delete normalizedSlot.personalityOverrides;
+        }
+        return normalizedSlot;
+      });
+      const unique = ensureUniqueAccountSlotIds(mappedSlots);
       const input = {
         ...parsed,
-        slots: parsed.slots.map(slot => {
-          // Prefer the currently persisted identity when the incoming save
-          // contains the same slot. This protects imported saves and stale
-          // account-panel writes from replacing a slotId and orphaning its
-          // TrustScore assignment/countdown.
-          const incomingSlotId = typeof slot.slotId === "string" && slot.slotId.length >= 8
-            ? slot.slotId
-            : undefined;
-          const slotId = (incomingSlotId && previousBySlotId.get(incomingSlotId))
-            ?? previousByUsername.get(`${slot.platform === "snapchat" ? "snapchat" : "instagram"}:${normalizeUsername(slot.username)}`)
-            ?? incomingSlotId
-            ?? crypto.randomUUID();
-          const normalizedSlot = { ...slot, platform: slot.platform ?? "instagram", slotId };
-          if (normalizedSlot.platform === "snapchat") {
-            delete normalizedSlot.personality;
-            delete normalizedSlot.personalityOverrides;
-          }
-          return normalizedSlot;
-        }),
+        slots: unique.slots,
       };
       // Previously forced a minimum of SLOT_COUNT (5) slots, padding with
       // empty entries.  That caused deleted slots to silently reappear every
       // time the panel reloaded — the save wrote 2 slots, the pad restored
       // 5, and the UI loaded 5 again.  Now we store exactly what the UI
       // sent so the displayed count always matches what was saved.
-      cfg[serial] = { ...cfg[serial], account: input };
+      const slotAutomation = await copySlotIdentityState(
+        serial,
+        unique.repairs,
+        cfg[serial]?.slotAutomation,
+      );
+      cfg[serial] = { ...cfg[serial], account: input, slotAutomation };
       saveInstanceConfigs(cfg);
       await Promise.all(input.slots.map(slot => persistSlotPersonalityToDatabase(serial, slot)));
       // Account saves are also a state-boundary checkpoint. The UI can save

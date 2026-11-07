@@ -14,3 +14,9 @@ For automation cycles, resolve the submitted stable `slotId` to its unique curre
 **Why:** A queued timer can outlive an account reorder. Strictly requiring its captured index and stable ID to still match made the device grant the collision lease, then reject the cycle as “account slot changed.”
 
 **How to apply:** Use the same resolved current index throughout the cycle’s settings, active-slot state, and logs. Keep the rejection path fail-closed when the stable ID cannot be uniquely found.
+
+On account reads and saves, normalize the full slot list so every persisted `slotId` is unique. If an incoming save repeats an ID, retain the prior slot identity at that position only when platform and username still match; otherwise repair the collision and preserve any state that was shared under the duplicate ID.
+
+**Why:** Duplicate Snapchat slot IDs caused React to reuse one slot’s settings component and made both slots read and write the same execution window.
+
+**How to apply:** Check uniqueness at account read and write boundaries, use stable IDs in copy-settings selections and requests, and migrate shared settings when repairing a pre-existing duplicate.
