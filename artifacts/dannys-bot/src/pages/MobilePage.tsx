@@ -51,6 +51,10 @@ import { getTrustLevels, getTrustScore, type TrustLevelEntry } from "@/component
 import { MobilePhoneApps, MobilePhoneAppsPanel, DeviceQuickControls, type MobilePhoneAppsPanelHandle } from "@/pages/MobilePhoneApps";
 import { SnapchatSettingsPanel } from "@/components/tools/snapchat/settings/SnapchatSettingsPanel";
 import {
+  getSnapchatRunWindowStatus,
+  getSnapchatWindowedDelay,
+} from "@/lib/snapchatRunWindow";
+import {
   loadSlotTrustScore,
   readLocalSlotTrustScore,
   saveSlotTrustScore,
@@ -5179,8 +5183,25 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 
     // Stores the next timer handle in the module-level map and returns it.
     const scheduleNext = (delayMs: number) => {
-      const roundedDelayMs = Math.round(delayMs);
-      const scheduledFireAt = _hstNextRunAt.get(key) ?? Date.now() + roundedDelayMs;
+      const snapchatWindow = slotPlatformRef.current === "snapchat"
+        ? settingsRef.current.snapchatRunWindow
+        : undefined;
+      const windowedDelayMs = snapchatWindow
+        ? getSnapchatWindowedDelay(delayMs, snapchatWindow)
+        : delayMs;
+      if (windowedDelayMs === null) {
+        const existingTimer = _hstTimers.get(key);
+        if (existingTimer !== undefined) clearTimeout(existingTimer);
+        _hstTimers.delete(key);
+        _hstNextRunAt.delete(key);
+        setNextRunAt(null);
+        srvLog(`${hstDebugTag} — timer paused because Start From needs two different valid HH:MM times`);
+        return null;
+      }
+      const roundedDelayMs = Math.max(0, Math.round(windowedDelayMs));
+      const scheduledFireAt = Date.now() + roundedDelayMs;
+      _hstNextRunAt.set(key, scheduledFireAt);
+      setNextRunAt(scheduledFireAt);
       const t = setTimeout(() => {
         srvLog(`${hstDebugTag} — timer callback entered (scheduledFireAt=${scheduledFireAt}, stop=${_hstStop.has(key)}, uiOwner=true)`);
         void runCycle().catch((error: any) => {
@@ -5226,6 +5247,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         onLog?.(`[HST-DBG] ${_dbgTag} — phone changed/disconnected mid-wait; skipping cycle`);
         srvLog(`${_dbgTag} — phone changed/disconnected mid-wait; skipping cycle`);
         return;
+      }
+      if (slotPlatformRef.current === "snapchat") {
+        const windowStatus = getSnapchatRunWindowStatus(settingsRef.current.snapchatRunWindow);
+        if (!windowStatus.valid || !windowStatus.open) {
+          onLog?.(`[HST] ${_dbgTag} — outside its Start From window; waiting for the next opening`);
+          srvLog(`${_dbgTag} — timer reached outside Start From window (valid=${windowStatus.valid}, nextOpenAt=${windowStatus.nextOpenAt ?? "none"})`);
+          setRunning(false);
+          scheduleNext(0);
+          return;
+        }
       }
       // Preserve the scheduled HST turn before clearing the display state.
       // Collision Preventer uses this original timestamp to order overdue
@@ -5279,6 +5310,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           cycleCollisionLease = null;
           return;
         }
+        if (slotPlatformRef.current === "snapchat") {
+          const windowStatus = getSnapchatRunWindowStatus(settingsRef.current.snapchatRunWindow);
+          if (!windowStatus.valid || !windowStatus.open) {
+            onLog?.(`[HST] ${_dbgTag} — Start From window closed while queued; releasing device without running`);
+            srvLog(`${_dbgTag} — collision wait ended outside Start From window (valid=${windowStatus.valid}, nextOpenAt=${windowStatus.nextOpenAt ?? "none"})`);
+            releaseSlot?.(lease, true);
+            cycleCollisionLease = null;
+            setRunning(false);
+            scheduleNext(0);
+            return;
+          }
+        }
       }
       // Reset only this device's live debug buffer once this account owns the
       // device. A queued account must not erase the active account's log.
@@ -5309,6 +5352,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       onLog?.(`[HST-DBG] ${_dbgTag} — sending cycle to server (serial=${serial}, count=${count})`);
       srvLog(`${_dbgTag} — sending POST /automation-cycle (serial=${serial}, count=${count})`);
       let retryBusy = false;
+      let serverWindowRetryAt: number | null = null;
       try {
         const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
           method: "POST",
@@ -5550,6 +5594,15 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             setNextRunAt(null);
             srvLog(`${_dbgTag} — server refused cycle because the account slot is disabled; local loop stopped`);
             onLog?.(`[HST-TOGGLE] ${_dbgTag} — cycle stopped because this account slot is disabled`);
+          } else if (body?.outsideScheduleWindow === true) {
+            serverWindowRetryAt = typeof body.nextAllowedAt === "string"
+              ? Date.parse(body.nextAllowedAt)
+              : null;
+            if (!Number.isFinite(serverWindowRetryAt)) serverWindowRetryAt = null;
+            onLog?.(body.invalidScheduleWindow
+              ? `[HST] ${_dbgTag} — Start From needs two different valid HH:MM times; no work started`
+              : `[HST] ${_dbgTag} — outside its Start From window; waiting until it opens`);
+            srvLog(`${_dbgTag} — server refused cycle outside Start From window (invalid=${body.invalidScheduleWindow === true}, nextOpenAt=${serverWindowRetryAt ?? "none"})`);
           } else if (r.status === 409) {
             // Server already has a cycle running (e.g. we just remounted while
             // one was in progress). Not an error — retry shortly instead of
@@ -5608,12 +5661,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // not replace this account's configured HST Run-every interval.
       const safeMin = Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const safeMax = Math.max(1, Math.max(s2.cycleIntervalMin, s2.cycleIntervalMax));
-       const gapMs = retryBusy
-         ? 10_000 + Math.random() * 10_000
-         : (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
-      const nextFireAt2 = Date.now() + Math.round(gapMs);
-      _hstNextRunAt.set(key, nextFireAt2);
-      setNextRunAt(nextFireAt2);
+       const gapMs = serverWindowRetryAt !== null
+          ? Math.max(0, serverWindowRetryAt - Date.now())
+          : retryBusy
+            ? 10_000 + Math.random() * 10_000
+            : (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
       scheduleNext(gapMs);
     };
 
@@ -5710,7 +5762,46 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       rescheduleFnRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.enabled, hydrated, phone?.serial, connectedKey, toggleSignal]);
+  }, [
+    settings.enabled,
+    settings.snapchatRunWindow.start,
+    settings.snapchatRunWindow.end,
+    hydrated,
+    phone?.serial,
+    connectedKey,
+    toggleSignal,
+  ]);
+
+  // If the slot's schedule is edited while it is running, apply the new
+  // boundary immediately instead of letting the in-flight cycle continue
+  // under the previous window snapshot.
+  useEffect(() => {
+    if (!settings.enabled || !running || slotPlatform !== "snapchat") return;
+    const status = getSnapchatRunWindowStatus(settings.snapchatRunWindow);
+    if (status.valid && status.open) return;
+
+    const abortingId = cycleIdRef.current;
+    cycleAbortRef.current?.abort();
+    cycleAbortRef.current = null;
+    cycleIdRef.current = null;
+    if (abortingId && phone?.serial) {
+      fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/automation-cycle/abort`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cycleId: abortingId }),
+      }).catch(() => {});
+    }
+    onLog?.("[HST] Start From window is closed or invalid; stopping the active Snapchat cycle");
+    setRunning(false);
+  }, [
+    settings.enabled,
+    settings.snapchatRunWindow.start,
+    settings.snapchatRunWindow.end,
+    running,
+    slotPlatform,
+    phone?.serial,
+    onLog,
+  ]);
 
   // Clamp: if the existing timer no longer fits within the new [min, max]
   // bounds, directly reschedule the module-level timer with a corrected delay.
@@ -5831,7 +5922,7 @@ function useCollisionPreventer(serial: string | null) {
 type CopyTarget = { serial: string; slotIdx: number };
 type DeviceSlots = { phone: UsbPhone; slots: Array<{ username: string; platform?: AccountPlatform; snapchatTrustScoreLabel?: SnapchatTrustScoreLabel }> };
 const SNAPCHAT_COPY_OPTIONS = [
-  { key: "step1", label: "Step 1 enabled state and interval" },
+  { key: "step1", label: "Step 1 enabled state, interval and time window" },
   { key: "shuffleToolOrder", label: "Shuffle tool order" },
   { key: "uploadSnap", label: "Upload a Snap" },
   { key: "addFriends", label: "Add Friends" },
@@ -6075,6 +6166,7 @@ function CopySettingsDialog({
         partial.enabled = settings.enabled;
         partial.cycleIntervalMin = settings.cycleIntervalMin;
         partial.cycleIntervalMax = settings.cycleIntervalMax;
+        partial.snapchatRunWindow = { ...settings.snapchatRunWindow };
       }
       const snapchatTools: Record<string, unknown> = {};
       if (selectedSnapchatCopyKeys.has("shuffleToolOrder")) {
@@ -6914,6 +7006,57 @@ export function AutomationSettingsPanel({
             )}
           </div>
           <div className="w-px self-stretch bg-border mx-1" />
+          {slotPlatform === "snapchat" && (
+            <>
+              <Label className="text-sm text-muted-foreground whitespace-nowrap">Start from (PC local time)</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={5}
+                placeholder="HH:MM"
+                aria-label="Snapchat window start time in 24-hour HH:MM format"
+                className="w-[5.25rem] text-center font-mono"
+                value={settings.snapchatRunWindow.start}
+                onChange={e => setSettings(s => ({
+                  ...s,
+                  snapchatRunWindow: {
+                    ...s.snapchatRunWindow,
+                    start: e.target.value.slice(0, 5),
+                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  },
+                }))}
+                disabled={fieldDisabled("snapchatRunWindow")}
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={5}
+                placeholder="HH:MM"
+                aria-label="Snapchat window end time in 24-hour HH:MM format"
+                className="w-[5.25rem] text-center font-mono"
+                value={settings.snapchatRunWindow.end}
+                onChange={e => setSettings(s => ({
+                  ...s,
+                  snapchatRunWindow: {
+                    ...s.snapchatRunWindow,
+                    end: e.target.value.slice(0, 5),
+                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  },
+                }))}
+                disabled={fieldDisabled("snapchatRunWindow")}
+              />
+              <span className="text-xs text-muted-foreground">24-hour HH:MM · leave both blank for no window</span>
+              {!getSnapchatRunWindowStatus(settings.snapchatRunWindow).valid && (
+                <span className="w-full text-xs text-destructive">
+                  Enter two different valid times; this slot stays paused until the window is valid.
+                </span>
+              )}
+              <div className="w-px self-stretch bg-border mx-1" />
+            </>
+          )}
           <Label className="text-sm text-muted-foreground whitespace-nowrap">Run every</Label>
           <Input
             type="number"

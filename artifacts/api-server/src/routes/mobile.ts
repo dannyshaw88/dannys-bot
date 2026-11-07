@@ -49,6 +49,7 @@ import {
   snapchatToolsSettingsSchema,
   type SnapchatToolSettings,
 } from "../mobile/hst/settings/snapchat";
+import { getSnapchatRunWindowStatus } from "../mobile/hst/snapchatRunWindow";
 import { runVisitOwnProfile as runVisitOwnProfileOperation } from "../mobile/hst/operations/visitOwnProfile";
 import { runVisitSaved as runVisitSavedOperation } from "../mobile/hst/operations/visitSaved";
 import { runVisitSettings as runVisitSettingsOperation } from "../mobile/hst/operations/visitSettings";
@@ -539,6 +540,7 @@ const p = (req: Request, key: string): string => String((req.params as any)[key]
 type AutomationSettings = {
   cycleIntervalMin?: number;
   cycleIntervalMax?: number;
+  snapchatRunWindow?: { start: string; end: string; timeZone?: string };
   snapchatTools?: SnapchatToolSettings;
   enabled: boolean;
   trustScoreId?: string | null;
@@ -2522,10 +2524,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // NEW persisted field must be added here too, or it will silently never
   // survive a save.
   const followSourceSchema = z.object({ type: z.string(), value: z.string() });
+  // Preserve partially edited HH:MM text so an incomplete window remains
+  // fail-closed after restart; the runtime validator decides whether it is
+  // executable.
+  const localClockTimeSchema = z.string().max(5);
   const automationSchema = z.object({
     enabled: z.boolean().default(false),
     cycleIntervalMin: z.number().min(1).max(9999).optional(),
     cycleIntervalMax: z.number().min(1).max(9999).optional(),
+    snapchatRunWindow: z.object({
+      start: localClockTimeSchema,
+      end: localClockTimeSchema,
+      timeZone: z.string().max(100).optional().default(""),
+    }).default({ start: "", end: "" }),
     feedEnabled: z.boolean().default(true),
     storiesEnabled: z.boolean().default(true),
     actionDelayMin: z.number().min(0).max(9999),
@@ -2854,6 +2865,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const cfg = loadInstanceConfigs();
     const defaults: AutomationSettings = {
       enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+      snapchatRunWindow: { start: "", end: "", timeZone: "" },
       snapchatTools: snapchatToolsSettingsDefault,
       feedEnabled: true, storiesEnabled: true,
       actionDelayMin: 5, actionDelayMax: 10,
@@ -3087,6 +3099,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   });
   const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
     "enabled",
+    "snapchatRunWindow",
     "trustScoreId",
     "trustScoreDisabledTools",
     "trustScoreToolOverrides",
@@ -3158,6 +3171,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     "preSwitchActionPercentMax",
   ]);
   const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
+    "snapchatRunWindow",
     "followSources",
     "followFiltersEnabled",
     "followFilterPrivateUsers",
@@ -3552,6 +3566,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const requestedSlotId = typeof req.query.slotId === "string" ? req.query.slotId : undefined;
       const defaults: AutomationSettings = {
         enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+        snapchatRunWindow: { start: "", end: "", timeZone: "" },
         snapchatTools: snapchatToolsSettingsDefault,
         feedEnabled: true, storiesEnabled: true,
         actionDelayMin: 5, actionDelayMax: 10,
@@ -6913,8 +6928,41 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ ok: true });
   });
 
-  app.post("/api/mobile/devices/:serial/automation-cycle", async (req: Request, res: Response) => {
+  app.post("/api/mobile/devices/:serial/automation-cycle", async (req: Request, res: Response): Promise<void> => {
     const serial = p(req, "serial");
+    let snapchatWindowEndTimer: ReturnType<typeof setTimeout> | null = null;
+    // Reject a Snapchat cycle before even querying ADB if this slot is outside
+    // its saved PC-local operating window. The request's slot ID is preferred
+    // so a reordered account list cannot apply another slot's schedule.
+    const earlyRequestedSlotIdx = typeof req.body?.slotIdx === "number" ? req.body.slotIdx : 0;
+    const earlySlotId = typeof req.body?.slotId === "string" ? req.body.slotId.trim() : "";
+    const earlySlots = loadInstanceConfigs()[serial]?.account?.slots ?? [];
+    const earlyMatches = earlySlotId
+      ? earlySlots.flatMap((slot, index) => slot?.slotId?.trim() === earlySlotId ? [index] : [])
+      : [];
+    const earlySlotIdx = earlyMatches.length === 1 ? earlyMatches[0] : earlyRequestedSlotIdx;
+    const earlySlot = earlySlots[earlySlotIdx];
+    if (earlySlot?.platform === "snapchat") {
+      const earlySaved: Record<string, any> = loadInstanceConfigs()[serial]?.slotAutomation?.[
+        slotAutomationKey(serial, earlySlotIdx, earlySlotId || earlySlot.slotId)
+      ] ?? loadInstanceConfigs()[serial]?.slotAutomation?.[String(earlySlotIdx)] ?? {};
+      const earlyWindow = earlySaved.enabled === true
+        ? getSnapchatRunWindowStatus(earlySaved.snapchatRunWindow)
+        : null;
+      if (earlyWindow && (!earlyWindow.valid || !earlyWindow.open)) {
+        res.status(409).json({
+          error: earlyWindow.valid
+            ? "Snapchat account slot is outside its allowed time window"
+            : "Snapchat account slot has an incomplete or invalid time window",
+          outsideScheduleWindow: true,
+          invalidScheduleWindow: !earlyWindow.valid,
+          nextAllowedAt: earlyWindow.nextOpenAt === null
+            ? null
+            : new Date(earlyWindow.nextOpenAt).toISOString(),
+        });
+        return;
+      }
+    }
     // The USB poll can still report a serial while ADB has transitioned it to
     // offline. Never start a Human Session Tool cycle against that stale entry.
     // The frontend keeps the saved toggle enabled and retries automatically
@@ -7002,8 +7050,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       });
       return;
     }
+    const snapchatWindow = configuredSlot?.platform === "snapchat"
+      ? getSnapchatRunWindowStatus(savedSlotSettings.snapchatRunWindow)
+      : null;
+    if (snapchatWindow && (!snapchatWindow.valid || !snapchatWindow.open)) {
+      res.status(409).json({
+        error: snapchatWindow.valid
+          ? "Snapchat account slot is outside its allowed time window"
+          : "Snapchat account slot has an incomplete or invalid time window",
+        outsideScheduleWindow: true,
+        invalidScheduleWindow: !snapchatWindow.valid,
+        nextAllowedAt: snapchatWindow.nextOpenAt === null
+          ? null
+          : new Date(snapchatWindow.nextOpenAt).toISOString(),
+      });
+      return;
+    }
     automationCycleCurrentId.set(serial, incomingCycleId);
     automationCycleAbortedId.delete(serial); // clear any abort from a previous cycle
+    if (snapchatWindow?.closesAt !== null && snapchatWindow?.closesAt !== undefined) {
+      const windowCloseAt = snapchatWindow.closesAt;
+      snapchatWindowEndTimer = setTimeout(() => {
+        if (automationCycleCurrentId.get(serial) !== incomingCycleId) return;
+        automationCycleAbortedId.set(serial, incomingCycleId);
+        logger.info({
+          serial,
+          slotId,
+          slotIdx: incomingSlotIdx,
+          cycleId: incomingCycleId,
+          windowCloseAt: new Date(windowCloseAt).toISOString(),
+        }, "[snapchat-cycle] stopping at configured operating-window end");
+      }, Math.max(0, windowCloseAt - Date.now()));
+    }
     automationCycleInProgress.add(serial);
     automationCycleActiveSlot.set(serial, incomingSlotIdx);
     checkFeedInProgress.add(serial); // also blocks a concurrent manual Check Feed call
@@ -7526,7 +7604,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               cycles: 1,
             }).catch((error: any) => logger.warn({ err: error }, "[snapchat-cycle] cycle count persist error"));
           }
-         return res.json({ ok: true, steps });
+         res.json({ ok: true, steps });
+         return;
        }
 
        // 2. Open Instagram.
@@ -7536,11 +7615,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const whiteScreenCleared = await android.clearInstagramWhiteScreenAfterLaunch(serial, tLog);
       if (!whiteScreenCleared) {
         steps.push("instagram-white-screen-recovery-failed");
-        return res.json({
+        res.json({
           ok: false,
           steps,
           error: "Instagram did not return to a usable foreground screen after white-screen recovery",
         });
+        return;
       }
       steps.push("instagram-white-screen-guard");
       // Android can raise the USB/MTP phone-data dialog after the pre-launch
@@ -9329,6 +9409,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
     } finally {
+      if (snapchatWindowEndTimer) {
+        clearTimeout(snapchatWindowEndTimer);
+        snapchatWindowEndTimer = null;
+      }
       if (screenMonitor) {
         clearInterval(screenMonitor);
         screenMonitor = null;

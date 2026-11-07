@@ -8,6 +8,11 @@
  */
 import type { HstToggleEvent } from "./hstToggleCoordinator";
 import { requestDeviceDebugLogClear } from "../contexts/DeviceLogContext";
+import {
+  getSnapchatRunWindowStatus,
+  getSnapchatWindowedDelay,
+  type SnapchatRunWindow,
+} from "./snapchatRunWindow";
 
 // ── Shared maps (imported by MobilePage so they use the same instances) ──────
 export const _hstTimers   = new Map<string, ReturnType<typeof setTimeout>>();
@@ -222,8 +227,21 @@ function scheduleNextBg(
   key: string,
   delayMs: number,
   manualOverride = false,
+  window?: SnapchatRunWindow,
 ): void {
-  const roundedDelayMs = Math.round(delayMs);
+  const windowedDelayMs = window ? getSnapchatWindowedDelay(delayMs, window) : delayMs;
+  if (windowedDelayMs === null) {
+    const existingTimer = _hstTimers.get(key);
+    if (existingTimer !== undefined) clearTimeout(existingTimer);
+    _hstTimers.delete(key);
+    _hstNextRunAt.delete(key);
+    logBackgroundHst("timer-paused-invalid-snapchat-window", serial, slotIdx, {
+      key,
+      window: `${window?.start ?? ""}-${window?.end ?? ""}`,
+    });
+    return;
+  }
+  const roundedDelayMs = Math.round(windowedDelayMs);
   const fireAt = Date.now() + roundedDelayMs;
   const t = setTimeout(() => {
     // A second recovery/stray timer must not create another turn while this
@@ -337,7 +355,17 @@ async function scheduleRestartRecovery(serial: string, slotIdx: number, key: str
   ));
   const safeMax = Math.max(safeMin, Number(settings.cycleIntervalMax ?? 20));
   const delayMs = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
-  scheduleNextBg(serial, slotIdx, key, delayMs);
+  const window = settings.snapchatRunWindow as SnapchatRunWindow | undefined;
+  const windowStatus = getSnapchatRunWindowStatus(window);
+  if (!windowStatus.valid) {
+    logBackgroundHst("recovery-paused-invalid-snapchat-window", serial, slotIdx, {
+      key,
+      window: `${window?.start ?? ""}-${window?.end ?? ""}`,
+    });
+    scheduleNextBg(serial, slotIdx, key, 60_000);
+    return;
+  }
+  scheduleNextBg(serial, slotIdx, key, delayMs, false, window);
 }
 
 async function runCycleBg(
@@ -408,6 +436,26 @@ async function runCycleBg(
     logBackgroundHst("cycle-stopped-disabled", serial, slotIdx, { key });
     return; // toggle was turned off in the DB
   }
+  const window = s.snapchatRunWindow as SnapchatRunWindow | undefined;
+  const windowStatus = getSnapchatRunWindowStatus(window);
+  if (!windowStatus.valid) {
+    logBackgroundHst("cycle-paused-invalid-snapchat-window", serial, slotIdx, {
+      key,
+      window: `${window?.start ?? ""}-${window?.end ?? ""}`,
+    });
+    scheduleNextBg(serial, slotIdx, key, 60_000);
+    return;
+  }
+  if (!windowStatus.open) {
+    const delayMs = windowStatus.nextOpenAt === null ? 60_000 : windowStatus.nextOpenAt - Date.now();
+    logBackgroundHst("cycle-deferred-outside-snapchat-window", serial, slotIdx, {
+      key,
+      nextOpenAt: windowStatus.nextOpenAt,
+      delayMs,
+    });
+    scheduleNextBg(serial, slotIdx, key, delayMs, false, window);
+    return;
+  }
   if (_hstStop.has(key) || _hstUiMounted.has(key)) {
     logBackgroundHst("cycle-skipped-after-settings", serial, slotIdx, {
       key,
@@ -417,7 +465,6 @@ async function runCycleBg(
     _hstNextRunAt.delete(key);
     return;
   }
-
   const feedMin = Math.max(1, Math.min(Number(s.feedScrollMin ?? 1), Number(s.feedScrollMax ?? 10)));
   const feedMax = Math.max(feedMin, Number(s.feedScrollMax ?? 10));
   const count   = Math.floor(Math.random() * (feedMax - feedMin + 1)) + feedMin;
@@ -449,6 +496,21 @@ async function runCycleBg(
     });
     _hstStop.delete(key);
     releaseCollisionSlot(serial, collisionLease, true);
+    return;
+  }
+  const postCollisionWindow = getSnapchatRunWindowStatus(window);
+  if (!postCollisionWindow.valid || !postCollisionWindow.open) {
+    releaseCollisionSlot(serial, collisionLease, true);
+    const delayMs = postCollisionWindow.valid && postCollisionWindow.nextOpenAt !== null
+      ? postCollisionWindow.nextOpenAt - Date.now()
+      : 60_000;
+    logBackgroundHst("cycle-deferred-after-collision-outside-snapchat-window", serial, slotIdx, {
+      key,
+      valid: postCollisionWindow.valid,
+      nextOpenAt: postCollisionWindow.nextOpenAt,
+      delayMs,
+    });
+    scheduleNextBg(serial, slotIdx, key, delayMs, false, postCollisionWindow.valid ? window : undefined);
     return;
   }
 
@@ -681,11 +743,34 @@ async function runCycleBg(
       });
       return;
     }
+    if (cycleBody?.outsideScheduleWindow === true) {
+      const serverNextOpenAt = typeof cycleBody.nextAllowedAt === "string"
+        ? Date.parse(cycleBody.nextAllowedAt)
+        : NaN;
+      const delayMs = Number.isFinite(serverNextOpenAt)
+        ? Math.max(0, serverNextOpenAt - Date.now())
+        : 60_000;
+      logBackgroundHst("cycle-refused-outside-snapchat-window", serial, slotIdx, {
+        key,
+        invalidWindow: cycleBody.invalidScheduleWindow === true,
+        nextAllowedAt: cycleBody.nextAllowedAt ?? null,
+        delayMs,
+      });
+      scheduleNextBg(
+        serial,
+        slotIdx,
+        key,
+        delayMs,
+        false,
+        cycleBody.invalidScheduleWindow === true ? undefined : window,
+      );
+      return;
+    }
     if (cycleResponse.status === 409) {
       // Another slot on this device is currently running. Keep this slot's
       // turn alive and retry shortly rather than waiting for the full interval
       // and making an enabled HST appear inert.
-      scheduleNextBg(serial, slotIdx, key, 10_000 + Math.random() * 10_000);
+      scheduleNextBg(serial, slotIdx, key, 10_000 + Math.random() * 10_000, false, window);
       return;
     }
     if (!cycleResponse.ok) {
@@ -722,5 +807,5 @@ async function runCycleBg(
   const safeMin = Math.max(1, Math.min(Number(s.cycleIntervalMin ?? 20), Number(s.cycleIntervalMax ?? 20)));
   const safeMax = Math.max(safeMin, Number(s.cycleIntervalMax ?? 20));
   const gapMs   = (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
-  scheduleNextBg(serial, slotIdx, key, gapMs);
+  scheduleNextBg(serial, slotIdx, key, gapMs, false, window);
 }

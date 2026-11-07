@@ -71,6 +71,7 @@
 - [Synthetic browser startup path](synthetic-browser-startup.md) — device Browser sessions must bypass Instagram bootstrap, blank-page recovery, and self-waiting screencast queues
 - [Mobile account posted-media history](mobile-posted-media-history.md) — keep confirmed profile posts per account/slot separate from the device-wide no-repeat cache
 - [Mobile platform account slots](mobile-platform-account-slots.md) — keep Instagram and Snapchat in one platform-tagged slot list so HST timers and collision control stay shared
+- [Snapchat per-slot run windows](snapchat-slot-run-window.md) — enforce each Snapchat slot’s PC-local time window in both schedulers and the API, including queued and active cycles
 - [Manual PC-to-phone media transfer](manual-pc-phone-media-transfer.md) — native PC picker, temporary DCIM copy, manual Instagram post, and explicit phone-side deletion
 - [Random settings single-action flow](random-settings-single-action.md) — tap one validated settings row, optionally scroll once, then Back once; never tap a subsetting
 - [Mobile cycle cross-tool metrics](mobile-cycle-all-likes.md) — aggregate likes, shares, DMs, and saves across every tool; keep pre-switch metrics with the previous account

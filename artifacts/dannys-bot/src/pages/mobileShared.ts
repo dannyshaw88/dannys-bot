@@ -92,6 +92,7 @@ export interface AutomationSettingsData {
   enabled: boolean;
   cycleIntervalMin: number;
   cycleIntervalMax: number;
+  snapchatRunWindow: { start: string; end: string; timeZone?: string };
   snapchatTools: SnapchatToolSettings;
   feedEnabled: boolean;
   storiesEnabled: boolean;
@@ -297,6 +298,7 @@ export interface AutomationSettingsData {
 
 export const AUTOMATION_DEFAULTS: AutomationSettingsData = {
   enabled: false, cycleIntervalMin: 20, cycleIntervalMax: 30,
+  snapchatRunWindow: { start: "", end: "" },
   snapchatTools: snapchatToolSettingsDefaults,
   feedEnabled: true, storiesEnabled: true, shuffleToolOrder: false,
   actionDelayMin: 5, actionDelayMax: 10,
@@ -471,6 +473,7 @@ export type CopySection    = { key: string; label: string; sub: CopySubSetting[]
 /** Values owned by a physical slot rather than a TrustScore template. */
 export const TRUST_SCORE_SLOT_OWNED_FIELDS = new Set([
   "enabled",
+  "snapchatRunWindow",
   "trustScoreId",
   "trustScoreConfigured",
   "trustScoreControlledFields",
@@ -535,6 +538,7 @@ export const TRUST_SCORE_TEMPLATE_LOCKED_FIELDS = new Set(
 
 /** Values that may be copied between Human Session Tool slots. */
 export const COPYABLE_ACCOUNT_SPECIFIC_FIELDS = new Set([
+  "snapchatRunWindow",
   "followSources",
   "followFiltersEnabled",
   "followFilterPrivateUsers",
