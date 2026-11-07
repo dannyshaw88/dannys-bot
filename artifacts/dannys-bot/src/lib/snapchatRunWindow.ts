@@ -23,6 +23,23 @@ export function formatSnapchatClockInput(value: string): string {
   return digits.length >= 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
 }
 
+export function getSnapchatClockInputCaret(
+  rawValue: string,
+  rawCaret: number,
+  formattedValue: string,
+  inputType: string,
+): number {
+  const digitsBeforeCaret = rawValue.slice(0, rawCaret).replace(/\D/g, "").length;
+  if (!rawValue.includes(":") && formattedValue.includes(":") && digitsBeforeCaret === 2) {
+    if (inputType === "deleteContentBackward") return 2;
+    if (inputType === "deleteContentForward") return 3;
+  }
+  return Math.min(
+    formattedValue.length,
+    digitsBeforeCaret + (digitsBeforeCaret >= 2 ? 1 : 0),
+  );
+}
+
 export function getSnapchatRunWindowStatus(
   window: SnapchatRunWindow | null | undefined,
   now = Date.now(),

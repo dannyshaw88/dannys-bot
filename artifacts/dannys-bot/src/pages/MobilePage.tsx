@@ -52,6 +52,7 @@ import { MobilePhoneApps, MobilePhoneAppsPanel, DeviceQuickControls, type Mobile
 import { SnapchatSettingsPanel } from "@/components/tools/snapchat/settings/SnapchatSettingsPanel";
 import {
   formatSnapchatClockInput,
+  getSnapchatClockInputCaret,
   getSnapchatRunWindowStatus,
   getSnapchatWindowedDelay,
 } from "@/lib/snapchatRunWindow";
@@ -4572,6 +4573,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // Counts explicit master-toggle edits so a settings response that was
   // already in flight cannot overwrite a newer off→on (or on→off) choice.
   const enabledEditRevisionRef = useRef(0);
+  const settingsEditRevisionRef = useRef(0);
   // Hydration is a gate only for a new slot/device identity. Refreshing the
   // same identity must not briefly set hydrated=false and tear down scheduling.
   const hydrationIdentityRef = useRef<string | null>(null);
@@ -4833,6 +4835,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const identityChanged = hydrationIdentityRef.current !== hydrationIdentity;
     hydrationIdentityRef.current = hydrationIdentity;
     const hydrationEditRevision = enabledEditRevisionRef.current;
+    const hydrationSettingsEditRevision = settingsEditRevisionRef.current;
     if (identityChanged) {
       hydratedRef.current = false;
       setHydrated(false);
@@ -4859,7 +4862,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       lastSavedSnapchatToolsRef.current = JSON.stringify(merged.snapchatTools ?? AUTOMATION_DEFAULTS.snapchatTools);
       // Set settings AND hydrated in the same React batch so the run-loop
       // fires exactly once with the correct loaded values.
-      setSettings(merged);
+      const settingsWereEditedDuringFetch =
+        settingsEditRevisionRef.current !== hydrationSettingsEditRevision;
+      // A copy refresh can finish after the slot editor is already open.
+      // Keep any user-edited snapshot and let autosave write it over the
+      // fetched copy instead of making the controls appear to revert/freeze.
+      setSettings(settingsWereEditedDuringFetch ? settingsRef.current : merged);
       setHydrated(true);
       hydratedRef.current = true;
     };
@@ -5836,10 +5844,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.cycleIntervalMin, settings.cycleIntervalMax]);
 
+  const setSettingsFromPanel = useCallback<React.Dispatch<React.SetStateAction<AutomationSettingsData>>>(
+    update => {
+      settingsEditRevisionRef.current += 1;
+      setSettings(update);
+    },
+    [],
+  );
+
   // Expose the union: client fetch in-flight OR server confirmed active.
   // This keeps the mirror live immediately on remount without waiting for
   // runCycle() to start its own fetch.
-  return { settings, setSettings, setEnabledByUser, loading, saveError, running: running || serverCycleRunning, nextRunAt };
+  return { settings, setSettings: setSettingsFromPanel, setEnabledByUser, loading, saveError, running: running || serverCycleRunning, nextRunAt };
 }
 
 // ── Per-device collision preventer ────────────────────────────────────────────
@@ -6704,6 +6720,28 @@ export function AutomationSettingsPanel({
           (templateDisabledTools.has(field) && field !== "shareReelEnabled")
         : fieldLocked(field),
     );
+  const updateSnapchatRunWindowTime = (
+    field: "start" | "end",
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const input = event.currentTarget;
+    const rawValue = input.value;
+    const rawCaret = input.selectionStart ?? rawValue.length;
+    const inputType = (event.nativeEvent as InputEvent).inputType ?? "";
+    const formattedValue = formatSnapchatClockInput(rawValue);
+    const nextCaret = getSnapchatClockInputCaret(rawValue, rawCaret, formattedValue, inputType);
+    setSettings(s => ({
+      ...s,
+      snapchatRunWindow: {
+        ...s.snapchatRunWindow,
+        [field]: formattedValue,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+    }));
+    window.requestAnimationFrame(() => {
+      if (document.activeElement === input) input.setSelectionRange(nextCaret, nextCaret);
+    });
+  };
   // Follow Users UI local state — hooks must come before any conditional return.
   const [_localShowCopyDialog, _localSetShowCopyDialog] = useState(false);
   const showCopyDialogResolved = showCopyDialog ?? _localShowCopyDialog;
@@ -7056,14 +7094,7 @@ export function AutomationSettingsPanel({
                 aria-label="Snapchat window start time in 24-hour HH:MM format"
                 className="w-[5.25rem] text-center font-mono"
                 value={settings.snapchatRunWindow.start}
-                onChange={e => setSettings(s => ({
-                  ...s,
-                  snapchatRunWindow: {
-                    ...s.snapchatRunWindow,
-                    start: formatSnapchatClockInput(e.target.value),
-                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  },
-                }))}
+                onChange={event => updateSnapchatRunWindowTime("start", event)}
                 disabled={fieldDisabled("snapchatRunWindow")}
               />
               <span className="text-muted-foreground text-sm">to</span>
@@ -7076,14 +7107,7 @@ export function AutomationSettingsPanel({
                 aria-label="Snapchat window end time in 24-hour HH:MM format"
                 className="w-[5.25rem] text-center font-mono"
                 value={settings.snapchatRunWindow.end}
-                onChange={e => setSettings(s => ({
-                  ...s,
-                  snapchatRunWindow: {
-                    ...s.snapchatRunWindow,
-                    end: formatSnapchatClockInput(e.target.value),
-                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                  },
-                }))}
+                onChange={event => updateSnapchatRunWindowTime("end", event)}
                 disabled={fieldDisabled("snapchatRunWindow")}
               />
               {!getSnapchatRunWindowStatus(settings.snapchatRunWindow).valid && (
