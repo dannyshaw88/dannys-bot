@@ -1,4 +1,4 @@
-import type { SnapchatToolSettings } from "@/pages/snapchatSettings";
+import { snapchatToolSettingsDefaults, type SnapchatToolSettings } from "@/pages/snapchatSettings";
 import { AcceptFriendsSetting } from "./AcceptFriendsSetting";
 import { AddFriendsSetting } from "./AddFriendsSetting";
 import { MassSnapSetting } from "./MassSnapSetting";
@@ -28,6 +28,14 @@ export function SnapchatSettingsPanel({
   onShuffleChange,
   onToolUpdate,
 }: SnapchatSettingsPanelProps) {
+  // Existing slots may have been saved before Upload a Video was introduced.
+  // Fill its defaults locally as well as during hydration so legacy records
+  // cannot crash the entire Farm page.
+  const uploadVideoSettings = {
+    ...snapchatToolSettingsDefaults.uploadVideo,
+    ...settings.uploadVideo,
+  };
+
   return (
     <div className="bg-card border border-border rounded-xl p-5 space-y-5">
       <div>
@@ -49,7 +57,7 @@ export function SnapchatSettingsPanel({
         onUpdate={patch => onToolUpdate("uploadSnap", patch as Record<string, unknown>)}
       />
       <UploadVideoSetting
-        value={settings.uploadVideo}
+        value={uploadVideoSettings}
         loading={loading}
         phoneSerial={phoneSerial}
         slotIdx={slotIdx}

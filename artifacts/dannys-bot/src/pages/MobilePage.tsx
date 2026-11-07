@@ -4851,7 +4851,23 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const hydrateCacheKey = `hstHydrate=${Date.now()}`;
     const applyHydratedSettings = (d: Record<string, any>) => {
       if (!active) return;
-      const merged = { ...AUTOMATION_DEFAULTS, ...d, makePostLocalFolderEnabled: true };
+      const incomingSnapchatTools =
+        d.snapchatTools && typeof d.snapchatTools === "object" && !Array.isArray(d.snapchatTools)
+          ? d.snapchatTools
+          : {};
+      const merged = {
+        ...AUTOMATION_DEFAULTS,
+        ...d,
+        snapchatTools: {
+          ...AUTOMATION_DEFAULTS.snapchatTools,
+          ...incomingSnapchatTools,
+          uploadVideo: {
+            ...AUTOMATION_DEFAULTS.snapchatTools.uploadVideo,
+            ...(incomingSnapchatTools.uploadVideo ?? {}),
+          },
+        },
+        makePostLocalFolderEnabled: true,
+      };
       // A user edit made while this request was in flight is newer than the
       // server snapshot. Preserve that explicit toggle while still applying
       // the rest of the refreshed settings.
@@ -6619,7 +6635,11 @@ export function AutomationSettingsPanel({
     ...s,
     snapchatTools: {
       ...s.snapchatTools,
-      [tool]: { ...s.snapchatTools[tool], ...patch },
+      [tool]: {
+        ...AUTOMATION_DEFAULTS.snapchatTools[tool],
+        ...s.snapchatTools[tool],
+        ...patch,
+      },
     },
   }));
   const isTrustScoreTemplateEditor = templateLockedFields !== undefined;

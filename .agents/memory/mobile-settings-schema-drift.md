@@ -31,3 +31,11 @@ When a dedicated endpoint saves only the HST enabled flag, update only that fiel
 **Why:** A Step 1 toggle can race a Step 2 edit; the enabled-only endpoint does not persist the nested tool settings.
 
 **How to apply:** Preserve dirty fields when reconciling dedicated toggle writes, and autosave Snapchat tool changes promptly with keepalive for navigation.
+
+## New nested tool settings
+
+When adding a new tool under a nested per-slot settings object, deep-merge that tool's defaults during frontend hydration and before applying partial edits. Existing saved slots may predate the tool, so a shallow merge at the top level can leave its settings `undefined` and crash the whole settings panel.
+
+**Why:** A newly added Snapchat tool was absent from older slot records, and the UI dereferenced the missing nested object.
+
+**How to apply:** Merge tool-level defaults with each persisted tool object on load; keep a local component fallback so incomplete legacy payloads cannot break page rendering.
