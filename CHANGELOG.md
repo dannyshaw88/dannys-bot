@@ -1,3 +1,13 @@
+## [1.2.679] — 2026-11-07
+
+### Fixed
+
+- Prevent Snapchat account slots from sharing execution windows or appearing locked after copying settings by repairing duplicate slot IDs and targeting copy operations by stable slot identity.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.679`.
+
 ## [1.2.678] — 2026-11-05
 
 ### Fixed
