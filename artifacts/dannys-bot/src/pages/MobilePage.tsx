@@ -51,6 +51,7 @@ import { getTrustLevels, getTrustScore, type TrustLevelEntry } from "@/component
 import { MobilePhoneApps, MobilePhoneAppsPanel, DeviceQuickControls, type MobilePhoneAppsPanelHandle } from "@/pages/MobilePhoneApps";
 import { SnapchatSettingsPanel } from "@/components/tools/snapchat/settings/SnapchatSettingsPanel";
 import {
+  formatSnapchatClockInput,
   getSnapchatRunWindowStatus,
   getSnapchatWindowedDelay,
 } from "@/lib/snapchatRunWindow";
@@ -4450,6 +4451,7 @@ function NoPhonesPanel({ rawOutput, restarting = false }: { rawOutput?: string |
 
 // Three-character value area, shared by every numeric field in this panel.
 const NUM_INPUT_CLASS = "box-content w-[3ch] text-center px-1";
+const CYCLE_INTERVAL_INPUT_CLASS = "box-content w-[2.4ch] text-center px-1";
 
 const Input = BaseInput;
 
@@ -5961,6 +5963,15 @@ function CopySettingsDialog({
   const [copyReplyPrompt, setCopyReplyPrompt] = useState(false);
   const [copying, setCopying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const saveSnapchatCopySelection = (
+    keys: Iterable<SnapchatCopyKey>,
+    includeReplyPrompt: boolean,
+  ) => {
+    try {
+      sessionStorage.setItem("copySettings_snapchatKeys", JSON.stringify([...keys]));
+      sessionStorage.setItem("copySettings_replyPrompt", String(includeReplyPrompt));
+    } catch {}
+  };
   const displayCopySections = (() => {
     const sections = [...COPY_SECTIONS];
     const moveAfter = (key: string, afterKey: string) => {
@@ -5975,9 +5986,7 @@ function CopySettingsDialog({
     return sections;
   })();
 
-  // Fetch all devices + their slots whenever the dialog opens.
-  // Reads sessionStorage to restore the last selection; defaults to all-unticked.
-  // Only a page reload (software restart) or clicking "None" clears the memory.
+  // Fetch devices and restore every selection whenever the dialog opens.
   useEffect(() => {
     if (!open) return;
     setResult(null);
@@ -5987,6 +5996,8 @@ function CopySettingsDialog({
     // Read session memory synchronously FIRST — before any setState can overwrite it
     const savedSubKeysRaw = sessionStorage.getItem("copySettings_subKeys");
     const savedTargetsRaw  = sessionStorage.getItem("copySettings_targets");
+    const savedSnapchatKeysRaw = sessionStorage.getItem("copySettings_snapchatKeys");
+    const savedReplyPromptRaw = sessionStorage.getItem("copySettings_replyPrompt");
     const restoredSubKeys = savedSubKeysRaw
       ? new Set<string>((JSON.parse(savedSubKeysRaw) as string[]).filter(key =>
         COPY_SECTIONS.some(section =>
@@ -6000,6 +6011,25 @@ function CopySettingsDialog({
     const restoredTargets: CopyTarget[] | null = savedTargetsRaw ? JSON.parse(savedTargetsRaw) as CopyTarget[] : null;
 
     setSelectedSubKeys(restoredSubKeys);
+    if (savedSnapchatKeysRaw !== null) {
+      try {
+        const savedKeys = JSON.parse(savedSnapchatKeysRaw);
+        if (Array.isArray(savedKeys)) {
+          setSelectedSnapchatCopyKeys(new Set(
+            savedKeys.filter((key): key is SnapchatCopyKey =>
+              SNAPCHAT_COPY_OPTIONS.some(option => option.key === key),
+            ),
+          ));
+        }
+      } catch {}
+    } else {
+      setSelectedSnapchatCopyKeys(new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key)));
+    }
+    if (savedReplyPromptRaw !== null) {
+      setCopyReplyPrompt(savedReplyPromptRaw === "true");
+    } else {
+      setCopyReplyPrompt(false);
+    }
 
     Promise.all([
       fetch("/api/mobile/usb-phones").then(r => r.json()),
@@ -6331,15 +6361,19 @@ function CopySettingsDialog({
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
                       onClick={() => {
-                        setSelectedSnapchatCopyKeys(new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key)));
+                        const allKeys = new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key));
+                        setSelectedSnapchatCopyKeys(allKeys);
                         setCopyReplyPrompt(true);
+                        saveSnapchatCopySelection(allKeys, true);
                       }}>
                       All
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
                       onClick={() => {
-                        setSelectedSnapchatCopyKeys(new Set());
+                        const noKeys = new Set<SnapchatCopyKey>();
+                        setSelectedSnapchatCopyKeys(noKeys);
                         setCopyReplyPrompt(false);
+                        saveSnapchatCopySelection(noKeys, false);
                       }}>
                       None
                     </Button>
@@ -6360,6 +6394,7 @@ function CopySettingsDialog({
                             const next = new Set(previous);
                             if (event.target.checked) next.add(option.key);
                             else next.delete(option.key);
+                            saveSnapchatCopySelection(next, copyReplyPrompt);
                             return next;
                           })}
                         />
@@ -6376,7 +6411,11 @@ function CopySettingsDialog({
                             className="w-3 h-3 accent-primary shrink-0"
                             checked={copyReplyPrompt}
                             disabled={!selectedSnapchatCopyKeys.has("replyUnreadChats")}
-                            onChange={event => setCopyReplyPrompt(event.target.checked)}
+                            onChange={event => {
+                              const nextPromptValue = event.target.checked;
+                              setCopyReplyPrompt(nextPromptValue);
+                              saveSnapchatCopySelection(selectedSnapchatCopyKeys, nextPromptValue);
+                            }}
                           />
                           Copy reply prompt
                         </label>
@@ -7008,7 +7047,6 @@ export function AutomationSettingsPanel({
           <div className="w-px self-stretch bg-border mx-1" />
           {slotPlatform === "snapchat" && (
             <>
-              <Label className="text-sm text-muted-foreground whitespace-nowrap">Start from (PC local time)</Label>
               <Input
                 type="text"
                 inputMode="numeric"
@@ -7022,7 +7060,7 @@ export function AutomationSettingsPanel({
                   ...s,
                   snapchatRunWindow: {
                     ...s.snapchatRunWindow,
-                    start: e.target.value.slice(0, 5),
+                    start: formatSnapchatClockInput(e.target.value),
                     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                   },
                 }))}
@@ -7042,13 +7080,12 @@ export function AutomationSettingsPanel({
                   ...s,
                   snapchatRunWindow: {
                     ...s.snapchatRunWindow,
-                    end: e.target.value.slice(0, 5),
+                    end: formatSnapchatClockInput(e.target.value),
                     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                   },
                 }))}
                 disabled={fieldDisabled("snapchatRunWindow")}
               />
-              <span className="text-xs text-muted-foreground">24-hour HH:MM · leave both blank for no window</span>
               {!getSnapchatRunWindowStatus(settings.snapchatRunWindow).valid && (
                 <span className="w-full text-xs text-destructive">
                   Enter two different valid times; this slot stays paused until the window is valid.
@@ -7061,7 +7098,7 @@ export function AutomationSettingsPanel({
           <Input
             type="number"
             min={1}
-            className={NUM_INPUT_CLASS}
+            className={CYCLE_INTERVAL_INPUT_CLASS}
             value={settings.cycleIntervalMin}
             onChange={e => setSettings(s => ({ ...s, cycleIntervalMin: Math.max(1, clamp4(Number(e.target.value))) }))}
             disabled={fieldDisabled("cycleIntervalMin", "cycleIntervalMax")}
@@ -7070,7 +7107,7 @@ export function AutomationSettingsPanel({
           <Input
             type="number"
             min={1}
-            className={NUM_INPUT_CLASS}
+            className={CYCLE_INTERVAL_INPUT_CLASS}
             value={settings.cycleIntervalMax}
             onChange={e => setSettings(s => ({ ...s, cycleIntervalMax: Math.max(1, clamp4(Number(e.target.value))) }))}
             disabled={fieldDisabled("cycleIntervalMin", "cycleIntervalMax")}
