@@ -4451,7 +4451,7 @@ function NoPhonesPanel({ rawOutput, restarting = false }: { rawOutput?: string |
 
 // Three-character value area, shared by every numeric field in this panel.
 const NUM_INPUT_CLASS = "box-content w-[3ch] text-center px-1";
-const CYCLE_INTERVAL_INPUT_CLASS = "box-content w-[2.4ch] text-center px-1";
+const CYCLE_INTERVAL_INPUT_CLASS = "box-content w-[2.4ch] !h-[26px] text-center px-1";
 
 const Input = BaseInput;
 
