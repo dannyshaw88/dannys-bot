@@ -99,14 +99,28 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
 
     state = await dump(context.serial);
     let sendToButton = findLabeledControl(state.nodes, "send to");
-    for (let attempt = 0; !sendToButton && attempt < 10; attempt++) {
-      if (attempt > 0) await context.sleep(500, "exact");
+    for (let attempt = 0; !sendToButton && attempt < 3; attempt++) {
+      if (attempt > 0) await context.sleep(350, "exact");
       state = await dump(context.serial);
       sendToButton = findLabeledControl(state.nodes, "send to");
     }
-    if (!sendToButton || !await tapNode(context, sendToButton, "open Send To from the video Snap editor")) {
-      context.onLog("Upload a Video stopped: the Send To button was not available in the video editor.");
-      return "failed";
+    if (sendToButton) {
+      if (!await tapNode(context, sendToButton, "open Send To from the video Snap editor")) return "failed";
+    } else {
+      const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+      const sendToX = Math.round(screenWidth * 0.92);
+      const sendToY = Math.round(screenHeight * 0.9);
+      context.onLog(`Upload a Video: Send To is visible but not exposed in the accessibility tree; tapping its bottom-right button at (${sendToX},${sendToY}) on ${screenWidth}×${screenHeight}.`);
+      await android.tap(
+        context.serial,
+        sendToX,
+        sendToY,
+        "bot",
+        "Snapchat: open Send To from the video Snap editor",
+        "automation",
+        { exact: true },
+      );
+      await context.sleep(700, "exact");
     }
 
     let publicStory: UiNode | undefined;

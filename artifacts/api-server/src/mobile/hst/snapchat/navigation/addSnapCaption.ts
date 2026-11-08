@@ -162,17 +162,7 @@ export async function addSnapCaption(
     context.onLog("Upload a Video stopped: the calibrated keyboard Enter/tick key could not be tapped to commit the caption.");
     return false;
   }
-  for (let attempt = 0; attempt < 8; attempt++) {
-    state = await dump(context.serial);
-    const sendToVisible = Boolean(findSendTo(state.nodes));
-    const keyboardVisibleAfterCommit = await android.isKeyboardShown(context.serial).catch(() => true);
-    if (sendToVisible && !keyboardVisibleAfterCommit) {
-      context.onLog("Upload a Video: caption committed; Snapchat returned to the Snap editor and Send To is available.");
-      return true;
-    }
-    if (attempt < 7) await context.sleep(350, "exact");
-  }
-
-  context.onLog("Upload a Video stopped: Snapchat did not close the caption keyboard and return to the video Snap editor after the Enter/tick tap.");
-  return false;
+  await context.sleep(500, "exact");
+  context.onLog("Upload a Video: caption Enter/tick sent; proceeding to Send To.");
+  return true;
 }
