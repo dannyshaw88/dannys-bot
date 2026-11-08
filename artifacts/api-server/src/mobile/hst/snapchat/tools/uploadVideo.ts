@@ -97,12 +97,16 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
       if (!await addSnapCaption(context, settings.caption, linkWasJustAttached)) return "failed";
     }
 
-    state = await dump(context.serial);
-    let sendToButton = findLabeledControl(state.nodes, "send to");
-    for (let attempt = 0; !sendToButton && attempt < 3; attempt++) {
-      if (attempt > 0) await context.sleep(350, "exact");
+    const linkOrCaptionWasAdded = settings.addLink || Boolean(settings.caption.trim());
+    let sendToButton: UiNode | undefined;
+    if (!linkOrCaptionWasAdded) {
       state = await dump(context.serial);
       sendToButton = findLabeledControl(state.nodes, "send to");
+      for (let attempt = 0; !sendToButton && attempt < 3; attempt++) {
+        if (attempt > 0) await context.sleep(350, "exact");
+        state = await dump(context.serial);
+        sendToButton = findLabeledControl(state.nodes, "send to");
+      }
     }
     if (sendToButton) {
       if (!await tapNode(context, sendToButton, "open Send To from the video Snap editor")) return "failed";
@@ -110,7 +114,11 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
       const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
       const sendToX = Math.round(screenWidth * 0.92);
       const sendToY = Math.round(screenHeight * 0.9);
-      context.onLog(`Upload a Video: Send To is visible but not exposed in the accessibility tree; tapping its bottom-right button at (${sendToX},${sendToY}) on ${screenWidth}×${screenHeight}.`);
+      context.onLog(
+        linkOrCaptionWasAdded
+          ? `Upload a Video: link/caption entry completed; skipping slow accessibility scans and tapping Send To at (${sendToX},${sendToY}) on ${screenWidth}×${screenHeight}.`
+          : `Upload a Video: Send To is visible but not exposed in the accessibility tree; tapping its bottom-right button at (${sendToX},${sendToY}) on ${screenWidth}×${screenHeight}.`,
+      );
       await android.tap(
         context.serial,
         sendToX,
