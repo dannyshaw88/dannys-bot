@@ -66,3 +66,9 @@ After typing an Upload a Video URL, press the device-calibrated Enter/Search key
 **Why:** Typing alone leaves the editor on the URL-entry screen; Snapchat only exposes the attach action after the keyboard’s search/enter action loads the link preview. Caption text also remains in edit mode until the keyboard’s tick/Enter action is pressed.
 
 **How to apply:** Use the per-device named Enter keyboard bind to load the URL preview and commit the caption. Wait for the live Attach to Snap control before tapping it, and do not continue to Send To until the committed caption has returned to the Snap editor.
+
+After a confirmed Attach to Snap tap, do not require the accessibility tree to expose “Send To” before opening the caption tool. Snapchat can omit that label while the Snap editor and T tool are visibly available.
+
+**Why:** A real-device log showed the URL attached successfully, but the caption routine stopped at its Send To accessibility check before it attempted the T-tool tap.
+
+**How to apply:** For the immediate link-to-caption handoff only, trust the confirmed Attach to Snap transition, tap the live T tool when exposed or its known editor position, and still require the caption keyboard to open before typing.
