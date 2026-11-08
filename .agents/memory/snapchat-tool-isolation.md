@@ -67,8 +67,8 @@ After typing an Upload a Video URL, press the device-calibrated Enter/Search key
 
 **How to apply:** Use the per-device named Enter keyboard bind to load the URL preview and commit the caption. Wait for the live Attach to Snap control before tapping it, and do not continue to Send To until the committed caption has returned to the Snap editor.
 
-After a confirmed Attach to Snap tap, do not require the accessibility tree to expose “Send To” before opening the caption tool. Snapchat can omit that label while the Snap editor and T tool are visibly available.
+After a confirmed Attach to Snap tap, do not require the accessibility tree to expose “Send To” before starting caption entry. Snapchat can omit that label while the Snap editor is visibly available. Start the caption by tapping open video canvas around the horizontal center, above the link sticker when clear; use a clear point below it only if the upper point overlaps a control or sticker. Never use the top-right T toolbar coordinate for this caption flow.
 
-**Why:** A real-device log showed the URL attached successfully, but the caption routine stopped at its Send To accessibility check before it attempted the T-tool tap.
+**Why:** Real-device logs showed the URL attached successfully, but the caption routine first stopped at its Send To accessibility check. A later tap in the top toolbar hit the wrong control; the user clarified that the caption prompt opens by tapping open canvas away from the link sticker.
 
-**How to apply:** For the immediate link-to-caption handoff only, trust the confirmed Attach to Snap transition, tap the live T tool when exposed or its known editor position, and still require the caption keyboard to open before typing.
+**How to apply:** For the immediate link-to-caption handoff only, trust the confirmed Attach to Snap transition, choose an open canvas point away from the link and toolbar controls, and still require the caption keyboard to open before typing. Do not send Android Back if the keyboard unexpectedly remains open after attaching the link.
