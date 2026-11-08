@@ -238,18 +238,28 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
   }
   context.onLog("Upload a Video: link text entered using the device's saved keyboard calibration.");
 
+  context.onLog("Upload a Video: pressing the device's calibrated Enter/Search keyboard key to load the link preview.");
+  if (!await android.tapCalibratedKeyboardKey(
+    context.serial,
+    "enter",
+    message => context.onLog(`Upload a Video: ${message}`),
+  )) {
+    context.onLog("Upload a Video stopped: the calibrated keyboard Enter/Search key could not be tapped.");
+    return false;
+  }
+
   let attachControl: UiNode | undefined;
-  for (let attempt = 0; attempt < 8; attempt++) {
+  for (let attempt = 0; attempt < 24; attempt++) {
     state = await dump(context.serial);
     attachControl = findAttachButton(state.nodes);
     if (attachControl) break;
-    if (attempt < 7) await context.sleep(400, "exact");
+    if (attempt < 23) await context.sleep(500, "exact");
   }
   if (!attachControl) {
-    context.onLog("Upload a Video stopped: Snapchat did not expose the control to attach the typed link.");
+    context.onLog("Upload a Video stopped: Snapchat did not show the link preview or its Attach to Snap button after the URL search.");
     return false;
   }
-  if (!await tapNode(context, attachControl, "tap the yellow Attach to Snap button", 700)) return false;
+  if (!await tapNode(context, attachControl, "tap the blue Attach to Snap button after the URL preview loads", 700)) return false;
   context.onLog("Upload a Video: link attached to the Snap.");
   return true;
 }

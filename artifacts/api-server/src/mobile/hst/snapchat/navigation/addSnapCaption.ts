@@ -136,21 +136,28 @@ export async function addSnapCaption(context: SnapchatContext, rawCaption: strin
   }
   context.onLog(`Upload a Video: caption entered using the saved keyboard calibration (${caption.length} characters).`);
 
-  // Back dismisses the soft keyboard while keeping the newly placed caption
-  // on the Snap. Confirm the Send To control is back before continuing.
-  if (await android.isKeyboardShown(context.serial).catch(() => false)) {
-    await android.keyevent(context.serial, 4);
-    await context.sleep(500, "exact");
+  // Snapchat commits the caption with the keyboard's bottom-right tick/Enter
+  // action. Back only hides the keyboard and does not finish caption editing.
+  context.onLog("Upload a Video: committing the caption with the device's calibrated keyboard Enter/tick key.");
+  if (!await android.tapCalibratedKeyboardKey(
+    context.serial,
+    "enter",
+    message => context.onLog(`Upload a Video: ${message}`),
+  )) {
+    context.onLog("Upload a Video stopped: the calibrated keyboard Enter/tick key could not be tapped to commit the caption.");
+    return false;
   }
   for (let attempt = 0; attempt < 8; attempt++) {
     state = await dump(context.serial);
-    if (findSendTo(state.nodes)) {
-      context.onLog("Upload a Video: caption editor closed; Send To is available.");
+    const sendToVisible = Boolean(findSendTo(state.nodes));
+    const keyboardVisibleAfterCommit = await android.isKeyboardShown(context.serial).catch(() => true);
+    if (sendToVisible && !keyboardVisibleAfterCommit) {
+      context.onLog("Upload a Video: caption committed; Snapchat returned to the Snap editor and Send To is available.");
       return true;
     }
     if (attempt < 7) await context.sleep(350, "exact");
   }
 
-  context.onLog("Upload a Video stopped: Snapchat did not return to the video Snap editor after caption entry.");
+  context.onLog("Upload a Video stopped: Snapchat did not close the caption keyboard and return to the video Snap editor after the Enter/tick tap.");
   return false;
 }

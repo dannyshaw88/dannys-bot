@@ -60,3 +60,9 @@ Snapchat may expose the empty URL field’s “Type a URL” hint through both a
 **Why:** An inspect dump showed the placeholder in both fields, and the previous non-empty check interpreted it as existing link content.
 
 **How to apply:** Ignore the placeholder when deciding whether to clear the field, then proceed to the device’s saved keyboard calibration for URL entry.
+
+After typing an Upload a Video URL, press the device-calibrated Enter/Search key to load Snapchat’s link preview. Wait for the preview’s Attach to Snap button, tap it, then continue to the optional caption. After typing the caption, press the same saved Enter/tick key to commit it and verify the keyboard closes and Send To returns; Android Back only hides the keyboard and does not commit the caption.
+
+**Why:** Typing alone leaves the editor on the URL-entry screen; Snapchat only exposes the attach action after the keyboard’s search/enter action loads the link preview. Caption text also remains in edit mode until the keyboard’s tick/Enter action is pressed.
+
+**How to apply:** Use the per-device named Enter keyboard bind to load the URL preview and commit the caption. Wait for the live Attach to Snap control before tapping it, and do not continue to Send To until the committed caption has returned to the Snap editor.
