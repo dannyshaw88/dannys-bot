@@ -74,7 +74,22 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
     );
     await context.sleep(700, "exact");
 
-    if (settings.addLink && !await attachSnapLink(context, settings.linkUrl)) return "failed";
+    if (settings.addLink) {
+      let editorReady = false;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        state = await dump(context.serial);
+        if (findLabeledControl(state.nodes, "send to")) {
+          editorReady = true;
+          break;
+        }
+        if (attempt < 11) await context.sleep(500, "exact");
+      }
+      if (!editorReady) {
+        context.onLog("Upload a Video stopped: Snapchat did not finish opening the video Snap editor after selecting the video.");
+        return "failed";
+      }
+      if (!await attachSnapLink(context, settings.linkUrl)) return "failed";
+    }
 
     state = await dump(context.serial);
     let sendToButton = findLabeledControl(state.nodes, "send to");

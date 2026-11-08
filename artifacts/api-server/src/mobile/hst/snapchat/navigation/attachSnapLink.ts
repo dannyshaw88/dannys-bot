@@ -30,6 +30,26 @@ function findLabeledControl(nodes: UiNode[], labels: string[]): UiNode | undefin
     )[0] ?? labelNode;
 }
 
+function findUrlField(nodes: UiNode[]): UiNode | undefined {
+  return nodes.find(node =>
+    node.resourceId.split("/").pop() === "attachment-editor-text-field",
+  ) ?? nodes
+    .filter(node =>
+      /edittext/i.test(node.className) ||
+      (/url|link/i.test(node.resourceId) && (node.focusable || node.clickable)),
+    )
+    .sort((a, b) =>
+      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]) -
+      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]),
+    )[0];
+}
+
+function findAttachButton(nodes: UiNode[]): UiNode | undefined {
+  return nodes.find(node =>
+    node.resourceId.split("/").pop() === "attachment-editor-attach-button",
+  ) ?? findLabeledControl(nodes, ["attach to snap"]);
+}
+
 export async function attachSnapLink(context: SnapchatContext, rawUrl: string): Promise<boolean> {
   const url = rawUrl.trim();
   if (!url) {
@@ -46,24 +66,37 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
       /(?:^|[/_])(?:link|url)(?:$|[/_])/i.test(`${node.resourceId} ${node.desc}`),
     );
   }
-  if (!linkControl) {
-    context.onLog("Upload a Video stopped: Snapchat's Snap editor did not expose its Link control.");
-    return false;
+  if (linkControl) {
+    if (!await tapNode(context, linkControl, "open the Link control in the video Snap editor", 1_000)) return false;
+  } else {
+    // The paperclip is an unlabeled toolbar icon in Snapchat's video editor.
+    // Only use its observed screen-relative position after confirming the
+    // editor is open; never send this coordinate from another Snapchat page.
+    const sendToVisible = Boolean(findLabeledControl(state.nodes, ["send to"]));
+    if (!sendToVisible) {
+      context.onLog("Upload a Video stopped: the Snap editor was not ready and its paperclip control had no accessibility label.");
+      return false;
+    }
+    const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    const paperclipX = Math.round(screenWidth * 0.935);
+    const paperclipY = Math.round(screenHeight * 0.65);
+    context.onLog(`Upload a Video: tapping the Snap editor paperclip at (${paperclipX},${paperclipY}) on ${screenWidth}×${screenHeight}.`);
+    await android.tap(
+      context.serial,
+      paperclipX,
+      paperclipY,
+      "bot",
+      "Snapchat: open the paperclip link editor on the video Snap",
+      "automation",
+      { exact: true },
+    );
+    await context.sleep(1_000, "exact");
   }
-  if (!await tapNode(context, linkControl, "open the Link control in the video Snap editor")) return false;
 
   let urlField: UiNode | undefined;
   for (let attempt = 0; attempt < 8; attempt++) {
     state = await dump(context.serial);
-    urlField = state.nodes
-      .filter(node =>
-        /edittext/i.test(node.className) ||
-        (/url|link/i.test(node.resourceId) && (node.focusable || node.clickable)),
-      )
-      .sort((a, b) =>
-        (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]) -
-        (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]),
-      )[0];
+    urlField = findUrlField(state.nodes);
     if (urlField) break;
     if (attempt < 7) await context.sleep(400, "exact");
   }
@@ -72,6 +105,25 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
     return false;
   }
   if (!await tapNode(context, urlField, "focus the Snapchat link text field", 300)) return false;
+
+  const previousText = (urlField.text || urlField.desc).trim();
+  if (previousText) {
+    try {
+      await android.clearFocusedTextField(
+        context.serial,
+        message => context.onLog(`Upload a Video: ${message}`),
+      );
+    } catch (error) {
+      context.onLog(`Upload a Video stopped: could not clear the existing Snapchat link text${error instanceof Error ? ` (${error.message})` : ""}.`);
+      return false;
+    }
+    state = await dump(context.serial);
+    urlField = findUrlField(state.nodes);
+    if (!urlField || (urlField.text || urlField.desc).trim()) {
+      context.onLog("Upload a Video stopped: the existing link text could not be cleared and verified.");
+      return false;
+    }
+  }
 
   let typed;
   try {
@@ -101,11 +153,10 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
   }
   context.onLog("Upload a Video: link text entered using the device's saved keyboard calibration.");
 
-  const attachLabels = ["attach", "attach link", "attach to snap", "add link", "add to snap", "done"];
   let attachControl: UiNode | undefined;
   for (let attempt = 0; attempt < 8; attempt++) {
     state = await dump(context.serial);
-    attachControl = findLabeledControl(state.nodes, attachLabels);
+    attachControl = findAttachButton(state.nodes);
     if (attachControl) break;
     if (attempt < 7) await context.sleep(400, "exact");
   }
@@ -113,7 +164,7 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
     context.onLog("Upload a Video stopped: Snapchat did not expose the control to attach the typed link.");
     return false;
   }
-  if (!await tapNode(context, attachControl, "attach the typed link to the video Snap", 700)) return false;
+  if (!await tapNode(context, attachControl, "tap the yellow Attach to Snap button", 700)) return false;
   context.onLog("Upload a Video: link attached to the Snap.");
   return true;
 }
