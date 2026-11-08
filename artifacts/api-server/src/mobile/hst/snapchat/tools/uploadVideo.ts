@@ -4,6 +4,7 @@ import { center, dump, randomCount, tapNode } from "../runtime";
 import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
 import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 import { attachSnapLink } from "../navigation/attachSnapLink";
+import { addSnapCaption } from "../navigation/addSnapCaption";
 
 export type UploadVideoResult = "not-started" | "completed" | "failed";
 
@@ -74,7 +75,7 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
     );
     await context.sleep(700, "exact");
 
-    if (settings.addLink) {
+    if (settings.addLink || settings.caption.trim()) {
       let editorReady = false;
       for (let attempt = 0; attempt < 12; attempt++) {
         state = await dump(context.serial);
@@ -88,7 +89,8 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
         context.onLog("Upload a Video stopped: Snapchat did not finish opening the video Snap editor after selecting the video.");
         return "failed";
       }
-      if (!await attachSnapLink(context, settings.linkUrl)) return "failed";
+      if (settings.addLink && !await attachSnapLink(context, settings.linkUrl)) return "failed";
+      if (!await addSnapCaption(context, settings.caption)) return "failed";
     }
 
     state = await dump(context.serial);

@@ -10,6 +10,7 @@ export const uploadVideoSettingsDefault = {
   selectAtRandom: false,
   addLink: false,
   linkUrl: "",
+  caption: "",
 };
 
 export const uploadVideoSettingsSchema = z.object({
@@ -22,4 +23,5 @@ export const uploadVideoSettingsSchema = z.object({
   selectAtRandom: z.boolean().default(false),
   addLink: z.boolean().default(false),
   linkUrl: z.string().max(2048).default(""),
+  caption: z.string().default(""),
 }).default(uploadVideoSettingsDefault);

@@ -1,6 +1,7 @@
 import { FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import type { UploadVideoSettings } from "@/pages/snapchatSettings/uploadVideo";
 import { ToolSettingFrame } from "./ToolSettingFrame";
 
@@ -19,6 +20,7 @@ export function UploadVideoSetting({
   slotIdx,
   onUpdate,
 }: UploadVideoSettingProps) {
+  const captionFieldId = `upload-video-caption-${slotIdx ?? 0}`;
   return (
     <ToolSettingFrame
       title="Upload a Video"
@@ -28,28 +30,44 @@ export function UploadVideoSetting({
       loading={loading}
       onUpdate={onUpdate}
       childrenBelow={
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-1">
-          <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={value.addLink}
-              onChange={event => onUpdate({ addLink: event.target.checked })}
-              disabled={loading || !value.enabled}
-              className="h-4 w-4 accent-primary"
+        <>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-1">
+            <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={value.addLink}
+                onChange={event => onUpdate({ addLink: event.target.checked })}
+                disabled={loading || !value.enabled}
+                className="h-4 w-4 accent-primary"
+              />
+              Add a link
+            </label>
+            <Input
+              type="url"
+              value={value.linkUrl}
+              onChange={event => onUpdate({ linkUrl: event.target.value })}
+              placeholder="https://example.com"
+              maxLength={2048}
+              className="h-8 min-w-[220px] max-w-[420px] flex-1 text-xs"
+              disabled={loading || !value.enabled || !value.addLink}
+              aria-label="Link to add to the video Snap"
             />
-            Add a link
-          </label>
-          <Input
-            type="url"
-            value={value.linkUrl}
-            onChange={event => onUpdate({ linkUrl: event.target.value })}
-            placeholder="https://example.com"
-            maxLength={2048}
-            className="h-8 min-w-[220px] max-w-[420px] flex-1 text-xs"
-            disabled={loading || !value.enabled || !value.addLink}
-            aria-label="Link to add to the video Snap"
-          />
-        </div>
+          </div>
+          <div className="grid w-full gap-1">
+            <label htmlFor={captionFieldId} className="text-xs text-muted-foreground">
+              Caption
+            </label>
+            <Textarea
+              id={captionFieldId}
+              value={value.caption}
+              onChange={event => onUpdate({ caption: event.target.value })}
+              placeholder="Leave blank for no caption"
+              rows={2}
+              className="min-h-[56px] resize-y text-xs"
+              disabled={loading || !value.enabled}
+            />
+          </div>
+        </>
       }
     >
       <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">

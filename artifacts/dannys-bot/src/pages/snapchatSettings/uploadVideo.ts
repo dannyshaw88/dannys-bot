@@ -8,6 +8,7 @@ export type UploadVideoSettings = {
   selectAtRandom: boolean;
   addLink: boolean;
   linkUrl: string;
+  caption: string;
 };
 
 export const uploadVideoSettingsDefault: UploadVideoSettings = {
@@ -20,4 +21,5 @@ export const uploadVideoSettingsDefault: UploadVideoSettings = {
   selectAtRandom: false,
   addLink: false,
   linkUrl: "",
+  caption: "",
 };
