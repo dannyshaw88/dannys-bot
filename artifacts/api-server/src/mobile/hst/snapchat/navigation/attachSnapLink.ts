@@ -1,6 +1,6 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
-import { center, dump, tapNode } from "../runtime";
+import { center, dump, shortResourceId, tapNode } from "../runtime";
 
 function normalize(value: string): string {
   return value.trim().toLowerCase().replace(/[·•–—-]/g, " ").replace(/\s+/g, " ");
@@ -50,6 +50,25 @@ function findAttachButton(nodes: UiNode[]): UiNode | undefined {
   ) ?? findLabeledControl(nodes, ["attach to snap"]);
 }
 
+function findMoreToolsControl(nodes: UiNode[]): UiNode | undefined {
+  return nodes.find(node =>
+    shortResourceId(node) === "more" ||
+    ["more", "more tools", "show more tools", "expand tools"].includes(normalize(node.text || node.desc)),
+  );
+}
+
+function findPaperclipControl(nodes: UiNode[], screenWidth: number, screenHeight: number): UiNode | undefined {
+  return nodes.find(node => {
+    if (!node.clickable) return false;
+    const point = center(node);
+    const label = `${node.text} ${node.desc} ${node.resourceId}`;
+    return point.x >= screenWidth * 0.76 &&
+      point.y >= screenHeight * 0.06 &&
+      point.y <= screenHeight * 0.88 &&
+      /paperclip|attachmenttool|(?:^|[/_])(?:link|url|attachment)(?:$|[/_])/i.test(label);
+  });
+}
+
 export async function attachSnapLink(context: SnapchatContext, rawUrl: string): Promise<boolean> {
   const url = rawUrl.trim();
   if (!url) {
@@ -58,26 +77,43 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
   }
 
   let state = await dump(context.serial);
-  let linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]);
-  if (!linkControl) {
-    linkControl = state.nodes.find(node =>
-      node.clickable &&
-      !/edittext/i.test(node.className) &&
-      /(?:^|[/_])(?:link|url)(?:$|[/_])/i.test(`${node.resourceId} ${node.desc}`),
-    );
+  const sendToVisible = Boolean(findLabeledControl(state.nodes, ["send to"]));
+  if (!sendToVisible) {
+    context.onLog("Upload a Video stopped: the video Snap editor was not visible before opening the paperclip.");
+    return false;
   }
-  if (linkControl) {
-    if (!await tapNode(context, linkControl, "open the Link control in the video Snap editor", 1_000)) return false;
+
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+  const moreTools = findMoreToolsControl(state.nodes);
+  if (moreTools) {
+    context.onLog("Upload a Video: tapping the right-side downward chevron to expose the hidden Snap editor tools.");
+    if (!await tapNode(context, moreTools, "expand the Snap editor tools with the downward chevron", 700, true)) return false;
   } else {
-    // The paperclip is an unlabeled toolbar icon in Snapchat's video editor.
-    // Only use its observed screen-relative position after confirming the
-    // editor is open; never send this coordinate from another Snapchat page.
-    const sendToVisible = Boolean(findLabeledControl(state.nodes, ["send to"]));
-    if (!sendToVisible) {
-      context.onLog("Upload a Video stopped: the Snap editor was not ready and its paperclip control had no accessibility label.");
-      return false;
-    }
-    const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+    // This icon is unlabeled in some Snapchat builds. The tap is limited to
+    // the confirmed video editor and uses the position shown in the supplied
+    // device screenshot.
+    const moreX = Math.round(screenWidth * 0.935);
+    const moreY = Math.round(screenHeight * 0.455);
+    context.onLog(`Upload a Video: tapping the downward chevron at (${moreX},${moreY}) to expose the paperclip.`);
+    await android.tap(
+      context.serial,
+      moreX,
+      moreY,
+      "bot",
+      "Snapchat: expand the video Snap editor tools with the downward chevron",
+      "automation",
+      { exact: true },
+    );
+    await context.sleep(700, "exact");
+  }
+
+  state = await dump(context.serial);
+  let linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]);
+  if (!linkControl) linkControl = findPaperclipControl(state.nodes, screenWidth, screenHeight);
+  if (linkControl) {
+    context.onLog("Upload a Video: opening the exposed paperclip/Link control.");
+    if (!await tapNode(context, linkControl, "open the exposed paperclip Link control in the video Snap editor", 1_000, true)) return false;
+  } else {
     const paperclipX = Math.round(screenWidth * 0.935);
     const paperclipY = Math.round(screenHeight * 0.65);
     context.onLog(`Upload a Video: tapping the Snap editor paperclip at (${paperclipX},${paperclipY}) on ${screenWidth}×${screenHeight}.`);
