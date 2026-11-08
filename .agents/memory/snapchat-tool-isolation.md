@@ -40,3 +40,11 @@ For Snapchat switching, always refresh the Camera UI immediately before tapping 
 **Why:** A device log showed Snapchat visibly on its Add Friends screen while the exact XML page check failed, preventing the tool from examining visible friend rows; the same brittle page gate existed in Accept Friends.
 
 **How to apply:** Keep page-marker confirmation out of both friend-list flows. Use each live Add or Accept action and its enclosing friend row as the actionable evidence.
+
+## Upload a Video link toolbar
+
+On the video Snap editor, Snapchat initially hides the paperclip under the right-side downward chevron. Upload a Video must expand that toolbar before tapping the paperclip to open the link editor.
+
+**Why:** The link tap missed because it targeted the paperclip position while the toolbar was still collapsed.
+
+**How to apply:** In Upload a Video only, tap the More/down-chevron control first, wait for the toolbar to expand, then tap the paperclip and continue with URL entry.
