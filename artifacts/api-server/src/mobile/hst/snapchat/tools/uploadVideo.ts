@@ -89,8 +89,12 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
         context.onLog("Upload a Video stopped: Snapchat did not finish opening the video Snap editor after selecting the video.");
         return "failed";
       }
-      if (settings.addLink && !await attachSnapLink(context, settings.linkUrl)) return "failed";
-      if (!await addSnapCaption(context, settings.caption)) return "failed";
+      let linkWasJustAttached = false;
+      if (settings.addLink) {
+        if (!await attachSnapLink(context, settings.linkUrl)) return "failed";
+        linkWasJustAttached = true;
+      }
+      if (!await addSnapCaption(context, settings.caption, linkWasJustAttached)) return "failed";
     }
 
     state = await dump(context.serial);

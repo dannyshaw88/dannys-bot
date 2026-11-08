@@ -51,7 +51,11 @@ function findTextTool(nodes: UiNode[], screenWidth: number, screenHeight: number
     )[0] ?? textTool;
 }
 
-export async function addSnapCaption(context: SnapchatContext, rawCaption: string): Promise<boolean> {
+export async function addSnapCaption(
+  context: SnapchatContext,
+  rawCaption: string,
+  linkWasJustAttached = false,
+): Promise<boolean> {
   const caption = rawCaption.trim();
   if (!caption) {
     context.onLog("Upload a Video: caption is blank; skipping the Snapchat text tool.");
@@ -59,9 +63,13 @@ export async function addSnapCaption(context: SnapchatContext, rawCaption: strin
   }
 
   let state = await dump(context.serial);
-  if (!findSendTo(state.nodes)) {
+  const sendToVisible = Boolean(findSendTo(state.nodes));
+  if (!sendToVisible && !linkWasJustAttached) {
     context.onLog("Upload a Video stopped: the video Snap editor was not visible before adding its caption.");
     return false;
+  }
+  if (!sendToVisible && linkWasJustAttached) {
+    context.onLog("Upload a Video: Send To is not exposed in the accessibility tree after Attach to Snap; continuing from the confirmed link-attach transition to open the text tool.");
   }
 
   // Tapping the text toolbar button opens Snapchat's caption editor and
@@ -71,9 +79,12 @@ export async function addSnapCaption(context: SnapchatContext, rawCaption: strin
     await android.keyevent(context.serial, 4);
     await context.sleep(350, "exact");
     state = await dump(context.serial);
-    if (!findSendTo(state.nodes)) {
+    if (!findSendTo(state.nodes) && !linkWasJustAttached) {
       context.onLog("Upload a Video stopped: could not dismiss the existing keyboard while returning to the Snap editor.");
       return false;
+    }
+    if (!findSendTo(state.nodes) && linkWasJustAttached) {
+      context.onLog("Upload a Video: Send To remains absent after hiding the link keyboard; continuing from the confirmed Snap link attachment.");
     }
   }
 
