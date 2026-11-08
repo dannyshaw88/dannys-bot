@@ -48,3 +48,9 @@ On the video Snap editor, Snapchat initially hides the paperclip under the right
 **Why:** The link tap missed because it targeted the paperclip position while the toolbar was still collapsed.
 
 **How to apply:** In Upload a Video only, tap the More/down-chevron control first, wait for the toolbar to expand, then tap the paperclip and continue with URL entry.
+
+The Snapchat URL editor may show a “Show links I’ve recently copied?” clipboard-access dialog. When that exact prompt is present, tap **Not now**, verify it is gone, and only then type the configured URL.
+
+**Why:** The dialog overlays the URL editor and must be cleared before calibrated typing can safely proceed.
+
+**How to apply:** Check the settled URL-editor screen for both the prompt title and its clipboard-access explanation; dismiss only that dialog and fail closed if it remains.

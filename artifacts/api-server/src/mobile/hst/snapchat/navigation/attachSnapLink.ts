@@ -50,6 +50,16 @@ function findAttachButton(nodes: UiNode[]): UiNode | undefined {
   ) ?? findLabeledControl(nodes, ["attach to snap"]);
 }
 
+function hasClipboardAccessPrompt(nodes: UiNode[]): boolean {
+  const hasTitle = nodes.some(node =>
+    /show links i['’]ve recently copied\?/i.test(`${node.text} ${node.desc}`),
+  );
+  const hasExplanation = nodes.some(node =>
+    /requires clipboard access for snapchat/i.test(`${node.text} ${node.desc}`),
+  );
+  return hasTitle && hasExplanation;
+}
+
 function findMoreToolsControl(nodes: UiNode[]): UiNode | undefined {
   return nodes.find(node =>
     shortResourceId(node) === "more" ||
@@ -127,6 +137,35 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
       { exact: true },
     );
     await context.sleep(1_000, "exact");
+  }
+
+  let clipboardPromptVisible = false;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    state = await dump(context.serial);
+    clipboardPromptVisible = hasClipboardAccessPrompt(state.nodes);
+    if (clipboardPromptVisible || findUrlField(state.nodes)) break;
+    if (attempt < 7) await context.sleep(400, "exact");
+  }
+
+  if (clipboardPromptVisible) {
+    const notNowButton = findLabeledControl(state.nodes, ["not now"]);
+    if (!notNowButton) {
+      context.onLog("Upload a Video stopped: Snapchat's clipboard prompt appeared without a visible Not now button.");
+      return false;
+    }
+    context.onLog("Upload a Video: dismissing Snapchat's clipboard prompt with Not now.");
+    if (!await tapNode(context, notNowButton, "dismiss Snapchat's clipboard prompt with Not now", 500, true)) return false;
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+      state = await dump(context.serial);
+      clipboardPromptVisible = hasClipboardAccessPrompt(state.nodes);
+      if (!clipboardPromptVisible) break;
+      if (attempt < 5) await context.sleep(300, "exact");
+    }
+    if (clipboardPromptVisible) {
+      context.onLog("Upload a Video stopped: Snapchat's clipboard prompt remained open after tapping Not now.");
+      return false;
+    }
   }
 
   let urlField: UiNode | undefined;
