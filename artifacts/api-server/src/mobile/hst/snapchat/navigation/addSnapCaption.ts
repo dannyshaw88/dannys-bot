@@ -75,11 +75,7 @@ export async function addSnapCaption(
   // Tapping the text toolbar button opens Snapchat's caption editor and
   // keyboard. The current Snapchat UI exposes no reliable label for this
   // icon, so use its observed top-right location only on the confirmed editor.
-  if (await android.isKeyboardShown(context.serial).catch(() => false)) {
-    if (linkWasJustAttached) {
-      context.onLog("Upload a Video stopped: the keyboard is still open after Attach to Snap; refusing Android Back because it could leave the Snap editor.");
-      return false;
-    }
+  if (!linkWasJustAttached && await android.isKeyboardShown(context.serial).catch(() => false)) {
     await android.keyevent(context.serial, 4);
     await context.sleep(350, "exact");
     state = await dump(context.serial);
@@ -87,6 +83,9 @@ export async function addSnapCaption(
       context.onLog("Upload a Video stopped: could not dismiss the existing keyboard while returning to the Snap editor.");
       return false;
     }
+  }
+  if (linkWasJustAttached) {
+    context.onLog("Upload a Video: link attachment was confirmed; proceeding directly to the top-right T icon without an Android Back or keyboard precheck.");
   }
 
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);

@@ -6386,9 +6386,17 @@ export async function getForegroundSnapshot(serial: string): Promise<InstagramFo
 export async function isKeyboardShown(serial: string): Promise<boolean> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
-  const r = spawnSync(adb, ["-s", serial, "shell", "dumpsys", "input_method"], { encoding: "utf8", timeout: 4000 });
-  const out = r.stdout || "";
-  return /mInputShown=true/.test(out) || /mIsInputViewShown=true/.test(out);
+  try {
+    const { stdout } = await execFileP(
+      adb,
+      ["-s", serial, "shell", "dumpsys", "input_method"],
+      { encoding: "utf8", timeout: 4000, maxBuffer: 2 * 1024 * 1024 } as any,
+    );
+    const out = String(stdout ?? "");
+    return /mInputShown=true/.test(out) || /mIsInputViewShown=true/.test(out);
+  } catch {
+    return false;
+  }
 }
 
 export async function getInstagramSignupHint(serial: string): Promise<{ currentActivity: string | null }> {

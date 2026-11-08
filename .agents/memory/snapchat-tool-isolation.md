@@ -71,4 +71,4 @@ After a confirmed Attach to Snap tap, do not require the accessibility tree to e
 
 **Why:** Real-device logs showed the URL attached successfully, but the caption routine first stopped at its Send To accessibility check. The user clarified that the caption prompt should open from the top-right T icon, not a general canvas tap.
 
-**How to apply:** For the immediate link-to-caption handoff only, trust the confirmed Attach to Snap transition, press the top-right T icon, and still require the caption keyboard to open before typing. Do not send Android Back if the keyboard unexpectedly remains open after attaching the link.
+**How to apply:** For the immediate link-to-caption handoff only, trust the confirmed Attach to Snap transition, skip the pre-tap keyboard check and press the top-right T icon directly, then require the caption keyboard before typing. Do not send Android Back after attaching the link.
