@@ -54,3 +54,9 @@ The Snapchat URL editor may show a “Show links I’ve recently copied?” clip
 **Why:** The dialog overlays the URL editor and must be cleared before calibrated typing can safely proceed.
 
 **How to apply:** Check the settled URL-editor screen for both the prompt title and its clipboard-access explanation; dismiss only that dialog and fail closed if it remains.
+
+Snapchat may expose the empty URL field’s “Type a URL” hint through both accessibility text and description. Treat that exact hint as empty; otherwise the replacement check can abort before saved-keyboard typing begins.
+
+**Why:** An inspect dump showed the placeholder in both fields, and the previous non-empty check interpreted it as existing link content.
+
+**How to apply:** Ignore the placeholder when deciding whether to clear the field, then proceed to the device’s saved keyboard calibration for URL entry.
