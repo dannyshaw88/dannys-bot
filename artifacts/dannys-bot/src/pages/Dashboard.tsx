@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Activity, Clock, User, Zap, Sparkles, Bell, Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, RefreshCw, Settings2, Upload, Download,
   Fingerprint, ThumbsUp, Power,
@@ -76,6 +77,15 @@ const ACTION_STYLES: Record<string, { label: string; cls: string; icon: string |
 
 const DEFAULT_COL_WIDTHS = { account: 160, device_name: 140, account_slot: 100, event: 150, detail: 200, timestamp: 220, trustscore: 108 };
 const DEFAULT_COL_ORDER: (keyof typeof DEFAULT_COL_WIDTHS)[] = ["account", "device_name", "account_slot", "trustscore", "event", "detail", "timestamp"];
+const DEFAULT_COL_VISIBILITY: Record<keyof typeof DEFAULT_COL_WIDTHS, boolean> = {
+  account: true,
+  device_name: true,
+  account_slot: true,
+  event: true,
+  detail: true,
+  timestamp: true,
+  trustscore: true,
+};
 const COL_LABELS: Record<keyof typeof DEFAULT_COL_WIDTHS, string> = {
   account: "ACCOUNT", device_name: "DEVICE", account_slot: "SLOT", event: "ACTION", detail: "DETAIL", timestamp: "TIMESTAMP", trustscore: "TRUSTSCORE",
 };
@@ -11425,6 +11435,11 @@ export function Dashboard() {
     DEFAULT_COL_WIDTHS,
     (s, d) => ({ ...d, ...s }),
   );
+  const [colVisibility, setColVisibility] = usePersistentSetting(
+    "dashboard_col_visibility",
+    DEFAULT_COL_VISIBILITY,
+    (s, d) => ({ ...d, ...s }),
+  );
   const [colOrder, setColOrder] = usePersistentSetting<(keyof typeof DEFAULT_COL_WIDTHS)[]>(
     "dashboard_col_order",
     DEFAULT_COL_ORDER,
@@ -11446,6 +11461,10 @@ export function Dashboard() {
       return missing.length ? [...clean, ...missing] : clean;
     },
   );
+  const visibleColOrder = colOrder.filter(key => colVisibility[key] !== false);
+  const setColumnVisibility = (key: keyof typeof DEFAULT_COL_WIDTHS, visible: boolean) => {
+    setColVisibility({ ...colVisibility, [key]: visible });
+  };
   const moveCol = (key: keyof typeof DEFAULT_COL_WIDTHS, dir: -1 | 1) => {
     const idx = colOrder.indexOf(key);
     const next = [...colOrder];
@@ -11747,9 +11766,10 @@ export function Dashboard() {
                 {manageColsOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setManageColsOpen(false)} />
-                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto">
+                    <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-background border border-border rounded-lg shadow-2xl w-[600px] max-h-[80vh] overflow-y-auto">
                       <div className="px-5 pt-4 pb-3 border-b border-border">
                         <p className="text-sm font-semibold">Columns</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Check a column to show it in the activity log.</p>
                       </div>
                       <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-1">
                         {colOrder.map((key, idx) => {
@@ -11778,7 +11798,20 @@ export function Dashboard() {
                                   <ChevronDown className="w-2.5 h-2.5" />
                                 </button>
                               </div>
-                              <label className="text-xs w-16 text-muted-foreground shrink-0 truncate" title={label}>{label}</label>
+                              <Checkbox
+                                id={`dashboard-column-${key}`}
+                                checked={colVisibility[key] !== false}
+                                disabled={visibleColOrder.length === 1 && colVisibility[key] !== false}
+                                onCheckedChange={checked => setColumnVisibility(key, checked === true)}
+                                aria-label={`Show ${label} column`}
+                              />
+                              <label
+                                htmlFor={`dashboard-column-${key}`}
+                                className="text-xs w-16 text-muted-foreground shrink-0 truncate cursor-pointer"
+                                title={label}
+                              >
+                                {label}
+                              </label>
                               <button
                                 onClick={() => updateCol(-10)}
                                 className="h-6 w-6 flex items-center justify-center border border-border rounded bg-background hover:bg-muted/40 text-muted-foreground transition-colors shrink-0"
@@ -11810,7 +11843,13 @@ export function Dashboard() {
                       </div>
                       <div className="px-4 pb-4">
                         <button
-                          onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem("dashboard_col_widths_px"); setColOrder(DEFAULT_COL_ORDER); localStorage.removeItem("dashboard_col_order"); }}
+                          onClick={() => {
+                            setColWidths(DEFAULT_COL_WIDTHS);
+                            localStorage.removeItem("dashboard_col_widths_px");
+                            setColVisibility(DEFAULT_COL_VISIBILITY);
+                            setColOrder(DEFAULT_COL_ORDER);
+                            localStorage.removeItem("dashboard_col_order");
+                          }}
                           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                         >
                           Reset to defaults
@@ -11943,11 +11982,11 @@ export function Dashboard() {
             <div className="overflow-y-auto overflow-x-hidden max-h-[70vh]">
               <table className="w-full text-sm text-left table-fixed">
                 <colgroup>
-                  {colOrder.map(key => <col key={key} style={{ width: `${colWidths[key]}px` }} />)}
+                  {visibleColOrder.map(key => <col key={key} style={{ width: `${colWidths[key]}px` }} />)}
                 </colgroup>
                 <thead className="text-xs uppercase bg-muted/80 text-foreground font-bold border-b border-border/50 sticky top-0 z-10 backdrop-blur-sm">
                   <tr>
-                    {colOrder.map(key => {
+                    {visibleColOrder.map(key => {
                       const isDragTarget = dashDragOverCol === key;
                       return (
                         <th
@@ -11983,12 +12022,12 @@ export function Dashboard() {
                   {initialLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="animate-pulse">
-                        <td colSpan={colOrder.length} className="px-3 py-4 bg-muted/10 h-12" />
+                        <td colSpan={visibleColOrder.length} className="px-3 py-4 bg-muted/10 h-12" />
                       </tr>
                     ))
                   ) : filteredFeed.length === 0 ? (
                     <tr>
-                      <td colSpan={colOrder.length} className="px-3 py-12 text-center text-muted-foreground">
+                      <td colSpan={visibleColOrder.length} className="px-3 py-12 text-center text-muted-foreground">
                         <Activity className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
                         <p className="text-sm font-medium">
                           {apiLogSearch.trim()
@@ -12033,7 +12072,7 @@ export function Dashboard() {
                         : "hover:bg-accent/5 transition-colors";
                       return (
                         <tr key={item.key} className={rowCls}>
-                          {colOrder.map(col => getCell(col))}
+                          {visibleColOrder.map(col => getCell(col))}
                         </tr>
                       );
                     })

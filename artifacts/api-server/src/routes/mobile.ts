@@ -7384,6 +7384,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     let likes = 0, likeFailures = 0, sharesFeed = 0, sharesDm = 0, saves = 0, captionExpands = 0, strayNavRecoveries = 0, audioTaps = 0, hashtagTaps = 0, authorVisits = 0;
     let feedScrolled = 0; // number of feed posts requested to scroll this cycle
     let exploreScrolled = 0; // number of explore scrolls this cycle
+    const snapchatMetricCounts = {
+      snapchatAddFriends: 0,
+      snapchatAcceptFriends: 0,
+      snapchatReplies: 0,
+      snapchatUploads: 0,
+      snapchatSpotlights: 0,
+      snapchatSpotlightLikes: 0,
+      snapchatSnaps: 0,
+    };
     let _slotUsername = "";       // captured from schema parse for catch-block use
     let _mobileProfileId: number | null = null; // same
     const cycleMetricSummary = () => [
@@ -7417,6 +7426,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (saves) parts.push(`${saves} saved`);
       if (feedScrolled) parts.push(`${feedScrolled} posts scrolled`);
       if (exploreScrolled) parts.push(`${exploreScrolled} Explore scrolls`);
+      const addFriends = snapchatMetricCounts.snapchatAddFriends;
+      const acceptedFriends = snapchatMetricCounts.snapchatAcceptFriends;
+      const replies = snapchatMetricCounts.snapchatReplies;
+      const uploads = snapchatMetricCounts.snapchatUploads;
+      const spotlights = snapchatMetricCounts.snapchatSpotlights;
+      const spotlightLikes = snapchatMetricCounts.snapchatSpotlightLikes;
+      const snaps = snapchatMetricCounts.snapchatSnaps;
+      if (addFriends) parts.push(`${addFriends} friend${addFriends === 1 ? "" : "s"} added`);
+      if (acceptedFriends) parts.push(`${acceptedFriends} friend request${acceptedFriends === 1 ? "" : "s"} accepted`);
+      if (replies) parts.push(`${replies} repl${replies === 1 ? "y" : "ies"} sent`);
+      if (uploads) parts.push(`${uploads} Snap${uploads === 1 ? "" : "s"} uploaded`);
+      if (spotlights) parts.push(`${spotlights} Spotlight${spotlights === 1 ? "" : "s"} viewed`);
+      if (spotlightLikes) parts.push(`${spotlightLikes} Spotlight like${spotlightLikes === 1 ? "" : "s"}`);
+      if (snaps) parts.push(`${snaps} Snap${snaps === 1 ? "" : "s"} viewed`);
       return parts.join(", ") || "No metrics recorded";
     };
     const cycleStart = Date.now();
@@ -7760,15 +7783,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const snapchatTools = automationSchema.shape.snapchatTools.parse(
             effectiveSettings.snapchatTools ?? {},
           );
-          const snapchatMetricCounts = {
-            snapchatAddFriends: 0,
-            snapchatAcceptFriends: 0,
-            snapchatReplies: 0,
-            snapchatUploads: 0,
-            snapchatSpotlights: 0,
-            snapchatSpotlightLikes: 0,
-            snapchatSnaps: 0,
-          };
           try {
             await runSnapchatTools({
               serial,
@@ -7884,6 +7898,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               cycles: 1,
             }).catch((error: any) => logger.warn({ err: error }, "[snapchat-cycle] cycle count persist error"));
           }
+          await storage.createSessionAction({
+            profileId: mobileProfileId ?? 0,
+            toolId: 0,
+            action: "tool_complete",
+            targetUsername: resolvedSlotUsername,
+            detail: dashboardMetricSummary(),
+            result: "ok",
+            sourceValue: `${serial}:${incomingSlotIdx}`,
+            sourceType: "phone",
+            timestamp: new Date().toISOString(),
+          }).catch(error => logger.warn(
+            { err: error, serial, slotId, username: resolvedSlotUsername },
+            "[snapchat-cycle] dashboard completion activity log failed",
+          ));
          res.json({ ok: true, steps });
          return;
        }

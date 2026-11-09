@@ -34,6 +34,13 @@ const ACTIVITY_METRICS: ActivityMetric[] = [
   { pattern: /^\d+\s+reels?\s+scrolled$/i, icon: Clapperboard, color: "text-purple-500" },
   { pattern: /^\d+\s+posts?\s+scrolled$/i, icon: BarChart2, color: "text-teal-500" },
   { pattern: /^\d+\s+Explore\s+scrolls?$/i, icon: Activity, color: "text-orange-500" },
+  { pattern: /^\d+\s+friends?\s+added$/i, icon: UserPlus, color: "text-blue-500" },
+  { pattern: /^\d+\s+friend requests?\s+accepted$/i, icon: UserPlus, color: "text-emerald-500" },
+  { pattern: /^\d+\s+repl(?:y|ies)\s+sent$/i, icon: Send, color: "text-violet-500" },
+  { pattern: /^\d+\s+Snaps?\s+uploaded$/i, icon: ImagePlus, color: "text-fuchsia-500" },
+  { pattern: /^\d+\s+Spotlights?\s+viewed$/i, icon: Eye, color: "text-indigo-500" },
+  { pattern: /^\d+\s+Spotlight\s+likes?$/i, icon: Heart, color: "text-red-500", filled: true },
+  { pattern: /^\d+\s+Snaps?\s+viewed$/i, icon: Eye, color: "text-sky-500" },
 ];
 
 function renderMetricPart(part: string, index: number): ReactNode {

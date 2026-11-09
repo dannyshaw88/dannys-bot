@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,9 @@ function downloadCsv(filename: string, rows: unknown[][]) {
 export function FarmAccountsExportPanel() {
   const { toast } = useToast();
   const [selectedSerial, setSelectedSerial] = useState("");
+  const [platform, setPlatform] = useState<"instagram" | "snapchat">("instagram");
   const [selectedSlotKeys, setSelectedSlotKeys] = useState<Set<string>>(() => new Set());
+  const initializedPlatformForSerial = useRef("");
 
   const phonesQuery = useQuery<DeviceListResponse>({
     queryKey: ["/api/mobile/usb-phones"],
@@ -119,6 +121,24 @@ export function FarmAccountsExportPanel() {
     staleTime: 0,
   });
 
+  useEffect(() => {
+    if (!selectedSerial || !accountQuery.data || initializedPlatformForSerial.current === selectedSerial) return;
+    initializedPlatformForSerial.current = selectedSerial;
+    const slots = accountQuery.data.slots ?? [];
+    const hasSelectedPlatform = slots.some(slot =>
+      (slot.platform === "snapchat" ? "snapchat" : "instagram") === platform &&
+      Boolean(slot.username?.trim()),
+    );
+    if (hasSelectedPlatform) return;
+    const firstAvailable = (["instagram", "snapchat"] as const).find(candidate =>
+      slots.some(slot =>
+        (slot.platform === "snapchat" ? "snapchat" : "instagram") === candidate &&
+        Boolean(slot.username?.trim()),
+      ),
+    );
+    if (firstAvailable) setPlatform(firstAvailable);
+  }, [accountQuery.data, platform, selectedSerial]);
+
   const accountSlots = useMemo(() => {
     return (accountQuery.data?.slots ?? [])
       .map((slot, index) => ({
@@ -130,14 +150,15 @@ export function FarmAccountsExportPanel() {
       .filter(({ slot }) => Boolean(slot.username?.trim()));
   }, [accountQuery.data]);
 
+  const visibleAccountSlots = accountSlots.filter(account => account.platform === platform);
   const selectedDevice = devices.find(device => device.serial === selectedSerial);
-  const selectedAccountSlots = accountSlots.filter(account => selectedSlotKeys.has(account.key));
+  const selectedAccountSlots = visibleAccountSlots.filter(account => selectedSlotKeys.has(account.key));
   const selectedCount = selectedAccountSlots.length;
-  const allSelected = accountSlots.length > 0 && selectedCount === accountSlots.length;
+  const allSelected = visibleAccountSlots.length > 0 && selectedCount === visibleAccountSlots.length;
 
   const toggleAll = (checked: boolean | "indeterminate") => {
     setSelectedSlotKeys(checked === true
-      ? new Set(accountSlots.map(account => account.key))
+      ? new Set(visibleAccountSlots.map(account => account.key))
       : new Set());
   };
 
@@ -159,6 +180,7 @@ export function FarmAccountsExportPanel() {
         "Device Serial",
         "Platform",
         "Account Slot",
+        "Platform",
         "Username",
         "Password",
         "2FA Secret",
@@ -170,8 +192,8 @@ export function FarmAccountsExportPanel() {
       ...selectedAccountSlots.map(({ slot, slotNumber, platform: slotPlatform }) => [
         deviceName,
         selectedDevice.serial,
-        slotPlatform === "snapchat" ? "Snapchat" : "Instagram",
         slotNumber,
+        slotPlatform === "snapchat" ? "Snapchat" : "Instagram",
         slot.username,
         slot.password,
         slot.totpSecret,
@@ -199,7 +221,7 @@ export function FarmAccountsExportPanel() {
       <div>
         <h2 className="text-lg font-semibold">Export Account Slots</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Choose a device, then select individual account slots or select them all.
+          Choose a device and platform, then select individual account slots or select them all.
         </p>
       </div>
 
@@ -208,7 +230,7 @@ export function FarmAccountsExportPanel() {
       ) : devices.length === 0 ? (
         <p className="text-sm text-muted-foreground">No farm or connected devices are available.</p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-1.5 text-sm">
             <span className="font-medium">Device</span>
             <select
@@ -228,6 +250,20 @@ export function FarmAccountsExportPanel() {
               })}
             </select>
           </label>
+          <label className="space-y-1.5 text-sm">
+            <span className="font-medium">Platform</span>
+            <select
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={platform}
+              onChange={event => {
+                setPlatform(event.target.value as "instagram" | "snapchat");
+                setSelectedSlotKeys(new Set());
+              }}
+            >
+              <option value="instagram">Instagram</option>
+              <option value="snapchat">Snapchat</option>
+            </select>
+          </label>
         </div>
       )}
 
@@ -237,23 +273,25 @@ export function FarmAccountsExportPanel() {
             <Checkbox
               checked={allSelected ? true : selectedCount > 0 ? "indeterminate" : false}
               onCheckedChange={toggleAll}
-              disabled={accountQuery.isLoading || accountSlots.length === 0}
+              disabled={accountQuery.isLoading || visibleAccountSlots.length === 0}
               aria-label="Select all account slots"
             />
-            <span className="text-sm font-semibold">Select all</span>
+            <span className="text-sm font-semibold">Select all {platform === "snapchat" ? "Snapchat" : "Instagram"}</span>
             <span className="ml-auto text-xs text-muted-foreground">
-              {accountQuery.isLoading ? "Loading slots…" : `${selectedCount} of ${accountSlots.length} selected`}
+              {accountQuery.isLoading ? "Loading slots…" : `${selectedCount} of ${visibleAccountSlots.length} selected`}
             </span>
           </label>
           {accountQuery.isLoading ? (
             <div className="flex items-center gap-2 px-4 py-5 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />Loading account slots…
             </div>
-          ) : accountSlots.length === 0 ? (
-            <p className="px-4 py-5 text-sm text-muted-foreground">No populated account slots on this device.</p>
+          ) : visibleAccountSlots.length === 0 ? (
+            <p className="px-4 py-5 text-sm text-muted-foreground">
+              No populated {platform === "snapchat" ? "Snapchat" : "Instagram"} account slots on this device.
+            </p>
           ) : (
             <div className="max-h-80 divide-y divide-border overflow-y-auto">
-              {accountSlots.map(({ slot, slotNumber, key, platform: slotPlatform }) => (
+              {visibleAccountSlots.map(({ slot, slotNumber, key, platform: slotPlatform }) => (
                 <label key={key} className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-accent/30">
                   <Checkbox
                     checked={selectedSlotKeys.has(key)}
