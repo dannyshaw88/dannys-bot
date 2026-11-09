@@ -7206,7 +7206,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   app.post("/api/mobile/devices/:serial/automation-cycle", async (req: Request, res: Response): Promise<void> => {
     const serial = p(req, "serial");
-    let snapchatWindowEndTimer: ReturnType<typeof setTimeout> | null = null;
+    let snapchatWindowCloseLogTimer: ReturnType<typeof setTimeout> | null = null;
     // Reject a Snapchat cycle before even querying ADB if this slot is outside
     // its saved PC-local operating window. The request's slot ID is preferred
     // so a reordered account list cannot apply another slot's schedule.
@@ -7342,20 +7342,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       });
       return;
     }
+    // The run window controls when a cycle may start, not when an active cycle
+    // must be interrupted. Let a cycle already in progress finish its tools
+    // and normal Snapchat close/phone-lock cleanup; the scheduler will defer
+    // the following cycle until the next opening.
     automationCycleCurrentId.set(serial, incomingCycleId);
     automationCycleAbortedId.delete(serial); // clear any abort from a previous cycle
     if (snapchatWindow?.closesAt !== null && snapchatWindow?.closesAt !== undefined) {
       const windowCloseAt = snapchatWindow.closesAt;
-      snapchatWindowEndTimer = setTimeout(() => {
+      snapchatWindowCloseLogTimer = setTimeout(() => {
         if (automationCycleCurrentId.get(serial) !== incomingCycleId) return;
-        automationCycleAbortedId.set(serial, incomingCycleId);
         logger.info({
           serial,
           slotId,
           slotIdx: incomingSlotIdx,
           cycleId: incomingCycleId,
           windowCloseAt: new Date(windowCloseAt).toISOString(),
-        }, "[snapchat-cycle] stopping at configured operating-window end");
+        }, "[snapchat-cycle] operating window closed during active cycle; allowing cycle and cleanup to finish");
       }, Math.max(0, windowCloseAt - Date.now()));
     }
     automationCycleInProgress.add(serial);
@@ -9686,9 +9689,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
     } finally {
-      if (snapchatWindowEndTimer) {
-        clearTimeout(snapchatWindowEndTimer);
-        snapchatWindowEndTimer = null;
+      if (snapchatWindowCloseLogTimer) {
+        clearTimeout(snapchatWindowCloseLogTimer);
+        snapchatWindowCloseLogTimer = null;
       }
       if (screenMonitor) {
         clearInterval(screenMonitor);
