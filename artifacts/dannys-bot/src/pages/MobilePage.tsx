@@ -5692,11 +5692,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // not replace this account's configured HST Run-every interval.
       const safeMin = Math.max(1, Math.min(s2.cycleIntervalMin, s2.cycleIntervalMax));
       const safeMax = Math.max(1, Math.max(s2.cycleIntervalMin, s2.cycleIntervalMax));
-       const gapMs = serverWindowRetryAt !== null
-          ? Math.max(0, serverWindowRetryAt - Date.now())
-          : retryBusy
-            ? 10_000 + Math.random() * 10_000
-            : (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
+      const gapMs = serverWindowRetryAt !== null
+        ? Math.max(0, serverWindowRetryAt - Date.now())
+        : retryBusy
+          ? 10_000 + Math.random() * 10_000
+          : (safeMin + Math.random() * (safeMax - safeMin)) * 60_000;
       scheduleNext(gapMs);
     };
 
