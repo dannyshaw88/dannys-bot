@@ -1,6 +1,7 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { TrustScoresTabContent, BulkImportTabContent } from "@/pages/ToolsPage";
 import ImagesPage from "@/pages/ImagesPage";
+import { FarmAccountsExportPanel } from "@/components/FarmAccountsExportPanel";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -25,7 +26,7 @@ const SETTINGS_TABS = [
   { label: "General", icon: Settings },
   { label: "Trust Scores", icon: Shield },
   { label: "Fix Images", icon: Palette },
-  { label: "Import", icon: Upload },
+  { label: "Import/Export", icon: Upload },
   { label: "Scraping", icon: Database },
   { label: "Automation", icon: Timer },
   { label: "Security", icon: ShieldAlert },
@@ -649,15 +650,16 @@ export function SettingsPage() {
         <ImagesPage embedded />
       )}
 
-      {settingsTab === "import" && (
-        <div>
+      {settingsTab === "import/export" && (
+        <div className="space-y-4">
           <BulkImportTabContent />
+          <FarmAccountsExportPanel />
         </div>
       )}
 
       {settingsTab === "prompt test" && <LunaTestPage embedded />}
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import", "prompt test"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import/export", "prompt test"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button
