@@ -4508,6 +4508,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // clear the module-level timer and restart with a corrected delay, without
   // needing a React state update or dep-array change.
   const rescheduleFnRef = useRef<((delayMs: number) => void) | null>(null);
+  const intervalClampSnapshotRef = useRef({
+    min: settings.cycleIntervalMin,
+    max: settings.cycleIntervalMax,
+    hydrated: false,
+  });
   // Reflects server-side cycle state independently of the client fetch.
   // Keeps running=true even right after remount, before runCycle() fires.
   const [serverCycleRunning, setServerCycleRunning] = useState(false);
@@ -5829,12 +5834,17 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     onLog,
   ]);
 
-  // Clamp: if the existing timer no longer fits within the new [min, max]
-  // bounds, directly reschedule the module-level timer with a corrected delay.
+  // Clamp only after a real interval edit: if the existing timer no longer
+  // fits within the new [min, max] bounds, directly reschedule it.
   //
   // Two cases that need a reschedule:
   //   1. Max was reduced  — remaining > new max  → timer would fire too late.
   //   2. Min was increased — remaining < new min  → timer would fire too early.
+  //
+  // Do not run this on first mount or settings hydration. An existing timer's
+  // remaining time naturally drops below the minimum as it counts down; doing
+  // that check during a remount repeatedly pushes an almost-due execution out
+  // by another full interval.
   //
   // IMPORTANT: debounced 800 ms.  Without the debounce the clamp fires on
   // every single keystroke while the user is editing the "Run every" fields.
@@ -5846,6 +5856,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // The debounce ensures the clamp only evaluates after the user has finished
   // editing (i.e. the value has settled), not on transient intermediate states.
   useEffect(() => {
+    const previous = intervalClampSnapshotRef.current;
+    const boundsChanged =
+      previous.min !== settings.cycleIntervalMin ||
+      previous.max !== settings.cycleIntervalMax;
+    const shouldClamp = previous.hydrated && hydrated && boundsChanged;
+    intervalClampSnapshotRef.current = {
+      min: settings.cycleIntervalMin,
+      max: settings.cycleIntervalMax,
+      hydrated,
+    };
+    if (!shouldClamp) return;
+
     const t = setTimeout(() => {
       if (!settings.enabled || running || !nextRunAtRef.current) return;
       const safeMin = Math.max(1, Math.min(settings.cycleIntervalMin, settings.cycleIntervalMax));
@@ -5858,7 +5880,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     }, 800);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.cycleIntervalMin, settings.cycleIntervalMax]);
+  }, [settings.cycleIntervalMin, settings.cycleIntervalMax, hydrated]);
 
   const setSettingsFromPanel = useCallback<React.Dispatch<React.SetStateAction<AutomationSettingsData>>>(
     update => {

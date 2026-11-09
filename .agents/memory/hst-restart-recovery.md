@@ -16,3 +16,9 @@ Background recovery must report API-backed stage markers for timer scheduling, c
 **Why:** Browser-console recovery messages were not present in the Windows Electron debug log, and the unobserved `setTimeout` promise boundary could make a slot disappear after its timer fired without any server-visible evidence.
 
 **How to apply:** Route background diagnostics through `/api/hst-dbg`; include serial, slot index, stage, status/error, and retry/ownership reason. Keep the retry delayed and only reschedule when the slot is not explicitly stopped or owned by the mounted runtime.
+
+HST interval clamping must run only after a real interval-bound edit made after settings hydration. Do not compare a normal timer's remaining countdown with the minimum on mount or remount; the remaining time naturally falls below the minimum and repeated clamping pushes the execution away.
+
+**Why:** A Windows log showed an HST timer due at 16:03 being reset to 16:21 and then 16:34 during UI remounts, despite no new cycle or interval edit.
+
+**How to apply:** Track the last hydrated min/max values and clamp only when those values actually change. Preserve the existing timer during initial mount and settings hydration.
