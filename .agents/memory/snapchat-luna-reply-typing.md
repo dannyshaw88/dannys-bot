@@ -114,11 +114,17 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 
 **How to apply:** Keep the UI, API validation, and run-count selection uncapped for this tool. The run still ends when it reaches the selected count or Snapchat has no more eligible unread chats.
 
-**Universal third-reply link:** When the next outgoing reply is actual Reply 3 and this contact has not already received the Boundlus URL, include the URL in that reply regardless of the incoming message or conversation context. If an early media route already sent the URL, do not repeat it.
+**Universal third-reply link:** When the next outgoing reply is actual Reply 3 and this contact has not already received the Boundlus URL, include the URL regardless of ordinary conversation topic. Respect a clear stop request and the exact phone/video-call or voice-note refusal; if an early media route already sent the URL, do not repeat it.
 
-**Why:** The user explicitly clarified that every third outgoing reply must contain the link; ordinary acknowledgments such as “OK” must not bypass the link step.
+**Why:** The user clarified that ordinary third replies, including acknowledgments such as “OK,” must not bypass the link step, while call/voice-note requests have a separately specified exact refusal.
 
-**How to apply:** Keep this unconditional routing rule in every editable persona prompt, including special-answer turns. Do not weaken it to ordinary-chat context or hardcode persona-specific wording in software.
+**How to apply:** Keep one prominent routing rule in every editable persona prompt. Include the link after ordinary and factual answers on Reply 3; do not weaken it based on conversational topic or hardcode persona-specific wording in software.
+
+**Concise persona prompts:** Keep the five editable persona prompts short and structurally identical; change only persona facts and URLs. State the reply-3 link rule once, with clear precedence for early media links, exact call refusals, prior links, and post-link support.
+
+**Why:** The user said increasingly descriptive prompts seem less effective, and the reply-history audit found ordinary Reply 3 answers without links plus links deferred to Reply 4 or 5.
+
+**How to apply:** Remove duplicated or conflicting instructions while preserving required factual answers. Use the Settings Prompt Test on ordinary Reply 3, early media requests, and post-link support before delivering revised prompt files.
 
 **Post-link Boundlus questions:** After the URL has already been sent, interpret a direct “what’s that/it/this?” question as referring to Boundlus. Answer the platform question and use the remaining post-link support slot; do not restart the normal link step or repeat its URL/call to action.
 
