@@ -50,6 +50,7 @@ import {
   type SnapchatToolSettings,
 } from "../mobile/hst/settings/snapchat";
 import { getSnapchatRunWindowStatus } from "../mobile/hst/snapchatRunWindow";
+import { formatCooldownTime } from "../mobile/hst/snapchat/navigation/handleFriendRequestCooldown";
 import { runVisitOwnProfile as runVisitOwnProfileOperation } from "../mobile/hst/operations/visitOwnProfile";
 import { runVisitSaved as runVisitSavedOperation } from "../mobile/hst/operations/visitSaved";
 import { runVisitSettings as runVisitSettingsOperation } from "../mobile/hst/operations/visitSettings";
@@ -7794,6 +7795,33 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               pickLocalFolderVideo,
               tools: snapchatTools,
               onLog: tLog,
+              getFriendRequestCooldownUntil: async () => {
+                const settings = await storage.getGlobalSettings();
+                const savedUntil = Number(settings[`snapchat_friend_request_cooldown_${slotId}`]);
+                return Number.isFinite(savedUntil) && savedUntil > Date.now() ? savedUntil : null;
+              },
+              onFriendRequestCooldown: async (until, triggeringTool) => {
+                const detail = `Snapchat friend-request limit reached during ${triggeringTool}. Add Friends and Accept Friends paused for 3 hours, until ${formatCooldownTime(until)}.`;
+                await storage.setGlobalSetting(`snapchat_friend_request_cooldown_${slotId}`, String(until))
+                  .catch(error => {
+                    logger.warn({ err: error, serial, slotId }, "[snapchat-cooldown] cooldown persistence failed");
+                    tLog("Warning: could not persist the Snapchat friend-request cooldown; this cycle will still skip both friend tools.");
+                  });
+                await storage.createSessionAction({
+                  profileId: mobileProfileId ?? 0,
+                  toolId: 0,
+                  action: "action_suspended",
+                  targetUsername: resolvedSlotUsername,
+                  detail,
+                  result: "warning",
+                  sourceValue: `${serial}:${incomingSlotIdx}`,
+                  sourceType: "phone",
+                  timestamp: new Date().toISOString(),
+                }).catch(error => {
+                  logger.warn({ err: error, serial, slotId }, "[snapchat-cooldown] dashboard activity log failed");
+                  tLog("Warning: could not write the Snapchat friend-request cooldown to the Dashboard activity log.");
+                });
+              },
               onAccountNotFound: async username => {
                 tLog(`Account not found: @${username}`);
                 await storage.createSessionAction({

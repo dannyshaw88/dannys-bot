@@ -1,10 +1,11 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForSuggestions } from "../navigation/openAddFriends";
+import { handleFriendRequestLimit } from "../navigation/handleFriendRequestCooldown";
 import { scrollAddFriendsListOneSlot } from "../navigation/scrollAddFriendsListOneSlot";
 import { center, dump, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
 
-export async function runAddFriends(context: SnapchatContext): Promise<boolean> {
+export async function runAddFriends(context: SnapchatContext): Promise<boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked"> {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
   if (!context.tools.addFriends.enabled || requested === 0) return false;
   if (!await openAddFriendsForSuggestions(context)) return false;
@@ -39,6 +40,8 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean> 
 
   while (added < requested && !context.isAborted()) {
     let state = await dump(context.serial);
+    const cooldownResult = await handleFriendRequestLimit(context, "Add Friends", state.nodes);
+    if (cooldownResult) return cooldownResult;
     let { addButtons, candidates } = findAddCandidates(state.nodes);
     let selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
     const candidate = selected?.candidate;
@@ -57,6 +60,8 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean> 
       );
       if (context.isAborted()) break;
       state = await dump(context.serial);
+      const cooldownAfterWait = await handleFriendRequestLimit(context, "Add Friends", state.nodes);
+      if (cooldownAfterWait) return cooldownAfterWait;
       ({ addButtons, candidates } = findAddCandidates(state.nodes));
       selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
       if (!selected) continue;
@@ -67,6 +72,8 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean> 
     if (!await tapNode(context, currentCandidate, `tap Add for ${friendName} under Find Friends`, 0, true)) break;
 
     const afterTap = await dump(context.serial);
+    const cooldownAfterTap = await handleFriendRequestLimit(context, "Add Friends", afterTap.nodes);
+    if (cooldownAfterTap) return cooldownAfterTap;
     if (hasSnapchatChatComposer(afterTap.nodes)) {
       const recoveries = (recoveryAttempts.get(friendKey) ?? 0) + 1;
       recoveryAttempts.set(friendKey, recoveries);

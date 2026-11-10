@@ -1,10 +1,11 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForAccepts } from "../navigation/openAddFriends";
+import { handleFriendRequestLimit } from "../navigation/handleFriendRequestCooldown";
 import { scrollAcceptFriendsListOneSlot } from "../navigation/scrollAcceptFriendsListOneSlot";
 import { center, dump, findOccludingBanner, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
 
-export async function runAcceptFriends(context: SnapchatContext): Promise<boolean> {
+export async function runAcceptFriends(context: SnapchatContext): Promise<boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked"> {
   const requested = randomCount(context.tools.acceptFriends.min, context.tools.acceptFriends.max);
   if (!context.tools.acceptFriends.enabled || requested === 0) return false;
   if (!await openAddFriendsForAccepts(context)) return false;
@@ -33,6 +34,8 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
   const acceptanceKey = (name: string) => name.toLowerCase().replace(/\s+/g, " ").trim();
 
   let state = await dump(context.serial);
+  const initialCooldownResult = await handleFriendRequestLimit(context, "Accept Friends", state.nodes);
+  if (initialCooldownResult) return initialCooldownResult;
 
   for (let expansion = 0; expansion < 10 && !context.isAborted(); expansion++) {
     const moreButton = state.nodes.find(node =>
@@ -49,6 +52,8 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
       }
       await context.sleep(120, "exact");
       state = await dump(context.serial);
+      const cooldownWhileExpanding = await handleFriendRequestLimit(context, "Accept Friends", state.nodes);
+      if (cooldownWhileExpanding) return cooldownWhileExpanding;
       expansion--;
       continue;
     }
@@ -142,6 +147,9 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
     }
     blockedAcceptance = "";
     if (!await tapNode(context, candidate.button, `accept ${candidate.name} under Added Me`, 250)) break;
+    state = await dump(context.serial);
+    const cooldownAfterTap = await handleFriendRequestLimit(context, "Accept Friends", state.nodes);
+    if (cooldownAfterTap) return cooldownAfterTap;
     pendingAcceptance = { name: candidate.name, row: candidate.row };
   }
   context.onLog(`Accept Friends: accepted ${accepted}/${requested} visible incoming requests.`);

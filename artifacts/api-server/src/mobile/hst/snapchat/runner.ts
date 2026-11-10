@@ -9,6 +9,7 @@ import { runUploadSnap, type UploadSnapResult } from "./tools/uploadSnap";
 import { runUploadVideo, type UploadVideoResult } from "./tools/uploadVideo";
 import { runViewSnaps } from "./tools/viewSnaps";
 import { runViewSpotlights } from "./tools/viewSpotlights";
+import { formatCooldownTime } from "./navigation/handleFriendRequestCooldown";
 
 type SnapchatToolEntry = {
   name: string;
@@ -18,7 +19,7 @@ type SnapchatToolEntry = {
     activatePctMax: number;
     directoryPath?: string;
   };
-  run: () => Promise<void | UploadSnapResult | UploadVideoResult | boolean>;
+  run: () => Promise<void | UploadSnapResult | UploadVideoResult | boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked">;
 };
 
 export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
@@ -37,8 +38,22 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
     { name: "View Snaps", settings: context.tools.viewSnaps, run: () => runViewSnaps(context) },
   ];
 
+  let friendRequestCooldownTriggered = false;
+  const getFriendRequestCooldownUntil = async () =>
+    await context.getFriendRequestCooldownUntil?.().catch(() => null) ?? null;
+  const initialFriendCooldownUntil = await getFriendRequestCooldownUntil();
+  if (initialFriendCooldownUntil) {
+    context.onLog(
+      `Snapchat: Add Friends and Accept Friends are paused by the 3-hour cooldown until ${formatCooldownTime(initialFriendCooldownUntil)}.`,
+    );
+  }
+
   const orderedTools = toolList.filter(tool => {
     if (!tool.settings.enabled) return false;
+    if (
+      initialFriendCooldownUntil &&
+      (tool.name === "Add Friends" || tool.name === "Accept Friends")
+    ) return false;
     if (
       (tool.name === "Upload a Snap" || tool.name === "Upload a Video") &&
       !tool.settings.directoryPath?.trim()
@@ -64,15 +79,35 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
   for (let index = 0; index < orderedTools.length; index++) {
     const tool = orderedTools[index];
     if (context.isAborted()) return;
+    if (tool.name === "Add Friends" || tool.name === "Accept Friends") {
+      if (friendRequestCooldownTriggered) {
+        context.onLog(`Snapchat: ${tool.name} skipped because the 3-hour friend-request cooldown was triggered this cycle.`);
+        continue;
+      }
+      const activeUntil = await getFriendRequestCooldownUntil();
+      if (activeUntil) {
+        context.onLog(
+          `Snapchat: ${tool.name} skipped; the friend-request cooldown remains active until ${formatCooldownTime(activeUntil)}.`,
+        );
+        continue;
+      }
+    }
     let toolError: unknown;
     let toolFailed = false;
-    let result: void | UploadSnapResult | UploadVideoResult | boolean = undefined;
+    let result: void | UploadSnapResult | UploadVideoResult | boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked" = undefined;
     try {
       result = await tool.run();
       if ((tool.name === "Upload a Snap" || tool.name === "Upload a Video") && result === "failed") return;
     } catch (error) {
       toolError = error;
       toolFailed = true;
+    }
+    if (result === "friend-request-cooldown") {
+      friendRequestCooldownTriggered = true;
+    }
+    if (result === "friend-request-cooldown-blocked") {
+      context.onLog("Snapchat tools stopped because the friend-request limit dialog could not be safely cleared.");
+      return;
     }
     if (
       (tool.name === "Add Friends" || tool.name === "Accept Friends") &&

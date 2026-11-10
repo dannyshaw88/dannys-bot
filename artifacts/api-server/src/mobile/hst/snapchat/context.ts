@@ -59,6 +59,8 @@ export type SnapchatContext = {
   ) => Promise<string | null>;
   tools: SnapchatToolSettings;
   onLog: (message: string) => void;
+  getFriendRequestCooldownUntil?: () => Promise<number | null>;
+  onFriendRequestCooldown?: (until: number, toolName: "Add Friends" | "Accept Friends") => Promise<void>;
   onAccountNotFound?: (username: string) => Promise<void>;
   onProgress: () => void;
   onMetric?: (
