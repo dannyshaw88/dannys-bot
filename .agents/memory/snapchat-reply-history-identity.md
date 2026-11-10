@@ -5,6 +5,14 @@ description: Preserve correct contact identity and user-controlled retention for
 
 Snapchat reply history must be associated with the persisted account-slot ID and the verified username shown on the contact profile; display names are not unique identifiers. Keep logs until the user clears them, clear only the selected Snapchat slot, and never send another reply after that slot's Boundlus link has been sent to the contact. Detect the Boundlus domain generically, not one fixed profile handle, because slots may use different links. Provide Luna with retained captured messages, exact prior sent text, and the outgoing reply number so follow-up replies continue the conversation instead of restarting or repeating.
 
+### Conversation history storage
+
+Store one conversation per contact, device, and account slot. Merge sent replies and genuine failed attempts into that conversation, label each sender, and timestamp every event. Show conversations and their messages newest first; failed sends must say `FAILED` with a reason. Do not store unread-list scans, Spotlight/media-only rows, false Delivered entries, or run-ended noise as conversation records. For incoming messages without Snapchat-provided timestamps, show when the message was observed rather than implying it was sent then. The bundled conversation store is canonical; legacy copies are not active history, and clearing a slot must clear that slot's records from both.
+
+**Why:** the user explicitly asked for one simple, timestamped conversation per contact instead of split reply/audit entries, with only real conversation activity.
+
+**How to apply:** keep exports and Luna's prior-reply context sourced from the same conversation records; preserve exact sent times, the `HH:MM-DD/MM/YYYY` display format, and slot-scoped clearing.
+
 Open Chat once, wait for the Unread tab to appear, and tap Unread once. After exiting a replied conversation, the Unread filter remains selected; dump the list and continue without tapping Chat or Unread again. Choose eligible rows using their visible new-message markers.
 
 An unread row can open a received photo/video Snap instead of the chat thread. When the live screen confirms Snapchat's media viewer, swipe down to close it, exit the conversation with the top-left chevron, verify the chat list, and continue to the next unread row rather than aborting the tool.

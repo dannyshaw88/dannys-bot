@@ -1,7 +1,7 @@
 import * as android from "../../../androidManager";
 import { storage } from "../../../../storage";
 import {
-  appendSnapchatUnansweredAudit,
+  appendSnapchatConversationFailure,
   appendSnapchatReplyHistory,
   containsSnapchatBoundlusLink,
   getSnapchatReplyHistory,
@@ -214,7 +214,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     recordedSkips.add(identity);
     context.onLog(`Reply to Unread Chats: not replying to "${displayName}" — ${reason}`);
     try {
-      appendSnapchatUnansweredAudit({
+      appendSnapchatConversationFailure({
         slotId,
         serial: context.serial,
         accountUsername: context.targetUsername?.trim() || undefined,
@@ -354,12 +354,13 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
         row.displayName,
         "opening-chat",
         "the chat composer was not available after opening the unread contact.",
-        thread.nodes.map(nodeLabel).filter(Boolean).slice(-25),
+        row.preview,
       );
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
     const transcript = visibleConversation(thread.nodes, composer.bounds[1]);
+    const transcriptCapturedAt = new Date().toISOString();
     activeContact = {
       displayName: row.displayName,
       stage: "reading-conversation",
@@ -370,7 +371,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
         row.displayName,
         "reading-conversation",
         "no readable conversation text was available to answer.",
-        thread.nodes.map(nodeLabel).filter(Boolean).slice(-25),
+        row.preview,
       );
       const exited = await exitSnapchatConversation(context).catch(() => false);
       if (!exited) {
@@ -605,6 +606,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
         username: contactKey,
         displayName: row.displayName,
         capturedMessages: transcript,
+        capturedAt: transcriptCapturedAt,
         sentText: enteredReply,
         sentAt: new Date().toISOString(),
       });
