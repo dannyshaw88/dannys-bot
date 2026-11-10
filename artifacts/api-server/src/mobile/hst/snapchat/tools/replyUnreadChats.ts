@@ -246,8 +246,11 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
   let replied = 0;
   const visited = new Set<string>();
   const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, (displayName, reason, preview) => {
+    // Delivered rows are ordinary outgoing conversations, not missed incoming
+    // chats. Keep excluding them from processing, but don't write a skipped
+    // contact audit after the corresponding sent-reply record.
+    if (reason === "Delivered") return;
     const explanations: Record<typeof reason, string> = {
-      Delivered: "Snapchat marks the row Delivered, so it is outgoing rather than an incoming chat.",
       empty: "the row has no readable incoming message preview.",
       "media-only": "the row contains only Snap/photo/video activity, not a text chat.",
       "My AI": "it is Snapchat's My AI conversation, which is intentionally excluded.",

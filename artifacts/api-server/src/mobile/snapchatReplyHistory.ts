@@ -79,6 +79,11 @@ function readUnansweredAuditEntries(): SnapchatUnansweredAuditEntry[] {
   }
 }
 
+function isOutgoingDeliveredAudit(entry: SnapchatUnansweredAuditEntry): boolean {
+  return entry.stage === "unread-list" &&
+    /^Snapchat marks the row Delivered\b/i.test(entry.reason);
+}
+
 function normalizeContactKey(value: string): string {
   return value.replace(/^@/, "").trim().toLowerCase();
 }
@@ -111,7 +116,8 @@ export function getSnapchatReplyHistory(slotId: string, contactKey: string): {
 
 export function exportSnapchatReplyHistory(slotId: string): string {
   const entries = readEntries().filter(entry => entry.slotId === slotId);
-  const unanswered = readUnansweredAuditEntries().filter(entry => entry.slotId === slotId);
+  const unanswered = readUnansweredAuditEntries()
+    .filter(entry => entry.slotId === slotId && !isOutgoingDeliveredAudit(entry));
   if (!entries.length && !unanswered.length) {
     return "No Snapchat reply history or skipped-contact audit recorded for this account slot.\n";
   }
@@ -120,7 +126,7 @@ export function exportSnapchatReplyHistory(slotId: string): string {
 
 export function exportAllSnapchatReplyHistory(): string {
   const entries = readEntries();
-  const unanswered = readUnansweredAuditEntries();
+  const unanswered = readUnansweredAuditEntries().filter(entry => !isOutgoingDeliveredAudit(entry));
   if (!entries.length && !unanswered.length) {
     return "No Snapchat reply history or skipped-contact audit has been recorded.\n";
   }
@@ -157,7 +163,6 @@ function formatHistoryEvent(event: SnapchatHistoryExportEvent): string {
   if (event.kind === "reply") {
     const { entry } = event;
     return [
-      `Event at: ${event.timestamp}`,
       "Record type: Sent reply",
       `Device: ${serial || "Unknown"}`,
       accountHeading,
@@ -166,7 +171,7 @@ function formatHistoryEvent(event: SnapchatHistoryExportEvent): string {
         : `@${entry.username} (${entry.displayName})`}`,
       `Reply number: ${entry.replyNumber}`,
       `Boundlus link sent: ${containsSnapchatBoundlusLink(entry.sentText) ? "Yes" : "No"}`,
-      `Sent at: ${entry.sentAt}`,
+      `Sent at: ${formatHistoryTimestamp(entry.sentAt)}`,
       "Captured conversation:",
       ...entry.capturedMessages.map(message => `  ${message}`),
       "GPT-6 Luna sent:",
@@ -179,12 +184,11 @@ function formatHistoryEvent(event: SnapchatHistoryExportEvent): string {
 
   const { entry } = event;
   return [
-    `Event at: ${event.timestamp}`,
     "Record type: Unanswered / skipped audit",
     `Device: ${serial || "Unknown"}`,
     accountHeading,
     `Contact: ${entry.contactName}`,
-    `Not replied at: ${entry.recordedAt}`,
+    `Not replied at: ${formatHistoryTimestamp(entry.recordedAt)}`,
     `Stage: ${entry.stage}`,
     `Reason: ${entry.reason}`,
     "Captured conversation:",
@@ -193,6 +197,13 @@ function formatHistoryEvent(event: SnapchatHistoryExportEvent): string {
     "------------------------------------------------------------",
     "",
   ].join("\n");
+}
+
+function formatHistoryTimestamp(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  const twoDigits = (part: number) => String(part).padStart(2, "0");
+  return `${twoDigits(date.getUTCHours())}:${twoDigits(date.getUTCMinutes())}-${twoDigits(date.getUTCDate())}/${twoDigits(date.getUTCMonth() + 1)}/${date.getUTCFullYear()}`;
 }
 
 function formatAccountUsername(username: string): string {
