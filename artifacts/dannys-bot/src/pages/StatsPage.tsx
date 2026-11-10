@@ -360,7 +360,7 @@ function PhoneFarmPhoneSection({
   });
 
   const getFarmSortValue = (slot: typeof slotsWithStats[number], key: string) =>
-    key === "posts" ? slot.postsDaily : Number(slot.daily[key] ?? 0);
+    key === "account" ? slot.idx : key === "posts" ? slot.postsDaily : Number(slot.daily[key] ?? 0);
 
   const sortedSlots = farmSortKey
     ? [...slotsWithStats].sort((a, b) => {
@@ -1232,7 +1232,7 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
       setFarmSortDir(farmSortDir === "desc" ? "asc" : "desc");
     } else {
       setFarmSortKey(key);
-      setFarmSortDir("desc");
+      setFarmSortDir(key === "account" ? "asc" : "desc");
     }
   };
 
@@ -1456,7 +1456,14 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
             </colgroup>
             <thead className="text-xs bg-muted/30 text-foreground border-b border-border/50">
               <tr>
-                <th className="px-4 py-3 font-bold uppercase tracking-wide text-left" style={{ width: `${activeColWidths.account ?? activeDefaultColWidths.account}px` }}>
+                <th
+                  onClick={() => cycleFarmSort("account")}
+                  aria-sort={farmSortKey === "account" ? (farmSortDir === "asc" ? "ascending" : "descending") : "none"}
+                  title="Sort by account slot"
+                  data-testid={`button-sort-stats-account-${platform}`}
+                  className={`px-4 py-3 font-bold uppercase tracking-wide text-left cursor-pointer select-none ${farmSortKey === "account" ? "text-primary" : ""}`}
+                  style={{ width: `${activeColWidths.account ?? activeDefaultColWidths.account}px` }}
+                >
                   Device / Account
                 </th>
                 {orderedLabels.map(s => {
