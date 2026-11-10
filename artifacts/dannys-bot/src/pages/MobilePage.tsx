@@ -4452,7 +4452,7 @@ function NoPhonesPanel({ rawOutput, restarting = false }: { rawOutput?: string |
 
 // Three-character value area, shared by every numeric field in this panel.
 const NUM_INPUT_CLASS = "box-content w-[3ch] text-center px-1";
-const CYCLE_INTERVAL_INPUT_CLASS = "box-content w-[2.4ch] !h-[26px] text-center px-1";
+const CYCLE_INTERVAL_INPUT_CLASS = "box-content w-[3ch] !h-[26px] text-center px-1";
 
 const Input = BaseInput;
 
@@ -5978,18 +5978,77 @@ function useCollisionPreventer(serial: string | null) {
 type CopyTarget = { serial: string; slotIdx: number; slotId?: string };
 type DeviceSlots = { phone: UsbPhone; slots: Array<{ slotId?: string; username: string; platform?: AccountPlatform; snapchatTrustScoreLabel?: SnapchatTrustScoreLabel }> };
 const SNAPCHAT_COPY_OPTIONS = [
-  { key: "step1", label: "Step 1 enabled state, interval and time window" },
-  { key: "shuffleToolOrder", label: "Shuffle tool order" },
-  { key: "uploadSnap", label: "Upload a Snap" },
-  { key: "uploadVideo", label: "Upload a Video" },
-  { key: "addFriends", label: "Add Friends" },
-  { key: "acceptFriends", label: "Accept Friends" },
-  { key: "viewStories", label: "View Spotlights" },
-  { key: "viewSnaps", label: "View Snaps" },
-  { key: "massSnap", label: "Mass Snap" },
-  { key: "replyUnreadChats", label: "Reply to Unread Chats" },
+  { key: "step1", label: "Step 1", settings: [
+    { key: "enabled", label: "Enabled", fields: ["enabled"] },
+    { key: "interval", label: "Run every", fields: ["cycleIntervalMin", "cycleIntervalMax"] },
+    { key: "window", label: "Execution time window", fields: ["snapchatRunWindow"] },
+  ] },
+  { key: "shuffleToolOrder", label: "Shuffle tool order", settings: [
+    { key: "enabled", label: "Enabled", fields: ["shuffleToolOrder"] },
+  ] },
+  { key: "uploadSnap", label: "Upload a Snap", settings: [
+    { key: "enabled", label: "Enabled", fields: ["enabled"] },
+    { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
+    { key: "amount", label: "Amount", fields: ["min", "max"] },
+    { key: "directory", label: "Directory", fields: ["directoryPath"] },
+    { key: "selectAtRandom", label: "Select at random", fields: ["selectAtRandom"] },
+  ] },
+  { key: "uploadVideo", label: "Upload a Video", settings: [
+    { key: "enabled", label: "Enabled", fields: ["enabled"] },
+    { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
+    { key: "amount", label: "Amount", fields: ["min", "max"] },
+    { key: "directory", label: "Directory", fields: ["directoryPath"] },
+    { key: "selectAtRandom", label: "Select at random", fields: ["selectAtRandom"] },
+    { key: "addLink", label: "Add a link", fields: ["addLink"] },
+    { key: "linkUrl", label: "Link URL", fields: ["linkUrl"] },
+    { key: "caption", label: "Caption", fields: ["caption"] },
+  ] },
+  { key: "addFriends", label: "Add Friends", settings: [
+    { key: "enabled", label: "Enabled", fields: ["enabled"] },
+    { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
+    { key: "amount", label: "Count", fields: ["min", "max"] },
+    { key: "delay", label: "Delay between actions (s)", fields: ["delayMinSeconds", "delayMaxSeconds"] },
+  ] },
+  { key: "acceptFriends", label: "Accept Friends", settings: [
+    { key: "enabled", label: "Enabled", fields: ["enabled"] },
+    { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
+    { key: "amount", label: "Count", fields: ["min", "max"] },
+    { key: "delay", label: "Delay between actions (s)", fields: ["delayMinSeconds", "delayMaxSeconds"] },
+  ] },
+  { key: "viewStories", label: "View Spotlights", settings: [
+    { key: "enabled", label: "Enabled", fields: ["enabled"] },
+    { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
+    { key: "amount", label: "Swipes", fields: ["min", "max"] },
+    { key: "likePercent", label: "Like %", fields: ["likePercentMin", "likePercentMax"] },
+    { key: "watchSeconds", label: "Watch time (s)", fields: ["watchSecondsMin", "watchSecondsMax"] },
+  ] },
+  { key: "viewSnaps", label: "View Snaps", settings: [
+    { key: "enabled", label: "Enabled", fields: ["enabled"] },
+    { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
+    { key: "amount", label: "Snaps", fields: ["min", "max"] },
+    { key: "watchSeconds", label: "Watch time (s)", fields: ["watchSecondsMin", "watchSecondsMax"] },
+  ] },
+  { key: "massSnap", label: "Mass Snap", settings: [
+    { key: "enabled", label: "Enabled", fields: ["enabled"] },
+    { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
+    { key: "amount", label: "Select", fields: ["min", "max"] },
+    { key: "swipe", label: "Swipe distance (px)", fields: ["contactScrollPixels"] },
+  ] },
+  { key: "replyUnreadChats", label: "Reply to Unread Chats", settings: [
+    { key: "enabled", label: "Enabled", fields: ["enabled"] },
+    { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
+    { key: "amount", label: "Count", fields: ["min", "max"] },
+    { key: "replyGoal", label: "Copy reply prompt", fields: ["replyGoal"] },
+  ] },
 ] as const;
 type SnapchatCopyKey = typeof SNAPCHAT_COPY_OPTIONS[number]["key"];
+const snapchatCopySubKey = (toolKey: string, settingKey: string) => `${toolKey}.${settingKey}`;
+const SNAPCHAT_COPY_SUBSETTING_KEYS = SNAPCHAT_COPY_OPTIONS.flatMap(option =>
+  option.settings.map(setting => snapchatCopySubKey(option.key, setting.key)),
+);
+const SNAPCHAT_COPY_DEFAULT_SUBSETTING_KEYS = SNAPCHAT_COPY_SUBSETTING_KEYS.filter(
+  key => key !== snapchatCopySubKey("replyUnreadChats", "replyGoal"),
+);
 
 function deviceLabel(p: UsbPhone): string {
   return [p.manufacturer, p.marketName || p.model].filter(Boolean).join(" ") || p.serial;
@@ -6012,19 +6071,25 @@ function CopySettingsDialog({
   const [farmSlotMap, setFarmSlotMap] = useState<Map<string, number>>(new Map());
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [selectedSubKeys, setSelectedSubKeys] = useState<Set<string>>(new Set());
-  const [selectedSnapchatCopyKeys, setSelectedSnapchatCopyKeys] = useState<Set<SnapchatCopyKey>>(
-    () => new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key)),
+  const [selectedSnapchatSubKeys, setSelectedSnapchatSubKeys] = useState<Set<string>>(
+    () => new Set(SNAPCHAT_COPY_DEFAULT_SUBSETTING_KEYS),
   );
-  const [copyReplyPrompt, setCopyReplyPrompt] = useState(false);
   const [copying, setCopying] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const saveSnapchatCopySelection = (
-    keys: Iterable<SnapchatCopyKey>,
-    includeReplyPrompt: boolean,
-  ) => {
+  const saveSnapchatCopySelection = (keys: Iterable<string>) => {
+    const selectedKeys = new Set([...keys].filter(key => SNAPCHAT_COPY_SUBSETTING_KEYS.includes(key)));
     try {
-      sessionStorage.setItem("copySettings_snapchatKeys", JSON.stringify([...keys]));
-      sessionStorage.setItem("copySettings_replyPrompt", String(includeReplyPrompt));
+      const selectedGroups = SNAPCHAT_COPY_OPTIONS
+        .filter(option => option.settings.some(setting =>
+          selectedKeys.has(snapchatCopySubKey(option.key, setting.key)),
+        ))
+        .map(option => option.key);
+      sessionStorage.setItem("copySettings_snapchatSubKeys", JSON.stringify([...selectedKeys]));
+      sessionStorage.setItem("copySettings_snapchatKeys", JSON.stringify(selectedGroups));
+      sessionStorage.setItem(
+        "copySettings_replyPrompt",
+        String(selectedKeys.has(snapchatCopySubKey("replyUnreadChats", "replyGoal"))),
+      );
     } catch {}
   };
   const displayCopySections = (() => {
@@ -6052,6 +6117,7 @@ function CopySettingsDialog({
     const savedSubKeysRaw = sessionStorage.getItem("copySettings_subKeys");
     const savedTargetsRaw  = sessionStorage.getItem("copySettings_targets");
     const savedSnapchatKeysRaw = sessionStorage.getItem("copySettings_snapchatKeys");
+    const savedSnapchatSubKeysRaw = sessionStorage.getItem("copySettings_snapchatSubKeys");
     const savedReplyPromptRaw = sessionStorage.getItem("copySettings_replyPrompt");
     const restoredSubKeys = savedSubKeysRaw
       ? new Set<string>((JSON.parse(savedSubKeysRaw) as string[]).filter(key =>
@@ -6066,25 +6132,49 @@ function CopySettingsDialog({
     const restoredTargets: CopyTarget[] | null = savedTargetsRaw ? JSON.parse(savedTargetsRaw) as CopyTarget[] : null;
 
     setSelectedSubKeys(restoredSubKeys);
-    if (savedSnapchatKeysRaw !== null) {
+    let restoredSnapchatSubKeys = new Set<string>(SNAPCHAT_COPY_DEFAULT_SUBSETTING_KEYS);
+    if (savedSnapchatSubKeysRaw !== null) {
       try {
-        const savedKeys = JSON.parse(savedSnapchatKeysRaw);
+        const savedKeys = JSON.parse(savedSnapchatSubKeysRaw);
         if (Array.isArray(savedKeys)) {
-          setSelectedSnapchatCopyKeys(new Set(
-            savedKeys.filter((key): key is SnapchatCopyKey =>
+          restoredSnapchatSubKeys = new Set(
+            savedKeys.filter((key): key is string => SNAPCHAT_COPY_SUBSETTING_KEYS.includes(key)),
+          );
+        }
+      } catch {
+        restoredSnapchatSubKeys = new Set(SNAPCHAT_COPY_DEFAULT_SUBSETTING_KEYS);
+      }
+    } else if (savedSnapchatKeysRaw !== null) {
+      // Migrate the previous per-tool selection into the new per-setting checkboxes.
+      try {
+        const savedGroups = JSON.parse(savedSnapchatKeysRaw);
+        if (Array.isArray(savedGroups)) {
+          const savedGroupSet = new Set<SnapchatCopyKey>(
+            savedGroups.filter((key): key is SnapchatCopyKey =>
               SNAPCHAT_COPY_OPTIONS.some(option => option.key === key),
             ),
-          ));
+          );
+          const includeReplyPrompt = savedReplyPromptRaw === "true";
+          restoredSnapchatSubKeys = new Set(
+            SNAPCHAT_COPY_OPTIONS.flatMap(option =>
+              savedGroupSet.has(option.key)
+                ? option.settings
+                    .filter(setting =>
+                      includeReplyPrompt ||
+                      snapchatCopySubKey(option.key, setting.key) !== snapchatCopySubKey("replyUnreadChats", "replyGoal"),
+                    )
+                    .map(setting => snapchatCopySubKey(option.key, setting.key))
+                : [],
+            ),
+          );
         }
-      } catch {}
+      } catch {
+        restoredSnapchatSubKeys = new Set(SNAPCHAT_COPY_DEFAULT_SUBSETTING_KEYS);
+      }
     } else {
-      setSelectedSnapchatCopyKeys(new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key)));
+      restoredSnapchatSubKeys = new Set(SNAPCHAT_COPY_DEFAULT_SUBSETTING_KEYS);
     }
-    if (savedReplyPromptRaw !== null) {
-      setCopyReplyPrompt(savedReplyPromptRaw === "true");
-    } else {
-      setCopyReplyPrompt(false);
-    }
+    setSelectedSnapchatSubKeys(restoredSnapchatSubKeys);
 
     Promise.all([
       fetch("/api/mobile/usb-phones").then(r => r.json()),
@@ -6208,6 +6298,36 @@ function CopySettingsDialog({
       .filter(t => !(t.serial === phone?.serial && t.slotIdx === currentSlotIdx))
   );
 
+  const toggleSnapchatSetting = (toolKey: SnapchatCopyKey, settingKey: string, checked: boolean) =>
+    setSelectedSnapchatSubKeys(previous => {
+      const next = new Set(previous);
+      const key = snapchatCopySubKey(toolKey, settingKey);
+      if (checked) next.add(key);
+      else next.delete(key);
+      saveSnapchatCopySelection(next);
+      return next;
+    });
+
+  const toggleSnapchatGroup = (option: typeof SNAPCHAT_COPY_OPTIONS[number], checked: boolean) =>
+    setSelectedSnapchatSubKeys(previous => {
+      const next = new Set(previous);
+      option.settings.forEach(setting => {
+        const key = snapchatCopySubKey(option.key, setting.key);
+        if (checked) next.add(key);
+        else next.delete(key);
+      });
+      saveSnapchatCopySelection(next);
+      return next;
+    });
+
+  const setAllSnapchatSettings = (checked: boolean) => {
+    const next = checked
+      ? new Set<string>(SNAPCHAT_COPY_SUBSETTING_KEYS)
+      : new Set<string>();
+    setSelectedSnapchatSubKeys(next);
+    saveSnapchatCopySelection(next);
+  };
+
   const toggleSub = (subKey: string, checked: boolean) =>
     setSelectedSubKeys(prev => {
       const sub = COPY_SECTIONS
@@ -6273,22 +6393,37 @@ function CopySettingsDialog({
         ),
       );
     if (slotPlatform === "snapchat") {
-      if (selectedSnapchatCopyKeys.has("step1")) {
-        partial.enabled = settings.enabled;
-        partial.cycleIntervalMin = settings.cycleIntervalMin;
-        partial.cycleIntervalMax = settings.cycleIntervalMax;
-        partial.snapchatRunWindow = { ...settings.snapchatRunWindow };
-      }
       const snapchatTools: Record<string, unknown> = {};
-      if (selectedSnapchatCopyKeys.has("shuffleToolOrder")) {
-        snapchatTools.shuffleToolOrder = settings.snapchatTools.shuffleToolOrder;
-      }
-      for (const key of ["uploadSnap", "uploadVideo", "addFriends", "massSnap", "acceptFriends", "replyUnreadChats", "viewStories", "viewSnaps"] as const) {
-        if (selectedSnapchatCopyKeys.has(key)) {
-          const toolSettings = { ...settings.snapchatTools[key] } as Record<string, unknown>;
-          if (key === "replyUnreadChats" && !copyReplyPrompt) delete toolSettings.replyGoal;
-          snapchatTools[key] = toolSettings;
+      const rootSettings = settings as unknown as Record<string, unknown>;
+      for (const option of SNAPCHAT_COPY_OPTIONS) {
+        const selectedSettings = option.settings.filter(setting =>
+          selectedSnapchatSubKeys.has(snapchatCopySubKey(option.key, setting.key)),
+        );
+        if (selectedSettings.length === 0) continue;
+
+        if (option.key === "step1") {
+          for (const setting of selectedSettings) {
+            for (const field of setting.fields) {
+              const value = rootSettings[field];
+              partial[field] = field === "snapchatRunWindow" && value && typeof value === "object"
+                ? { ...(value as Record<string, unknown>) }
+                : value;
+            }
+          }
+          continue;
         }
+
+        if (option.key === "shuffleToolOrder") {
+          snapchatTools.shuffleToolOrder = settings.snapchatTools.shuffleToolOrder;
+          continue;
+        }
+
+        const sourceSettings = (settings.snapchatTools as unknown as Record<string, Record<string, unknown>>)[option.key] ?? {};
+        const selectedToolSettings: Record<string, unknown> = {};
+        for (const setting of selectedSettings) {
+          for (const field of setting.fields) selectedToolSettings[field] = sourceSettings[field];
+        }
+        if (Object.keys(selectedToolSettings).length > 0) snapchatTools[option.key] = selectedToolSettings;
       }
       if (Object.keys(snapchatTools).length > 0) partial.snapchatTools = snapchatTools;
     } else {
@@ -6437,73 +6572,67 @@ function CopySettingsDialog({
           {/* Right: settings with sub-items */}
           <div className="flex-1 min-w-0 flex flex-col min-h-0">
             {slotPlatform === "snapchat" ? (
-              <div className="rounded-md border border-border/50 overflow-hidden">
-                <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-muted/40">
+              <div className="rounded-md border border-border/50 overflow-hidden flex flex-col min-h-0">
+                <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-muted/40 shrink-0">
                   <span className="text-xs font-bold text-foreground">Snapchat settings</span>
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
                       onClick={() => {
-                        const allKeys = new Set(SNAPCHAT_COPY_OPTIONS.map(option => option.key));
-                        setSelectedSnapchatCopyKeys(allKeys);
-                        setCopyReplyPrompt(true);
-                        saveSnapchatCopySelection(allKeys, true);
+                        setAllSnapchatSettings(true);
                       }}>
                       All
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5"
                       onClick={() => {
-                        const noKeys = new Set<SnapchatCopyKey>();
-                        setSelectedSnapchatCopyKeys(noKeys);
-                        setCopyReplyPrompt(false);
-                        saveSnapchatCopySelection(noKeys, false);
+                        setAllSnapchatSettings(false);
                       }}>
                       None
                     </Button>
                   </div>
                 </div>
-                <div className="space-y-1 px-3 py-2">
+                <div className="overflow-y-auto flex-1 min-h-0 space-y-1 px-3 py-2">
                   <p className="text-[11px] leading-snug text-muted-foreground">
                     Copies only to Snapchat account slots. Instagram slots are excluded.
                   </p>
-                  {SNAPCHAT_COPY_OPTIONS.map(option => (
-                    <div key={option.key} className="space-y-0.5">
-                      <label className="flex items-center gap-2 py-0.5 text-xs text-muted-foreground cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          className="w-3.5 h-3.5 accent-primary shrink-0"
-                          checked={selectedSnapchatCopyKeys.has(option.key)}
-                          onChange={event => setSelectedSnapchatCopyKeys(previous => {
-                            const next = new Set(previous);
-                            if (event.target.checked) next.add(option.key);
-                            else next.delete(option.key);
-                            saveSnapchatCopySelection(next, copyReplyPrompt);
-                            return next;
-                          })}
-                        />
-                        {option.label}
-                      </label>
-                      {option.key === "replyUnreadChats" && (
-                        <label className={`flex items-center gap-2 pl-5 py-0.5 text-[11px] select-none ${
-                          selectedSnapchatCopyKeys.has("replyUnreadChats")
-                            ? "text-muted-foreground cursor-pointer"
-                            : "text-muted-foreground/50 cursor-not-allowed"
-                        }`}>
+                  {SNAPCHAT_COPY_OPTIONS.map(option => {
+                    const selectedCount = option.settings.filter(setting =>
+                      selectedSnapchatSubKeys.has(snapchatCopySubKey(option.key, setting.key)),
+                    ).length;
+                    return (
+                      <div key={option.key} className="space-y-0.5">
+                        <label className="flex items-center gap-2 py-0.5 text-xs text-muted-foreground cursor-pointer select-none">
                           <input
                             type="checkbox"
-                            className="w-3 h-3 accent-primary shrink-0"
-                            checked={copyReplyPrompt}
-                            disabled={!selectedSnapchatCopyKeys.has("replyUnreadChats")}
-                            onChange={event => {
-                              const nextPromptValue = event.target.checked;
-                              setCopyReplyPrompt(nextPromptValue);
-                              saveSnapchatCopySelection(selectedSnapchatCopyKeys, nextPromptValue);
+                            data-testid={`snapchat-copy-group-${option.key}`}
+                            className="w-3.5 h-3.5 accent-primary shrink-0"
+                            checked={selectedCount === option.settings.length}
+                            ref={element => {
+                              if (element) element.indeterminate = selectedCount > 0 && selectedCount < option.settings.length;
                             }}
+                            onChange={event => toggleSnapchatGroup(option, event.target.checked)}
                           />
-                          Copy reply prompt
+                          <span className="text-foreground">{option.label}</span>
                         </label>
-                      )}
-                    </div>
-                  ))}
+                        <div className="space-y-0.5 pl-5">
+                          {option.settings.map(setting => {
+                            const subKey = snapchatCopySubKey(option.key, setting.key);
+                            return (
+                              <label key={subKey} className="flex items-center gap-2 py-0.5 text-[11px] text-muted-foreground cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  data-testid={`snapchat-copy-setting-${subKey}`}
+                                  className="w-3 h-3 accent-primary shrink-0"
+                                  checked={selectedSnapchatSubKeys.has(subKey)}
+                                  onChange={event => toggleSnapchatSetting(option.key, setting.key, event.target.checked)}
+                                />
+                                {setting.label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -6594,7 +6723,7 @@ function CopySettingsDialog({
           )}
           <Button variant="secondary" onClick={onClose} disabled={copying}>Cancel</Button>
           <Button onClick={handleCopy}
-            disabled={copying || allTargets.length === 0 || (slotPlatform === "snapchat" && selectedSnapchatCopyKeys.size === 0)}
+            disabled={copying || allTargets.length === 0 || (slotPlatform === "snapchat" && selectedSnapchatSubKeys.size === 0)}
             style={result === "ok" ? { background: "#16a34a", borderColor: "#16a34a" } : undefined}>
             {result === "ok"
               ? <CheckCircle2 className="w-4 h-4 text-white" />
@@ -7119,7 +7248,7 @@ export function AutomationSettingsPanel({
           )}
           {slotIdx !== undefined && (
             slotPlatform === "snapchat"
-              ? <SnapchatTrustScoreLabelBadge label={snapchatTrustScoreLabel ?? "WARMUP"} width={121} />
+              ? <SnapchatTrustScoreLabelBadge label={snapchatTrustScoreLabel ?? "WARMUP"} width={114} height={36} />
               : <SlotTrustScoreBadge serial={phone?.serial ?? ""} slotIdx={slotIdx} width={121} />
           )}
           {slotIdx !== undefined && onOpenGestures && (
@@ -9659,11 +9788,11 @@ export function AutomationSettingsPanel({
 const ROW_H = 30; // px per dropdown row
 const MAX_VISIBLE_ROWS = 5;
 
-function SnapchatTrustScoreLabelBadge({ label, width = 114 }: { label: SnapchatTrustScoreLabel; width?: number }) {
+function SnapchatTrustScoreLabelBadge({ label, width = 114, height }: { label: SnapchatTrustScoreLabel; width?: number; height?: number }) {
   return (
     <div
       className="inline-flex shrink-0 items-center justify-center rounded-md border border-yellow-500 bg-yellow-300 px-2 text-center text-[11px] font-extrabold tracking-wide text-black"
-      style={{ width, minWidth: width, height: "100%" }}
+      style={{ width, minWidth: width, height: height ?? "100%" }}
       title="Snapchat display-only label"
       aria-label={`Snapchat TrustScore label: ${label}`}
     >
@@ -9681,7 +9810,11 @@ function SnapchatTrustScoreLabelSelect({ value, onChange }: { value: SnapchatTru
       className="h-9 w-[114px] shrink-0 appearance-none rounded-md border border-yellow-500 bg-yellow-300 px-2 text-center text-[11px] font-extrabold tracking-wide text-black"
       style={{ textAlign: "center", textAlignLast: "center" }}
     >
-      {SNAPCHAT_TRUST_SCORE_LABELS.map(label => <option key={label} value={label}>{label}</option>)}
+      {SNAPCHAT_TRUST_SCORE_LABELS.map(label => (
+        <option key={label} value={label} style={{ textAlign: "center" }}>
+          {label}
+        </option>
+      ))}
     </select>
   );
 }
@@ -11086,18 +11219,20 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
                   })()}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={loading}
-                    onClick={() => void openNotebook(i)}
-                    className="h-6 w-6 p-0 text-black hover:bg-black/10 hover:text-black"
-                    aria-label={`Export cycle debugging notebook for ${activeAccountPlatform} Account Slot ${platformIndex + 1}`}
-                    title="Export cycle debugging notebook as .txt"
-                  >
-                    <NotebookPen className="w-3.5 h-3.5" />
-                  </Button>
+                  {activeAccountPlatform !== "snapchat" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={loading}
+                      onClick={() => void openNotebook(i)}
+                      className="h-6 w-6 p-0 text-black hover:bg-black/10 hover:text-black"
+                      aria-label={`Export cycle debugging notebook for ${activeAccountPlatform} Account Slot ${platformIndex + 1}`}
+                      title="Export cycle debugging notebook as .txt"
+                    >
+                      <NotebookPen className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="ghost"
@@ -12539,16 +12674,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
   const [copiedCapture,  setCopiedCapture]  = React.useState(false);
   const [lastCapture,    setLastCapture]    = React.useState<string[] | null>(null);
   const [checkingInfo,   setCheckingInfo]   = React.useState(false);
-  const [exportingUsbDiagnostics, setExportingUsbDiagnostics] = React.useState(false);
-  const [manualDiagSessionId, setManualDiagSessionId] = React.useState<string | null>(null);
-  const [startingManualDiag, setStartingManualDiag] = React.useState(false);
-  const [collectingManualDiag, setCollectingManualDiag] = React.useState(false);
   const [expandedLogGroups, setExpandedLogGroups] = React.useState<Set<string>>(() => new Set());
   const debugLogContextRef = useRef<DebugLogContext | null>(null);
 
   useEffect(() => {
     debugLogContextRef.current = null;
-    setManualDiagSessionId(serial ? window.localStorage.getItem(`aura-manual-signup-diagnostic:${serial}`) : null);
   }, [serial]);
 
   // Only auto-scroll when the user is currently at (or near) the bottom.
@@ -12687,88 +12817,6 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
     URL.revokeObjectURL(url);
   };
 
-  const handleExportUsbDiagnostics = async () => {
-    if (!serial) return;
-    setExportingUsbDiagnostics(true);
-    try {
-      const response = await fetch(`/api/mobile/usb-diagnostics?serial=${encodeURIComponent(serial)}`);
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        addLog?.(`USB diagnostics export failed: ${body?.error ?? response.status}`);
-        return;
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `aura-farming-usb-diagnostics-${serial}-${Date.now()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      addLog?.("USB diagnostics exported — includes ADB poll history, state transitions, and server-log tail.");
-    } catch (e: any) {
-      addLog?.(`USB diagnostics export error: ${e?.message ?? "network error"}`);
-    } finally {
-      setExportingUsbDiagnostics(false);
-    }
-  };
-
-  const handleStartManualSignupCapture = async () => {
-    if (!serial) return;
-    setStartingManualDiag(true);
-    try {
-      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/manual-signup-diagnostics/start`, {
-        method: "POST",
-      });
-      const body = await response.json().catch(() => null);
-      if (!response.ok || !body?.sessionId) {
-        addLog?.(`Manual signup capture failed to start: ${body?.error ?? response.status}`);
-        return;
-      }
-      setManualDiagSessionId(body.sessionId);
-      window.localStorage.setItem(`aura-manual-signup-diagnostic:${serial}`, body.sessionId);
-      addLog?.("Manual signup diagnostic started on the phone. Unplug it, perform the manual signup test, reconnect this same phone, then collect the capture.");
-    } catch (e: any) {
-      addLog?.(`Manual signup capture error: ${e?.message ?? "network error"}`);
-    } finally {
-      setStartingManualDiag(false);
-    }
-  };
-
-  const handleCollectManualSignupCapture = async () => {
-    if (!serial || !manualDiagSessionId) return;
-    setCollectingManualDiag(true);
-    try {
-      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/manual-signup-diagnostics/collect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: manualDiagSessionId }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        addLog?.(`Manual signup diagnostic collection failed: ${body?.error ?? response.status}`);
-        return;
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `aura-manual-signup-diagnostic-${serial}-${Date.now()}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      window.localStorage.removeItem(`aura-manual-signup-diagnostic:${serial}`);
-      setManualDiagSessionId(null);
-      addLog?.("Manual signup diagnostic collected and exported. The temporary capture was deleted from the phone.");
-    } catch (e: any) {
-      addLog?.(`Manual signup diagnostic collection error: ${e?.message ?? "network error"}`);
-    } finally {
-      setCollectingManualDiag(false);
-    }
-  };
-
   const handleCopyCapture = async () => {
     if (!lastCapture) return;
     await writeToClipboard(lastCapture.join("\n"));
@@ -12821,43 +12869,11 @@ function LogPanel({ lines, onClear, serial, onScanTray, addLog, getVideoSize, lo
             <Button type="button" variant="secondary" onClick={handleExportLog} disabled={lines.length === 0} title="Save the full log as a .txt file — browser Save As dialog will appear">
               💾 Export
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void handleExportUsbDiagnostics()}
-              disabled={!serial || exportingUsbDiagnostics}
-              title="Export the ADB/USB connection timeline and server-log evidence"
-            >
-              {exportingUsbDiagnostics ? "USB Log…" : "USB Log"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void handleStartManualSignupCapture()}
-              disabled={!serial || startingManualDiag || !!manualDiagSessionId}
-              title="Start a private, phone-side system-state capture for a manual signup test"
-            >
-              {startingManualDiag ? "Starting…" : "Manual Signup Capture"}
-            </Button>
-            {manualDiagSessionId && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void handleCollectManualSignupCapture()}
-                disabled={!serial || collectingManualDiag}
-                title="Reconnect the same phone, then stop and export its local capture"
-              >
-                {collectingManualDiag ? "Collecting…" : "Collect Capture"}
-              </Button>
-            )}
             <Button type="button" variant="secondary" onClick={onClear} disabled={lines.length === 0}>
               Clear
             </Button>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Manual test only: starts a 30-minute phone-side capture that continues while unplugged. Reconnect the same phone to export it. Records USB, battery, proxy, and network state only—not Snapchat messages or traffic contents.
-        </p>
 
       </div>
 

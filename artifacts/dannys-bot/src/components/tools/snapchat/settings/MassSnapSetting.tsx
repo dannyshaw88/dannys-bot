@@ -19,11 +19,6 @@ export function MassSnapSetting({ value, loading, onUpdate }: MassSnapSettingPro
       value={value}
       loading={loading}
       onUpdate={onUpdate}
-      childrenBelow={(
-        <p className="pt-1 text-xs text-muted-foreground">
-          Configuration only; Snapchat recipient selection and sending are not connected yet.
-        </p>
-      )}
     >
       <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
         <Label className="text-[11px] text-muted-foreground">Swipe (px)</Label>

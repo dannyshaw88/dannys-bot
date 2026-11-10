@@ -39,7 +39,7 @@ export function SnapchatSettingsPanel({
   return (
     <div className="bg-card border border-border rounded-xl p-5 space-y-5">
       <div>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP2)</p>
           <ShuffleToolOrderSetting
             value={settings.shuffleToolOrder}

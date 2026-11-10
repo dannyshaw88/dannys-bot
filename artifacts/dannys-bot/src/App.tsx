@@ -20,7 +20,6 @@ import { TrustScoresPage } from "@/pages/TrustScoresPage";
 import { TrustScoreDetailPage } from "@/pages/TrustScoreDetailPage";
 import { ToolsPage } from "@/pages/ToolsPage";
 import { EbAuditPage } from "@/pages/EbAuditPage";
-import { CreateGhostPage } from "@/pages/CreateGhostPage";
 import JarveeBinaryViewerPage from "@/pages/JarveeBinaryViewerPage";
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
@@ -119,7 +118,7 @@ function Router() {
       <Route path="/settings" component={SettingsPage} />
       <Route path="/luna-test"><Redirect to="/settings?tab=prompt%20test" /></Route>
       <Route path="/prompt-test"><Redirect to="/settings?tab=prompt%20test" /></Route>
-      <Route path="/create-ghost" component={CreateGhostPage} />
+      <Route path="/create-ghost"><Redirect to="/settings?tab=ghost%20browser" /></Route>
       <Route path="/settings/jarvee-binary" component={JarveeBinaryViewerPage} />
       <Route path="/settings/jarvee-binary-viewer" component={JarveeBinaryViewerPage} />
       <Route path="/browser/:id" component={StandaloneBrowserPage} />

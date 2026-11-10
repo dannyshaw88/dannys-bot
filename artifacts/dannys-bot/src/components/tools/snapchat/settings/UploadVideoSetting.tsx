@@ -1,4 +1,5 @@
-import { FolderOpen } from "lucide-react";
+import { useId, useState } from "react";
+import { ChevronDown, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,6 +22,8 @@ export function UploadVideoSetting({
   onUpdate,
 }: UploadVideoSettingProps) {
   const captionFieldId = `upload-video-caption-${slotIdx ?? 0}`;
+  const advancedOptionsId = useId();
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   return (
     <ToolSettingFrame
       title="Upload a Video"
@@ -30,7 +33,7 @@ export function UploadVideoSetting({
       loading={loading}
       onUpdate={onUpdate}
       childrenBelow={
-        <>
+        <div id={advancedOptionsId} hidden={!showAdvancedOptions} className="space-y-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-1">
             <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
               <input
@@ -67,7 +70,7 @@ export function UploadVideoSetting({
               disabled={loading || !value.enabled}
             />
           </div>
-        </>
+        </div>
       }
     >
       <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
@@ -115,6 +118,18 @@ export function UploadVideoSetting({
           />
           Select at random
         </label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 text-muted-foreground"
+          aria-label={showAdvancedOptions ? "Collapse video link and caption options" : "Expand video link and caption options"}
+          aria-expanded={showAdvancedOptions}
+          aria-controls={advancedOptionsId}
+          onClick={() => setShowAdvancedOptions(open => !open)}
+        >
+          <ChevronDown className={`h-4 w-4 transition-transform ${showAdvancedOptions ? "rotate-180" : ""}`} />
+        </Button>
       </div>
     </ToolSettingFrame>
   );

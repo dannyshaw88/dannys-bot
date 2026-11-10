@@ -59,17 +59,6 @@ function FilledGhostIcon({ className, style }: { className?: string; style?: Rea
   );
 }
 
-function HackerIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="9.5" />
-      <path d="M2.5 12h19" />
-      <path d="M12 2.5c2.7 2.6 4.2 5.8 4.2 9.5S14.7 18.9 12 21.5c-2.7-2.6-4.2-5.8-4.2-9.5S9.3 5.1 12 2.5Z" />
-    </svg>
-  );
-}
-
-
 function FilledSettingsIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg className={className} style={style} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -134,7 +123,6 @@ export function Sidebar() {
     { name: "Phone Farm",      shortLabel: "PHONE FARM",     path: "/mobile",       icon: FilledFarmIcon        },
     { name: "Statistics",      shortLabel: "STATISTICS",     path: "/stats",        icon: FilledBarChartIcon },
     { name: "Settings",        shortLabel: "SETTINGS",       path: "/settings",     icon: FilledSettingsIcon  },
-    { name: "Ghost Browser",   shortLabel: "GHOST BROWSER",  path: "/create-ghost", icon: HackerIcon },
   ];
 
   return (

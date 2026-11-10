@@ -11,8 +11,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
-import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, Activity, Globe, MessageCircle } from "lucide-react";
+import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, Activity, Globe, MessageCircle, Ghost } from "lucide-react";
 import { LunaTestPage } from "@/pages/LunaTestPage";
+import { GhostBrowserTabContent } from "@/pages/CreateGhostPage";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -32,6 +33,7 @@ const SETTINGS_TABS = [
   { label: "Security", icon: ShieldAlert },
   { label: "Prompt Test", icon: MessageCircle },
   { label: "Data", icon: HardDrive },
+  { label: "Ghost Browser", icon: Ghost },
 ] as const;
 
 // ─── Jarvee parser helpers ───────────────────────────────────────────────────
@@ -625,6 +627,7 @@ export function SettingsPage() {
         {SETTINGS_TABS.map(({ label, icon: TabIcon }) => (
           <button
             key={label}
+            data-testid={label === "Ghost Browser" ? "settings-tab-ghost-browser" : undefined}
             onClick={() => setTab(label.toLowerCase())}
             className={`inline-flex items-center gap-1.5 px-[18px] py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${settingsTab === label.toLowerCase() ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
@@ -658,8 +661,9 @@ export function SettingsPage() {
       )}
 
       {settingsTab === "prompt test" && <LunaTestPage embedded />}
+      {settingsTab === "ghost browser" && <GhostBrowserTabContent />}
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import/export", "prompt test"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import/export", "prompt test", "ghost browser"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button
