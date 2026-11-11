@@ -56,6 +56,12 @@ On the video Snap editor, Snapchat initially hides the paperclip under the right
 
 **How to apply:** In Upload a Video only, tap the More/down-chevron control first, wait for the toolbar to expand, then tap the paperclip and continue with URL entry.
 
+When the paperclip is already visible, identify it by its live label/resource ID or screenshot icon shape; do not tap a fixed toolbar coordinate or assume a stable icon order. Expand More only when the live paperclip icon is not present, then identify the paperclip again.
+
+**Why:** Snapchat changed the editor toolbar ordering, and a fixed paperclip coordinate landed on Crop instead.
+
+**How to apply:** Prefer exact live icon labels, then match the paperclip silhouette among current right-toolbar nodes and tap that node's live center. If neither identification succeeds, stop without a guessed tap.
+
 The Snapchat URL editor may show a “Show links I’ve recently copied?” clipboard-access dialog. When that exact prompt is present, tap **Not now**, verify it is gone, and only then type the configured URL.
 
 **Why:** The dialog overlays the URL editor and must be cleared before calibrated typing can safely proceed.
