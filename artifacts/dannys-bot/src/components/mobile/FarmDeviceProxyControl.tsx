@@ -197,14 +197,15 @@ export function FarmDeviceProxyControl({
         </select>
         <button
           type="button"
-          aria-label={`Reapply proxy for device ${serial}`}
+          aria-label={`${failed ? "Retry" : "Apply"} route for device ${serial}`}
           data-testid={`button-reapply-device-proxy-${serial}`}
-          title="Apply the selected route again"
+          title={failed ? "Retry the selected route" : "Apply the selected route again"}
           disabled={loading || busy || Boolean(proxyConfigError) || !online}
           onClick={() => { void applySavedAssignment(true, true); }}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-7 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
         >
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          <span>{busy ? "Applying" : failed ? "Retry" : "Apply"}</span>
         </button>
       </div>
       <div className={`mt-1 flex min-h-4 items-center gap-1 text-[10px] ${failed ? "text-destructive" : "text-muted-foreground"}`} data-testid={`status-device-proxy-${serial}`}>
