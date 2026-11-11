@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw, ShieldCheck, Wifi } from "lucide-react";
+import { useCreateProxy } from "@/hooks/use-proxies";
 
 export type FarmProxyOption = {
   id: number;
@@ -202,6 +203,12 @@ export function FarmDeviceProxySettings({
   const [assignments, setAssignments] = useState<Record<string, number | null>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hostPort, setHostPort] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const createProxy = useCreateProxy();
 
   useEffect(() => {
     let cancelled = false;
@@ -252,6 +259,117 @@ export function FarmDeviceProxySettings({
           setAssignments(previous => ({ ...previous, [deviceSerial]: proxyId }));
         }}
       />
+      <form
+        className="mt-4 border-t border-border pt-4"
+        data-testid={`form-add-device-proxy-${serial}`}
+        onSubmit={async event => {
+          event.preventDefault();
+          setSaveError(null);
+          const input = hostPort.trim().replace(/^https?:\/\//i, "");
+          const separator = input.lastIndexOf(":");
+          const host = input.slice(0, separator).replace(/^\[|\]$/g, "").trim();
+          const port = Number(input.slice(separator + 1));
+          if (separator < 1 || !host || !Number.isInteger(port) || port < 1 || port > 65535) {
+            setSaveError("Enter a valid proxy as host:port.");
+            return;
+          }
+
+          setSaving(true);
+          try {
+            const created = await createProxy.mutateAsync({
+              host,
+              port,
+              username: username.trim() || null,
+              password: password || null,
+            });
+            const newOption: FarmProxyOption = {
+              id: created.id,
+              name: created.name,
+              host: created.host,
+              port: created.port,
+              proxyType: (created as { proxyType?: string }).proxyType ?? "http",
+            };
+            setProxies(previous => [...previous, newOption]);
+
+            const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/proxy`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ proxyId: created.id }),
+            });
+            const result = await readJson(response);
+            if (!response.ok || result?.ok !== true) {
+              throw new Error(result?.error ?? "Proxy was saved but could not be assigned to this device.");
+            }
+
+            setAssignments(previous => ({ ...previous, [serial]: created.id }));
+            setHostPort("");
+            setUsername("");
+            setPassword("");
+          } catch (saveFailure) {
+            setSaveError(saveFailure instanceof Error ? saveFailure.message : "Could not save and assign this proxy.");
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        <p className="mb-2 text-xs font-medium text-foreground">Enter a new HTTP proxy</p>
+        <p className="mb-3 text-[11px] text-muted-foreground">
+          It will be saved in Proxy Manager and assigned to this phone.
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <label className="text-[11px] text-muted-foreground">
+            Proxy:Port
+            <input
+              required
+              type="text"
+              value={hostPort}
+              onChange={event => setHostPort(event.target.value)}
+              placeholder="proxy.example.com:8080"
+              aria-label="Proxy host and port"
+              data-testid={`input-device-proxy-host-port-${serial}`}
+              className="mt-1 h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground"
+            />
+          </label>
+          <label className="text-[11px] text-muted-foreground">
+            Username
+            <input
+              type="text"
+              value={username}
+              onChange={event => setUsername(event.target.value)}
+              autoComplete="off"
+              aria-label="Proxy username"
+              data-testid={`input-device-proxy-username-${serial}`}
+              className="mt-1 h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground"
+            />
+          </label>
+          <label className="text-[11px] text-muted-foreground">
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={event => setPassword(event.target.value)}
+              autoComplete="new-password"
+              aria-label="Proxy password"
+              data-testid={`input-device-proxy-password-${serial}`}
+              className="mt-1 h-8 w-full rounded-md border border-border bg-background px-2 text-xs text-foreground"
+            />
+          </label>
+        </div>
+        {saveError && (
+          <p className="mt-2 text-xs text-destructive" role="alert" data-testid={`error-device-proxy-save-${serial}`}>
+            {saveError}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={saving || loading || Boolean(error)}
+          data-testid={`button-save-device-proxy-${serial}`}
+          className="mt-3 inline-flex h-8 items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          Save and assign to this phone
+        </button>
+      </form>
     </section>
   );
 }
