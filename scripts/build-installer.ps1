@@ -85,6 +85,41 @@ Invoke-Step "Install workspace dependencies" {
   pnpm install --no-frozen-lockfile
 }
 
+Invoke-Step "Build Windows USB reverse-tether helper" {
+  if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+    throw "Rust Cargo is required to build the USB reverse-tether helper. Install the Rust stable toolchain, then rerun this script."
+  }
+
+  cargo build --release --locked --manifest-path artifacts/electron/third_party/gnirehtet-relay-rust/Cargo.toml
+  if ($LASTEXITCODE -ne 0) {
+    throw "Building the USB reverse-tether relay failed."
+  }
+
+  $Target = Join-Path $ElectronRoot "resources\bin\win32\gnirehtet"
+  New-Item -ItemType Directory -Force -Path $Target | Out-Null
+  $Relay = Join-Path $ProjectRoot "artifacts\electron\third_party\gnirehtet-relay-rust\target\release\gnirehtet.exe"
+  if (-not (Test-Path $Relay -PathType Leaf)) {
+    throw "The Windows USB reverse-tether relay was not produced at $Relay"
+  }
+  Copy-Item $Relay (Join-Path $Target "gnirehtet.exe") -Force
+
+  $Archive = Join-Path $env:TEMP "gnirehtet-rust-win64-v2.5.1.zip"
+  $Unpack = Join-Path $env:TEMP "gnirehtet-rust-win64-v2.5.1"
+  Invoke-WebRequest `
+    -Uri "https://github.com/Genymobile/gnirehtet/releases/download/v2.5.1/gnirehtet-rust-win64-v2.5.1.zip" `
+    -OutFile $Archive
+  $Hash = (Get-FileHash $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($Hash -ne "7f5b1063e7895182aa60def1437e50363c3758144088dcd079037bb7c3c46a1c") {
+    throw "Gnirehtet release archive SHA-256 did not match the published checksum."
+  }
+  Expand-Archive -Force -Path $Archive -DestinationPath $Unpack
+  $Apk = Join-Path $Unpack "gnirehtet.apk"
+  if (-not (Test-Path $Apk -PathType Leaf)) {
+    throw "The verified Gnirehtet archive did not contain gnirehtet.apk."
+  }
+  Copy-Item $Apk (Join-Path $Target "gnirehtet.apk") -Force
+}
+
 Invoke-Step "Build API server" {
   pnpm --filter @workspace/api-server run build
 }
@@ -102,6 +137,19 @@ Invoke-Step "Install Electron dependencies" {
 
 Invoke-Step "Build Electron bundle" {
   node build.mjs
+}
+
+Invoke-Step "Verify reverse-tether installer assets" {
+  $Required = @(
+    (Join-Path $ElectronRoot "resources\bin\win32\gnirehtet\gnirehtet.exe"),
+    (Join-Path $ElectronRoot "resources\bin\win32\gnirehtet\gnirehtet.apk")
+  )
+  foreach ($Path in $Required) {
+    if (-not (Test-Path $Path -PathType Leaf)) {
+      throw "Required USB reverse-tether installer asset is missing: $Path"
+    }
+    Write-Host "Verified: $Path"
+  }
 }
 
 $env:GYP_MSVS_VERSION = "2022"
