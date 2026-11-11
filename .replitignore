@@ -5,3 +5,4 @@
 .local
 /generated-artifacts/
 **/target/
+artifacts/electron/resources/bin/win32/gnirehtet/

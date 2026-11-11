@@ -92,4 +92,5 @@ artifacts/mockup-sandbox/.vite/
 # Generated Electron installer output
 artifacts/electron/release/
 artifacts/electron/package-lock.json
+artifacts/electron/resources/bin/win32/gnirehtet/
 /generated-artifacts/
