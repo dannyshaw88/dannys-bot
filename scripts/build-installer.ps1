@@ -43,7 +43,9 @@ Invoke-Step "Pull latest GitHub changes" {
     # Electron Builder creates this output locally; it is never source input
     # and must not make an otherwise clean checkout fail the sync guard.
     $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+release(?:[\\/]|$)' -and
-    $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+package-lock\.json$'
+    $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+package-lock\.json$' -and
+    # The helper executable and APK are rebuilt below from verified sources.
+    $_ -notmatch '^\?\?\s+artifacts[\\/]+electron[\\/]+resources[\\/]+bin[\\/]+win32[\\/]+gnirehtet(?:[\\/]|$)'
   })
   if ($GitStatus.Count -gt 0) {
     $StashMessage = "build-installer automatic backup $(Get-Date -Format 'yyyyMMdd-HHmmss')"
@@ -53,14 +55,16 @@ Invoke-Step "Pull latest GitHub changes" {
     # are already broken. Exclude ZIPs from the stash operation so Git does
     # not block on those stale binary filters; the remote checkout below
     # replaces the tracked copies with the verified release versions.
-    $StashBefore = @(git stash list -1 --format="%gd")
+    # Compare stash object IDs, not selectors like stash@{0}; that selector
+    # remains unchanged when a new stash is pushed ahead of an existing one.
+    $StashBefore = @(git stash list -1 --format="%H")
     git stash push --include-untracked --message $StashMessage -- . ':(exclude)*.zip' ':(exclude)**/*.zip'
     if ($LASTEXITCODE -ne 0) {
       throw "Could not preserve the local checkout in Git stash."
     }
-    $StashAfter = @(git stash list -1 --format="%gd")
+    $StashAfter = @(git stash list -1 --format="%H")
     if ($StashAfter.Count -gt 0 -and ($StashBefore.Count -eq 0 -or $StashAfter[0] -ne $StashBefore[0])) {
-      $AutomaticStashRef = $StashAfter[0]
+      $AutomaticStashRef = @(git stash list -1 --format="%gd")[0]
       Write-Host "Preserved non-ZIP local changes as $AutomaticStashRef. They were not reapplied to the release checkout." -ForegroundColor Yellow
     } elseif (@($GitStatus | Where-Object { $_ -notmatch '\.zip$' }).Count -gt 0) {
       throw "Git stash completed but its backup reference could not be identified."
