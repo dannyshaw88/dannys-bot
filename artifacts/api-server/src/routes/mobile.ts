@@ -18,6 +18,10 @@ import {
   exportSnapchatReplyHistory,
 } from "../mobile/snapchatReplyHistory";
 import * as proxyRelay from "../mobile/proxyRelay";
+import {
+  getAdapterIp,
+  startAdapterProxy,
+} from "../instagram/adapterProxy";
 import * as sessionRecorder from "../mobile/sessionRecorder";
 import { getDeviceLabel } from "./usb-phones";
 import { getUsbDiagnostics } from "../mobile/usbDiagnostics";
@@ -835,6 +839,66 @@ type DevicePersonality = {
 };
 type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; accountTabPreferences?: { order: ("instagram" | "snapchat")[]; landing: "instagram" | "snapchat" }; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
+
+async function applyDeviceProxyAssignment(serial: string, proxyId: number | null): Promise<string | null> {
+  if (proxyId === null) {
+    await android.setDeviceProxy(serial, null);
+    await android.adbReverseRemove(serial);
+    proxyRelay.stopRelayForDevice(serial);
+    return null;
+  }
+
+  const proxies = await storage.getProxies();
+  const proxy = proxies.find(entry => entry.id === proxyId);
+  if (!proxy) throw new Error("The selected Proxy Manager entry no longer exists");
+
+  let upstream: {
+    host: string;
+    port: number;
+    user?: string;
+    pass?: string;
+    protocol?: "http" | "socks5";
+  };
+  let description: string;
+
+  if (proxy.proxyType === "adapter") {
+    const adapterName = proxy.adapterName?.trim();
+    if (!adapterName || !getAdapterIp(adapterName)) {
+      throw new Error(`The selected network adapter "${adapterName || "(unnamed)"}" is unavailable`);
+    }
+    const tunnelPort = await startAdapterProxy(proxy.id, adapterName);
+    upstream = { host: "127.0.0.1", port: tunnelPort, protocol: "http" };
+    description = `adapter ${adapterName}`;
+  } else {
+    const protocol = proxy.proxyType === "socks5" ? "socks5" : "http";
+    upstream = {
+      host: proxy.host,
+      port: proxy.port,
+      user: proxy.username ?? undefined,
+      pass: proxy.password ?? undefined,
+      protocol,
+    };
+    description = `${protocol.toUpperCase()} ${proxy.host}:${proxy.port}`;
+  }
+
+  // Remove any old tunnel before changing the Android global proxy. This keeps
+  // a dead localhost port from being left behind if reconfiguration fails.
+  await android.adbReverseRemove(serial);
+  proxyRelay.stopRelayForDevice(serial);
+  const relayPort = await proxyRelay.startRelay(serial, upstream);
+
+  try {
+    await android.adbReverse(serial, relayPort);
+    await android.setDeviceProxy(serial, { host: "127.0.0.1", port: relayPort });
+  } catch (error) {
+    await android.setDeviceProxy(serial, null).catch(() => {});
+    await android.adbReverseRemove(serial).catch(() => {});
+    proxyRelay.stopRelayForDevice(serial);
+    throw error;
+  }
+
+  return description;
+}
 
 function configFilePath(): string {
   if (process.env.EQUINOX_DATA_DIR) {
@@ -9807,6 +9871,42 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(500).json({ error: e?.message }); }
   });
 
+  // Small, credential-free payload for the Phone Farm's per-device selector.
+  app.get("/api/mobile/device-proxies", async (_req: Request, res: Response) => {
+    try {
+      const [loadedCfg, proxies] = await Promise.all([
+        Promise.resolve(loadInstanceConfigs()),
+        storage.getProxies(),
+      ]);
+      const cfg = { ...loadedCfg };
+      const validProxyIds = new Set(proxies.map(proxy => proxy.id));
+      let removedMissingAssignment = false;
+      for (const [serial, instance] of Object.entries(cfg)) {
+        if (instance.proxyId != null && !validProxyIds.has(instance.proxyId)) {
+          cfg[serial] = { ...instance, proxyId: null };
+          removedMissingAssignment = true;
+        }
+      }
+      if (removedMissingAssignment) saveInstanceConfigs(cfg);
+      const assignments = Object.fromEntries(
+        Object.entries(cfg).map(([serial, instance]) => [serial, instance.proxyId ?? null]),
+      );
+      res.json({
+        assignments,
+        proxies: proxies.map(proxy => ({
+          id: proxy.id,
+          name: proxy.name,
+          host: proxy.host,
+          port: proxy.port,
+          proxyType: proxy.proxyType ?? "http",
+          adapterName: proxy.adapterName ?? null,
+        })),
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e?.message ?? "Could not load device proxies" });
+    }
+  });
+
   const instanceConfigSchema = z.object({
     proxyId: z.number().nullable().optional(),
     proxyProtocol: z.enum(["http", "socks5"]).optional(),
@@ -9871,46 +9971,81 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const serial = p(req, "serial");
       const cfg = loadInstanceConfigs();
       const proxyId = cfg[serial]?.proxyId ?? null;
-      if (!proxyId) {
-        proxyRelay.stopRelayForDevice(serial);
-        await android.setDeviceProxy(serial, null);
-        return res.json({ ok: true, message: "Proxy cleared on device" });
+      if (proxyId !== null) {
+        const proxies = await storage.getProxies();
+        if (!proxies.some(proxy => proxy.id === proxyId)) {
+          // A deleted Proxy Manager entry is equivalent to no assignment: clear
+          // stale Android settings and fall back to the phone's normal network.
+          cfg[serial] = { ...cfg[serial], proxyId: null };
+          saveInstanceConfigs(cfg);
+          await applyDeviceProxyAssignment(serial, null);
+          return res.json({ ok: true, applied: true, proxyId: null, message: "Missing proxy assignment cleared; device is using its default connection" });
+        }
       }
-      const proxies = await storage.getProxies();
-      const proxy = proxies.find(pr => pr.id === proxyId);
-      if (!proxy) return res.status(404).json({ ok: false, error: "Proxy not found" });
-
-      // Start (or restart) the local relay on 127.0.0.1 (localhost only)
-      const relayPort = await proxyRelay.startRelay(serial, {
-        host: proxy.host,
-        port: proxy.port,
-        user: proxy.username ?? undefined,
-        pass: proxy.password ?? undefined,
+      const description = await applyDeviceProxyAssignment(serial, proxyId);
+      res.json({
+        ok: true,
+        applied: true,
+        proxyId,
+        message: description
+          ? `Device proxy applied: ${description}`
+          : "Device proxy cleared; using the device's default connection",
       });
-
-      // Register adb reverse so Android's localhost:relayPort tunnels through
-      // the ADB connection to the host relay — no Windows Firewall rules needed.
-      android.adbReverse(serial, relayPort);
-
-      // Point Android at its own loopback — the ADB tunnel does the rest
-      await android.setDeviceProxy(serial, { host: "127.0.0.1", port: relayPort });
-
-      res.json({ ok: true, message: `Relay (adb reverse :${relayPort}) → ${proxy.host}:${proxy.port} applied` });
     } catch (e: any) {
+      const serial = p(req, "serial");
+      await applyDeviceProxyAssignment(serial, null).catch(() => {});
       res.status(500).json({ ok: false, error: e?.message ?? "Apply proxy failed" });
     }
   });
 
-  // Save proxy assignment for a device (no relay — user configures proxy directly in LD Player)
+  // Save the per-device assignment and apply it immediately when the phone is online.
   const deviceProxySchema = z.object({ proxyId: z.number().nullable() });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
     try {
       const input = deviceProxySchema.parse(req.body);
       const serial = p(req, "serial");
+      if (input.proxyId !== null) {
+        const proxies = await storage.getProxies();
+        if (!proxies.some(proxy => proxy.id === input.proxyId)) {
+          return res.status(404).json({ ok: false, error: "Proxy Manager entry not found" });
+        }
+      }
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], proxyId: input.proxyId ?? null };
       saveInstanceConfigs(cfg);
-      res.json({ ok: true });
+
+      const device = (await android.listDevices()).find(entry => entry.serial === serial && entry.state === "device");
+      if (!device) {
+        return res.json({
+          ok: true,
+          proxyId: input.proxyId,
+          applied: false,
+          pending: true,
+          message: "Saved. The device will use this setting when it reconnects.",
+        });
+      }
+
+      try {
+        const description = await applyDeviceProxyAssignment(serial, input.proxyId);
+        return res.json({
+          ok: true,
+          proxyId: input.proxyId,
+          applied: true,
+          message: description
+            ? `Saved and applied ${description}`
+            : "Saved and cleared; the device is using its default connection",
+        });
+      } catch (error: any) {
+        // Keep the saved choice for retry, but clear any old route so a failed
+        // switch does not silently keep using a different proxy.
+        await applyDeviceProxyAssignment(serial, null).catch(() => {});
+        return res.json({
+          ok: true,
+          proxyId: input.proxyId,
+          applied: false,
+          warning: `Saved, but not applied; using the device default when reachable. ${error?.message ?? "Could not apply the device proxy"}`,
+        });
+      }
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
@@ -11237,13 +11372,27 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       const deviceProxy = await android.getDeviceProxySetting(serial);
       const cfg = loadInstanceConfigs();
       const proxyId = cfg[serial]?.proxyId ?? null;
+      const relayPort = proxyRelay.getRelayPort(serial);
+      const adbReverseActive = relayPort === null
+        ? false
+        : await android.hasAdbReverse(serial, relayPort).catch(() => false);
       let upstreamProxy: string | null = null;
       if (proxyId) {
         const proxies = await storage.getProxies();
         const px = proxies.find(pr => pr.id === proxyId);
-        if (px) upstreamProxy = `${px.host}:${px.port}`;
+        if (px) {
+          upstreamProxy = px.proxyType === "adapter"
+            ? `adapter:${px.adapterName ?? "unknown"}`
+            : `${px.host}:${px.port}`;
+        }
       }
-      res.json({ deviceProxy, upstreamProxy, relayActive: !!deviceProxy });
+      res.json({
+        deviceProxy,
+        upstreamProxy,
+        proxyId,
+        relayActive: relayPort !== null,
+        adbReverseActive,
+      });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Could not read device proxy status" });
     }

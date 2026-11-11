@@ -41,6 +41,7 @@ import { FaInstagram, FaSnapchatGhost } from "react-icons/fa";
 import { AnnexBDemuxer, spsToCodecString } from "@/lib/h264Stream";
 import { ImageSettingsDialog, type ImageFilterSettings } from "@/components/tools/ImageSettingsDialog";
 import { AppCloseGestureSettings } from "@/components/mobile/AppCloseGestureSettings";
+import { FarmDeviceProxySettings } from "@/components/mobile/FarmDeviceProxyControl";
 import {
   AppCloseGestureRecorderProvider,
   useAppCloseGestureRecorder,
@@ -11563,7 +11564,15 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
 // ─── Phone Settings Panel ──────────────────────────────────────────────────────
 
-function PhoneSettingsPanel({ serial }: { serial: string | null }) {
+function PhoneSettingsPanel({
+  serial,
+  online,
+  showProxy,
+}: {
+  serial: string | null;
+  online: boolean;
+  showProxy: boolean;
+}) {
   interface BatteryScheduleConfig { enabled: boolean; unplugMinutes: number; cycleHours: number; spoofLevel: number; }
   interface BatteryInfo {
     level: number; status: string; plugged: string; temperatureC: number;
@@ -12045,6 +12054,10 @@ function PhoneSettingsPanel({ serial }: { serial: string | null }) {
 
   return (
     <div className="h-full overflow-y-auto p-6 space-y-6">
+
+      {showProxy && serial && (
+        <FarmDeviceProxySettings serial={serial} online={online} />
+      )}
 
       {/* ── Typing Speed Profile ─────────────────────────────────────── */}
       <div className="bg-card border border-primary/30 rounded-xl p-5 space-y-3">
@@ -13244,6 +13257,9 @@ export function MobilePage() {
     : [...allPhones].sort((a, b) => a.serial.localeCompare(b.serial));
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
   const activeSerial = slots[0]?.serial ?? null;
+  const deviceSettingsSerial = targetSerial ?? activeSerial;
+  const deviceSettingsOnline = deviceSettingsSerial !== null
+    && allPhones.some(phone => phone.serial === deviceSettingsSerial && phone.state === "device");
   const { navigateTo } = useBrowserWindows();
   const openBrowserProfile = useCallback((username: string) => {
     const cleanUsername = username.trim().replace(/^@+/, "");
@@ -13756,7 +13772,12 @@ export function MobilePage() {
                     )}
                 </div>
                 {activeTab === "phonesettings" && (
-                  <PhoneSettingsPanel key={activeSerial ?? "no-device"} serial={activeSerial} />
+                  <PhoneSettingsPanel
+                    key={deviceSettingsSerial ?? "no-device"}
+                    serial={deviceSettingsSerial}
+                    online={deviceSettingsOnline}
+                    showProxy={deviceDetailView}
+                  />
                 )}
                 {activeTab === "actionlog" && (
                   <ActionLogPanel

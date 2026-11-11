@@ -611,6 +611,16 @@ export async function adbReverseRemove(serial: string, port?: number): Promise<v
   await runAdb(tools.adb.path, args, 5000);
 }
 
+export async function hasAdbReverse(serial: string, port: number): Promise<boolean> {
+  const tools = detectToolset();
+  if (!tools.adb.found || !tools.adb.path) return false;
+  const output = await runAdb(tools.adb.path, ["-s", serial, "reverse", "--list"], 5000);
+  return output.split(/\r?\n/).some(line => {
+    const fields = line.trim().split(/\s+/);
+    return fields.includes(`tcp:${port}`) && fields.length >= 2;
+  });
+}
+
 export async function getAndroidId(serial: string): Promise<string | null> {
   const tools = detectToolset();
   if (!tools.adb.found || !tools.adb.path) return null;

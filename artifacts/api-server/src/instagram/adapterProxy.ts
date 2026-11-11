@@ -101,6 +101,8 @@ export function isAdapterRotating(adapterName: string): boolean {
  * Returns the local port it bound to.
  */
 export async function startAdapterProxy(proxyId: number, adapterName: string): Promise<number> {
+  const active = servers.get(proxyId);
+  if (active?.adapterName === adapterName) return active.port;
   await stopAdapterProxy(proxyId);
 
   return new Promise((resolve, reject) => {
