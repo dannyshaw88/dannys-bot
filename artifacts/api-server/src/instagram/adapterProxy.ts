@@ -266,21 +266,39 @@ export async function stopAllAdapterProxies(): Promise<void> {
 export function rotateAdapter(adapterName: string, onDone?: (newIp: string | null) => void): void {
   (async () => {
     rotatingAdapters.add(adapterName);
+    let rotationError: unknown = null;
     try {
       console.log(`[adapter] Rotating "${adapterName}" — disabling...`);
       await execAsync(`netsh interface set interface "${adapterName}" disable`);
       console.log(`[adapter] "${adapterName}" disabled — waiting 30 s for carrier reassignment...`);
       await new Promise(r => setTimeout(r, 30_000));
-      await execAsync(`netsh interface set interface "${adapterName}" enable`);
-      // Give the OS a moment to obtain the new DHCP lease
-      await new Promise(r => setTimeout(r, 3_000));
-      const newIp = getAdapterIp(adapterName);
-      console.log(`[adapter] "${adapterName}" re-enabled — new IP: ${newIp ?? "unknown"}`);
-      onDone?.(newIp);
     } catch (err) {
+      rotationError = err;
       console.warn(`[adapter] Rotation failed for "${adapterName}":`, err);
-      onDone?.(null);
     } finally {
+      // Always attempt to bring the adapter back, even if the disable/wait
+      // sequence failed partway through. A failed rotation must not strand the
+      // laptop's Wi-Fi or its selected proxy adapter in the disabled state.
+      let reenabled = false;
+      for (let attempt = 1; attempt <= 3 && !reenabled; attempt += 1) {
+        try {
+          await execAsync(`netsh interface set interface "${adapterName}" enable`);
+          reenabled = true;
+        } catch (err) {
+          console.warn(`[adapter] Re-enable attempt ${attempt}/3 failed for "${adapterName}":`, err);
+          if (attempt < 3) await new Promise(r => setTimeout(r, 1_000));
+        }
+      }
+      if (!reenabled) {
+        console.error(`[adapter] CRITICAL: could not re-enable network adapter "${adapterName}".`);
+        onDone?.(null);
+      } else {
+        // Give the OS a moment to obtain the new DHCP lease.
+        await new Promise(r => setTimeout(r, 3_000));
+        const newIp = getAdapterIp(adapterName);
+        console.log(`[adapter] "${adapterName}" re-enabled — new IP: ${newIp ?? "unknown"}`);
+        onDone?.(rotationError ? null : newIp);
+      }
       rotatingAdapters.delete(adapterName);
     }
   })();
