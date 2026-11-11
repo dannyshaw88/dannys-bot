@@ -32,6 +32,10 @@ For Snapchat switching, always refresh the Camera UI immediately before tapping 
 
 **How to apply:** For an individual Snapchat tool failure, log that tool's failure, restore the Camera surface, and continue with later enabled tools. Stop the remaining tools only when Camera cannot be safely restored, the user aborts, account identity was not confirmed before dispatch, or a blocking safety dialog cannot be cleared.
 
+**Why:** The app can launch directly into Memories, which is a valid Snapchat screen but was not one of the account gate's recognized surfaces; this prevented Upload a Snap from staging media before opening Camera Roll.
+
+**How to apply:** During initial account verification, if another Snapchat screen exposes the live Camera tab, return to Camera first and then verify the slot username. Do not mistake an unrecognized Snapchat tab for proof that the app failed to load.
+
 **Why:** A device log showed that two post-send Android Back presses still left Snapchat on a surface where the next tool could not find Chat or restore Camera.
 
 **How to apply:** After Send, allow the transition to settle, pause between all three Back presses, and allow the final navigation to settle before cleaning up the staged phone image or dispatching the next tool.

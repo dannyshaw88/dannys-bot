@@ -46,7 +46,9 @@ async function waitForKnownSurface(
       if (cameraTab) {
         cameraTabRecoveryAttempted = true;
         context.onLog("Snapchat account check: another Snapchat tab is open; tapping its live Camera tab before verifying this slot.");
-        await tapNode(context, cameraTab, "return to Camera before Snapchat account verification", 500, true);
+        if (!await tapNode(context, cameraTab, "return to Camera before Snapchat account verification", 500, true)) {
+          context.onLog("Snapchat account check: the Camera tab tap did not complete.");
+        }
       }
     }
     await context.sleep(500, "exact");
