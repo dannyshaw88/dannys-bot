@@ -395,7 +395,7 @@ function formatHistoryTimestamp(value: string): string {
 
 function formatConversation(conversation: SnapchatConversation): string {
   const messages = [...conversation.messages].sort((a, b) =>
-    parseTime(b.timestamp) - parseTime(a.timestamp) || b.sequence - a.sequence,
+    parseTime(a.timestamp) - parseTime(b.timestamp) || a.sequence - b.sequence,
   );
   const hasAccountUsername = conversation.accountUsername &&
     conversation.accountUsername !== conversation.slotId;

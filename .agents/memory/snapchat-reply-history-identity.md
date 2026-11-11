@@ -7,11 +7,11 @@ Snapchat reply history must be associated with the persisted account-slot ID and
 
 ### Conversation history storage
 
-Store one conversation per contact, device, and account slot. Merge sent replies and genuine failed attempts into that conversation, label each sender, and timestamp every event. Show conversations and their messages newest first; failed sends must say `FAILED` with a reason. Do not store unread-list scans, Spotlight/media-only rows, false Delivered entries, or run-ended noise as conversation records. For incoming messages without Snapchat-provided timestamps, show when the message was observed rather than implying it was sent then. The bundled conversation store is canonical; legacy copies are not active history, and clearing a slot must clear that slot's records from both.
+Store one conversation per contact, device, and account slot. Merge sent replies and genuine failed attempts into that conversation, label each sender, and timestamp every event. Show conversations newest first, with each conversation's messages oldest first; failed sends must say `FAILED` with a reason. Do not store unread-list scans, Spotlight/media-only rows, false Delivered entries, or run-ended noise as conversation records. For incoming messages without Snapchat-provided timestamps, show when the message was observed rather than implying it was sent then. The bundled conversation store is canonical; legacy copies are not active history, and clearing a slot must clear that slot's records from both.
 
 **Why:** the user explicitly asked for one simple, timestamped conversation per contact instead of split reply/audit entries, with only real conversation activity.
 
-**How to apply:** keep exports and Luna's prior-reply context sourced from the same conversation records; preserve exact sent times, the `HH:MM-DD/MM/YYYY` display format, and slot-scoped clearing.
+**How to apply:** keep exports and Luna's prior-reply context sourced from the same conversation records; preserve exact sent times, use `HH:MM-DD/MM/YYYY`, order conversations newest-first and messages within each conversation oldest-first, and keep clearing slot-scoped.
 
 Open Chat once, wait for the Unread tab to appear, and tap Unread once. After exiting a replied conversation, the Unread filter remains selected; dump the list and continue without tapping Chat or Unread again. Choose eligible rows using their visible new-message markers.
 
