@@ -28,7 +28,15 @@ type TunnelEntry = {
   child: ChildProcess;
   state: "starting" | "running" | "error";
   error: string | null;
+  retryAt: number | null;
+  manualInstallRequired: boolean;
+  vpnInactiveChecks: number;
   startedAt: number;
+};
+
+export type DeviceRoutePreference = {
+  enabled: boolean;
+  proxy: ReverseTetherProxy | null;
 };
 
 const tunnels = new Map<string, TunnelEntry>();
@@ -175,6 +183,20 @@ async function readAdbValue(adb: string, serial: string, args: string[]): Promis
   return String(stdout ?? "").trim();
 }
 
+async function isGnirehtetInstalled(adb: string, serial: string): Promise<boolean> {
+  try {
+    const output = await readAdbValue(adb, serial, [
+      "shell",
+      "pm",
+      "path",
+      "com.genymobile.gnirehtet",
+    ]);
+    return output.split(/\r?\n/).some(line => line.trim().startsWith("package:"));
+  } catch {
+    return false;
+  }
+}
+
 async function setRadio(adb: string, serial: string, name: "wifi" | "data", enabled: boolean): Promise<void> {
   await runAdb(adb, serial, ["shell", "svc", name, enabled ? "enable" : "disable"]);
 }
@@ -233,6 +255,7 @@ async function activateAfterApproval(entry: TunnelEntry, adb: string): Promise<b
   await isolatePhoneNetwork(adb, entry.serial);
   entry.state = "running";
   entry.error = null;
+  entry.vpnInactiveChecks = 0;
   return true;
 }
 
@@ -398,17 +421,22 @@ async function startUnlocked(
     child,
     state: "starting",
     error: null,
+    retryAt: null,
+    manualInstallRequired: false,
+    vpnInactiveChecks: 0,
     startedAt: Date.now(),
   };
   tunnels.set(serial, entry);
   child.once("error", error => {
     entry.state = "error";
     entry.error = error.message;
+    entry.retryAt = Date.now() + 20_000;
   });
   child.once("exit", (code, signal) => {
     if (tunnels.get(serial) !== entry) return;
     entry.state = "error";
     entry.error = `USB relay stopped unexpectedly (${code ?? signal ?? "unknown"}).`;
+    entry.retryAt = Date.now() + 20_000;
   });
 
   try {
@@ -436,10 +464,12 @@ async function startUnlocked(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await stopUnlocked(serial);
-    // Keep a failed state so the USB watcher does not repeatedly trigger the
-    // same user-facing Android install prompt. A deliberate Apply/Retry clears it.
+    // Do not repeatedly open the Android install prompt. Once the user installs
+    // the staged APK, the watcher detects it and resumes the saved route.
     entry.error = message;
     entry.state = "error";
+    entry.manualInstallRequired = /INSTALL_FAILED_USER_RESTRICTED|Install canceled by user/i.test(message);
+    entry.retryAt = Date.now() + 20_000;
     tunnels.set(serial, entry);
     throw error;
   }
@@ -512,7 +542,7 @@ export function getDeviceStatus(serial: string) {
  * alone.
  */
 export function startUsbDeviceWatcher(
-  loadProxy: (serial: string) => Promise<ReverseTetherProxy | null>,
+  loadRoute: (serial: string) => Promise<DeviceRoutePreference>,
 ): void {
   if (watcher || process.platform !== "win32" || !process.env.AURA_GNIREHTET_DIR) return;
   const poll = async () => {
@@ -527,9 +557,34 @@ export function startUsbDeviceWatcher(
       );
       for (const serial of connectedUsb) {
         const current = tunnels.get(serial);
+        let preference: DeviceRoutePreference;
+        try {
+          preference = await loadRoute(serial);
+        } catch (error) {
+          console.warn(`[reverse-tether] ${serial}: could not load the saved route: ${error instanceof Error ? error.message : String(error)}`);
+          continue;
+        }
+        if (!preference.enabled) {
+          if (current) await stopDevice(serial).catch(() => {});
+          continue;
+        }
         if (current?.state === "running" && current.child.exitCode === null) {
           const adb = android.detectToolset().adb.path;
-          if (!adb || await vpnServiceActive(adb, serial).catch(() => false)) continue;
+          if (!adb) continue;
+          let vpnActive: boolean;
+          try {
+            vpnActive = await vpnServiceActive(adb, serial);
+          } catch (error) {
+            console.warn(`[reverse-tether] ${serial}: VPN status check failed; keeping the existing route: ${error instanceof Error ? error.message : String(error)}`);
+            continue;
+          }
+          if (vpnActive) {
+            current.vpnInactiveChecks = 0;
+            continue;
+          }
+          current.vpnInactiveChecks += 1;
+          if (current.vpnInactiveChecks < 2) continue;
+          console.warn(`[reverse-tether] ${serial}: VPN service was absent in two consecutive checks; restarting the saved route`);
           await stopDevice(serial).catch(() => {});
         } else if (current?.state === "starting" && current.child.exitCode === null) {
           const adb = android.detectToolset().adb.path;
@@ -540,19 +595,29 @@ export function startUsbDeviceWatcher(
                 if (pending?.state === "starting") await activateAfterApproval(pending, adb);
               });
             } catch (error) {
-              console.warn(`[reverse-tether] ${serial}: could not activate VPN route: ${error instanceof Error ? error.message : String(error)}`);
-              await stopDevice(serial).catch(() => {});
+              console.warn(`[reverse-tether] ${serial}: VPN activation check failed; leaving the route pending: ${error instanceof Error ? error.message : String(error)}`);
             }
           }
           continue;
         }
-        // A user-rejected install or VPN prompt must not be retried every poll:
-        // let the user resolve the phone-side prompt and explicitly retry.
-        if (current?.state === "error") continue;
+        if (current?.state === "error") {
+          if (current.manualInstallRequired) {
+            const adb = android.detectToolset().adb.path;
+            if (!adb || !await isGnirehtetInstalled(adb, serial)) continue;
+            if (current.retryAt !== null && Date.now() < current.retryAt) continue;
+          } else if (current.retryAt !== null && Date.now() < current.retryAt) {
+            continue;
+          }
+          await stopDevice(serial).catch(() => {});
+        }
         try {
-          const proxy = await loadProxy(serial);
+          const latestPreference = await loadRoute(serial);
+          if (!latestPreference.enabled) {
+            await stopDevice(serial).catch(() => {});
+            continue;
+          }
           await android.setDeviceProxy(serial, null);
-          await startDevice(serial, proxy);
+          await startDevice(serial, latestPreference.proxy);
         } catch (error) {
           console.warn(`[reverse-tether] ${serial}: ${error instanceof Error ? error.message : String(error)}`);
         }

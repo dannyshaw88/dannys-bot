@@ -8,3 +8,9 @@ Preferred Phone Farm networking: each phone uses the laptop's broadband connecti
 **Why:** The user stated this as the desired and fallback setup for the Phone Farm.
 
 **How to apply:** Treat proxy assignment as device-level for phone-based actions, not as a replacement for existing account-level proxy assignments. Every account slot on a phone shares that phone's network path. Verify actual phone/app egress rather than assuming an Android global proxy setting guarantees all app traffic is proxied.
+
+The selected USB route is a persistent desired setting: automatically reapply it when Aura or a phone restarts, and leave it enabled until the user cancels it. Aura must be running for the laptop-hosted relay to provide internet.
+
+**Why:** The user explicitly requires per-device routes to survive restarts and updates until cancelled.
+
+**How to apply:** Persist route-enabled state alongside the device's proxy assignment; distinguish cancellation from app shutdown, which should stop the relay but preserve the desired route for the next launch.

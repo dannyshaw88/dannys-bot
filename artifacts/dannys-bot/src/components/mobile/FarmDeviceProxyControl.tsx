@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, Loader2, RefreshCw, ShieldCheck, Wifi } from "lucide-react";
+import { Download, Loader2, Power, RefreshCw, ShieldCheck, Wifi } from "lucide-react";
 import { useCreateProxy } from "@/hooks/use-proxies";
 
 export type FarmProxyOption = {
@@ -38,6 +38,7 @@ export function FarmDeviceProxyControl({
   const [status, setStatus] = useState("");
   const [failed, setFailed] = useState(false);
   const [manualInstallReady, setManualInstallReady] = useState(false);
+  const [routeEnabled, setRouteEnabled] = useState(true);
   const handledAssignment = useRef<number | null | undefined>(undefined);
   const handledOnline = useRef(false);
   const selectedProxy = proxies.find(proxy => proxy.id === proxyId);
@@ -64,6 +65,12 @@ export function FarmDeviceProxyControl({
         const statusResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/proxy-status`);
         const current = await readJson(statusResponse);
         if (statusResponse.ok) {
+          setRouteEnabled(current?.routeEnabled !== false);
+          if (current?.routeEnabled === false) {
+            setStatus("Route cancelled. The phone will use its normal connection.");
+            setFailed(false);
+            return;
+          }
           if (current?.routeStatus?.error) {
             setStatus(current.routeStatus.error);
             setFailed(true);
@@ -87,6 +94,11 @@ export function FarmDeviceProxyControl({
             setFailed(false);
             return;
           }
+          if (!force) {
+            setStatus("Saved. Aura will apply this route automatically when the phone is ready.");
+            setFailed(false);
+            return;
+          }
         }
       }
       const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/apply-proxy`, {
@@ -96,6 +108,7 @@ export function FarmDeviceProxyControl({
       if (!response.ok || result?.ok !== true) {
         throw new Error(result?.error ?? `Could not apply the device proxy (${response.status})`);
       }
+      setRouteEnabled(true);
       setStatus(result.message ?? (proxyId == null ? "Laptop internet tunnel is active" : "Proxy route applied"));
       setFailed(false);
     } catch (error) {
@@ -107,29 +120,56 @@ export function FarmDeviceProxyControl({
   }, [online, proxyId, selectedLabel, selectedProxy, serial]);
 
   useEffect(() => {
-    if (!online || !status.startsWith("Waiting for the one-time Android VPN approval")) return;
+    if (!online || !routeEnabled) return;
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/proxy-status`);
         const current = await readJson(response);
         if (!response.ok) return;
+        if (current?.routeEnabled === false) {
+          setRouteEnabled(false);
+          setStatus("Route cancelled. The phone will use its normal connection.");
+          setFailed(false);
+          return;
+        }
         if (current?.routeStatus?.error) {
-          setStatus(current.routeStatus.error);
+          if (!manualInstallReady) setStatus(current.routeStatus.error);
           setFailed(true);
         } else if (current?.relayActive && current?.adbReverseActive) {
           setStatus(proxyId == null ? "Laptop internet tunnel is active" : `Applied: ${selectedLabel}`);
+          setFailed(false);
+          setManualInstallReady(false);
+        } else if (current?.routeStatus?.starting) {
+          setStatus("Waiting for the one-time Android VPN approval. Tap Allow on the phone to activate the laptop route.");
           setFailed(false);
         }
       } catch {}
     }, 2500);
     return () => window.clearInterval(timer);
-  }, [online, proxyId, selectedLabel, serial, status]);
+  }, [online, manualInstallReady, proxyId, routeEnabled, selectedLabel, serial]);
 
   useEffect(() => {
     if (loading || proxyId === undefined) return;
     if (!online) {
       handledOnline.current = false;
-      setStatus(proxyId == null ? "Laptop internet applies when connected" : "Saved; applies when connected");
+      void fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/proxy-status`)
+        .then(async response => ({ response, current: await readJson(response) }))
+        .then(({ response, current }) => {
+          if (!response.ok) return;
+          const enabled = current?.routeEnabled !== false;
+          setRouteEnabled(enabled);
+          if (!enabled) {
+            setStatus("Route cancelled. The phone will use its normal connection.");
+            setFailed(false);
+          } else if (current?.routeStatus?.error) {
+            setStatus(current.routeStatus.error);
+            setFailed(true);
+          } else {
+            setStatus(proxyId == null ? "Laptop internet applies when connected" : "Saved; applies when connected");
+            setFailed(false);
+          }
+        })
+        .catch(() => {});
       setFailed(false);
       return;
     }
@@ -137,7 +177,7 @@ export function FarmDeviceProxyControl({
     handledAssignment.current = proxyId;
     handledOnline.current = true;
     void applySavedAssignment(false);
-  }, [applySavedAssignment, loading, online, proxyId]);
+  }, [applySavedAssignment, loading, online, proxyId, serial]);
 
   const handleSelection = async (value: string) => {
     const nextProxyId = value ? Number(value) : null;
@@ -159,10 +199,33 @@ export function FarmDeviceProxyControl({
       onProxyIdChange(serial, nextProxyId);
       handledAssignment.current = nextProxyId;
       handledOnline.current = online;
+      setRouteEnabled(true);
       setStatus(result.warning ?? result.message ?? "Proxy assignment saved");
       setFailed(Boolean(result.warning));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save the device proxy");
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelSavedRoute = async () => {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/stop-proxy`, {
+        method: "POST",
+      });
+      const result = await readJson(response);
+      if (!response.ok || result?.ok !== true) {
+        throw new Error(result?.error ?? "Could not cancel the device route");
+      }
+      setRouteEnabled(false);
+      setManualInstallReady(false);
+      setStatus(result.message ?? "Route cancelled. The phone will use its normal connection.");
+      setFailed(false);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not cancel the device route");
       setFailed(true);
     } finally {
       setBusy(false);
@@ -195,6 +258,7 @@ export function FarmDeviceProxyControl({
   const currentProxyExists = proxyId == null || proxies.some(proxy => proxy.id === proxyId);
   const canStageManualInstall =
     failed && /INSTALL_FAILED_USER_RESTRICTED|Install canceled by user/i.test(status);
+  const canApplyRoute = failed || !routeEnabled;
 
   return (
     <div
@@ -228,16 +292,30 @@ export function FarmDeviceProxyControl({
         </select>
         <button
           type="button"
-          aria-label={`${failed ? "Retry" : "Apply"} route for device ${serial}`}
+          aria-label={`${routeEnabled && !failed ? "Cancel" : failed ? "Retry" : "Apply"} route for device ${serial}`}
           data-testid={`button-reapply-device-proxy-${serial}`}
-          title={failed ? "Retry the selected route" : "Apply the selected route again"}
-          disabled={loading || busy || Boolean(proxyConfigError) || !online}
-          onClick={() => { void applySavedAssignment(true, true); }}
+          title={routeEnabled && !failed ? "Cancel the saved route" : failed ? "Retry the selected route" : "Save and apply this route until cancelled"}
+          disabled={busy || (canApplyRoute && (loading || Boolean(proxyConfigError) || !online))}
+          onClick={() => {
+            if (routeEnabled && !failed) void cancelSavedRoute();
+            else void applySavedAssignment(true, true);
+          }}
           className="flex h-7 shrink-0 items-center justify-center gap-1 rounded-md px-2 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          <span>{busy ? "Applying" : failed ? "Retry" : "Apply"}</span>
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : routeEnabled && !failed ? <Power className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          <span>{busy ? "Working" : routeEnabled && !failed ? "Cancel" : failed ? "Retry" : "Apply"}</span>
         </button>
+        {routeEnabled && failed && (
+          <button
+            type="button"
+            aria-label={`Cancel route for device ${serial}`}
+            onClick={() => { void cancelSavedRoute(); }}
+            disabled={busy}
+            className="h-7 shrink-0 rounded-md px-2 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-destructive disabled:opacity-40"
+          >
+            Cancel
+          </button>
+        )}
       </div>
       <div className={`mt-1 flex min-h-4 items-center gap-1 text-[10px] ${failed ? "text-destructive" : "text-muted-foreground"}`} data-testid={`status-device-proxy-${serial}`}>
         {proxyId == null && !failed ? <Wifi className="w-3 h-3 shrink-0" aria-hidden="true" /> : null}
@@ -255,7 +333,7 @@ export function FarmDeviceProxyControl({
         </button>
       )}
       <p className="mt-1 text-[10px] text-muted-foreground">
-        Requires USB debugging and one VPN approval per phone. Phone Wi-Fi and mobile data are paused while this route is active, then restored when disconnected.
+        Saved routes reapply after Aura or phone restarts until cancelled. Requires USB debugging and one VPN approval per phone. Phone Wi-Fi and mobile data are paused while this route is active, then restored when disconnected.
         {proxyId != null
           ? selectedProxy?.proxyType === "socks5"
             ? " The assigned SOCKS5 proxy carries TCP and UDP traffic."

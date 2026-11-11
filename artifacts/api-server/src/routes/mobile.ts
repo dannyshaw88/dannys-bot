@@ -837,7 +837,7 @@ type DevicePersonality = {
   discovery: number;
   actionVariety: number;
 };
-type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; accountTabPreferences?: { order: ("instagram" | "snapchat")[]; landing: "instagram" | "snapchat" }; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
+type InstanceConfig = { proxyId?: number | null; networkRouteEnabled?: boolean; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; accountTabPreferences?: { order: ("instagram" | "snapchat")[]; landing: "instagram" | "snapchat" }; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 async function applyDeviceProxyAssignment(serial: string, proxyId: number | null): Promise<string | null> {
@@ -1359,8 +1359,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // workspace. Only one process may launch mobile input against real devices.
   startMobileAutomationProcessLock();
   reverseTether.startUsbDeviceWatcher(async serial => {
-    const proxyId = loadInstanceConfigs()[serial]?.proxyId ?? null;
-    return resolveReverseTetherProxy(proxyId);
+    const instance = loadInstanceConfigs()[serial] ?? {};
+    const enabled = instance.networkRouteEnabled !== false;
+    return {
+      enabled,
+      proxy: enabled ? await resolveReverseTetherProxy(instance.proxyId ?? null) : null,
+    };
   });
 
   app.get("/api/diagnostics/snapshot", (_req: Request, res: Response) => {
@@ -9940,7 +9944,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       res.json({
         ok: true,
         stagedPath,
-        message: "Gnirehtet was copied to Downloads. On the phone, open File Manager → Downloads → AuraGnirehtet.apk and install it. If prompted, allow File Manager to install this app. Then return here and retry the route.",
+        message: "Gnirehtet was copied to Downloads. On the phone, open File Manager → Downloads → AuraGnirehtet.apk and install it. If prompted, allow File Manager to install this app. Aura will detect the install and resume the saved route; use Retry only if it does not start.",
       });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e?.message ?? "Could not copy the helper APK to the phone" });
@@ -9960,17 +9964,39 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           return res.status(404).json({ ok: false, error: "The assigned proxy no longer exists. The phone was not routed directly." });
         }
       }
+      cfg[serial] = { ...cfg[serial], networkRouteEnabled: true };
+      saveInstanceConfigs(cfg);
       const description = await applyDeviceProxyAssignment(serial, proxyId);
       res.json({
         ok: true,
         applied: true,
         proxyId,
+        routeEnabled: true,
         message: description
           ? description
           : "USB route is waiting for Android VPN approval. Tap Allow on the phone to activate laptop internet.",
       });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e?.message ?? "Apply proxy failed" });
+    }
+  });
+
+  app.post("/api/mobile/devices/:serial/stop-proxy", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const cfg = loadInstanceConfigs();
+      cfg[serial] = { ...cfg[serial], networkRouteEnabled: false };
+      saveInstanceConfigs(cfg);
+      await reverseTether.stopDevice(serial);
+      const device = (await android.listDevices()).find(entry => entry.serial === serial && entry.state === "device");
+      if (device) await android.setDeviceProxy(serial, null);
+      res.json({
+        ok: true,
+        routeEnabled: false,
+        message: "USB route cancelled. The phone will use its normal network until you apply a route again.",
+      });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? "Could not cancel the device route" });
     }
   });
 
@@ -9987,7 +10013,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         }
       }
       const cfg = loadInstanceConfigs();
-      cfg[serial] = { ...cfg[serial], proxyId: input.proxyId ?? null };
+      cfg[serial] = {
+        ...cfg[serial],
+        proxyId: input.proxyId ?? null,
+        networkRouteEnabled: true,
+      };
       saveInstanceConfigs(cfg);
 
       const device = (await android.listDevices()).find(entry => entry.serial === serial && entry.state === "device");
@@ -11362,6 +11392,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
         deviceProxy: null,
         upstreamProxy,
         proxyId,
+        routeEnabled: cfg[serial]?.networkRouteEnabled !== false,
         relayActive: routeStatus.running,
         adbReverseActive,
         routeStatus,
@@ -11394,7 +11425,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       // 4. Stop the USB internet route and clear the saved proxy assignment.
       await reverseTether.stopDevice(serial);
       const cfg = loadInstanceConfigs();
-      cfg[serial] = { ...cfg[serial], proxyId: null };
+      cfg[serial] = { ...cfg[serial], proxyId: null, networkRouteEnabled: false };
       saveInstanceConfigs(cfg);
 
       // 5. Disconnect the device from ADB so it disappears from the device list
@@ -11438,7 +11469,13 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       // 4. Stop the USB internet route and clear the saved proxy assignment.
       await reverseTether.stopDevice(serial);
       const cfg = loadInstanceConfigs();
-      cfg[serial] = { ...cfg[serial], proxyId: null, proxyPort: null, proxyProtocol: null as any };
+      cfg[serial] = {
+        ...cfg[serial],
+        proxyId: null,
+        proxyPort: null,
+        proxyProtocol: null as any,
+        networkRouteEnabled: false,
+      };
       saveInstanceConfigs(cfg);
 
       // 5. Disconnect ADB
