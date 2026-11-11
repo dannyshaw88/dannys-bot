@@ -22,16 +22,35 @@ function profileUsername(state: UiState): string | null {
   return value ? value.replace(/^@/, "").trim() : null;
 }
 
-async function waitForKnownSurface(context: SnapchatContext, timeoutMs: number): Promise<UiState | null> {
+async function waitForKnownSurface(
+  context: SnapchatContext,
+  timeoutMs: number,
+  timeoutLabel?: string,
+): Promise<UiState | null> {
   const deadline = Date.now() + timeoutMs;
+  let lastState: UiState | null = null;
   while (!context.isAborted() && Date.now() < deadline) {
     const state = await dump(context.serial);
+    lastState = state;
     if (
       isSnapchatCameraSurface(state) ||
       isSnapchatProfileSurface(state) ||
       isSavedSnapchatAccountPicker(state)
     ) return state;
     await context.sleep(500, "exact");
+  }
+  if (timeoutLabel && !context.isAborted()) {
+    const packages = [...new Set(
+      (lastState?.nodes ?? []).map(node => node.packageName.trim()).filter(Boolean),
+    )].slice(0, 3);
+    const resourceIds = [...new Set(
+      (lastState?.nodes ?? []).map(shortResourceId).filter(Boolean),
+    )].slice(0, 8);
+    context.onLog(
+      `Snapchat account check: timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${timeoutLabel}; ` +
+      `last package(s)=${packages.join(", ") || "none"}, ` +
+      `resource IDs=${resourceIds.join(", ") || "none"}, nodes=${lastState?.nodes.length ?? 0}.`,
+    );
   }
   return null;
 }
@@ -44,7 +63,7 @@ export async function ensureSnapchatAccount(context: SnapchatContext): Promise<b
   }
 
   try {
-    let state = await waitForKnownSurface(context, 20_000);
+    let state = await waitForKnownSurface(context, 20_000, "the launched app's account screen");
     if (!state) {
       context.onLog("Snapchat tools not started: the launched app did not reach a known account screen.");
       return false;

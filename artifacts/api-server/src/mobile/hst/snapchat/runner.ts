@@ -22,6 +22,22 @@ type SnapchatToolEntry = {
   run: () => Promise<void | UploadSnapResult | UploadVideoResult | boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked">;
 };
 
+async function restoreCameraBeforeNextTool(
+  context: SnapchatContext,
+  toolName: string,
+): Promise<boolean> {
+  try {
+    if (await returnToCameraBeforeNextTool(context)) return true;
+  } catch (error) {
+    context.onLog(
+      `Snapchat: could not restore Camera after ${toolName} (${error instanceof Error ? error.message : String(error)}).`,
+    );
+    return false;
+  }
+  context.onLog(`Snapchat: remaining tools skipped because Camera could not be restored after ${toolName}.`);
+  return false;
+}
+
 export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
   if (!await ensureSnapchatAccount(context)) {
     context.onLog("Snapchat tool dispatcher skipped because the configured slot account was not confirmed.");
@@ -92,15 +108,12 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
         continue;
       }
     }
-    let toolError: unknown;
-    let toolFailed = false;
     let result: void | UploadSnapResult | UploadVideoResult | boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked" = undefined;
+    let failureReason: string | null = null;
     try {
       result = await tool.run();
-      if ((tool.name === "Upload a Snap" || tool.name === "Upload a Video") && result === "failed") return;
     } catch (error) {
-      toolError = error;
-      toolFailed = true;
+      failureReason = error instanceof Error ? error.message : String(error);
     }
     if (result === "friend-request-cooldown") {
       friendRequestCooldownTriggered = true;
@@ -109,22 +122,39 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
       context.onLog("Snapchat tools stopped because the friend-request limit dialog could not be safely cleared.");
       return;
     }
+    if (result === "failed") {
+      failureReason ??= "the tool reported a failure; see its preceding log entry for details";
+    }
+    if (failureReason) {
+      context.onLog(`Snapchat: ${tool.name} failed (${failureReason}).`);
+      if (context.isAborted()) return;
+      if (index < orderedTools.length - 1 && !await restoreCameraBeforeNextTool(context, tool.name)) return;
+      continue;
+    }
     if (
       (tool.name === "Add Friends" || tool.name === "Accept Friends") &&
       result === true &&
       !context.isAborted()
     ) {
-      if (!await closeAddFriendsPanel(context)) return;
+      let panelClosed = false;
+      try {
+        panelClosed = await closeAddFriendsPanel(context);
+      } catch (error) {
+        context.onLog(`Snapchat: could not close the completed friend list (${error instanceof Error ? error.message : String(error)}).`);
+      }
+      if (!panelClosed) {
+        context.onLog(`Snapchat: trying to restore Camera after ${tool.name} finished.`);
+        if (index < orderedTools.length - 1 && !await restoreCameraBeforeNextTool(context, tool.name)) return;
+        continue;
+      }
     }
     if (
       tool.name === "Reply to Unread Chats" &&
-      !toolFailed &&
       index < orderedTools.length - 1 &&
       !context.isAborted()
     ) {
       if (!await returnToCameraBeforeNextTool(context)) return;
     }
-    if (toolFailed) throw toolError;
     if (
       index < orderedTools.length - 1 &&
       (tool.name === "View Spotlights" || tool.name === "View Snaps")
