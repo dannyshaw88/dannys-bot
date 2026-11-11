@@ -26,9 +26,11 @@ async function waitForKnownSurface(
   context: SnapchatContext,
   timeoutMs: number,
   timeoutLabel?: string,
+  recoverToCameraFromOtherTab = false,
 ): Promise<UiState | null> {
   const deadline = Date.now() + timeoutMs;
   let lastState: UiState | null = null;
+  let cameraTabRecoveryAttempted = false;
   while (!context.isAborted() && Date.now() < deadline) {
     const state = await dump(context.serial);
     lastState = state;
@@ -37,6 +39,16 @@ async function waitForKnownSurface(
       isSnapchatProfileSurface(state) ||
       isSavedSnapchatAccountPicker(state)
     ) return state;
+    if (recoverToCameraFromOtherTab && !cameraTabRecoveryAttempted) {
+      const cameraTab = state.nodes.find(node =>
+        node.clickable && shortResourceId(node) === "ngs_camera_icon_container",
+      );
+      if (cameraTab) {
+        cameraTabRecoveryAttempted = true;
+        context.onLog("Snapchat account check: another Snapchat tab is open; tapping its live Camera tab before verifying this slot.");
+        await tapNode(context, cameraTab, "return to Camera before Snapchat account verification", 500, true);
+      }
+    }
     await context.sleep(500, "exact");
   }
   if (timeoutLabel && !context.isAborted()) {
@@ -63,7 +75,12 @@ export async function ensureSnapchatAccount(context: SnapchatContext): Promise<b
   }
 
   try {
-    let state = await waitForKnownSurface(context, 20_000, "the launched app's account screen");
+    let state = await waitForKnownSurface(
+      context,
+      20_000,
+      "the launched app's account screen",
+      true,
+    );
     if (!state) {
       context.onLog("Snapchat tools not started: the launched app did not reach a known account screen.");
       return false;
