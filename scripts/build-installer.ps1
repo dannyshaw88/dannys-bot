@@ -104,7 +104,7 @@ Invoke-Step "Build Windows USB reverse-tether helper" {
   Copy-Item $Relay (Join-Path $Target "gnirehtet.exe") -Force
 
   $Archive = Join-Path $env:TEMP "gnirehtet-rust-win64-v2.5.1.zip"
-  $Unpack = Join-Path $env:TEMP "gnirehtet-rust-win64-v2.5.1"
+  $Unpack = Join-Path $env:TEMP ("gnirehtet-rust-win64-v2.5.1-" + [guid]::NewGuid().ToString("N"))
   Invoke-WebRequest `
     -Uri "https://github.com/Genymobile/gnirehtet/releases/download/v2.5.1/gnirehtet-rust-win64-v2.5.1.zip" `
     -OutFile $Archive
@@ -113,11 +113,11 @@ Invoke-Step "Build Windows USB reverse-tether helper" {
     throw "Gnirehtet release archive SHA-256 did not match the published checksum."
   }
   Expand-Archive -Force -Path $Archive -DestinationPath $Unpack
-  $Apk = Join-Path $Unpack "gnirehtet.apk"
-  if (-not (Test-Path $Apk -PathType Leaf)) {
-    throw "The verified Gnirehtet archive did not contain gnirehtet.apk."
+  $ApkMatches = @(Get-ChildItem -Path $Unpack -Filter "gnirehtet.apk" -File -Recurse)
+  if ($ApkMatches.Count -ne 1) {
+    throw "Expected exactly one gnirehtet.apk in the verified archive; found $($ApkMatches.Count)."
   }
-  Copy-Item $Apk (Join-Path $Target "gnirehtet.apk") -Force
+  Copy-Item $ApkMatches[0].FullName (Join-Path $Target "gnirehtet.apk") -Force
 }
 
 Invoke-Step "Build API server" {

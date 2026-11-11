@@ -73,7 +73,11 @@ jobs:
             throw "Gnirehtet release archive SHA-256 did not match the published checksum."
           }
           Expand-Archive -Force -Path $archive -DestinationPath $unpack
-          Copy-Item (Join-Path $unpack "gnirehtet.apk") "$target/gnirehtet.apk"
+          $apks = @(Get-ChildItem -Path $unpack -Filter "gnirehtet.apk" -File -Recurse)
+          if ($apks.Count -ne 1) {
+            throw "Expected exactly one gnirehtet.apk in the verified archive; found $($apks.Count)."
+          }
+          Copy-Item $apks[0].FullName "$target/gnirehtet.apk"
       - name: Download API bundle
         uses: actions/download-artifact@v4
         with:
