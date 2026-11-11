@@ -14,3 +14,9 @@ The selected USB route is a persistent desired setting: automatically reapply it
 **Why:** The user explicitly requires per-device routes to survive restarts and updates until cancelled.
 
 **How to apply:** Persist route-enabled state alongside the device's proxy assignment; distinguish cancellation from app shutdown, which should stop the relay but preserve the desired route for the next launch.
+
+Updated default: a phone with no route selected uses its own normal connection unchanged. Laptop internet over USB and a per-device proxy are explicit route choices. Removing the proxy from one phone must not delete the shared Proxy Manager entry or change any other device.
+
+**Why:** The user clarified that laptop tethering must not be the default and device-level removal must stay isolated to that phone.
+
+**How to apply:** Model native-device networking separately from laptop-direct routing; clearing a device assignment selects native networking, while other phones and shared proxy records remain untouched.

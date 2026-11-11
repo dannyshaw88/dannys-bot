@@ -837,15 +837,33 @@ type DevicePersonality = {
   discovery: number;
   actionVariety: number;
 };
-type InstanceConfig = { proxyId?: number | null; networkRouteEnabled?: boolean; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; accountTabPreferences?: { order: ("instagram" | "snapchat")[]; landing: "instagram" | "snapchat" }; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
+type DeviceNetworkRouteMode = "device" | "laptop" | "proxy";
+type InstanceConfig = { proxyId?: number | null; networkRouteEnabled?: boolean; networkRouteMode?: DeviceNetworkRouteMode; proxyProtocol?: "http" | "socks5"; proxyPort?: number | null; sourceInterface?: string | null; automation?: AutomationSettings; account?: DeviceAccount; accountTabPreferences?: { order: ("instagram" | "snapchat")[]; landing: "instagram" | "snapchat" }; slotAutomation?: Record<string, AutomationSettings>; deviceSettings?: DeviceSettings; devicePrefs?: DevicePrefs };
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
-async function applyDeviceProxyAssignment(serial: string, proxyId: number | null): Promise<string | null> {
+function getDeviceNetworkRouteMode(instance?: InstanceConfig): DeviceNetworkRouteMode {
+  if (instance?.networkRouteMode) return instance.networkRouteMode;
+  if (instance?.proxyId != null) return "proxy";
+  return instance?.networkRouteEnabled === true ? "laptop" : "device";
+}
+
+function isDeviceNetworkRouteEnabled(instance?: InstanceConfig): boolean {
+  return getDeviceNetworkRouteMode(instance) !== "device" && instance?.networkRouteEnabled !== false;
+}
+
+async function applyDeviceProxyAssignment(
+  serial: string,
+  routeMode: DeviceNetworkRouteMode,
+  proxyId: number | null,
+): Promise<string | null> {
   // Stop the previous path first so a deleted or invalid proxy can never leave
   // an outdated route active under the newly saved assignment.
   await reverseTether.stopDevice(serial);
   await android.setDeviceProxy(serial, null);
-  const upstream = await resolveReverseTetherProxy(proxyId);
+  if (routeMode === "device") {
+    return "Using the phone's normal connection. Aura will not route this device.";
+  }
+  const upstream = routeMode === "proxy" ? await resolveReverseTetherProxy(proxyId) : null;
   const result = await reverseTether.startDevice(serial, upstream);
   return result.message;
 }
@@ -1360,10 +1378,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   startMobileAutomationProcessLock();
   reverseTether.startUsbDeviceWatcher(async serial => {
     const instance = loadInstanceConfigs()[serial] ?? {};
-    const enabled = instance.networkRouteEnabled !== false;
+    const routeMode = getDeviceNetworkRouteMode(instance);
+    const enabled = isDeviceNetworkRouteEnabled(instance);
     return {
       enabled,
-      proxy: enabled ? await resolveReverseTetherProxy(instance.proxyId ?? null) : null,
+      proxy: enabled && routeMode === "proxy"
+        ? await resolveReverseTetherProxy(instance.proxyId ?? null)
+        : null,
     };
   });
 
@@ -9871,7 +9892,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       let removedMissingAssignment = false;
       for (const [serial, instance] of Object.entries(cfg)) {
         if (instance.proxyId != null && !validProxyIds.has(instance.proxyId)) {
-          cfg[serial] = { ...instance, proxyId: null };
+          cfg[serial] = {
+            ...instance,
+            proxyId: null,
+            networkRouteMode: "device",
+            networkRouteEnabled: false,
+          };
           removedMissingAssignment = true;
         }
       }
@@ -9879,8 +9905,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const assignments = Object.fromEntries(
         Object.entries(cfg).map(([serial, instance]) => [serial, instance.proxyId ?? null]),
       );
+      const routeModes = Object.fromEntries(
+        Object.entries(cfg).map(([serial, instance]) => [serial, getDeviceNetworkRouteMode(instance)]),
+      );
       res.json({
         assignments,
+        routeModes,
         proxies: proxies.map(proxy => ({
           id: proxy.id,
           name: proxy.name,
@@ -9955,7 +9985,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const serial = p(req, "serial");
       const cfg = loadInstanceConfigs();
-      const proxyId = cfg[serial]?.proxyId ?? null;
+      const instance = cfg[serial] ?? {};
+      const routeMode = getDeviceNetworkRouteMode(instance);
+      const proxyId = instance.proxyId ?? null;
+      if (routeMode === "device") {
+        return res.status(400).json({
+          ok: false,
+          error: "This device is set to use its normal connection. Choose laptop internet or a proxy first.",
+        });
+      }
+      if (routeMode === "proxy" && proxyId === null) {
+        return res.status(400).json({ ok: false, error: "No proxy is assigned to this device." });
+      }
       if (proxyId !== null) {
         const proxies = await storage.getProxies();
         if (!proxies.some(proxy => proxy.id === proxyId)) {
@@ -9964,12 +10005,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           return res.status(404).json({ ok: false, error: "The assigned proxy no longer exists. The phone was not routed directly." });
         }
       }
-      cfg[serial] = { ...cfg[serial], networkRouteEnabled: true };
+      cfg[serial] = { ...instance, networkRouteMode: routeMode, networkRouteEnabled: true };
       saveInstanceConfigs(cfg);
-      const description = await applyDeviceProxyAssignment(serial, proxyId);
+      const description = await applyDeviceProxyAssignment(serial, routeMode, proxyId);
       res.json({
         ok: true,
         applied: true,
+        routeMode,
         proxyId,
         routeEnabled: true,
         message: description
@@ -10004,9 +10046,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   const deviceProxySchema = z.object({ proxyId: z.number().nullable() });
   app.post("/api/mobile/devices/:serial/proxy", async (req: Request, res: Response) => {
     try {
-      const input = deviceProxySchema.parse(req.body);
+      const input = deviceProxySchema.extend({
+        routeMode: z.enum(["device", "laptop", "proxy"]).optional(),
+      }).parse(req.body);
       const serial = p(req, "serial");
-      if (input.proxyId !== null) {
+      const routeMode = input.routeMode
+        ?? (input.proxyId === null ? "laptop" : "proxy");
+      if (routeMode === "proxy" && input.proxyId === null) {
+        return res.status(400).json({ ok: false, error: "Choose a proxy for proxy routing." });
+      }
+      if (routeMode !== "proxy" && input.proxyId !== null) {
+        return res.status(400).json({ ok: false, error: "A proxy can only be assigned when proxy routing is selected." });
+      }
+      if (routeMode === "proxy" && input.proxyId !== null) {
         const proxies = await storage.getProxies();
         if (!proxies.some(proxy => proxy.id === input.proxyId)) {
           return res.status(404).json({ ok: false, error: "Proxy Manager entry not found" });
@@ -10016,7 +10068,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       cfg[serial] = {
         ...cfg[serial],
         proxyId: input.proxyId ?? null,
-        networkRouteEnabled: true,
+        networkRouteMode: routeMode,
+        networkRouteEnabled: routeMode !== "device",
       };
       saveInstanceConfigs(cfg);
 
@@ -10024,17 +10077,21 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (!device) {
         return res.json({
           ok: true,
+          routeMode,
           proxyId: input.proxyId,
           applied: false,
           pending: true,
-          message: "Saved. The device will use this setting when it reconnects.",
+          message: routeMode === "device"
+            ? "Saved. Aura will leave the phone's normal connection unchanged."
+            : "Saved. The device will use this setting when it reconnects.",
         });
       }
 
       try {
-        const description = await applyDeviceProxyAssignment(serial, input.proxyId);
+        const description = await applyDeviceProxyAssignment(serial, routeMode, input.proxyId);
         return res.json({
           ok: true,
+          routeMode,
           proxyId: input.proxyId,
           applied: true,
           message: description
@@ -11392,7 +11449,8 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
         deviceProxy: null,
         upstreamProxy,
         proxyId,
-        routeEnabled: cfg[serial]?.networkRouteEnabled !== false,
+        routeMode: getDeviceNetworkRouteMode(cfg[serial]),
+        routeEnabled: isDeviceNetworkRouteEnabled(cfg[serial]),
         relayActive: routeStatus.running,
         adbReverseActive,
         routeStatus,
@@ -11425,7 +11483,12 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       // 4. Stop the USB internet route and clear the saved proxy assignment.
       await reverseTether.stopDevice(serial);
       const cfg = loadInstanceConfigs();
-      cfg[serial] = { ...cfg[serial], proxyId: null, networkRouteEnabled: false };
+      cfg[serial] = {
+        ...cfg[serial],
+        proxyId: null,
+        networkRouteMode: "device",
+        networkRouteEnabled: false,
+      };
       saveInstanceConfigs(cfg);
 
       // 5. Disconnect the device from ADB so it disappears from the device list
@@ -11474,6 +11537,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
         proxyId: null,
         proxyPort: null,
         proxyProtocol: null as any,
+        networkRouteMode: "device",
         networkRouteEnabled: false,
       };
       saveInstanceConfigs(cfg);
