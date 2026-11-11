@@ -17,7 +17,7 @@ import {
   exportAllSnapchatReplyHistory,
   exportSnapchatReplyHistory,
 } from "../mobile/snapchatReplyHistory";
-import * as proxyRelay from "../mobile/proxyRelay";
+import * as reverseTether from "../mobile/reverseTether";
 import {
   getAdapterIp,
   startAdapterProxy,
@@ -841,25 +841,20 @@ type InstanceConfig = { proxyId?: number | null; proxyProtocol?: "http" | "socks
 type InstanceConfigMap = Record<string, InstanceConfig>;
 
 async function applyDeviceProxyAssignment(serial: string, proxyId: number | null): Promise<string | null> {
-  if (proxyId === null) {
-    await android.setDeviceProxy(serial, null);
-    await android.adbReverseRemove(serial);
-    proxyRelay.stopRelayForDevice(serial);
-    return null;
-  }
+  // Stop the previous path first so a deleted or invalid proxy can never leave
+  // an outdated route active under the newly saved assignment.
+  await reverseTether.stopDevice(serial);
+  await android.setDeviceProxy(serial, null);
+  const upstream = await resolveReverseTetherProxy(proxyId);
+  const result = await reverseTether.startDevice(serial, upstream);
+  return result.message;
+}
 
+async function resolveReverseTetherProxy(proxyId: number | null): Promise<reverseTether.ReverseTetherProxy | null> {
+  if (proxyId === null) return null;
   const proxies = await storage.getProxies();
   const proxy = proxies.find(entry => entry.id === proxyId);
-  if (!proxy) throw new Error("The selected Proxy Manager entry no longer exists");
-
-  let upstream: {
-    host: string;
-    port: number;
-    user?: string;
-    pass?: string;
-    protocol?: "http" | "socks5";
-  };
-  let description: string;
+  if (!proxy) throw new Error("The selected Proxy Manager entry no longer exists; the phone was not routed directly.");
 
   if (proxy.proxyType === "adapter") {
     const adapterName = proxy.adapterName?.trim();
@@ -867,37 +862,22 @@ async function applyDeviceProxyAssignment(serial: string, proxyId: number | null
       throw new Error(`The selected network adapter "${adapterName || "(unnamed)"}" is unavailable`);
     }
     const tunnelPort = await startAdapterProxy(proxy.id, adapterName);
-    upstream = { host: "127.0.0.1", port: tunnelPort, protocol: "http" };
-    description = `adapter ${adapterName}`;
-  } else {
-    const protocol = proxy.proxyType === "socks5" ? "socks5" : "http";
-    upstream = {
-      host: proxy.host,
-      port: proxy.port,
-      user: proxy.username ?? undefined,
-      pass: proxy.password ?? undefined,
-      protocol,
+    return {
+      protocol: "http",
+      host: "127.0.0.1",
+      port: tunnelPort,
+      label: `adapter ${adapterName}`,
     };
-    description = `${protocol.toUpperCase()} ${proxy.host}:${proxy.port}`;
   }
 
-  // Remove any old tunnel before changing the Android global proxy. This keeps
-  // a dead localhost port from being left behind if reconfiguration fails.
-  await android.adbReverseRemove(serial);
-  proxyRelay.stopRelayForDevice(serial);
-  const relayPort = await proxyRelay.startRelay(serial, upstream);
-
-  try {
-    await android.adbReverse(serial, relayPort);
-    await android.setDeviceProxy(serial, { host: "127.0.0.1", port: relayPort });
-  } catch (error) {
-    await android.setDeviceProxy(serial, null).catch(() => {});
-    await android.adbReverseRemove(serial).catch(() => {});
-    proxyRelay.stopRelayForDevice(serial);
-    throw error;
-  }
-
-  return description;
+  return {
+    protocol: proxy.proxyType === "socks5" ? "socks5" : "http",
+    host: proxy.host,
+    port: proxy.port,
+    username: proxy.username ?? undefined,
+    password: proxy.password ?? undefined,
+    label: `${proxy.proxyType === "socks5" ? "SOCKS5" : "HTTP"} ${proxy.host}:${proxy.port}`,
+  };
 }
 
 function configFilePath(): string {
@@ -1378,6 +1358,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // Artifact-managed workflows can start a second API process in the same
   // workspace. Only one process may launch mobile input against real devices.
   startMobileAutomationProcessLock();
+  reverseTether.startUsbDeviceWatcher(async serial => {
+    const proxyId = loadInstanceConfigs()[serial]?.proxyId ?? null;
+    return resolveReverseTetherProxy(proxyId);
+  });
 
   app.get("/api/diagnostics/snapshot", (_req: Request, res: Response) => {
     logger.info("[diagnostics] runtime snapshot requested");
@@ -9922,20 +9906,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
 
-  // Apply proxy to a running device via a transparent local relay.
-  //
-  // How it works:
-  //   1. Equinox starts a local TCP relay on a random port (0.0.0.0).
-  //   2. The relay forwards all CONNECT (HTTPS) and plain HTTP to the real
-  //      upstream proxy, injecting Proxy-Authorization automatically.
-  //   3. Android's global proxy is pointed at GATEWAY_IP:RELAY_PORT — no
-  //      credentials needed from Android's side, so auth stripping is never
-  //      an issue.
-  //
-  // The gateway IP (e.g. 10.0.2.2) is how the Android VM reaches the Windows
-  // host. We detect it from the device's default route so it works for both
-  // AVD and BlueStacks without hardcoding anything.
-  // Check the external IP seen through the device's assigned proxy (server-side test).
+  // Check the external IP seen through a saved proxy (server-side test).
   app.get("/api/mobile/devices/:serial/check-ip", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
@@ -9958,14 +9929,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
-  // Apply the saved proxy to a running Android device via a host-side relay.
-  //
-  // Why a relay instead of setting http_proxy directly?
-  //   Android's `settings put global http_proxy` only accepts "host:port" — it
-  //   cannot carry credentials.  Authenticated proxies silently fail (407) and
-  //   apps fall back to a direct connection.  We start a local TCP relay that
-  //   forwards traffic to the real upstream and injects Proxy-Authorization
-  //   automatically.  Android is pointed at gateway_ip:relay_port (no creds).
+  // Start a packet-level USB reverse-tether VPN. When a proxy is assigned, the
+  // per-device host relay sends TCP connections through it and blocks other
+  // UDP except DNS; without a proxy, IPv4 TCP/UDP exits through Windows' normal
+  // network route.
   app.post("/api/mobile/devices/:serial/apply-proxy", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
@@ -9974,12 +9941,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (proxyId !== null) {
         const proxies = await storage.getProxies();
         if (!proxies.some(proxy => proxy.id === proxyId)) {
-          // A deleted Proxy Manager entry is equivalent to no assignment: clear
-          // stale Android settings and fall back to the phone's normal network.
-          cfg[serial] = { ...cfg[serial], proxyId: null };
-          saveInstanceConfigs(cfg);
-          await applyDeviceProxyAssignment(serial, null);
-          return res.json({ ok: true, applied: true, proxyId: null, message: "Missing proxy assignment cleared; device is using its default connection" });
+          await reverseTether.stopDevice(serial);
+          await android.setDeviceProxy(serial, null);
+          return res.status(404).json({ ok: false, error: "The assigned proxy no longer exists. The phone was not routed directly." });
         }
       }
       const description = await applyDeviceProxyAssignment(serial, proxyId);
@@ -9988,12 +9952,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         applied: true,
         proxyId,
         message: description
-          ? `Device proxy applied: ${description}`
-          : "Device proxy cleared; using the device's default connection",
+          ? description
+          : "USB route is waiting for Android VPN approval. Tap Allow on the phone to activate laptop internet.",
       });
     } catch (e: any) {
-      const serial = p(req, "serial");
-      await applyDeviceProxyAssignment(serial, null).catch(() => {});
       res.status(500).json({ ok: false, error: e?.message ?? "Apply proxy failed" });
     }
   });
@@ -10033,17 +9995,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           applied: true,
           message: description
             ? `Saved and applied ${description}`
-            : "Saved and cleared; the device is using its default connection",
+            : "Saved; the device will use laptop internet over USB",
         });
       } catch (error: any) {
-        // Keep the saved choice for retry, but clear any old route so a failed
-        // switch does not silently keep using a different proxy.
-        await applyDeviceProxyAssignment(serial, null).catch(() => {});
         return res.json({
           ok: true,
           proxyId: input.proxyId,
           applied: false,
-          warning: `Saved, but not applied; using the device default when reachable. ${error?.message ?? "Could not apply the device proxy"}`,
+          warning: `Saved, but not applied; the phone was not switched to direct internet. ${error?.message ?? "Could not apply the device proxy"}`,
         });
       }
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
@@ -11365,17 +11324,16 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
     }
   });
 
-  // ── Device proxy status (what proxy Android itself is configured with) ─────
+  // ── Device internet route status ───────────────────────────────────────────
   app.get("/api/mobile/devices/:serial/proxy-status", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
-      const deviceProxy = await android.getDeviceProxySetting(serial);
       const cfg = loadInstanceConfigs();
       const proxyId = cfg[serial]?.proxyId ?? null;
-      const relayPort = proxyRelay.getRelayPort(serial);
-      const adbReverseActive = relayPort === null
+      const routeStatus = reverseTether.getDeviceStatus(serial);
+      const adbReverseActive = routeStatus.port === null
         ? false
-        : await android.hasAdbReverse(serial, relayPort).catch(() => false);
+        : await android.hasAdbReverseLocalAbstract(serial, routeStatus.port).catch(() => false);
       let upstreamProxy: string | null = null;
       if (proxyId) {
         const proxies = await storage.getProxies();
@@ -11387,11 +11345,12 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
         }
       }
       res.json({
-        deviceProxy,
+        deviceProxy: null,
         upstreamProxy,
         proxyId,
-        relayActive: relayPort !== null,
+        relayActive: routeStatus.running,
         adbReverseActive,
+        routeStatus,
       });
     } catch (e: any) {
       res.status(500).json({ error: e?.message ?? "Could not read device proxy status" });
@@ -11418,9 +11377,8 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       // 3. Clear proxy from the device's global settings
       await android.setDeviceProxy(serial, null);
 
-      // 4. Stop the relay, remove adb reverse tunnel, and clear instance config
-      android.adbReverseRemove(serial);
-      proxyRelay.stopRelayForDevice(serial);
+      // 4. Stop the USB internet route and clear the saved proxy assignment.
+      await reverseTether.stopDevice(serial);
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], proxyId: null };
       saveInstanceConfigs(cfg);
@@ -11463,9 +11421,8 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       await android.setDeviceProxy(serial, null);
       steps.push("✓ Proxy cleared");
 
-      // 4. Stop relay, remove adb reverse tunnel, and clear instance config
-      android.adbReverseRemove(serial);
-      proxyRelay.stopRelayForDevice(serial);
+      // 4. Stop the USB internet route and clear the saved proxy assignment.
+      await reverseTether.stopDevice(serial);
       const cfg = loadInstanceConfigs();
       cfg[serial] = { ...cfg[serial], proxyId: null, proxyPort: null, proxyProtocol: null as any };
       saveInstanceConfigs(cfg);

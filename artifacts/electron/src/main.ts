@@ -326,6 +326,9 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
       IDEVICE_BIN_DIR: app.isPackaged
         ? path.join(process.resourcesPath, "bin", "win32")
         : path.join(__dirname, "..", "..", "resources", "bin", "win32"),
+      AURA_GNIREHTET_DIR: app.isPackaged
+        ? path.join(process.resourcesPath, "bin", "win32", "gnirehtet")
+        : path.join(__dirname, "..", "resources", "bin", "win32", "gnirehtet"),
       // Packaged installs run from an install directory that is often
       // read-only without admin rights (e.g. Program Files) — process.cwd()
       // there is NOT a safe place to write files. ADB auto-install / the

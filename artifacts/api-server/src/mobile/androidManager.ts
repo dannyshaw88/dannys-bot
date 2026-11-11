@@ -621,6 +621,17 @@ export async function hasAdbReverse(serial: string, port: number): Promise<boole
   });
 }
 
+/** Check the Gnirehtet abstract-socket reverse rule for one device. */
+export async function hasAdbReverseLocalAbstract(serial: string, port: number): Promise<boolean> {
+  const tools = detectToolset();
+  if (!tools.adb.found || !tools.adb.path) return false;
+  const output = await runAdb(tools.adb.path, ["-s", serial, "reverse", "--list"], 5000);
+  return output.split(/\r?\n/).some(line => {
+    const fields = line.trim().split(/\s+/);
+    return fields.includes("localabstract:gnirehtet") && fields.includes(`tcp:${port}`);
+  });
+}
+
 export async function getAndroidId(serial: string): Promise<string | null> {
   const tools = detectToolset();
   if (!tools.adb.found || !tools.adb.path) return null;

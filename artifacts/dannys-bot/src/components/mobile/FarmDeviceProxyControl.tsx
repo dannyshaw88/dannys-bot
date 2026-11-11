@@ -44,11 +44,11 @@ export function FarmDeviceProxyControl({
     ? selectedProxy.proxyType === "adapter"
       ? `Adapter: ${selectedProxy.adapterName || selectedProxy.name || "network"}`
       : `${selectedProxy.name || `${selectedProxy.host}:${selectedProxy.port}`} (${selectedProxy.proxyType === "socks5" ? "SOCKS5" : "HTTP"})`
-    : "Device default connection";
+    : "Laptop internet over USB";
 
   const applySavedAssignment = useCallback(async (showProgress: boolean, force = false) => {
     if (!online) {
-      setStatus(proxyId == null ? "Using device default when connected" : "Saved; applies when connected");
+      setStatus(proxyId == null ? "Laptop internet applies when connected" : "Saved; applies when connected");
       setFailed(false);
       return;
     }
@@ -63,17 +63,21 @@ export function FarmDeviceProxyControl({
         const statusResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/proxy-status`);
         const current = await readJson(statusResponse);
         if (statusResponse.ok) {
-          const matches = proxyId == null
-            ? !current?.deviceProxy && !current?.relayActive
+          const assignmentMatches = proxyId == null
+            ? current?.proxyId == null
             : current?.proxyId === proxyId &&
-              current?.relayActive === true &&
-              current?.adbReverseActive === true &&
-              Boolean(current?.deviceProxy) &&
               (selectedProxy?.proxyType === "adapter"
                 ? current?.upstreamProxy === `adapter:${selectedProxy.adapterName ?? "unknown"}`
                 : current?.upstreamProxy === `${selectedProxy?.host}:${selectedProxy?.port}`);
+          const transportReady = current?.adbReverseActive === true;
+          const matches = assignmentMatches && current?.relayActive === true && transportReady;
           if (matches) {
-            setStatus(proxyId == null ? "Using device default connection" : `Applied: ${selectedLabel}`);
+            setStatus(proxyId == null ? "Laptop internet tunnel is active" : `Applied: ${selectedLabel}`);
+            setFailed(false);
+            return;
+          }
+          if (assignmentMatches && current?.routeStatus?.starting === true && transportReady) {
+            setStatus("Waiting for the one-time Android VPN approval. Tap Allow on the phone to activate the laptop route.");
             setFailed(false);
             return;
           }
@@ -86,7 +90,7 @@ export function FarmDeviceProxyControl({
       if (!response.ok || result?.ok !== true) {
         throw new Error(result?.error ?? `Could not apply the device proxy (${response.status})`);
       }
-      setStatus(result.message ?? (proxyId == null ? "Using device default connection" : "Proxy applied"));
+      setStatus(result.message ?? (proxyId == null ? "Laptop internet tunnel is active" : "Proxy route applied"));
       setFailed(false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not apply the device proxy");
@@ -97,10 +101,29 @@ export function FarmDeviceProxyControl({
   }, [online, proxyId, selectedLabel, selectedProxy, serial]);
 
   useEffect(() => {
+    if (!online || !status.startsWith("Waiting for the one-time Android VPN approval")) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const response = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/proxy-status`);
+        const current = await readJson(response);
+        if (!response.ok) return;
+        if (current?.routeStatus?.error) {
+          setStatus(current.routeStatus.error);
+          setFailed(true);
+        } else if (current?.relayActive && current?.adbReverseActive) {
+          setStatus(proxyId == null ? "Laptop internet tunnel is active" : `Applied: ${selectedLabel}`);
+          setFailed(false);
+        }
+      } catch {}
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [online, proxyId, selectedLabel, serial, status]);
+
+  useEffect(() => {
     if (loading || proxyId === undefined) return;
     if (!online) {
       handledOnline.current = false;
-      setStatus(proxyId == null ? "Using device default when connected" : "Saved; applies when connected");
+      setStatus(proxyId == null ? "Laptop internet applies when connected" : "Saved; applies when connected");
       setFailed(false);
       return;
     }
@@ -160,7 +183,7 @@ export function FarmDeviceProxyControl({
           disabled={loading || busy || Boolean(proxyConfigError)}
           onChange={event => { void handleSelection(event.target.value); }}
         >
-          <option value="">Device default connection</option>
+            <option value="">Laptop internet over USB</option>
           {proxyId != null && !currentProxyExists && (
             <option value={String(proxyId)}>Missing Proxy Manager entry</option>
           )}
@@ -186,8 +209,16 @@ export function FarmDeviceProxyControl({
       </div>
       <div className={`mt-1 flex min-h-4 items-center gap-1 text-[10px] ${failed ? "text-destructive" : "text-muted-foreground"}`} data-testid={`status-device-proxy-${serial}`}>
         {proxyId == null && !failed ? <Wifi className="w-3 h-3 shrink-0" aria-hidden="true" /> : null}
-        <span>{proxyConfigError || (loading ? "Loading saved proxies…" : (status || (proxyId == null ? "Using device default connection" : selectedLabel)))}</span>
+        <span>{proxyConfigError || (loading ? "Loading saved proxies…" : (status || (proxyId == null ? "Laptop internet over USB" : selectedLabel)))}</span>
       </div>
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        Requires USB debugging and one VPN approval per phone. Phone Wi-Fi and mobile data are paused while this route is active, then restored when disconnected.
+        {proxyId != null
+          ? selectedProxy?.proxyType === "socks5"
+            ? " The assigned SOCKS5 proxy carries TCP and UDP traffic."
+            : " The assigned HTTP proxy carries TCP; DNS uses the laptop network and other UDP is blocked."
+          : ""}
+      </p>
     </div>
   );
 }
@@ -245,7 +276,7 @@ export function FarmDeviceProxySettings({
       <div className="mb-3">
         <h2 className="text-sm font-semibold text-foreground">Device Network Route</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Applies to every account slot on this phone. Leave it on the default connection to use the phone’s normal network.
+          Applies to every account slot on this phone. The default route sends phone internet through the laptop over USB.
         </p>
       </div>
       <FarmDeviceProxyControl

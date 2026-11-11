@@ -49,9 +49,31 @@ jobs:
     needs: build-web
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Rust for the Windows relay
+        uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Build the patched Windows reverse-tether relay
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          cargo build --release --locked --manifest-path artifacts/electron/third_party/gnirehtet-relay-rust/Cargo.toml
+          $target = "artifacts/electron/resources/bin/win32/gnirehtet"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item "artifacts/electron/third_party/gnirehtet-relay-rust/target/release/gnirehtet.exe" "$target/gnirehtet.exe"
+
+          $archive = Join-Path $env:RUNNER_TEMP "gnirehtet-rust-win64-v2.5.1.zip"
+          $unpack = Join-Path $env:RUNNER_TEMP "gnirehtet-rust"
+          Invoke-WebRequest `
+            -Uri "https://github.com/Genymobile/gnirehtet/releases/download/v2.5.1/gnirehtet-rust-win64-v2.5.1.zip" `
+            -OutFile $archive
+          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne "7f5b1063e7895182aa60def1437e50363c3758144088dcd079037bb7c3c46a1c") {
+            throw "Gnirehtet release archive SHA-256 did not match the published checksum."
+          }
+          Expand-Archive -Force -Path $archive -DestinationPath $unpack
+          Copy-Item (Join-Path $unpack "gnirehtet.apk") "$target/gnirehtet.apk"
       - name: Download API bundle
         uses: actions/download-artifact@v4
         with:
@@ -96,6 +118,8 @@ jobs:
             "dist/server/start.mjs",
             "dist/frontend/public/index.html",
             "resources/bin/win32/idevice_id.exe",
+            "resources/bin/win32/gnirehtet/gnirehtet.exe",
+            "resources/bin/win32/gnirehtet/gnirehtet.apk",
             "assets/icon.ico"
           )
           foreach ($path in $required) {

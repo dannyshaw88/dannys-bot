@@ -499,8 +499,8 @@ async function startScrcpySessionInner(serial: string, opts: { maxSize?: number;
  * call even if nothing is running. `forward --remove-all` is scoped to this
  * device only (adb's `-s <serial>` targets the remove to that device's
  * forwards), so it can't disturb another connected phone's tunnels. The
- * mobile-farm proxy relay (`proxyRelay.ts`) uses `adb reverse`, a completely
- * separate tunnel table, so this doesn't touch it either.
+ * USB reverse-tether routing uses `adb reverse`, a completely separate tunnel
+ * table, so this doesn't touch the internet route either.
  */
 export function cleanupStaleSession(serial: string): void {
   try { runAdbSync(serial, ["shell", "pkill", "-f", "com.genymobile.scrcpy.Server"], 3000); } catch { /* ignore */ }
