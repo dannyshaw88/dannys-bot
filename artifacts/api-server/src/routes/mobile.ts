@@ -9940,7 +9940,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       res.json({
         ok: true,
         stagedPath,
-        message: "Gnirehtet was copied to Downloads. On the phone, open File Manager → Downloads → AuraGnirehtet.apk and install it. Then return here and retry the route.",
+        message: "Gnirehtet was copied to Downloads. On the phone, open File Manager → Downloads → AuraGnirehtet.apk and install it. If prompted, allow File Manager to install this app. Then return here and retry the route.",
       });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e?.message ?? "Could not copy the helper APK to the phone" });

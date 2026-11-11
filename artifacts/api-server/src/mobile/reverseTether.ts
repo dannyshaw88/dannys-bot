@@ -434,9 +434,13 @@ async function startUnlocked(
         : "Waiting for the one-time Android VPN approval. Tap Allow on the phone to activate the laptop route.",
     };
   } catch (error) {
-    entry.error = error instanceof Error ? error.message : String(error);
-    entry.state = "error";
+    const message = error instanceof Error ? error.message : String(error);
     await stopUnlocked(serial);
+    // Keep a failed state so the USB watcher does not repeatedly trigger the
+    // same user-facing Android install prompt. A deliberate Apply/Retry clears it.
+    entry.error = message;
+    entry.state = "error";
+    tunnels.set(serial, entry);
     throw error;
   }
 }
@@ -474,6 +478,7 @@ export async function stageHelperApkForManualInstall(serial: string): Promise<st
   const { apk } = executablePaths();
   const remotePath = "/sdcard/Download/AuraGnirehtet.apk";
   try {
+    await runAdb(adb, serial, ["shell", "mkdir", "-p", "/sdcard/Download"]);
     const { stdout, stderr } = await execFileAsync(adb, ["-s", serial, "push", apk, remotePath], {
       encoding: "utf8",
       timeout: 60_000,
@@ -550,7 +555,6 @@ export function startUsbDeviceWatcher(
           await startDevice(serial, proxy);
         } catch (error) {
           console.warn(`[reverse-tether] ${serial}: ${error instanceof Error ? error.message : String(error)}`);
-          await stopDevice(serial).catch(() => {});
         }
       }
       for (const serial of tunnels.keys()) {

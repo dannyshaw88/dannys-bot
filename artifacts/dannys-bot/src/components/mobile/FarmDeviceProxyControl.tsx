@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCw, ShieldCheck, Wifi } from "lucide-react";
+import { Download, Loader2, RefreshCw, ShieldCheck, Wifi } from "lucide-react";
 import { useCreateProxy } from "@/hooks/use-proxies";
 
 export type FarmProxyOption = {
@@ -37,6 +37,7 @@ export function FarmDeviceProxyControl({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [failed, setFailed] = useState(false);
+  const [manualInstallReady, setManualInstallReady] = useState(false);
   const handledAssignment = useRef<number | null | undefined>(undefined);
   const handledOnline = useRef(false);
   const selectedProxy = proxies.find(proxy => proxy.id === proxyId);
@@ -63,6 +64,11 @@ export function FarmDeviceProxyControl({
         const statusResponse = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/proxy-status`);
         const current = await readJson(statusResponse);
         if (statusResponse.ok) {
+          if (current?.routeStatus?.error) {
+            setStatus(current.routeStatus.error);
+            setFailed(true);
+            return;
+          }
           const assignmentMatches = proxyId == null
             ? current?.proxyId == null
             : current?.proxyId === proxyId &&
@@ -163,7 +169,32 @@ export function FarmDeviceProxyControl({
     }
   };
 
+  const stageHelperForManualInstall = async () => {
+    setBusy(true);
+    setStatus("Copying the helper installer to the phone…");
+    setFailed(false);
+    try {
+      const response = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(serial)}/stage-reverse-tether-apk`,
+        { method: "POST" },
+      );
+      const result = await readJson(response);
+      if (!response.ok || result?.ok !== true) {
+        throw new Error(result?.error ?? "Could not copy the helper installer to the phone");
+      }
+      setManualInstallReady(true);
+      setStatus(result.message ?? "Copied to Downloads. Open File Manager on the phone and install AuraGnirehtet.apk, then retry the route.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not copy the helper installer to the phone");
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const currentProxyExists = proxyId == null || proxies.some(proxy => proxy.id === proxyId);
+  const canStageManualInstall =
+    failed && /INSTALL_FAILED_USER_RESTRICTED|Install canceled by user/i.test(status);
 
   return (
     <div
@@ -210,8 +241,19 @@ export function FarmDeviceProxyControl({
       </div>
       <div className={`mt-1 flex min-h-4 items-center gap-1 text-[10px] ${failed ? "text-destructive" : "text-muted-foreground"}`} data-testid={`status-device-proxy-${serial}`}>
         {proxyId == null && !failed ? <Wifi className="w-3 h-3 shrink-0" aria-hidden="true" /> : null}
-        <span>{proxyConfigError || (loading ? "Loading saved proxies…" : (status || (proxyId == null ? "Laptop internet over USB" : selectedLabel)))}</span>
+        <span className="break-words">{proxyConfigError || (loading ? "Loading saved proxies…" : (status || (proxyId == null ? "Laptop internet over USB" : selectedLabel)))}</span>
       </div>
+      {canStageManualInstall && !manualInstallReady && (
+        <button
+          type="button"
+          onClick={() => { void stageHelperForManualInstall(); }}
+          disabled={busy || loading || !online}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          Copy helper to phone for manual install
+        </button>
+      )}
       <p className="mt-1 text-[10px] text-muted-foreground">
         Requires USB debugging and one VPN approval per phone. Phone Wi-Fi and mobile data are paused while this route is active, then restored when disconnected.
         {proxyId != null
