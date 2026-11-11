@@ -466,6 +466,28 @@ export function stopDevice(serial: string): Promise<void> {
   return withSerialLock(serial, () => stopUnlocked(serial));
 }
 
+export async function stageHelperApkForManualInstall(serial: string): Promise<string> {
+  const adb = android.detectToolset().adb.path;
+  if (!adb) throw new Error("ADB is not available. Connect the phone by USB and authorize USB debugging.");
+  const device = (await android.listDevices()).find(entry => entry.serial === serial && entry.state === "device");
+  if (!device) throw new Error("The phone is not connected and authorized over USB.");
+  const { apk } = executablePaths();
+  const remotePath = "/sdcard/Download/AuraGnirehtet.apk";
+  try {
+    const { stdout, stderr } = await execFileAsync(adb, ["-s", serial, "push", apk, remotePath], {
+      encoding: "utf8",
+      timeout: 60_000,
+      windowsHide: true,
+    } as any);
+    const output = `${stdout ?? ""}${stderr ?? ""}`.trim();
+    if (/failed|error:/i.test(output)) throw new Error(output);
+  } catch (error: any) {
+    const detail = `${error?.stderr ?? ""}\n${error?.stdout ?? ""}`.trim();
+    throw new Error((detail || error?.message || "Could not copy the helper APK to the phone").slice(0, 1200));
+  }
+  return remotePath;
+}
+
 export function getDeviceStatus(serial: string) {
   const entry = tunnels.get(serial);
   return {
@@ -519,6 +541,9 @@ export function startUsbDeviceWatcher(
           }
           continue;
         }
+        // A user-rejected install or VPN prompt must not be retried every poll:
+        // let the user resolve the phone-side prompt and explicitly retry.
+        if (current?.state === "error") continue;
         try {
           const proxy = await loadProxy(serial);
           await android.setDeviceProxy(serial, null);

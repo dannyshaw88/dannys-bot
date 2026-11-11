@@ -9933,6 +9933,20 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   // per-device host relay sends TCP connections through it and blocks other
   // UDP except DNS; without a proxy, IPv4 TCP/UDP exits through Windows' normal
   // network route.
+  app.post("/api/mobile/devices/:serial/stage-reverse-tether-apk", async (req: Request, res: Response) => {
+    try {
+      const serial = p(req, "serial");
+      const stagedPath = await reverseTether.stageHelperApkForManualInstall(serial);
+      res.json({
+        ok: true,
+        stagedPath,
+        message: "Gnirehtet was copied to Downloads. On the phone, open File Manager → Downloads → AuraGnirehtet.apk and install it. Then return here and retry the route.",
+      });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: e?.message ?? "Could not copy the helper APK to the phone" });
+    }
+  });
+
   app.post("/api/mobile/devices/:serial/apply-proxy", async (req: Request, res: Response) => {
     try {
       const serial = p(req, "serial");
