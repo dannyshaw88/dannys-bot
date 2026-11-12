@@ -1,6 +1,7 @@
 import type { SnapchatContext } from "./context";
 import { closeAddFriendsPanel } from "./navigation/closeAddFriendsPanel";
 import { ensureSnapchatAccount } from "./navigation/ensureSnapchatAccount";
+import { dismissSnapchatNotificationPermission } from "./navigation/dismissNotificationPermission";
 import { returnToCameraBeforeNextTool } from "./navigation/returnToCamera";
 import { runAcceptFriends } from "./tools/acceptFriends";
 import { runAddFriends } from "./tools/addFriends";
@@ -39,6 +40,13 @@ async function restoreCameraBeforeNextTool(
 }
 
 export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
+  if (!await dismissSnapchatNotificationPermission(context)) {
+    if (!context.isAborted()) {
+      context.onLog("Snapchat tool dispatcher skipped because its notification permission dialog was not dismissed.");
+    }
+    return;
+  }
+
   if (!await ensureSnapchatAccount(context)) {
     context.onLog("Snapchat tool dispatcher skipped because the configured slot account was not confirmed.");
     return;
