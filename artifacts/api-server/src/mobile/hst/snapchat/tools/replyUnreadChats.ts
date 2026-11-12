@@ -5,7 +5,6 @@ import {
   appendSnapchatReplyHistory,
   containsSnapchatBoundlusLink,
   getSnapchatReplyHistory,
-  isSnapchatConversationUiArtifact,
 } from "../../../snapchatReplyHistory";
 import { generateSnapchatLunaReply } from "../../../snapchatLuna";
 import type { SnapchatContext, UiNode, UiState } from "../context";
@@ -52,7 +51,7 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
     })
     .filter(text => {
       const key = text.toLowerCase().replace(/\s+/g, " ");
-      if (!key || excluded.test(text) || isSnapchatConversationUiArtifact(text) || key.length > 700 || seen.has(key)) return false;
+      if (!key || excluded.test(text) || key.length > 700 || seen.has(key)) return false;
       seen.add(key);
       return true;
     })
@@ -66,7 +65,7 @@ function labelConversationForLuna(
   const knownLunaMessages = new Set(sentReplies.map(reply => comparableMessageText(reply.sentText)));
   const labelled = transcript.flatMap(line => {
     const text = line.trim();
-    if (!text || isSnapchatConversationUiArtifact(text)) return [];
+    if (!text) return [];
     const explicitLuna = text.match(/^(?:luna|you|me)(?:\s+sent|\s+said)?\s*:\s*(.+)$/i);
     const explicitContact = text.match(/^(?:contact|received|from [^:]+)(?:\s+sent|\s+said)?\s*:\s*(.+)$/i);
     const message = explicitLuna?.[1]?.trim() ?? explicitContact?.[1]?.trim() ?? text;
