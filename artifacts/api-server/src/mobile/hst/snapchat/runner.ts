@@ -40,14 +40,13 @@ async function restoreCameraBeforeNextTool(
 }
 
 export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
-  if (!await dismissSnapchatNotificationPermission(context)) {
-    if (!context.isAborted()) {
-      context.onLog("Snapchat tool dispatcher skipped because its notification permission dialog was not dismissed.");
-    }
+  const notificationPermissionResult = await dismissSnapchatNotificationPermission(context);
+  if (notificationPermissionResult === "aborted") {
+    if (!context.isAborted()) context.onLog("Snapchat tool dispatcher skipped because notification prompt handling was interrupted.");
     return;
   }
 
-  if (!await ensureSnapchatAccount(context)) {
+  if (!await ensureSnapchatAccount(context, notificationPermissionResult === "tapped")) {
     context.onLog("Snapchat tool dispatcher skipped because the configured slot account was not confirmed.");
     return;
   }

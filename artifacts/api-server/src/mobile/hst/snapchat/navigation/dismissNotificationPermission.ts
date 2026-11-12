@@ -8,15 +8,68 @@ function isSnapchatNotificationPermissionDialog(state: UiState): boolean {
     .replace(/[‘’]/g, "'")
     .toLowerCase();
   return visibleText.includes("snapchat") &&
-    /requesting permission to send you notifications/.test(visibleText);
+    /notifications?/.test(visibleText) &&
+    /requesting permission|permission.{0,80}notifications?|notifications?.{0,80}permission|allow.{0,40}notifications?|send.{0,40}notifications?/i
+      .test(visibleText);
 }
 
 function findDontAllowButton(nodes: UiNode[]): UiNode | undefined {
-  return nodes.find(node =>
+  const matchingLabels = nodes.filter(node =>
     [node.text, node.desc].some(value =>
-      value.trim().replace(/[‘’]/g, "'").toLowerCase() === "don't allow",
+      value.trim().replace(/[‘’]/g, "'").replace(/\s+/g, " ").toLowerCase()
+        .match(/^don't allow(?: notifications)?$/),
     ),
   );
+  const area = (node: UiNode) =>
+    Math.max(0, node.bounds[2] - node.bounds[0]) *
+    Math.max(0, node.bounds[3] - node.bounds[1]);
+  matchingLabels.sort((a, b) =>
+    Number(b.clickable) - Number(a.clickable) || area(b) - area(a),
+  );
+  const labelNode = matchingLabels[0];
+  if (!labelNode || labelNode.clickable) return labelNode;
+
+  const [left, top, right, bottom] = labelNode.bounds;
+  const x = Math.round((left + right) / 2);
+  const y = Math.round((top + bottom) / 2);
+  const clickableParent = nodes
+    .filter(node =>
+      node.clickable &&
+      x >= node.bounds[0] && x <= node.bounds[2] &&
+      y >= node.bounds[1] && y <= node.bounds[3],
+    )
+    .sort((a, b) => area(a) - area(b))[0];
+  return clickableParent ?? labelNode;
+}
+
+export type NotificationPermissionTapResult =
+  | "not-present"
+  | "tapped"
+  | "button-missing"
+  | "aborted";
+
+/**
+ * Attempts the one permitted action using a caller's already-fresh UI tree.
+ * It deliberately does not inspect the UI again after tapping.
+ */
+export async function tapSnapchatNotificationPermissionIfPresent(
+  context: SnapchatContext,
+  state: UiState,
+): Promise<NotificationPermissionTapResult> {
+  if (!isSnapchatNotificationPermissionDialog(state)) return "not-present";
+  if (context.isAborted()) return "aborted";
+
+  const denyButton = findDontAllowButton(state.nodes);
+  if (!denyButton) return "button-missing";
+
+  context.onLog(
+    "Snapchat startup: notification permission dialog found; tapping Don't allow before account and banner checks.",
+  );
+  if (!await tapNode(context, denyButton, "deny Snapchat notification permission", 0, true)) {
+    return "aborted";
+  }
+  context.onLog("Snapchat startup: tapped Don't allow; continuing.");
+  return "tapped";
 }
 
 /**
@@ -25,35 +78,27 @@ function findDontAllowButton(nodes: UiNode[]): UiNode | undefined {
  */
 export async function dismissSnapchatNotificationPermission(
   context: SnapchatContext,
-): Promise<boolean> {
+): Promise<"tapped" | "not-found" | "aborted"> {
   const deadline = Date.now() + 3_000;
   let state = await dump(context.serial);
+  let missingButtonLogged = false;
   while (
-    !isSnapchatNotificationPermissionDialog(state) &&
     !context.isAborted() &&
     Date.now() < deadline
   ) {
+    const result = await tapSnapchatNotificationPermissionIfPresent(context, state);
+    if (result === "tapped") return "tapped";
+    if (result === "aborted") return "aborted";
+    if (result === "button-missing" && !missingButtonLogged) {
+      context.onLog(
+        "Snapchat startup: notification permission dialog is present; waiting for its Don't allow control to appear.",
+      );
+      missingButtonLogged = true;
+    }
     await context.sleep(300, "exact");
-    if (context.isAborted()) return false;
+    if (context.isAborted()) return "aborted";
     state = await dump(context.serial);
   }
 
-  if (!isSnapchatNotificationPermissionDialog(state)) return !context.isAborted();
-
-  const denyButton = findDontAllowButton(state.nodes);
-  if (!denyButton) {
-    context.onLog(
-      "Snapchat startup: notification permission dialog is present, but its live Don't allow control was not found.",
-    );
-    return false;
-  }
-
-  context.onLog(
-    "Snapchat startup: notification permission dialog found; tapping Don't allow before account and banner checks.",
-  );
-  if (!await tapNode(context, denyButton, "deny Snapchat notification permission", 0, true)) {
-    return false;
-  }
-  context.onLog("Snapchat startup: tapped Don't allow; continuing.");
-  return true;
+  return context.isAborted() ? "aborted" : "not-found";
 }
