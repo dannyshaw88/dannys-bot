@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, Loader2, Power, RefreshCw, ShieldCheck, Wifi } from "lucide-react";
+import { Download, Loader2, Power, RefreshCw, ShieldCheck, Wifi, X } from "lucide-react";
 import { useCreateProxy } from "@/hooks/use-proxies";
 
 export type FarmProxyOption = {
@@ -325,6 +325,19 @@ export function FarmDeviceProxyControl({
             </option>
           ))}
         </select>
+        {routeMode === "proxy" && (
+          <button
+            type="button"
+            aria-label={`Remove proxy from device ${serial}`}
+            data-testid={`button-remove-device-proxy-${serial}`}
+            title="Remove this proxy from this phone"
+            disabled={loading || busy || Boolean(proxyConfigError)}
+            onClick={() => { void handleSelection("device"); }}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
         {routeMode !== "device" && <button
           type="button"
           aria-label={`${routeEnabled && !failed ? "Cancel" : failed ? "Retry" : "Apply"} route for device ${serial}`}
