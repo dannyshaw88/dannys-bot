@@ -40,31 +40,20 @@ export async function dismissSnapchatNotificationPermission(
 
   if (!isSnapchatNotificationPermissionDialog(state)) return !context.isAborted();
 
-  for (let attempt = 1; attempt <= 2 && !context.isAborted(); attempt++) {
-    const denyButton = findDontAllowButton(state.nodes);
-    if (!denyButton) {
-      context.onLog(
-        "Snapchat startup: notification permission dialog is present, but its live Don't allow control was not found.",
-      );
-      return false;
-    }
-
+  const denyButton = findDontAllowButton(state.nodes);
+  if (!denyButton) {
     context.onLog(
-      `Snapchat startup: notification permission dialog found; tapping Don't allow before account and banner checks (attempt ${attempt}).`,
+      "Snapchat startup: notification permission dialog is present, but its live Don't allow control was not found.",
     );
-    if (!await tapNode(context, denyButton, "deny Snapchat notification permission", 500, true)) {
-      return false;
-    }
-
-    state = await dump(context.serial);
-    if (!isSnapchatNotificationPermissionDialog(state)) {
-      context.onLog("Snapchat startup: notification permission dialog dismissed.");
-      return true;
-    }
+    return false;
   }
 
   context.onLog(
-    "Snapchat startup: notification permission dialog remained after tapping Don't allow; stopping before other navigation checks.",
+    "Snapchat startup: notification permission dialog found; tapping Don't allow before account and banner checks.",
   );
-  return false;
+  if (!await tapNode(context, denyButton, "deny Snapchat notification permission", 0, true)) {
+    return false;
+  }
+  context.onLog("Snapchat startup: tapped Don't allow; continuing.");
+  return true;
 }
