@@ -5,6 +5,7 @@ import {
   appendSnapchatReplyHistory,
   containsSnapchatBoundlusLink,
   getSnapchatReplyHistory,
+  isSnapchatConversationUiArtifact,
 } from "../../../snapchatReplyHistory";
 import { generateSnapchatLunaReply } from "../../../snapchatLuna";
 import type { SnapchatContext, UiNode, UiState } from "../context";
@@ -22,6 +23,12 @@ import {
 } from "../runtime";
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+const comparableMessageText = (value: string) => value
+  .replace(/^(?:luna|contact|you|me|received|from [^:]+)\s*(?::|sent|said)\s*/i, "")
+  .normalize("NFKC")
+  .toLowerCase()
+  .replace(/[^\p{L}\p{N}]+/gu, " ")
+  .trim();
 const isEmptyComposerValue = (value: string) => {
   const normalized = normalizedText(value);
   return !normalized || normalized === "send a chat" || normalized === "send chat";
@@ -45,11 +52,38 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
     })
     .filter(text => {
       const key = text.toLowerCase().replace(/\s+/g, " ");
-      if (!key || excluded.test(text) || key.length > 700 || seen.has(key)) return false;
+      if (!key || excluded.test(text) || isSnapchatConversationUiArtifact(text) || key.length > 700 || seen.has(key)) return false;
       seen.add(key);
       return true;
     })
     .slice(-25);
+}
+
+function labelConversationForLuna(
+  transcript: string[],
+  sentReplies: Array<{ sentText: string }>,
+): { transcript: string[]; latestIncomingMessage: string } {
+  const knownLunaMessages = new Set(sentReplies.map(reply => comparableMessageText(reply.sentText)));
+  const labelled = transcript.flatMap(line => {
+    const text = line.trim();
+    if (!text || isSnapchatConversationUiArtifact(text)) return [];
+    const explicitLuna = text.match(/^(?:luna|you|me)(?:\s+sent|\s+said)?\s*:\s*(.+)$/i);
+    const explicitContact = text.match(/^(?:contact|received|from [^:]+)(?:\s+sent|\s+said)?\s*:\s*(.+)$/i);
+    const message = explicitLuna?.[1]?.trim() ?? explicitContact?.[1]?.trim() ?? text;
+    const fromLuna = Boolean(explicitLuna) || (
+      !explicitContact && knownLunaMessages.has(comparableMessageText(message))
+    );
+    return [{
+      sender: fromLuna ? "Luna" as const : "Contact" as const,
+      text: message,
+      labelled: `${fromLuna ? "Luna" : "Contact"}: ${message}`,
+    }];
+  });
+  const latestIncomingMessage = [...labelled].reverse().find(message => message.sender === "Contact")?.text ?? "";
+  return {
+    transcript: labelled.map(message => message.labelled),
+    latestIncomingMessage,
+  };
 }
 
 async function tapUnreadChatNameArea(
@@ -383,6 +417,21 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     }
     let reply: string;
     const history = getSnapchatReplyHistory(context.slotId, contactKey);
+    const modelContext = labelConversationForLuna(transcript, history.sentReplies);
+    if (!modelContext.latestIncomingMessage) {
+      recordNotReplied(
+        row.displayName,
+        "reading-conversation",
+        "no incoming contact message could be identified in the visible conversation.",
+        transcript,
+      );
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
+    }
+    context.onLog(
+      `Reply to Unread Chats: preparing a role-labelled conversation with ${history.sentReplies.length} prior Luna reply record(s); next reply #${history.previousReplyCount + 1}.`,
+    );
     const linkReplyIndex = history.sentReplies.findIndex(entry =>
       containsSnapchatBoundlusLink(entry.sentText),
     );
@@ -419,9 +468,9 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       reply = await generateContextualReply(
         replyGoal,
         contactKey,
-        transcript,
+        modelContext.transcript,
         history,
-        transcript[transcript.length - 1] ?? "",
+        modelContext.latestIncomingMessage,
       );
     } catch (error) {
       recordNotReplied(

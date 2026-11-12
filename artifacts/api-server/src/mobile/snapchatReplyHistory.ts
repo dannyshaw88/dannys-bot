@@ -6,6 +6,7 @@ export {
   exportAllSnapchatReplyHistory,
   exportSnapchatReplyHistory,
   getSnapchatReplyHistory,
+  isSnapchatConversationUiArtifact,
 } from "./snapchatConversationStore";
 export type {
   SnapchatReplyHistoryEntry,

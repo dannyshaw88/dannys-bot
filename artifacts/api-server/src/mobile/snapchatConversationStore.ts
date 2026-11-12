@@ -85,6 +85,15 @@ function normalizeContact(value: string): string {
   return value.replace(/^@/, "").trim().toLowerCase();
 }
 
+export function isSnapchatConversationUiArtifact(value: string): boolean {
+  const normalized = value
+    .trim()
+    .replace(/^(?:contact|received|you|me|from [^:]+):\s*/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+  return /^(?:snap envelop(?:e)?|tap to view|tap to open|story sent|new chats?(?:\s+\d+\s*(?:s|sec(?:onds)?|m|min(?:utes)?|h|hr(?:ours)?|d|days?))?|\d+\s+new chats?(?:\s+\d+\s*(?:s|sec(?:onds)?|m|min(?:utes)?|h|hr(?:ours)?|d|days?))?)$/i.test(normalized);
+}
+
 function parseTime(value: string): number {
   const time = Date.parse(value);
   return Number.isFinite(time) ? time : Number.NEGATIVE_INFINITY;
@@ -132,6 +141,7 @@ function cleanSnapshot(
     const normalized = normalizeContact(text);
     if (
       !normalized ||
+      isSnapchatConversationUiArtifact(text) ||
       aliases.has(normalized) ||
       sentTexts.has(normalized) ||
       /^draft intended:/i.test(text) ||
@@ -467,7 +477,8 @@ export function getSnapchatReplyHistory(slotId: string, contactKey: string): {
         .filter(prior =>
           prior.sender === "Contact" && prior.sequence < message.sequence,
         )
-        .map(prior => prior.text),
+        .map(prior => prior.text)
+        .filter(text => !isSnapchatConversationUiArtifact(text)),
       sentText: message.text,
     })),
   };

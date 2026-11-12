@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Loader2, MessageCircle, RotateCcw, Send, Sparkles } from "lucide-react";
 
 type TestMessage = { role: "user" | "assistant"; content: string };
+type SnapchatPromptSlot = {
+  serial: string;
+  model: string;
+  slotIdx: number;
+  slotId: string;
+  username: string;
+};
 
 const PROMPT_STORAGE_KEY = "aura:snapchat-luna-test-prompt";
 
@@ -20,6 +27,10 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [promptSlots, setPromptSlots] = useState<SnapchatPromptSlot[]>([]);
+  const [selectedPromptSlot, setSelectedPromptSlot] = useState("");
+  const [loadingPromptSlot, setLoadingPromptSlot] = useState(false);
+  const [promptLoadError, setPromptLoadError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,6 +40,67 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
   const updatePrompt = (value: string) => {
     setPrompt(value);
     try { localStorage.setItem(PROMPT_STORAGE_KEY, value); } catch {}
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSlots = async () => {
+      try {
+        const phonesResponse = await fetch("/api/mobile/usb-phones", { cache: "no-store" });
+        if (!phonesResponse.ok) throw new Error("Could not load connected phones.");
+        const phonesData = await phonesResponse.json();
+        const phones = Array.isArray(phonesData?.phones) ? phonesData.phones : [];
+        const slotGroups = await Promise.all(phones.map(async (phone: any) => {
+          if (typeof phone?.serial !== "string" || !phone.serial) return [];
+          try {
+            const response = await fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`, { cache: "no-store" });
+            if (!response.ok) return [];
+            const account = await response.json();
+            return (Array.isArray(account?.slots) ? account.slots : [])
+              .flatMap((slot: any, slotIdx: number) => slot?.platform === "snapchat" ? [{
+                serial: phone.serial,
+                model: String(phone.displayName || phone.model || phone.serial),
+                slotIdx,
+                slotId: typeof slot.slotId === "string" ? slot.slotId : "",
+                username: String(slot.username || `Snapchat slot ${slotIdx + 1}`),
+              }] : []);
+          } catch {
+            return [];
+          }
+        }));
+        if (!cancelled) setPromptSlots(slotGroups.flat());
+      } catch {
+        if (!cancelled) setPromptLoadError("Could not list connected Snapchat account slots.");
+      }
+    };
+    void loadSlots();
+    return () => { cancelled = true; };
+  }, []);
+
+  const loadSlotPrompt = async (slot: SnapchatPromptSlot) => {
+    setSelectedPromptSlot(`${slot.serial}|${slot.slotIdx}|${slot.slotId}`);
+    setPromptLoadError("");
+    setLoadingPromptSlot(true);
+    try {
+      const slotIdQuery = slot.slotId ? `?slotId=${encodeURIComponent(slot.slotId)}` : "";
+      const response = await fetch(
+        `/api/mobile/devices/${encodeURIComponent(slot.serial)}/slots/${slot.slotIdx}/automation-settings${slotIdQuery}`,
+        { cache: "no-store" },
+      );
+      const settings = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(settings.error || "Could not load that account’s settings.");
+      const savedPrompt = settings?.snapchatTools?.replyUnreadChats?.replyGoal;
+      if (typeof savedPrompt !== "string" || !savedPrompt.trim()) {
+        throw new Error("That account slot has no saved Reply to Unread Chats prompt.");
+      }
+      updatePrompt(savedPrompt);
+      resetConversation();
+      setNotice("Loaded this account slot’s saved prompt. The test chat is reset to reply 1.");
+    } catch (error) {
+      setPromptLoadError(error instanceof Error ? error.message : "Could not load that account’s prompt.");
+    } finally {
+      setLoadingPromptSlot(false);
+    }
   };
 
   const sendMessage = async (event?: React.FormEvent) => {
@@ -107,6 +179,31 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
               <label className="block text-xs font-semibold text-foreground" htmlFor="luna-test-prompt">
                 Reply goal / prompt
               </label>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-muted-foreground" htmlFor="luna-test-slot">
+                  Load the prompt saved to a Snapchat account
+                </label>
+                <select
+                  id="luna-test-slot"
+                  value={selectedPromptSlot}
+                  disabled={loadingPromptSlot || promptSlots.length === 0}
+                  onChange={event => {
+                    const slot = promptSlots.find(item => `${item.serial}|${item.slotIdx}|${item.slotId}` === event.target.value);
+                    if (slot) void loadSlotPrompt(slot);
+                  }}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+                >
+                  <option value="">
+                    {loadingPromptSlot ? "Loading saved prompt…" : promptSlots.length ? "Choose an account slot…" : "No connected Snapchat slots found"}
+                  </option>
+                  {promptSlots.map(slot => (
+                    <option key={`${slot.serial}-${slot.slotId || slot.slotIdx}`} value={`${slot.serial}|${slot.slotIdx}|${slot.slotId}`}>
+                      {slot.model} · {slot.username}
+                    </option>
+                  ))}
+                </select>
+                {promptLoadError && <p role="alert" className="text-xs text-red-600">{promptLoadError}</p>}
+              </div>
               <textarea
                 id="luna-test-prompt"
                 value={prompt}
@@ -115,7 +212,10 @@ export function LunaTestPage({ embedded = false }: { embedded?: boolean }) {
                 className="min-h-[360px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <div className="flex items-center text-xs text-muted-foreground">
-                <span>Requires a ChatGPT API key saved in Settings → Security.</span>
+                <span>
+                  Requires a ChatGPT API key in Settings → Security. Otherwise, Prompt Test uses this browser’s saved prompt.
+                  Each fresh test chat starts at reply 1; add earlier turns to test a later reply number.
+                </span>
               </div>
             </CardContent>
           </Card>
