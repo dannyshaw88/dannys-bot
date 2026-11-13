@@ -31,6 +31,17 @@ const TEMPLATE = [
   "........................",
 ] as const;
 
+const FOREGROUND: Array<{ x: number; y: number }> = [];
+for (let y = 0; y < TEMPLATE.length; y++) {
+  for (let x = 0; x < TEMPLATE[y].length; x++) {
+    if (TEMPLATE[y][x] === "#") FOREGROUND.push({ x, y });
+  }
+}
+
+const EDGE_OFFSETS = [
+  [-2, 0], [2, 0], [0, -2], [0, 2],
+] as const;
+
 function luma(screen: ScreenPixels, x: number, y: number): number | null {
   const px = Math.round(x);
   const py = Math.round(y);
@@ -49,23 +60,30 @@ function scoreAt(
 ): number | null {
   const left = center.x - (TEMPLATE[0].length * scale) / 2;
   const top = center.y - (TEMPLATE.length * scale) / 2;
-  let truePositive = 0;
-  let falsePositive = 0;
-  let falseNegative = 0;
+  let foregroundTotal = 0;
+  let edgeContrastTotal = 0;
+  let edgeContrastCount = 0;
 
-  for (let y = 0; y < TEMPLATE.length; y++) {
-    for (let x = 0; x < TEMPLATE[y].length; x++) {
-      const value = luma(screen, left + (x + 0.5) * scale, top + (y + 0.5) * scale);
-      if (value === null) return null;
-      const isBright = value > 0.82;
-      const isPaperclipStroke = TEMPLATE[y][x] === "#";
-      if (isBright && isPaperclipStroke) truePositive++;
-      else if (isBright) falsePositive++;
-      else if (isPaperclipStroke) falseNegative++;
+  for (const point of FOREGROUND) {
+    const x = left + (point.x + 0.5) * scale;
+    const y = top + (point.y + 0.5) * scale;
+    const value = luma(screen, x, y);
+    if (value === null) return null;
+    foregroundTotal += value;
+    for (const [dx, dy] of EDGE_OFFSETS) {
+      const surrounding = luma(screen, x + dx * scale, y + dy * scale);
+      if (surrounding === null) continue;
+      edgeContrastTotal += value - surrounding;
+      edgeContrastCount++;
     }
   }
 
-  return 2 * truePositive / Math.max(1, 2 * truePositive + falsePositive + falseNegative);
+  const foregroundMean = foregroundTotal / Math.max(1, FOREGROUND.length);
+  const edgeContrastMean = edgeContrastTotal / Math.max(1, edgeContrastCount);
+  // The editor toolbar overlays the selected video, so background pixels vary
+  // from clip to clip. Score the white glyph's local contrast instead of
+  // rejecting it because unrelated bright pixels happen to lie nearby.
+  return foregroundMean * 0.35 + edgeContrastMean * 0.65;
 }
 
 export function findPaperclipIconByShape(
@@ -90,6 +108,6 @@ export function findPaperclipIconByShape(
   matches.sort((a, b) => b.score - a.score);
   const best = matches[0];
   const secondBest = matches[1]?.score ?? -Infinity;
-  if (!best || best.score < 0.48 || best.score - secondBest < 0.06) return null;
+  if (!best || best.score < 0.18 || best.score - secondBest < 0.015) return null;
   return best;
 }

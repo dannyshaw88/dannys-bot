@@ -7625,13 +7625,16 @@ export function decodePngPixels(buf: Buffer): { width: number; height: number; c
  * timeout, corrupt PNG) so callers can skip an unverified visual action
  * safely — this must never throw and break an automation cycle.
  */
-async function _captureScreenPixels(serial: string): Promise<{ width: number; height: number; channels: number; pixels: Buffer } | null> {
+async function _captureScreenPixels(
+  serial: string,
+  timeoutMs = 8_000,
+): Promise<{ width: number; height: number; channels: number; pixels: Buffer } | null> {
   try {
     const tools = detectToolset();
     const adb = requireTool(tools.adb, "adb");
     const { stdout } = await execFileP(adb, ["-s", serial, "exec-out", "screencap", "-p"], {
       encoding: "buffer",
-      timeout: 8000,
+      timeout: Math.max(250, Math.round(timeoutMs)),
       maxBuffer: 20 * 1024 * 1024,
     } as any);
     const buf = stdout as unknown as Buffer;
@@ -7645,8 +7648,8 @@ async function _captureScreenPixels(serial: string): Promise<{ width: number; he
 export type ScreenPixels = { width: number; height: number; channels: number; pixels: Buffer };
 
 /** In-memory device screenshot for focused visual control detection. */
-export async function captureScreenPixels(serial: string): Promise<ScreenPixels | null> {
-  return _captureScreenPixels(serial);
+export async function captureScreenPixels(serial: string, timeoutMs = 8_000): Promise<ScreenPixels | null> {
+  return _captureScreenPixels(serial, timeoutMs);
 }
 
 /**

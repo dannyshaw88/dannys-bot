@@ -98,14 +98,25 @@ async function findPaperclipByShape(
       point.y <= screenHeight * 0.88 &&
       width >= 24 && height >= 24 &&
       width <= screenWidth * 0.22 &&
-      height <= screenHeight * 0.12 &&
-      /(?:View|Image)/i.test(node.className);
+      height <= screenHeight * 0.12;
   });
-  if (!candidates.length) return null;
+  if (!candidates.length) {
+    context.onLog("Upload a Video: no small controls were exposed in the live right-side editor toolbar.");
+    return null;
+  }
 
-  const screenshot = await android.captureScreenPixels(context.serial);
-  if (!screenshot) return null;
-  return findPaperclipIconByShape(screenshot, candidates.map(center));
+  const screenshot = await android.captureScreenPixels(context.serial, 2_200);
+  if (!screenshot) {
+    context.onLog("Upload a Video: the editor screenshot was unavailable within 2.2 seconds; paperclip detection will retry.");
+    return null;
+  }
+  const match = findPaperclipIconByShape(screenshot, candidates.map(center));
+  if (!match) {
+    context.onLog(
+      `Upload a Video: paperclip shape did not match among ${candidates.length} live right-toolbar controls.`,
+    );
+  }
+  return match;
 }
 
 export async function attachSnapLink(context: SnapchatContext, rawUrl: string): Promise<boolean> {
@@ -135,15 +146,22 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
       context.onLog("Upload a Video stopped: neither the paperclip icon nor Snapchat's More chevron could be identified in the live editor.");
       return false;
     }
-    context.onLog("Upload a Video: paperclip is not visible yet; opening the live More chevron to reveal it.");
+    const morePoint = center(moreTools);
+    context.onLog(
+      `Upload a Video: paperclip is not visible yet; tapping the live More chevron at (${morePoint.x},${morePoint.y}) to reveal it.`,
+    );
     if (!await tapNode(context, moreTools, "expand the Snap editor tools with the live More chevron", 700, true)) return false;
 
-    state = await dump(context.serial);
-    linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]) ??
-      findLabeledPaperclip(state.nodes);
-    paperclipMatch = linkControl
-      ? null
-      : await findPaperclipByShape(context, state.nodes, screenWidth, screenHeight);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await context.sleep(350, "exact");
+      state = await dump(context.serial);
+      linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]) ??
+        findLabeledPaperclip(state.nodes);
+      paperclipMatch = linkControl
+        ? null
+        : await findPaperclipByShape(context, state.nodes, screenWidth, screenHeight);
+      if (linkControl || paperclipMatch) break;
+    }
   }
 
   if (linkControl) {
