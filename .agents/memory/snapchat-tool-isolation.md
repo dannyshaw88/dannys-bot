@@ -11,6 +11,12 @@ After selecting a Camera Roll image, expand the editor's More tools, identify th
 
 For Add Friends and Accept Friends, do not gate the operation on exact Add Friends page/resource markers. Use live friend-row action controls directly; preserve row-to-button targeting so unrelated controls are never tapped.
 
+On the Add Friends page, dismiss the optional “Enable Friend Suggestions” prompt before either Add Friends or Accept Friends proceeds. Tap its live clickable parent, then tap Okay on the “Think Carefully Before Adding and Accepting Friends” confirmation when it appears; stop the friend tool safely if that confirmation cannot be cleared.
+
+**Why:** Snapchat can place the suggestions upsell over the friend list, and accepting it opens a separate warning dialog that blocks both tools.
+
+**How to apply:** Run this check after reaching the Add Friends surface and before selecting any friend-row action. Match the exact prompt and confirmation labels and tap the smallest live clickable parent containing each label.
+
 Successful Upload a Snap is normal tool completion, not a request to leave Snapchat open or stop the dispatcher. Continue remaining enabled tools and run normal app-close cleanup at cycle end.
 
 Before dispatching Snapchat tools, reconcile the app session with the configured Snapchat slot username. If already signed in, open the top-left profile, verify its Username, and only log out when it differs. Pass the confirmed profile tree directly to logout navigation to avoid a redundant dump before the Settings gear tap. After confirming logout, wait up to 60 seconds for the saved-account carousel. Before swiping, match the exact target username from live nodes and tap that username text directly, even when Android marks it non-clickable; use the visible centered account name only to choose the swipe row. Search right up to five times, then left up to five times; a repeated username after one swipe is not grounds to abort. Tap a match once, then check for Camera every five seconds for the full 60-second login window; do not tap again while login is in progress. Once the exact target row has been tapped and Camera appears, proceed directly to that slot's tools without reopening the profile or pressing Back. If identity cannot be confirmed from an already-signed-in profile or the target row cannot be selected, skip all Snapchat tools for that cycle.

@@ -90,6 +90,73 @@ export function findAddFriendsBanner(
   });
 }
 
+function findFriendSuggestionsControl(nodes: UiNode[], label: string): UiNode | undefined {
+  const textNode = nodes.find(node =>
+    [node.text, node.desc].some(value => value.trim().toLowerCase() === label.toLowerCase()),
+  );
+  if (!textNode) return undefined;
+  if (textNode.clickable) return textNode;
+
+  const point = center(textNode);
+  return nodes
+    .filter(node => {
+      if (!node.clickable) return false;
+      const [left, top, right, bottom] = node.bounds;
+      return point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
+    })
+    .sort((a, b) =>
+      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) -
+      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]),
+    )[0];
+}
+
+async function handleFriendSuggestionsPrompt(
+  context: SnapchatContext,
+  nodes: UiNode[],
+): Promise<{ nodes: UiNode[]; ok: boolean }> {
+  const enableButton = findFriendSuggestionsControl(nodes, "Enable Friend Suggestions");
+  if (!enableButton) return { nodes, ok: true };
+
+  context.onLog("Snapchat: enabling Friend Suggestions from the Add Friends page.");
+  if (!await tapNode(context, enableButton, "enable Friend Suggestions", 500, true)) {
+    return { nodes, ok: false };
+  }
+
+  let state = await dump(context.serial);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const warningVisible = state.nodes.some(node =>
+      [node.text, node.desc].some(value =>
+        /think carefully before adding and accepting friends/i.test(value),
+      ),
+    );
+    if (warningVisible) {
+      const okayButton = findFriendSuggestionsControl(state.nodes, "Okay");
+      if (!okayButton) {
+        context.onLog("Snapchat: the Friend Suggestions warning appeared, but its Okay control was not found.");
+        return { nodes: state.nodes, ok: false };
+      }
+      context.onLog("Snapchat: confirming Friend Suggestions with Okay.");
+      if (!await tapNode(context, okayButton, "confirm Friend Suggestions with Okay", 700, true)) {
+        return { nodes: state.nodes, ok: false };
+      }
+      return { nodes: (await dump(context.serial)).nodes, ok: true };
+    }
+    if (!state.nodes.some(node =>
+      [node.text, node.desc].some(value =>
+        value.trim().toLowerCase() === "enable friend suggestions",
+      ),
+    )) {
+      context.onLog("Snapchat: the Friend Suggestions prompt closed without showing the confirmation.");
+      return { nodes: state.nodes, ok: false };
+    }
+    await context.sleep(300, "exact");
+    state = await dump(context.serial);
+  }
+
+  context.onLog("Snapchat: the Friend Suggestions confirmation did not appear; stopping this friend tool safely.");
+  return { nodes: state.nodes, ok: false };
+}
+
 async function openAddFriendsForAction(
   context: SnapchatContext,
   actionLabel: "Add" | "Accept",
@@ -110,6 +177,10 @@ async function openAddFriendsForAction(
     if (hasSnapchatChatComposer(state.nodes)) return false;
   }
 
+  const initialSuggestions = await handleFriendSuggestionsPrompt(context, state.nodes);
+  if (!initialSuggestions.ok) return false;
+  state = { ...state, nodes: initialSuggestions.nodes };
+
   const friendActionIsVisible = (nodes: UiNode[]) => nodes.some(node =>
     shortResourceId(node) === "scu_search_action_button" &&
     [node.text, node.desc].some(value => value.trim().toLowerCase() === actionLabel.toLowerCase()),
@@ -126,11 +197,16 @@ async function openAddFriendsForAction(
       context.onLog(`${toolName}: tapping the live entry control; proceeding without checking a page marker.`);
       if (!await tapNode(context, entry, "open Add Friends from its live accessibility bounds", 0)) return false;
       await context.sleep(3_000, "exact");
-      return true;
+      state = await dump(context.serial);
+      const suggestions = await handleFriendSuggestionsPrompt(context, state.nodes);
+      return suggestions.ok;
     }
     if (check === 10) return false;
     await context.sleep(ADD_FRIENDS_BANNER_RECHECK_MS, "exact");
     state = await dump(context.serial);
+    const suggestions = await handleFriendSuggestionsPrompt(context, state.nodes);
+    if (!suggestions.ok) return false;
+    state = { ...state, nodes: suggestions.nodes };
     if (friendActionIsVisible(state.nodes) || friendRowIsVisible(state.nodes)) return true;
     entry = findAddFriendsEntry(state.nodes);
     if (!entry) return false;
