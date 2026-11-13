@@ -50,6 +50,12 @@ For Snapchat switching, always refresh the Camera UI immediately before tapping 
 
 ## Upload a Video link toolbar
 
+For View Snaps, the purple Story ring alone does not prove a Story is viewable. Snapchat may show a purple add-person badge with a plus and person glyph on suggested friend cards; never tap those cards. Check the live screenshot for both glyphs, exclude those cards, and skip View Snaps normally if no viewable friend Story remains so the dispatcher can continue.
+
+**Why:** The user identified the add-person badge on the Stories tab as a profile/Add action rather than a Story. Tapping it can derail the Snapchat tool sequence.
+
+**How to apply:** Use current Friends-row accessibility bounds with screenshot pixels to detect the filled purple pill and its separate white plus/person glyphs. Do not classify by the common purple ring. If all cards are add-person suggestions or no story circle remains, return normally without tapping; the dispatcher restores Camera and continues the next enabled tool.
+
 After selecting a Snapchat Story audience in either Upload a Snap or Upload a Video, an “Add To Your Story?” confirmation can appear. Dismiss it using the live `add_to_story_dialog_confirm_view` Okay control, not Cancel; stop that upload if the confirmation cannot be cleared.
 
 **Why:** A real-device UI dump showed the confirmation overlay blocking the Send To flow, with Okay exposed by a resource ID but no accessible text.

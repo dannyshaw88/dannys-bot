@@ -1,7 +1,7 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext } from "../context";
 import { exitSnapViewer } from "../navigation/exitSnapViewer";
-import { findStoryCircles, openStoriesList } from "../navigation/openStoriesList";
+import { findAddFriendStoryCards, findStoryCircles, openStoriesList } from "../navigation/openStoriesList";
 import { dump, randomCount, randomSeconds, tapNode } from "../runtime";
 
 export async function runViewSnaps(context: SnapchatContext): Promise<void> {
@@ -12,9 +12,19 @@ export async function runViewSnaps(context: SnapchatContext): Promise<void> {
 
   const stories = await dump(context.serial);
   const { h: screenHeight, w: screenWidth } = await android.getScreenSizeAsync(context.serial);
-  const circles = findStoryCircles(stories.nodes, screenHeight);
+  const screenshot = await android.captureScreenPixels(context.serial, 2_200);
+  if (!screenshot) {
+    context.onLog("View Snaps skipped: the live Stories row could not be checked safely.");
+    return;
+  }
+  const friendCards = findAddFriendStoryCards(stories.nodes, screenHeight, screenshot);
+  if (friendCards.allAreAddFriendCards) {
+    context.onLog("View Snaps skipped: every visible Friends card has the add-person plus badge; there are no viewable friend Stories.");
+    return;
+  }
+  const circles = findStoryCircles(stories.nodes, screenHeight, friendCards.addFriendCentersX);
   if (circles.length === 0) {
-    context.onLog("View Snaps stopped: no circular stories were found under Friends.");
+    context.onLog("View Snaps skipped: no viewable circular Stories were found under Friends.");
     return;
   }
   const story = circles[Math.floor(Math.random() * circles.length)];
