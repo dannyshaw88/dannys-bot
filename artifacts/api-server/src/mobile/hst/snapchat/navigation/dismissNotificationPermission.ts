@@ -1,4 +1,5 @@
 import type { SnapchatContext, UiNode, UiState } from "../context";
+import * as android from "../../../androidManager";
 import { dump, tapNode } from "../runtime";
 
 function isSnapchatNotificationPermissionDialog(state: UiState): boolean {
@@ -42,41 +43,98 @@ function findDontAllowButton(nodes: UiNode[]): UiNode | undefined {
   return clickableParent ?? labelNode;
 }
 
-export type NotificationPermissionTapResult =
+export type SnapchatStartupPopupTapResult =
   | "not-present"
   | "tapped"
   | "button-missing"
   | "aborted";
 
-/**
- * Attempts the one permitted action using a caller's already-fresh UI tree.
- * It deliberately does not inspect the UI again after tapping.
- */
-export async function tapSnapchatNotificationPermissionIfPresent(
+function isVerifyEmailAccountPopup(state: UiState): boolean {
+  const visibleText = state.nodes
+    .map(node => `${node.text} ${node.desc}`)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+  return /verify\s+(?:your\s+)?email(?:\s+account)?/.test(visibleText);
+}
+
+async function dismissVerifyEmailAccountPopup(
   context: SnapchatContext,
-  state: UiState,
-): Promise<NotificationPermissionTapResult> {
-  if (!isSnapchatNotificationPermissionDialog(state)) return "not-present";
-  if (context.isAborted()) return "aborted";
-
-  const denyButton = findDontAllowButton(state.nodes);
-  if (!denyButton) return "button-missing";
-
+): Promise<"tapped" | "aborted"> {
+  const { w, h } = android.getScreenSize(context.serial);
+  const centerX = Math.round(w / 2);
+  const centerY = Math.round(h / 2);
   context.onLog(
-    "Snapchat startup: notification permission dialog found; tapping Don't allow before account and banner checks.",
+    `Snapchat startup: Verify email account popup found; tapping its center (${centerX}, ${centerY}) and swiping down.`,
   );
-  if (!await tapNode(context, denyButton, "deny Snapchat notification permission", 0, true)) {
+  try {
+    await android.tap(
+      context.serial,
+      centerX,
+      centerY,
+      "bot",
+      "dismiss Snapchat Verify email account popup",
+      "automation",
+      { exact: true },
+    );
+    if (context.isAborted()) return "aborted";
+    await context.sleep(150, "exact");
+    if (context.isAborted()) return "aborted";
+    await android.swipe(
+      context.serial,
+      centerX,
+      centerY,
+      centerX,
+      Math.round(h * 0.82),
+      450,
+      false,
+    );
+  } catch (error) {
+    context.onLog(
+      `Snapchat startup: could not dismiss Verify email account popup (${error instanceof Error ? error.message : String(error)}).`,
+    );
     return "aborted";
   }
-  context.onLog("Snapchat startup: tapped Don't allow; continuing.");
-  return "tapped";
+  context.onLog("Snapchat startup: tapped and swiped down on Verify email account popup; continuing.");
+  return context.isAborted() ? "aborted" : "tapped";
 }
 
 /**
- * Snapchat can show Android's notification permission sheet on first launch.
- * Clear that exact dialog before any Camera/banner navigation checks.
+ * Handles either startup popup using a caller's already-fresh UI tree.
+ * Snapchat presents the notification dialog and Verify email popup separately.
  */
-export async function dismissSnapchatNotificationPermission(
+export async function tapSnapchatStartupPopupIfPresent(
+  context: SnapchatContext,
+  state: UiState,
+): Promise<SnapchatStartupPopupTapResult> {
+  if (context.isAborted()) return "aborted";
+
+  if (isSnapchatNotificationPermissionDialog(state)) {
+    const denyButton = findDontAllowButton(state.nodes);
+    if (!denyButton) return "button-missing";
+
+    context.onLog(
+      "Snapchat startup: notification permission dialog found; tapping Don't allow before account and banner checks.",
+    );
+    if (!await tapNode(context, denyButton, "deny Snapchat notification permission", 0, true)) {
+      return "aborted";
+    }
+    context.onLog("Snapchat startup: tapped Don't allow; continuing.");
+    return "tapped";
+  }
+
+  if (isVerifyEmailAccountPopup(state)) {
+    return dismissVerifyEmailAccountPopup(context);
+  }
+
+  return "not-present";
+}
+
+/**
+ * Snapchat may show either the Android notification dialog or its Verify email
+ * account popup on launch. Clear the one present before Camera/banner checks.
+ */
+export async function dismissSnapchatStartupPopup(
   context: SnapchatContext,
 ): Promise<"tapped" | "not-found" | "aborted"> {
   const deadline = Date.now() + 3_000;
@@ -86,7 +144,7 @@ export async function dismissSnapchatNotificationPermission(
     !context.isAborted() &&
     Date.now() < deadline
   ) {
-    const result = await tapSnapchatNotificationPermissionIfPresent(context, state);
+    const result = await tapSnapchatStartupPopupIfPresent(context, state);
     if (result === "tapped") return "tapped";
     if (result === "aborted") return "aborted";
     if (result === "button-missing" && !missingButtonLogged) {

@@ -1,7 +1,7 @@
 import type { SnapchatContext } from "./context";
 import { closeAddFriendsPanel } from "./navigation/closeAddFriendsPanel";
 import { ensureSnapchatAccount } from "./navigation/ensureSnapchatAccount";
-import { dismissSnapchatNotificationPermission } from "./navigation/dismissNotificationPermission";
+import { dismissSnapchatStartupPopup } from "./navigation/dismissNotificationPermission";
 import { returnToCameraBeforeNextTool } from "./navigation/returnToCamera";
 import { runAcceptFriends } from "./tools/acceptFriends";
 import { runAddFriends } from "./tools/addFriends";
@@ -40,13 +40,13 @@ async function restoreCameraBeforeNextTool(
 }
 
 export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
-  const notificationPermissionResult = await dismissSnapchatNotificationPermission(context);
-  if (notificationPermissionResult === "aborted") {
-    if (!context.isAborted()) context.onLog("Snapchat tool dispatcher skipped because notification prompt handling was interrupted.");
+  const startupPopupResult = await dismissSnapchatStartupPopup(context);
+  if (startupPopupResult === "aborted") {
+    if (!context.isAborted()) context.onLog("Snapchat tool dispatcher skipped because startup popup handling was interrupted.");
     return;
   }
 
-  if (!await ensureSnapchatAccount(context, notificationPermissionResult === "tapped")) {
+  if (!await ensureSnapchatAccount(context, startupPopupResult === "tapped")) {
     context.onLog("Snapchat tool dispatcher skipped because the configured slot account was not confirmed.");
     return;
   }

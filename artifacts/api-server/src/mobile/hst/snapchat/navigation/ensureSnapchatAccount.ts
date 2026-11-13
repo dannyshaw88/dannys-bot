@@ -1,7 +1,7 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiState } from "../context";
 import { dump, shortResourceId, tapNode } from "../runtime";
-import { tapSnapchatNotificationPermissionIfPresent } from "./dismissNotificationPermission";
+import { tapSnapchatStartupPopupIfPresent } from "./dismissNotificationPermission";
 import { logoutSnapchatAccount } from "./logoutSnapchatAccount";
 import {
   isSnapchatCameraSurface,
@@ -28,31 +28,31 @@ async function waitForKnownSurface(
   timeoutMs: number,
   timeoutLabel?: string,
   recoverToCameraFromOtherTab = false,
-  notificationPermissionTapSentBeforeWait = false,
+  startupPopupTapSentBeforeWait = false,
 ): Promise<UiState | null> {
   const deadline = Date.now() + timeoutMs;
   let lastState: UiState | null = null;
   let cameraTabRecoveryAttempted = false;
-  let notificationButtonMissingLogged = false;
-  let notificationPermissionTapSent = notificationPermissionTapSentBeforeWait;
+  let startupPopupButtonMissingLogged = false;
+  let startupPopupTapSent = startupPopupTapSentBeforeWait;
   while (!context.isAborted() && Date.now() < deadline) {
     const state = await dump(context.serial);
     lastState = state;
-    const permissionResult = notificationPermissionTapSent
+    const popupResult = startupPopupTapSent
       ? "not-present"
-      : await tapSnapchatNotificationPermissionIfPresent(context, state);
-    if (permissionResult === "tapped") {
-      notificationPermissionTapSent = true;
+      : await tapSnapchatStartupPopupIfPresent(context, state);
+    if (popupResult === "tapped") {
+      startupPopupTapSent = true;
       await context.sleep(300, "exact");
       continue;
     }
-    if (permissionResult === "aborted") return null;
-    if (permissionResult === "button-missing") {
-      if (!notificationButtonMissingLogged) {
+    if (popupResult === "aborted") return null;
+    if (popupResult === "button-missing") {
+      if (!startupPopupButtonMissingLogged) {
         context.onLog(
           "Snapchat account check: notification permission dialog is present; waiting for its Don't allow control before account and banner checks.",
         );
-        notificationButtonMissingLogged = true;
+        startupPopupButtonMissingLogged = true;
       }
       await context.sleep(300, "exact");
       continue;
@@ -94,7 +94,7 @@ async function waitForKnownSurface(
 
 export async function ensureSnapchatAccount(
   context: SnapchatContext,
-  notificationPermissionTapSent = false,
+  startupPopupTapSent = false,
 ): Promise<boolean> {
   const expectedUsername = context.targetUsername?.trim() ?? "";
   if (!expectedUsername) {
@@ -108,7 +108,7 @@ export async function ensureSnapchatAccount(
       20_000,
       "the launched app's account screen",
       true,
-      notificationPermissionTapSent,
+      startupPopupTapSent,
     );
     if (!state) {
       context.onLog("Snapchat tools not started: the launched app did not reach a known account screen.");
