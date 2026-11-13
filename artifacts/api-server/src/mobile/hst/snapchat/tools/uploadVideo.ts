@@ -5,6 +5,7 @@ import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
 import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 import { attachSnapLink } from "../navigation/attachSnapLink";
 import { addSnapCaption } from "../navigation/addSnapCaption";
+import { dismissAddToStoryNotice } from "../navigation/dismissAddToStoryNotice";
 
 export type UploadVideoResult = "not-started" | "completed" | "failed";
 
@@ -151,6 +152,9 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
     if (!publicStory) context.onLog("Upload a Video: My Story - Public is unavailable; using My Story - Friends Only.");
     if (!await tapNode(context, audienceControl, `select ${selectedAudience}`)) return "failed";
 
+    state = await dump(context.serial);
+    const addToStoryResult = await dismissAddToStoryNotice(context, state);
+    if (addToStoryResult === "failed" || addToStoryResult === "aborted") return "failed";
     state = await dump(context.serial);
     const publicStoryNoticeVisible = Boolean(publicStory) && state.nodes.some(node =>
       node.text.trim().toLowerCase() === "introducing your public story" ||

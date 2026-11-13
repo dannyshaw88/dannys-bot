@@ -50,6 +50,12 @@ For Snapchat switching, always refresh the Camera UI immediately before tapping 
 
 ## Upload a Video link toolbar
 
+After selecting a Snapchat Story audience in either Upload a Snap or Upload a Video, an “Add To Your Story?” confirmation can appear. Dismiss it using the live `add_to_story_dialog_confirm_view` Okay control, not Cancel; stop that upload if the confirmation cannot be cleared.
+
+**Why:** A real-device UI dump showed the confirmation overlay blocking the Send To flow, with Okay exposed by a resource ID but no accessible text.
+
+**How to apply:** Check for this dialog immediately after audience selection in both upload tools. Tap its clickable confirmation control, confirm the dialog has cleared, then continue with the existing story notice and Send flow. Keep the handler shared only by these two Snapchat upload tools.
+
 On the video Snap editor, Snapchat initially hides the paperclip under the right-side downward chevron. Upload a Video must expand that toolbar before tapping the paperclip to open the link editor.
 
 **Why:** The link tap missed because it targeted the paperclip position while the toolbar was still collapsed.

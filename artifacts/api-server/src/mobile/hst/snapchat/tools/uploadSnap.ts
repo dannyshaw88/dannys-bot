@@ -4,6 +4,7 @@ import { center, dump, tapNode } from "../runtime";
 import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
 import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 import { applySnapImageCrop } from "../navigation/applySnapImageCrop";
+import { dismissAddToStoryNotice } from "../navigation/dismissAddToStoryNotice";
 
 export type UploadSnapResult = "not-started" | "completed" | "failed";
 
@@ -115,6 +116,9 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
     if (!publicStory) context.onLog("Upload a Snap: My Story - Public is unavailable; using My Story - Friends Only.");
     if (!await tapNode(context, audienceControl, `select ${selectedAudience}`)) return "failed";
 
+    state = await dump(context.serial);
+    const addToStoryResult = await dismissAddToStoryNotice(context, state);
+    if (addToStoryResult === "failed" || addToStoryResult === "aborted") return "failed";
     state = await dump(context.serial);
     const publicStoryNoticeVisible = Boolean(publicStory) && state.nodes.some(node =>
       node.text.trim().toLowerCase() === "introducing your public story" ||
