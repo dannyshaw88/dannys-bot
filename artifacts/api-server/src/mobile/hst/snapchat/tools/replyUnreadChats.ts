@@ -148,7 +148,6 @@ function visibleConversation(nodes: UiNode[], composerTop: number, peerName: str
       return text || description;
     })
     .filter(text => {
-      if (isSnapchatUiArtifact(text)) return false;
       const key = text.toLowerCase().replace(/\s+/g, " ");
       if (!key || excluded.test(text) || key.length > 700 || seen.has(key)) return false;
       seen.add(key);
