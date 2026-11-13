@@ -13,10 +13,11 @@ export function isStoriesListSurface(nodes: UiNode[]): boolean {
 }
 
 type AddFriendStoryCards = {
-  cardCentersX: number[];
   addFriendCentersX: number[];
   allAreAddFriendCards: boolean;
 };
+
+type WhiteGlyph = { x: number; y: number; size: number };
 
 function isSnapchatPurple(red: number, green: number, blue: number): boolean {
   return red >= 105 && blue >= 125 && blue > green * 1.4 && red > green * 1.25;
@@ -25,7 +26,7 @@ function isSnapchatPurple(red: number, green: number, blue: number): boolean {
 function whiteGlyphComponents(
   screen: ScreenPixels,
   bounds: [number, number, number, number],
-): number[] {
+): WhiteGlyph[] {
   const left = Math.max(0, bounds[0]);
   const top = Math.max(0, bounds[1]);
   const right = Math.min(screen.width, bounds[2]);
@@ -71,22 +72,26 @@ function whiteGlyphComponents(
     purpleWidth < width * 0.52 ||
     purpleHeight < height * 0.28 ||
     purpleWidth / Math.max(1, purpleHeight) < 1.55 ||
-    whitePixels < area * 0.045
+    whitePixels < area * 0.02
   ) return [];
 
   const visited = new Uint8Array(mask.length);
-  const componentSizes: number[] = [];
+  const glyphs: WhiteGlyph[] = [];
   const stack: number[] = [];
   for (let start = 0; start < mask.length; start++) {
     if (!mask[start] || visited[start]) continue;
     visited[start] = 1;
     stack.push(start);
     let size = 0;
+    let sumX = 0;
+    let sumY = 0;
     while (stack.length) {
       const current = stack.pop()!;
       size++;
       const x = current % width;
       const y = Math.floor(current / width);
+      sumX += x;
+      sumY += y;
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           if (dx === 0 && dy === 0) continue;
@@ -100,17 +105,29 @@ function whiteGlyphComponents(
         }
       }
     }
-    if (size >= Math.max(3, area * 0.002)) componentSizes.push(size);
+    if (size >= Math.max(3, area * 0.002)) {
+      glyphs.push({ x: sumX / size, y: sumY / size, size });
+    }
   }
-  return componentSizes;
+  return glyphs;
 }
 
 function hasAddPersonBadge(screen: ScreenPixels, node: UiNode): boolean {
-  const components = whiteGlyphComponents(screen, node.bounds);
+  const [left, top, right, bottom] = node.bounds;
+  const width = right - left;
+  const height = bottom - top;
+  const glyphs = whiteGlyphComponents(screen, node.bounds)
+    .filter(glyph => glyph.y >= height * 0.2 && glyph.y <= height * 0.8);
   // Snapchat's marker contains two separate white glyphs: a plus and a
-  // person silhouette. Requiring both avoids treating the common purple ring
-  // itself as proof that a friend has no viewable Story.
-  return components.length >= 2;
+  // person silhouette, arranged side by side. This avoids treating the common
+  // purple ring itself as proof that a friend has no viewable Story.
+  return glyphs.some((first, index) => glyphs.slice(index + 1).some(second => {
+    const horizontalGap = Math.abs(first.x - second.x);
+    const verticalGap = Math.abs(first.y - second.y);
+    return horizontalGap >= width * 0.08 &&
+      horizontalGap <= width * 0.55 &&
+      verticalGap <= height * 0.3;
+  }));
 }
 
 export function findAddFriendStoryCards(
@@ -125,7 +142,7 @@ export function findAddFriendStoryCards(
     index > friendsIndex && [node.text, node.desc].some(value => /^discover$/i.test(value.trim())),
   );
   if (friendsIndex < 0 || discoverIndex < 0) {
-    return { cardCentersX: [], addFriendCentersX: [], allAreAddFriendCards: false };
+    return { addFriendCentersX: [], allAreAddFriendCards: false };
   }
 
   const rowTop = nodes[friendsIndex].bounds[3];
@@ -135,7 +152,9 @@ export function findAddFriendStoryCards(
     const [left, top, right, bottom] = node.bounds;
     const width = right - left;
     const height = bottom - top;
-    return /^[a-zA-Z0-9._]{2,30}$/.test(username) &&
+    return /View/i.test(node.className) &&
+      /^[a-zA-Z0-9._-]{1,30}$/.test(username) &&
+      username.toLowerCase() !== "friend_story_circle_thumbnail" &&
       top >= rowTop && bottom <= rowBottom &&
       width >= 55 && width <= screen.width * 0.35 &&
       height >= 20 && height <= screenHeight * 0.06;
@@ -156,7 +175,6 @@ export function findAddFriendStoryCards(
     .filter(group => group.nodes.some(node => hasAddPersonBadge(screen, node)))
     .map(group => group.centerX);
   return {
-    cardCentersX: cardGroups.map(group => group.centerX),
     addFriendCentersX,
     allAreAddFriendCards: cardGroups.length > 0 && addFriendCentersX.length === cardGroups.length,
   };
@@ -198,7 +216,7 @@ export async function openStoriesList(context: SnapchatContext): Promise<boolean
   if (!await tapNode(context, storiesButton, "open Stories from the bottom navigation")) return false;
   state = await dump(context.serial);
   if (!isStoriesListSurface(state.nodes)) {
-    context.onLog("View Snaps stopped: the Stories list and circular friend stories were not confirmed.");
+    context.onLog("View Snaps stopped: the Stories list was not confirmed.");
     return false;
   }
   return true;

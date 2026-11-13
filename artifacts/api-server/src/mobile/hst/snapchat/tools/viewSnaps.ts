@@ -22,6 +22,9 @@ export async function runViewSnaps(context: SnapchatContext): Promise<void> {
     context.onLog("View Snaps skipped: every visible Friends card has the add-person plus badge; there are no viewable friend Stories.");
     return;
   }
+  if (friendCards.addFriendCentersX.length) {
+    context.onLog(`View Snaps: excluding ${friendCards.addFriendCentersX.length} Friends card(s) marked with the add-person plus badge.`);
+  }
   const circles = findStoryCircles(stories.nodes, screenHeight, friendCards.addFriendCentersX);
   if (circles.length === 0) {
     context.onLog("View Snaps skipped: no viewable circular Stories were found under Friends.");
