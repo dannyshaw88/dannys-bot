@@ -50,7 +50,7 @@ async function waitForKnownSurface(
     if (popupResult === "button-missing") {
       if (!startupPopupButtonMissingLogged) {
         context.onLog(
-          "Snapchat account check: notification permission dialog is present; waiting for its Deny/Don't allow button before account and banner checks.",
+          "Snapchat account check: notification permission dialog is present; waiting for its Deny/Dismiss/Don't allow button before account and banner checks.",
         );
         startupPopupButtonMissingLogged = true;
       }

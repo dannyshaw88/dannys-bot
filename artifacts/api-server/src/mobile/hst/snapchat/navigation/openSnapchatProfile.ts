@@ -110,7 +110,7 @@ async function handleStartupPopupBeforeBanner(
 
     if (!waitingForDenyButtonLogged) {
       context.onLog(
-        "Snapchat account check: notification prompt is visible; waiting briefly for its Deny/Don't allow button before the banner check.",
+        "Snapchat account check: notification prompt is visible; waiting briefly for its Deny/Dismiss/Don't allow button before the banner check.",
       );
       waitingForDenyButtonLogged = true;
     }

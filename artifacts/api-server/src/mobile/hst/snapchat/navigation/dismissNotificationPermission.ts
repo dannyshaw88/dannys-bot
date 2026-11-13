@@ -8,29 +8,48 @@ function isSnapchatNotificationPermissionDialog(state: UiState): boolean {
     .join(" ")
     .replace(/[‘’]/g, "'")
     .toLowerCase();
-  return visibleText.includes("snapchat") &&
+  const exactAndroidTitle = /["“”]?\s*snapchat\s*["“”]?\s+is\s+requesting\s+permission\s+to\s+send\s+you\s+notifications?/i
+    .test(visibleText);
+  return exactAndroidTitle || (visibleText.includes("snapchat") &&
     /notifications?/.test(visibleText) &&
     /requesting permission|permission.{0,80}notifications?|notifications?.{0,80}permission|allow.{0,40}notifications?|send.{0,40}notifications?/i
-      .test(visibleText);
+      .test(visibleText));
+}
+
+function normalizeNotificationDenyLabel(value: string): string {
+  return value.trim()
+    .replace(/[‘’]/g, "'")
+    .replace(/[-–—]/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function notificationDenyLabelPriority(value: string): number {
+  const normalized = normalizeNotificationDenyLabel(value);
+  if (/^(?:don't allow|dont allow)(?: notifications)?$/.test(normalized)) return 0;
+  if (/^deny all(?: notifications?)?$/.test(normalized)) return 1;
+  if (/^deny(?: notifications?)?$/.test(normalized)) return 2;
+  if (/^dismiss(?: notifications?)?$/.test(normalized)) return 3;
+  return Number.POSITIVE_INFINITY;
 }
 
 function isNotificationDenyLabel(value: string): boolean {
-  return value.trim()
-    .replace(/[‘’]/g, "'")
-    .replace(/\s+/g, " ")
-    .toLowerCase()
-    .match(/^(?:don't allow(?: notifications)?|deny(?: all)?(?: notifications?)?)$/) !== null;
+  return Number.isFinite(notificationDenyLabelPriority(value));
 }
 
 function findNotificationDenyButton(nodes: UiNode[]): UiNode | undefined {
   const matchingLabels = nodes.filter(node =>
     [node.text, node.desc].some(isNotificationDenyLabel),
   );
+  const labelPriority = (node: UiNode) =>
+    Math.min(notificationDenyLabelPriority(node.text), notificationDenyLabelPriority(node.desc));
   const area = (node: UiNode) =>
     Math.max(0, node.bounds[2] - node.bounds[0]) *
     Math.max(0, node.bounds[3] - node.bounds[1]);
   matchingLabels.sort((a, b) =>
-    Number(b.clickable) - Number(a.clickable) || area(b) - area(a),
+    labelPriority(a) - labelPriority(b) ||
+    Number(b.clickable) - Number(a.clickable) ||
+    area(b) - area(a),
   );
   const labelNode = matchingLabels[0];
   if (!labelNode || labelNode.clickable) return labelNode;
@@ -157,7 +176,7 @@ export async function dismissSnapchatStartupPopup(
     if (result === "aborted") return "aborted";
     if (result === "button-missing" && !missingButtonLogged) {
       context.onLog(
-        "Snapchat startup: notification permission dialog is present; waiting for its Deny/Don't allow button to appear.",
+        "Snapchat startup: notification permission dialog is present; waiting for its Deny/Dismiss/Don't allow button to appear.",
       );
       missingButtonLogged = true;
     }
