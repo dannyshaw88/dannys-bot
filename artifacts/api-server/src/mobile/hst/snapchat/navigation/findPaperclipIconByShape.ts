@@ -1,34 +1,27 @@
 import type { ScreenPixels } from "../../../androidManager";
 
-// Screenshot-derived silhouette of Snapchat's tilted paperclip glyph.
-// Candidates come from the live right-side tool column; their order and
-// vertical positions are deliberately not used to choose the target.
+// Screenshot-derived mask of Snapchat's tilted paperclip glyph. This icon is
+// diagonal, not the upright paperclip shape used by some other toolbars.
 const TEMPLATE = [
-  "........................",
-  "........................",
-  "........................",
-  "..............####......",
-  ".............######.....",
-  "............###..##.....",
-  "...........###...###....",
-  "..........###....##.....",
-  ".........###....###.....",
-  "........###....###......",
-  ".......###....####......",
-  "......###....####..#....",
-  ".....###....####..###...",
-  "....###....###...###....",
-  "...###....###...###.....",
-  "...###...###...###......",
-  "...###...##...###.......",
-  "...###.......###........",
-  "....##......###.........",
-  "....###....###..........",
-  ".....########...........",
-  ".......#####............",
-  "........................",
-  "........................",
-  "........................",
+  "...........##...",
+  ".........#####..",
+  "........##....#.",
+  ".......##.....#.",
+  "......##......#.",
+  ".....##......##.",
+  "....##......##..",
+  "...##......##...",
+  "..##......##....",
+  ".##......##....#",
+  ".#......##....##",
+  "##.....##....##.",
+  "#.....##....##..",
+  "#....##....##...",
+  "#.........##....",
+  "##.......#......",
+  ".##.....##......",
+  "..######........",
+  "...####.........",
 ] as const;
 
 const FOREGROUND: Array<{ x: number; y: number }> = [];
@@ -37,10 +30,6 @@ for (let y = 0; y < TEMPLATE.length; y++) {
     if (TEMPLATE[y][x] === "#") FOREGROUND.push({ x, y });
   }
 }
-
-const EDGE_OFFSETS = [
-  [-2, 0], [2, 0], [0, -2], [0, 2],
-] as const;
 
 function luma(screen: ScreenPixels, x: number, y: number): number | null {
   const px = Math.round(x);
@@ -60,54 +49,70 @@ function scoreAt(
 ): number | null {
   const left = center.x - (TEMPLATE[0].length * scale) / 2;
   const top = center.y - (TEMPLATE.length * scale) / 2;
-  let foregroundTotal = 0;
-  let edgeContrastTotal = 0;
-  let edgeContrastCount = 0;
-
-  for (const point of FOREGROUND) {
-    const x = left + (point.x + 0.5) * scale;
-    const y = top + (point.y + 0.5) * scale;
-    const value = luma(screen, x, y);
-    if (value === null) return null;
-    foregroundTotal += value;
-    for (const [dx, dy] of EDGE_OFFSETS) {
-      const surrounding = luma(screen, x + dx * scale, y + dy * scale);
-      if (surrounding === null) continue;
-      edgeContrastTotal += value - surrounding;
-      edgeContrastCount++;
+  const values: Array<{ foreground: boolean; value: number }> = [];
+  let total = 0;
+  for (let y = 0; y < TEMPLATE.length; y++) {
+    for (let x = 0; x < TEMPLATE[y].length; x++) {
+      const value = luma(screen, left + (x + 0.5) * scale, top + (y + 0.5) * scale);
+      if (value === null) return null;
+      const foreground = TEMPLATE[y][x] === "#";
+      values.push({ foreground, value });
+      total += value;
     }
   }
 
-  const foregroundMean = foregroundTotal / Math.max(1, FOREGROUND.length);
-  const edgeContrastMean = edgeContrastTotal / Math.max(1, edgeContrastCount);
-  // The editor toolbar overlays the selected video, so background pixels vary
-  // from clip to clip. Score the white glyph's local contrast instead of
-  // rejecting it because unrelated bright pixels happen to lie nearby.
-  return foregroundMean * 0.35 + edgeContrastMean * 0.65;
+  // Normalized correlation compares the exact tilted silhouette while
+  // accounting for the variable video frame behind the white toolbar icon.
+  const mean = total / values.length;
+  const foregroundRatio = FOREGROUND.length / values.length;
+  const templateVariance = foregroundRatio * (1 - foregroundRatio);
+  let covariance = 0;
+  let imageVariance = 0;
+  for (const { foreground, value } of values) {
+    const centeredValue = value - mean;
+    covariance += ((foreground ? 1 : 0) - foregroundRatio) * centeredValue;
+    imageVariance += centeredValue * centeredValue;
+  }
+  const imageVarianceMean = imageVariance / values.length;
+  if (imageVarianceMean <= 0) return null;
+  return covariance / values.length / Math.sqrt(templateVariance * imageVarianceMean);
 }
 
 export function findPaperclipIconByShape(
   screen: ScreenPixels,
   candidateCenters: Array<{ x: number; y: number }>,
 ): { x: number; y: number; score: number } | null {
-  const uniqueCenters = new Map<string, { x: number; y: number }>();
+  const uniqueCenters: Array<{ x: number; y: number }> = [];
   for (const point of candidateCenters) {
-    uniqueCenters.set(`${point.x}:${point.y}`, point);
+    if (!uniqueCenters.some(existing =>
+      Math.abs(existing.x - point.x) <= 6 && Math.abs(existing.y - point.y) <= 6,
+    )) uniqueCenters.push(point);
   }
 
   const matches: Array<{ x: number; y: number; score: number }> = [];
-  for (const point of uniqueCenters.values()) {
+  const scales = [1.4, 1.8, 2.2, 2.6, 3, 3.4, 3.8, 4.2, 4.6];
+  const offsets = [-15, -10, -5, 0, 5, 10, 15];
+  for (const point of uniqueCenters) {
     let centerBest = -Infinity;
-    for (const scale of [1, 1.4, 1.8, 2.2, 2.6, 3, 3.4, 3.8, 4.2]) {
-      const score = scoreAt(screen, point, scale);
-      if (score !== null) centerBest = Math.max(centerBest, score);
+    let bestPoint = point;
+    for (const scale of scales) {
+      for (const dx of offsets) {
+        for (const dy of offsets) {
+          const candidate = { x: point.x + dx, y: point.y + dy };
+          const score = scoreAt(screen, candidate, scale);
+          if (score !== null && score > centerBest) {
+            centerBest = score;
+            bestPoint = candidate;
+          }
+        }
+      }
     }
-    if (centerBest > -Infinity) matches.push({ ...point, score: centerBest });
+    if (centerBest > -Infinity) matches.push({ ...bestPoint, score: centerBest });
   }
 
   matches.sort((a, b) => b.score - a.score);
   const best = matches[0];
   const secondBest = matches[1]?.score ?? -Infinity;
-  if (!best || best.score < 0.18 || best.score - secondBest < 0.015) return null;
+  if (!best || best.score < 0.56 || best.score - secondBest < 0.055) return null;
   return best;
 }
