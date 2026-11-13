@@ -9,6 +9,12 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 
 **How to apply:** Keep other typing callers strict by default. Put Luna conversation wording and behavior constraints in the user's editable reply prompt, not fixed generator rules, unless the user explicitly asks for hard-coded enforcement. Use the Replit-only Luna sandbox for prompt tests; diagnose live phone behavior from Windows Electron logs. Never infer the active Windows Electron prompt or live-device result from Replit's synthetic slot/settings, and never claim Replit can trace the user's phone. For live Snapchat replies, type directly after opening the chat without an extra composer tap, skip only unavailable characters, continue the calibrated sequence, verify and record/send the actual composer contents, and use two Android Back key events after exiting each chat.
 
+**Live sender and composer detection:** Preserve Snapchat's accessibility sender labels (`Me`/`You` and the contact name) when building the live transcript; do not classify every unlabeled message as incoming based only on text matching reply history. Detect the chat composer by its known resource ID or placeholder, with a cautious lower-screen EditText fallback and a short wait for UI settling.
+
+**Why:** The live run can show the keyboard and composer while reporting it unavailable if Snapchat changes the composer resource ID. Likewise, losing the `Me` sender label can make Luna's own message look like the newest incoming message, even though Prompt Test uses explicit user/assistant roles.
+
+**How to apply:** Compare the logged `latestIncomingMessage` against the visible live chat before investigating model wording. Keep Prompt Test and live replies on the shared reply generator, and use role-labelled live transcripts so the newest contact message is unambiguous.
+
 ## Batched calibrated reply typing
 When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB shell command. Keep keyboard-layer controls as separate commands and preserve the configured pauses inside the batch.
 

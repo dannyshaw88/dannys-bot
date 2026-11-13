@@ -34,7 +34,58 @@ const isEmptyComposerValue = (value: string) => {
 };
 const isMyAiChat = (name: string) => normalizedText(name) === "my ai";
 
-function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
+function findChatComposer(nodes: UiNode[], screenHeight: number): UiNode | undefined {
+  const editFields = nodes.filter(node => /edittext/i.test(node.className));
+  const byResourceId = editFields.find(node =>
+    /chat_input_text_field|chat.*composer|message.*input/i.test(node.resourceId),
+  );
+  if (byResourceId) return byResourceId;
+
+  const byPlaceholder = editFields.find(node =>
+    /send a chat|send chat|type a message|message/i.test(`${node.text} ${node.desc}`),
+  );
+  if (byPlaceholder) return byPlaceholder;
+
+  // Snapchat has changed the composer ID between app versions. When its
+  // accessibility tree omits the placeholder, the single lower-screen
+  // EditText is the focused chat composer; do not mistake a top search field
+  // or keyboard key for it.
+  const lowerFields = editFields
+    .filter(node => node.bounds[1] >= screenHeight * 0.55)
+    .sort((a, b) => b.bounds[1] - a.bounds[1]);
+  return lowerFields.length === 1 ? lowerFields[0] : undefined;
+}
+
+async function waitForChatComposer(
+  context: SnapchatContext,
+  initialState: UiState,
+  screenHeight: number,
+): Promise<{ state: UiState; composer: UiNode } | undefined> {
+  let state = initialState;
+  for (let attempt = 0; attempt < 6 && !context.isAborted(); attempt++) {
+    const composer = findChatComposer(state.nodes, screenHeight);
+    if (composer) return { state, composer };
+    if (attempt < 5) {
+      await context.sleep(350, "exact");
+      state = await dump(context.serial);
+    }
+  }
+  return undefined;
+}
+
+function senderFromDescription(
+  description: string,
+  peerName: string,
+): "Luna" | "Contact" | undefined {
+  const leadingLabel = description.trim().split(/[,\n:|]/, 1)[0].trim();
+  if (/^(?:me|you|luna|you sent|sent by you)$/i.test(leadingLabel)) return "Luna";
+  if (peerName && leadingLabel.toLocaleLowerCase() === peerName.trim().toLocaleLowerCase()) {
+    return "Contact";
+  }
+  return undefined;
+}
+
+function visibleConversation(nodes: UiNode[], composerTop: number, peerName: string): string[] {
   const excluded = /^(send|chat|call|video|audio|camera|back|more|typing|delivered|opened|seen|unread|new snap|today|yesterday|message)$/i;
   const seen = new Set<string>();
   return nodes
@@ -43,6 +94,8 @@ function visibleConversation(nodes: UiNode[], composerTop: number): string[] {
     .map(node => {
       const text = node.text.trim();
       const description = node.desc.trim();
+      const sender = senderFromDescription(description, peerName);
+      if (text && sender) return `${sender}: ${text}`;
       if (text && description && description.toLowerCase() !== text.toLowerCase() &&
           /\b(sent|received|from|you|message|snap)\b/i.test(description)) {
         return `${description}: ${text}`;
@@ -274,7 +327,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     context.onLog("Reply to Unread Chats stopped: the Unread chat list was not confirmed after tapping its tab.");
     return;
   }
-  const { w: screenWidth } = await android.getScreenSizeAsync(context.serial);
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
 
   let replied = 0;
   const visited = new Set<string>();
@@ -358,7 +411,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       break;
     }
     const contactKey = row.displayName;
-    const thread = await dump(context.serial);
+    let thread = await dump(context.serial);
     const threadNotice = await handleNotAddedFriendNotice(context, row.displayName, thread);
     if (threadNotice === "exited") {
       recordNotReplied(
@@ -379,10 +432,8 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       );
       break;
     }
-    const composer = thread.nodes.find(node =>
-      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-    );
-    if (!composer) {
+    const composerResult = await waitForChatComposer(context, thread, screenHeight);
+    if (!composerResult) {
       recordNotReplied(
         row.displayName,
         "opening-chat",
@@ -392,7 +443,9 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       await exitSnapchatConversation(context).catch(() => false);
       break;
     }
-    const transcript = visibleConversation(thread.nodes, composer.bounds[1]);
+    thread = composerResult.state;
+    const composer = composerResult.composer;
+    const transcript = visibleConversation(thread.nodes, composer.bounds[1], row.displayName);
     const transcriptCapturedAt = new Date().toISOString();
     activeContact = {
       displayName: row.displayName,
@@ -428,6 +481,9 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       list = await dump(context.serial);
       continue;
     }
+    context.onLog(
+      `Luna live input: newest contact message="${modelContext.latestIncomingMessage.replace(/[\r\n]+/g, " ")}"; ${modelContext.transcript.length} role-labelled visible message(s).`,
+    );
     context.onLog(
       `Reply to Unread Chats: preparing a role-labelled conversation with ${history.sentReplies.length} prior Luna reply record(s); next reply #${history.previousReplyCount + 1}.`,
     );
@@ -514,9 +570,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       );
       break;
     }
-    const verifiedComposer = verifiedThread.nodes.find(node =>
-      /edittext/i.test(node.className) && /message|chat|send/i.test(`${node.resourceId} ${node.desc}`),
-    );
+    const verifiedComposer = findChatComposer(verifiedThread.nodes, screenHeight);
     if (!verifiedComposer) {
       recordNotReplied(
         row.displayName,
@@ -585,9 +639,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
         );
       }
       sendState = await dump(context.serial);
-      const composerAfterTyping = sendState.nodes.find(node =>
-        /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-      );
+      const composerAfterTyping = findChatComposer(sendState.nodes, screenHeight);
       enteredReply = composerAfterTyping?.text.trim() ?? "";
       if (isEmptyComposerValue(enteredReply) || enteredReply === initialComposerText) {
         recordNotReplied(
@@ -624,12 +676,10 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       break;
     }
     const sentState = await dump(context.serial);
-    const afterConversation = visibleConversation(sentState.nodes, composer.bounds[1])
+    const afterConversation = visibleConversation(sentState.nodes, composer.bounds[1], row.displayName)
       .map(normalizedText).join(" ");
     const beforeConversation = transcript.map(normalizedText).join(" ");
-    const composerAfterSend = sentState.nodes.find(node =>
-      /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-    );
+    const composerAfterSend = findChatComposer(sentState.nodes, screenHeight);
     const sentTextConfirmed =
       afterConversation.includes(normalizedText(enteredReply)) &&
       !beforeConversation.includes(normalizedText(enteredReply)) &&
@@ -672,9 +722,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     list = await dump(context.serial);
     const chatListStillOpen =
       Boolean(exactClickable(list.nodes, ["Chat"])) &&
-      !list.nodes.some(node =>
-        /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
-      );
+      !findChatComposer(list.nodes, screenHeight);
     if (!chatListStillOpen) {
       context.onLog("Reply to Unread Chats stopped: Snapchat did not return to the chat list after exiting the conversation.");
       break;
