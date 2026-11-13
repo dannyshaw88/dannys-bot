@@ -482,7 +482,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       continue;
     }
     context.onLog(
-      `Luna live input: newest contact message="${modelContext.latestIncomingMessage.replace(/[\r\n]+/g, " ")}"; ${modelContext.transcript.length} role-labelled visible message(s).`,
+      `Luna live context [slot=${slotId}; promptChars=${replyGoal.length}; nextReply=${history.previousReplyCount + 1}]: newest contact message=${JSON.stringify(modelContext.latestIncomingMessage)}; transcript=${JSON.stringify(modelContext.transcript.slice(-12))}; prior Luna replies=${JSON.stringify(history.sentReplies.map(entry => entry.sentText))}`,
     );
     context.onLog(
       `Reply to Unread Chats: preparing a role-labelled conversation with ${history.sentReplies.length} prior Luna reply record(s); next reply #${history.previousReplyCount + 1}.`,
