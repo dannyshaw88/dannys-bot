@@ -33,6 +33,32 @@ const isEmptyComposerValue = (value: string) => {
   return !normalized || normalized === "send a chat" || normalized === "send chat";
 };
 const isMyAiChat = (name: string) => normalizedText(name) === "my ai";
+const SNAPCHAT_UI_ARTIFACTS = new Set([
+  "changed chats to delete immediately",
+  "changed chats to delete after 24 hours",
+  "missed call",
+  "call back",
+  "requested your location",
+  "is using snapchat for web",
+  "try it on your computer at snapchat com web",
+  "snap envelop",
+  "tap to view",
+  "like and subscribe",
+]);
+
+function isSnapchatUiArtifact(line: string): boolean {
+  const withoutSpeaker = line.trim().replace(
+    /^(?:(?:contact|luna|me|you|received|sent|from [^:]+)\s*:\s*)/i,
+    "",
+  );
+  const normalized = withoutSpeaker
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return SNAPCHAT_UI_ARTIFACTS.has(normalized);
+}
 
 function findChatComposer(nodes: UiNode[], screenHeight: number): UiNode | undefined {
   const editFields = nodes.filter(node => /edittext/i.test(node.className));
@@ -103,6 +129,7 @@ function visibleConversation(nodes: UiNode[], composerTop: number, peerName: str
       return text || description;
     })
     .filter(text => {
+      if (isSnapchatUiArtifact(text)) return false;
       const key = text.toLowerCase().replace(/\s+/g, " ");
       if (!key || excluded.test(text) || key.length > 700 || seen.has(key)) return false;
       seen.add(key);
