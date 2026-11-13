@@ -46,6 +46,12 @@ When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB 
 
 **How to apply:** Edit the saved prompt for conversational behavior. Keep only generic automation concerns in code, such as calibrated typing and confirmation that text was entered and sent; do not enforce wording, link timing, or semantic phrases in the sender.
 
+**Per-slot prompt versus Prompt Test:** Each farm account/device slot has its own saved Reply to Unread Chats prompt. The prompts share a structure, but each slot's prompt carries that girl's persona details and link; do not treat prompt text as shared across girls. Settings → Prompt Test uses the prompt manually entered there and is a separate test input.
+
+**Why:** A Prompt Test result only validates the text pasted into that test. It does not prove the active slot's saved prompt was tested, even though both paths use the same reply-generation function.
+
+**How to apply:** For a live-reply mismatch, distinguish the selected slot's saved prompt from the manually entered Prompt Test prompt. Compare them only when the user is explicitly testing the exact same prompt and conversation; retain each slot's own persona and link.
+
 **Link reply content:** The editable reply goal is the source of truth for Boundlus wording: answer the latest message briefly, use its exact call to action and URL, and do not add claims about Snap being overwhelming or private conversations.
 
 **Why:** The attached current prompt explicitly prohibits the older “Snap is overwhelming” and private-conversation wording, and defines a different exact call to action.
