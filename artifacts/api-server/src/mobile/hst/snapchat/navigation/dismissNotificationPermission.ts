@@ -10,10 +10,24 @@ function isSnapchatNotificationPermissionDialog(state: UiState): boolean {
     .toLowerCase();
   const exactAndroidTitle = /["“”]?\s*snapchat\s*["“”]?\s+is\s+requesting\s+permission\s+to\s+send\s+you\s+notifications?/i
     .test(visibleText);
-  return exactAndroidTitle || (visibleText.includes("snapchat") &&
+  const hasSnapchatPermissionWording = visibleText.includes("snapchat") &&
     /notifications?/.test(visibleText) &&
     /requesting permission|permission.{0,80}notifications?|notifications?.{0,80}permission|allow.{0,40}notifications?|send.{0,40}notifications?/i
-      .test(visibleText));
+      .test(visibleText);
+  const hasAndroidNotificationExplanation =
+    /notifications?\s+may\s+include\s+alerts[, ]+sounds[, ]+and\s+badge\s+updates/i.test(visibleText) &&
+    /controlled in your device settings/i.test(visibleText);
+  const labels = state.nodes.flatMap(node => [node.text, node.desc]);
+  const hasBothPermissionActions =
+    labels.some(isNotificationDenyLabel) &&
+    labels.some(label => normalizeNotificationDenyLabel(label) === "allow");
+
+  // Android sometimes omits the dialog title from UIAutomator entirely. The
+  // inspected tree then contains only this system permission dialog's exact
+  // explanation and its paired DON'T ALLOW / ALLOW controls.
+  return exactAndroidTitle ||
+    hasSnapchatPermissionWording ||
+    (hasAndroidNotificationExplanation && hasBothPermissionActions);
 }
 
 function normalizeNotificationDenyLabel(value: string): string {
