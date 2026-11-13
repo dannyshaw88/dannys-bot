@@ -14,12 +14,17 @@ function isSnapchatNotificationPermissionDialog(state: UiState): boolean {
       .test(visibleText);
 }
 
-function findDontAllowButton(nodes: UiNode[]): UiNode | undefined {
+function isNotificationDenyLabel(value: string): boolean {
+  return value.trim()
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .match(/^(?:don't allow(?: notifications)?|deny(?: all)?(?: notifications?)?)$/) !== null;
+}
+
+function findNotificationDenyButton(nodes: UiNode[]): UiNode | undefined {
   const matchingLabels = nodes.filter(node =>
-    [node.text, node.desc].some(value =>
-      value.trim().replace(/[‘’]/g, "'").replace(/\s+/g, " ").toLowerCase()
-        .match(/^don't allow(?: notifications)?$/),
-    ),
+    [node.text, node.desc].some(isNotificationDenyLabel),
   );
   const area = (node: UiNode) =>
     Math.max(0, node.bounds[2] - node.bounds[0]) *
@@ -110,16 +115,19 @@ export async function tapSnapchatStartupPopupIfPresent(
   if (context.isAborted()) return "aborted";
 
   if (isSnapchatNotificationPermissionDialog(state)) {
-    const denyButton = findDontAllowButton(state.nodes);
+    const denyButton = findNotificationDenyButton(state.nodes);
     if (!denyButton) return "button-missing";
 
+    const buttonLabel = [denyButton.text, denyButton.desc]
+      .map(value => value.trim())
+      .find(Boolean) ?? "Deny";
     context.onLog(
-      "Snapchat startup: notification permission dialog found; tapping Don't allow before account and banner checks.",
+      `Snapchat startup: notification permission dialog found; tapping its "${buttonLabel}" denial button before account and banner checks.`,
     );
     if (!await tapNode(context, denyButton, "deny Snapchat notification permission", 0, true)) {
       return "aborted";
     }
-    context.onLog("Snapchat startup: tapped Don't allow; continuing.");
+    context.onLog(`Snapchat startup: tapped "${buttonLabel}"; continuing.`);
     return "tapped";
   }
 
@@ -149,7 +157,7 @@ export async function dismissSnapchatStartupPopup(
     if (result === "aborted") return "aborted";
     if (result === "button-missing" && !missingButtonLogged) {
       context.onLog(
-        "Snapchat startup: notification permission dialog is present; waiting for its Don't allow control to appear.",
+        "Snapchat startup: notification permission dialog is present; waiting for its Deny/Don't allow button to appear.",
       );
       missingButtonLogged = true;
     }

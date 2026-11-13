@@ -1,6 +1,7 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode, UiState } from "../context";
 import { center, dump, shortResourceId, tapNode } from "../runtime";
+import { tapSnapchatStartupPopupIfPresent } from "./dismissNotificationPermission";
 
 export function isSnapchatCameraSurface(state: UiState): boolean {
   return state.nodes.some(node => [
@@ -88,11 +89,48 @@ export function overlappingAvatarBanner(
   });
 }
 
+async function handleStartupPopupBeforeBanner(
+  context: SnapchatContext,
+  initialState: UiState,
+): Promise<{ state: UiState; tapped: boolean } | null> {
+  let state = initialState;
+  const deadline = Date.now() + 2_500;
+  let waitingForDenyButtonLogged = false;
+
+  while (!context.isAborted()) {
+    const result = await tapSnapchatStartupPopupIfPresent(context, state);
+    if (result === "aborted") return null;
+    if (result === "not-present") return { state, tapped: false };
+    if (result === "tapped") {
+      // Refresh the surface for the next normal navigation step; this is not a
+      // separate prompt-dismissal confirmation.
+      await context.sleep(300, "exact");
+      return { state: await dump(context.serial), tapped: true };
+    }
+
+    if (!waitingForDenyButtonLogged) {
+      context.onLog(
+        "Snapchat account check: notification prompt is visible; waiting briefly for its Deny/Don't allow button before the banner check.",
+      );
+      waitingForDenyButtonLogged = true;
+    }
+    if (Date.now() >= deadline) return null;
+    await context.sleep(300, "exact");
+    if (context.isAborted()) return null;
+    state = await dump(context.serial);
+  }
+
+  return null;
+}
+
 export async function openSnapchatProfile(
   context: SnapchatContext,
   initialState?: UiState,
 ): Promise<UiState | null> {
   let state = initialState ?? await dump(context.serial);
+  let startupPopupResult = await handleStartupPopupBeforeBanner(context, state);
+  if (!startupPopupResult) return null;
+  state = startupPopupResult.state;
   if (isSnapchatProfileSurface(state)) return state;
   if (!isSnapchatCameraSurface(state)) {
     context.onLog("Snapchat account check: Camera screen was not confirmed; not tapping the top-left control.");
@@ -104,6 +142,11 @@ export async function openSnapchatProfile(
   // Refresh it immediately before deciding whether to tap the avatar.
   context.onLog("Snapchat account check: refreshing Camera and checking the avatar for an overlapping banner.");
   state = await dump(context.serial);
+  if (!startupPopupResult.tapped) {
+    startupPopupResult = await handleStartupPopupBeforeBanner(context, state);
+    if (!startupPopupResult) return null;
+    state = startupPopupResult.state;
+  }
   if (isSnapchatProfileSurface(state)) return state;
   if (!isSnapchatCameraSurface(state)) {
     context.onLog("Snapchat account check: Camera screen changed before the banner check.");
