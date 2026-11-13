@@ -33,31 +33,50 @@ const isEmptyComposerValue = (value: string) => {
   return !normalized || normalized === "send a chat" || normalized === "send chat";
 };
 const isMyAiChat = (name: string) => normalizedText(name) === "my ai";
-const SNAPCHAT_UI_ARTIFACTS = new Set([
-  "changed chats to delete immediately",
-  "changed chats to delete after 24 hours",
-  "missed call",
-  "call back",
-  "requested your location",
-  "is using snapchat for web",
-  "try it on your computer at snapchat com web",
-  "snap envelop",
-  "tap to view",
-  "like and subscribe",
-]);
-
-function isSnapchatUiArtifact(line: string): boolean {
-  const withoutSpeaker = line.trim().replace(
-    /^(?:(?:contact|luna|me|you|received|sent|from [^:]+)\s*:\s*)/i,
-    "",
-  );
-  const normalized = withoutSpeaker
+function normalizePromptPhrase(value: string): string {
+  return value
     .normalize("NFKC")
     .toLocaleLowerCase()
     .replace(/[’']/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
-  return SNAPCHAT_UI_ARTIFACTS.has(normalized);
+}
+
+function ignoredPromptPhrases(goal: string): string[] {
+  const lines = goal.split(/\r?\n/);
+  const headingIndex = lines.findIndex(line =>
+    normalizePromptPhrase(line.replace(/^[-•*]\s*/, "")) === "ignore the following",
+  );
+  if (headingIndex < 0) return [];
+  const phrases: string[] = [];
+  for (const line of lines.slice(headingIndex + 1)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (phrases.length) break;
+      continue;
+    }
+    if (!/^[-•*]\s*/.test(trimmed)) break;
+    const phrase = normalizePromptPhrase(trimmed.replace(/^[-•*]\s*/, ""));
+    if (phrase) phrases.push(phrase);
+  }
+  return phrases;
+}
+
+function filterPromptIgnoredTranscript(
+  transcript: string[],
+  goal: string,
+): { messages: string[]; ignoredCount: number } {
+  const phrases = ignoredPromptPhrases(goal);
+  if (!phrases.length) return { messages: transcript, ignoredCount: 0 };
+  const messages = transcript.filter(line => {
+    const normalized = comparableMessageText(line).replace(/[^a-z0-9]+/g, " ").trim();
+    return !phrases.some(phrase =>
+      normalized === phrase ||
+      normalized.includes(phrase) ||
+      (normalized.length >= 12 && (phrase.startsWith(normalized) || phrase.endsWith(normalized))),
+    );
+  });
+  return { messages, ignoredCount: transcript.length - messages.length };
 }
 
 function findChatComposer(nodes: UiNode[], screenHeight: number): UiNode | undefined {
@@ -472,7 +491,11 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     }
     thread = composerResult.state;
     const composer = composerResult.composer;
-    const transcript = visibleConversation(thread.nodes, composer.bounds[1], row.displayName);
+    const screenTranscript = visibleConversation(thread.nodes, composer.bounds[1], row.displayName);
+    const { messages: transcript, ignoredCount } = filterPromptIgnoredTranscript(screenTranscript, replyGoal);
+    if (ignoredCount) {
+      context.onLog(`Reply to Unread Chats: omitted ${ignoredCount} transcript item(s) matching this slot's prompt ignore list.`);
+    }
     const transcriptCapturedAt = new Date().toISOString();
     activeContact = {
       displayName: row.displayName,

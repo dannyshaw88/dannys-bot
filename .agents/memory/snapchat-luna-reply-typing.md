@@ -143,3 +143,9 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 **Why:** The user showed an early media-request link followed by “what’s that?”; the model repeated the link pitch or gave a vague answer despite the conversation history.
 
 **How to apply:** Use the exact prior-link state and post-link count. For this narrow referential question, a deterministic fallback may use the active prompt’s own support text so wording stays editable and the answer cannot be replaced by another link pitch.
+
+**Prompt-listed UI noise:** Treat bullet items under a slot prompt's `IGNORE THE FOLLOWING:` heading as live-transcript cleanup rules. Filter matching screen-derived lines before sending context to Luna; do not hardcode a shared list of that slot's phrases.
+
+**Why:** Snapchat's accessibility transcript can contain system/activity labels such as “Tap to view” that are absent from manually typed Prompt Test conversations, so the model receives different context in live use.
+
+**How to apply:** Parse only the explicit ignore-list section from that slot's editable goal and match normalized transcript lines (including split UI fragments) before generation. Leave persona, answer wording, and link behavior in the prompt.
