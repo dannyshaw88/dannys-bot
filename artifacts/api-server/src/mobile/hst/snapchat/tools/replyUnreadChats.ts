@@ -240,14 +240,14 @@ function unreadChatRows(
     ).sort((a, b) => a.bounds[1] - b.bounds[1]);
     const nameNode = names[0];
     const displayName = nameNode?.text.trim();
-    const withoutDisplayName = (value: string) => displayName
-      ? value.toLocaleLowerCase().split(displayName.toLocaleLowerCase()).join(" ")
-      : value;
-    const activityLabel = [
-      withoutDisplayName(markerLabel),
-      ...rowNodes.filter(node => node !== nameNode).map(node => withoutDisplayName(nodeLabel(node))),
-    ].join(" ");
-    const hasMedia = /\b(snaps?|photos?|videos?)\b/i.test(activityLabel);
+    const hasMedia = rowNodes.some(node => {
+      if (node === nameNode) return false;
+      const hasMediaStatus = [node.text, node.desc].some(value =>
+        /^(?:(?:\d+\s+)?new\s+(?:snaps?|photos?|videos?))(?:\s+\d+\s*(?:s|sec(?:onds)?|m|min(?:utes)?|h|hr(?:ours)?|d|days?))?$/i
+          .test(value.trim().replace(/[·•,]+/g, " ").replace(/\s+/g, " ")),
+      );
+      return hasMediaStatus || /feed_snap_smart_cta_button/i.test(node.resourceId);
+    });
     const hasChats = /\bchats?\b/i.test(rowLabel);
     const chatActionNode = rowNodes.find(node =>
       /feed_chat_button/i.test(`${node.text} ${node.desc} ${node.resourceId}`) &&
