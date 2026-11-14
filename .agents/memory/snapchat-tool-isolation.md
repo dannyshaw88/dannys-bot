@@ -5,7 +5,7 @@ description: Keep each Snapchat tool, its settings, and its navigation flow isol
 
 Each Snapchat tool, its settings, and each navigation flow belongs in its own dedicated module. Keep shared code limited to low-level utilities and explicit dispatch. For Upload a Snap, tap Memories directly when already on Camera; from another screen, tap the live `ngs_camera_icon_container` first, wait for Camera, then tap Memories.
 
-Do not share tool-specific navigation or prompt handlers between Upload a Snap and Upload a Video; keep each upload flow's Camera, Memories, and Add To Your Story handling inside its own tool module. Shared Android input, UI parsing, context types, and dispatcher lifecycle remain platform infrastructure.
+Never share tool-specific logic, navigation, or prompt handlers between any Snapchat tools, even when steps are identical; duplicate that behavior into each owning tool's files. Generic Android input, UI parsing, context types, and dispatcher lifecycle remain platform infrastructure.
 
 **Why:** The user explicitly requested that each tool's behavior remain independent even when two tools currently perform similar steps, to prevent an edit to one tool from affecting another.
 
