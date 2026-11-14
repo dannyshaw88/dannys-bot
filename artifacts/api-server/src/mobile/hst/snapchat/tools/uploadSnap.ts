@@ -1,6 +1,6 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
-import { center, dump, tapNode } from "../runtime";
+import { center, dump, logAction, tapNode } from "../runtime";
 import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
 import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 import { applySnapImageCrop } from "../navigation/applySnapImageCrop";
@@ -38,6 +38,7 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
   const settings = context.tools.uploadSnap;
   if (!settings.enabled || !settings.directoryPath.trim()) return "not-started";
 
+  logAction(context, "Upload 1 Snap");
   const fileName = await context.pickLocalFolderImage(context.serial, {
     folderPath: settings.directoryPath,
     random: settings.selectAtRandom,
@@ -45,10 +46,14 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
     slotIdx: context.slotIdx,
     onLog: message => context.onLog(message.replace(/^Make a Post:/, "Upload a Snap:")),
   });
-  if (!fileName) return "not-started";
+  if (!fileName) {
+    logAction(context, "0 Snaps sent; no image was available");
+    return "not-started";
+  }
 
   const localFilePath = context.path.join(settings.directoryPath, fileName);
   let devicePath = "";
+  let snapSent = false;
   try {
     context.onLog(`Upload a Snap: pushing "${fileName}" to the phone gallery before opening Snapchat Memories.`);
     devicePath = await android.pushFileToDevice(context.serial, localFilePath, fileName, true, true);
@@ -164,6 +169,7 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
     await context.sleep(3_000, "exact");
     context.onLog(`Upload a Snap: tapped Send for "${fileName}" to ${selectedAudience}.`);
     context.onMetric?.("snapchat_uploads");
+    snapSent = true;
     context.onLog("Upload a Snap: allowing Send to settle, then pressing Android Back three times with pauses between presses.");
     for (let press = 1; press <= 3; press++) {
       try {
@@ -183,6 +189,9 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
     context.onLog(`Upload a Snap stopped: ${error instanceof Error ? error.message : "image staging or navigation failed"}.`);
     return "failed";
   } finally {
+    logAction(context, snapSent
+      ? "1 Snap sent"
+      : "0 Snaps sent; the upload did not complete");
     if (devicePath) {
       try {
         await android.removeDeviceFileStrict(context.serial, devicePath);

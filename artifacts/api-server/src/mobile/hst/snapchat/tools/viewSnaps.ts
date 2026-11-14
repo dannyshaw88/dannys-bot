@@ -2,13 +2,17 @@ import * as android from "../../../androidManager";
 import type { SnapchatContext } from "../context";
 import { exitSnapViewer } from "../navigation/exitSnapViewer";
 import { openStoriesList, scanFreshStoryCircles } from "../navigation/openStoriesList";
-import { dump, randomCount, randomSeconds, tapNode } from "../runtime";
+import { dump, logAction, randomCount, randomSeconds, tapNode } from "../runtime";
 
 export async function runViewSnaps(context: SnapchatContext): Promise<void> {
   const settings = context.tools.viewSnaps;
   if (!settings.enabled) return;
   const requested = randomCount(Math.max(1, settings.min), Math.max(1, settings.max));
-  if (!await openStoriesList(context)) return;
+  logAction(context, `View up to ${requested} Snaps`);
+  if (!await openStoriesList(context)) {
+    logAction(context, "0 Snaps viewed; could not open Stories");
+    return;
+  }
 
   const stories = await dump(context.serial);
   const { h: screenHeight, w: screenWidth } = await android.getScreenSizeAsync(context.serial);
@@ -21,10 +25,14 @@ export async function runViewSnaps(context: SnapchatContext): Promise<void> {
   }
   if (scan.circles.length === 0) {
     context.onLog("View Snaps skipped: the Friends row has no fresh, viewable Story bubbles.");
+    logAction(context, "0 Snaps viewed; no viewable Stories available");
     return;
   }
   const story = scan.circles[Math.floor(Math.random() * scan.circles.length)];
-  if (!await tapNode(context, story, "open a circular story")) return;
+  if (!await tapNode(context, story, "open a circular story")) {
+    logAction(context, "0 Snaps viewed; the Story did not open");
+    return;
+  }
 
   await context.sleep(700, "exact");
   let viewed = 1;
@@ -53,4 +61,7 @@ export async function runViewSnaps(context: SnapchatContext): Promise<void> {
   }
   if (!context.isAborted()) await exitSnapViewer(context);
   context.onLog(`View Snaps: viewed ${viewed}/${requested} Snap(s).`);
+  logAction(context, viewed === requested
+    ? `${viewed} Snaps viewed`
+    : `${viewed} of ${requested} Snaps viewed; ${context.isAborted() ? "cycle stopped" : "stopped early"}`);
 }

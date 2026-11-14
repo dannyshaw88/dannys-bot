@@ -15,6 +15,7 @@ import {
   center,
   dump,
   exactClickable,
+  logAction,
   nodeLabel,
   randomCount,
   shortResourceId,
@@ -383,14 +384,17 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
   const { enabled, replyGoal } = context.tools.replyUnreadChats;
   const requested = randomCount(context.tools.replyUnreadChats.min, context.tools.replyUnreadChats.max);
   if (!enabled || requested === 0) return;
+  logAction(context, `Reply to up to ${requested} unread chats`);
   context.onLog(`Reply to Unread Chats: target ${requested} unread contact(s), one reply per contact.`);
   if (!context.slotId) {
     context.onLog("Reply to Unread Chats stopped: this Snapchat slot has no stable saved ID for private history.");
+    logAction(context, "0 replies sent; the slot has no saved history ID");
     return;
   }
   const slotId = context.slotId;
   if (!replyGoal.trim()) {
     context.onLog("Reply to Unread Chats skipped: add a conversation goal in Snapchat Step 2 first.");
+    logAction(context, "0 replies sent; no conversation goal is configured");
     return;
   }
   const recordedSkips = new Set<string>();
@@ -427,18 +431,24 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
   };
   if (!await tapExact(context, ["Chat"], "open the chat list")) {
     context.onLog("Reply to Unread Chats skipped: Chat tab was not found.");
+    logAction(context, "0 replies sent; the Chat tab was unavailable");
     return;
   }
   let list = await waitForUnreadTab(context);
-  if (!list) return;
+  if (!list) {
+    logAction(context, "0 replies sent; the Unread list did not open");
+    return;
+  }
   if (!exactClickable(list.nodes, ["Chat"]) ||
       list.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId))) {
     context.onLog("Reply to Unread Chats stopped: the Unread chat list was not confirmed after tapping its tab.");
+    logAction(context, "0 replies sent; the Unread list could not be confirmed");
     return;
   }
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
 
   let replied = 0;
+  let noMoreEligible = false;
   const visited = new Set<string>();
   const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, (displayName, reason, preview) => {
     // Delivered rows are ordinary outgoing conversations, not missed incoming
@@ -463,6 +473,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     context.onLog(`Reply to Unread Chats: found ${rows.length} eligible text-chat row(s) in the Unread list.`);
     const row = rows.find(item => !visited.has(normalizedText(item.displayName)));
     if (!row) {
+      noMoreEligible = true;
       context.onLog("Reply to Unread Chats: no eligible text-chat row remains in Snapchat's Unread list.");
       break;
     }
@@ -877,6 +888,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
         activeContact.capturedMessages,
       );
     }
+    logAction(context, `${replied} of ${requested} replies sent; the tool stopped after an error`);
     throw error;
   }
   const remainingReason = context.isAborted()
@@ -889,4 +901,9 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     recordNotReplied(row.displayName, "run-ended", remainingReason, row.preview);
   }
   context.onLog(`Reply to Unread Chats: confirmed ${replied}/${requested} GPT-6 Luna replies.`);
+  logAction(context, replied === requested
+    ? `${replied} replies sent`
+    : `${replied} of ${requested} replies sent; ${
+      noMoreEligible ? "no more eligible unread chats" : context.isAborted() ? "cycle stopped" : "tool stopped early"
+    }`);
 }

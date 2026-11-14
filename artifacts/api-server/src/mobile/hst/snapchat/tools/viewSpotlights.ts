@@ -2,21 +2,29 @@ import * as android from "../../../androidManager";
 import type { SnapchatContext } from "../context";
 import { openSpotlight, isSpotlightSurface } from "../navigation/openSpotlight";
 import { swipeByDeviceGesture } from "../navigation/swipeByDeviceGesture";
-import { dump, nodeLabel, randomCount, randomPercent, randomSeconds } from "../runtime";
+import { dump, logAction, nodeLabel, randomCount, randomPercent, randomSeconds } from "../runtime";
 
 export async function runViewSpotlights(context: SnapchatContext): Promise<void> {
   const settings = context.tools.viewStories;
   if (!settings.enabled) return;
   const requested = randomCount(Math.max(1, settings.min), Math.max(1, settings.max));
-  if (!await openSpotlight(context)) return;
+  logAction(context, `View ${requested} Spotlights`);
+  if (!await openSpotlight(context)) {
+    logAction(context, "Spotlights not completed; could not open Spotlight");
+    return;
+  }
 
   let swiped = 0;
+  let viewed = 0;
+  let stopReason = "";
   for (let index = 0; index < requested && !context.isAborted(); index++) {
     const state = await dump(context.serial);
     if (!isSpotlightSurface(state.xml, state.nodes)) {
+      stopReason = "Spotlight screen was unavailable";
       context.onLog("View Spotlights stopped: Spotlight was no longer the active screen.");
       break;
     }
+    viewed++;
     context.onMetric?.("snapchat_spotlights");
 
     const likeChance = randomPercent(settings.likePercentMin, settings.likePercentMax);
@@ -44,13 +52,22 @@ export async function runViewSpotlights(context: SnapchatContext): Promise<void>
     const seconds = randomSeconds(settings.watchSecondsMin, settings.watchSecondsMax);
     context.onLog(`View Spotlights: waiting ${seconds}s before the next Spotlight swipe.`);
     await context.sleep(seconds * 1000);
-    if (context.isAborted() || !await swipeByDeviceGesture(context)) break;
+    if (context.isAborted()) break;
+    if (!await swipeByDeviceGesture(context)) {
+      stopReason = "next Spotlight could not be opened";
+      break;
+    }
     const afterSwipe = await dump(context.serial);
     if (!isSpotlightSurface(afterSwipe.xml, afterSwipe.nodes)) {
+      stopReason = "Spotlight screen ended";
       context.onLog("View Spotlights stopped: the screen left Spotlight after the swipe.");
       break;
     }
     swiped++;
   }
   context.onLog(`View Spotlights: completed ${swiped}/${requested} Spotlight swipe(s).`);
+  const result = viewed === requested
+    ? `${viewed} Spotlights done`
+    : `${viewed} of ${requested} Spotlights done${stopReason ? `; ${stopReason}` : context.isAborted() ? "; cycle stopped" : ""}`;
+  logAction(context, result);
 }

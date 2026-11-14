@@ -11,6 +11,7 @@ import { runUploadVideo, type UploadVideoResult } from "./tools/uploadVideo";
 import { runViewSnaps } from "./tools/viewSnaps";
 import { runViewSpotlights } from "./tools/viewSpotlights";
 import { formatCooldownTime } from "./navigation/handleFriendRequestCooldown";
+import { withSnapchatContext } from "./runtime";
 
 type SnapchatToolEntry = {
   name: string;
@@ -40,6 +41,10 @@ async function restoreCameraBeforeNextTool(
 }
 
 export async function runSnapchatTools(context: SnapchatContext): Promise<void> {
+  return withSnapchatContext(context, () => runSnapchatToolsInContext(context));
+}
+
+async function runSnapchatToolsInContext(context: SnapchatContext): Promise<void> {
   const startupPopupResult = await dismissSnapchatStartupPopup(context);
   if (startupPopupResult === "aborted") {
     if (!context.isAborted()) context.onLog("Snapchat tool dispatcher skipped because startup popup handling was interrupted.");

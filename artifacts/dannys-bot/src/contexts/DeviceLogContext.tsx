@@ -17,7 +17,7 @@ import {
   type ReactNode,
 } from "react";
 
-const ACTION_LOG_RE = /Cycle\s+(complete|failed|aborted)/i; // "Cycle failed" added to catch-block tLog
+const ACTION_LOG_RE = /\[ACTION\]\s*\S|Cycle\s+(complete|failed|aborted)/i;
 const DEVICE_DEBUG_LOG_CLEAR_EVENT = "aura:clear-device-debug-log";
 
 /** Request a per-device live debug-log reset from non-React HST owners. */
@@ -52,10 +52,11 @@ export function DeviceLogProvider({ children }: { children: ReactNode }) {
     const now       = new Date();
     const stamp     = now.toLocaleTimeString();
     const line      = `[${stamp}] ${msg}`;
-    const isAction  = ACTION_LOG_RE.test(msg);
-    const actionLine = isAction
-      ? `[${now.toLocaleString(undefined, { dateStyle: "short", timeStyle: "medium" })}]  ${msg}`
-      : null;
+    const actionMessage = msg.match(/\[ACTION\]\s*(.+)$/i)?.[1]?.trim();
+    const isAction = Boolean(actionMessage) || ACTION_LOG_RE.test(msg);
+    const actionLine = !isAction
+      ? null
+      : `[${now.toLocaleString(undefined, { dateStyle: "short", timeStyle: "medium" })}]  ${actionMessage ?? msg}`;
 
     setStore(prev => {
       const cur = prev[serial] ?? { logLines: [], actionLogLines: [] };

@@ -1,6 +1,6 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
-import { center, dump, randomCount, tapNode } from "../runtime";
+import { center, dump, logAction, randomCount, tapNode } from "../runtime";
 import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
 import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 import { attachSnapLink } from "../navigation/attachSnapLink";
@@ -233,10 +233,14 @@ export async function runUploadVideo(context: SnapchatContext): Promise<UploadVi
     return "not-started";
   }
 
+  logAction(context, `Upload ${requestedAmount} video${requestedAmount === 1 ? "" : "s"}`);
   const usedFileNames: string[] = [];
   let completed = 0;
   for (let index = 0; index < requestedAmount; index++) {
-    if (context.isAborted()) return completed > 0 ? "completed" : "not-started";
+    if (context.isAborted()) {
+      logAction(context, `${completed} of ${requestedAmount} videos uploaded; cycle stopped`);
+      return completed > 0 ? "completed" : "not-started";
+    }
     const fileName = await context.pickLocalFolderVideo(context.serial, {
       folderPath: settings.directoryPath,
       random: settings.selectAtRandom,
@@ -244,15 +248,25 @@ export async function runUploadVideo(context: SnapchatContext): Promise<UploadVi
       onLog: context.onLog,
     });
     if (!fileName) {
-      if (completed === 0) return "not-started";
+      if (completed === 0) {
+        logAction(context, "0 videos uploaded; no unused videos were available");
+        return "not-started";
+      }
       context.onLog(`Upload a Video: completed ${completed} of ${requestedAmount}; no more unused videos were available.`);
+      logAction(context, `${completed} video${completed === 1 ? "" : "s"} uploaded; no more unused videos available`);
       return "completed";
     }
     usedFileNames.push(fileName);
     context.onLog(`Upload a Video: starting video ${index + 1} of ${requestedAmount}.`);
+    logAction(context, `Uploading video ${index + 1} of ${requestedAmount}`);
     const result = await uploadOneVideo(context, fileName);
-    if (result !== "completed") return result;
+    if (result !== "completed") {
+      logAction(context, `${completed} of ${requestedAmount} videos uploaded; video ${index + 1} did not complete`);
+      return result;
+    }
     completed++;
+    logAction(context, `Video ${completed} of ${requestedAmount} uploaded`);
   }
+  logAction(context, `${completed} video${completed === 1 ? "" : "s"} uploaded`);
   return "completed";
 }

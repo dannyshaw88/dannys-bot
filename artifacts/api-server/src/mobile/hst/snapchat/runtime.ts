@@ -1,11 +1,26 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import * as android from "../../androidManager";
 import type { SnapchatContext, UiNode, UiState } from "./context";
+import { dismissIncomingCallIfPresent } from "./navigation/dismissIncomingCall";
 
 export const BANNER_RECHECK_MS = 120;
 export const ADD_FRIENDS_BANNER_RECHECK_MS = 5_000;
 
+const snapchatContextStorage = new AsyncLocalStorage<SnapchatContext>();
+
+export function withSnapchatContext<T>(
+  context: SnapchatContext,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return snapchatContextStorage.run(context, operation);
+}
+
 export const shortResourceId = (node: UiNode) => node.resourceId.split("/").pop() ?? node.resourceId;
 export const nodeLabel = (node: UiNode) => `${node.text} ${node.desc}`.trim();
+export function logAction(context: SnapchatContext, message: string): void {
+  context.onLog(`[ACTION] ${message}`);
+}
+
 export const center = (node: UiNode) => ({
   x: Math.round((node.bounds[0] + node.bounds[2]) / 2),
   y: Math.round((node.bounds[1] + node.bounds[3]) / 2),
@@ -44,8 +59,14 @@ export function parseNodes(xml: string): UiNode[] {
 }
 
 export async function dump(serial: string): Promise<UiState> {
-  const xml = await android.dumpUi(serial).catch(() => "");
-  return { xml, nodes: parseNodes(xml) };
+  const readFreshState = async (): Promise<UiState> => {
+    const xml = await android.dumpUi(serial).catch(() => "");
+    return { xml, nodes: parseNodes(xml) };
+  };
+  const state = await readFreshState();
+  const context = snapchatContextStorage.getStore();
+  if (!context || context.serial !== serial || context.isAborted()) return state;
+  return dismissIncomingCallIfPresent(context, state, readFreshState);
 }
 
 export async function tapNode(

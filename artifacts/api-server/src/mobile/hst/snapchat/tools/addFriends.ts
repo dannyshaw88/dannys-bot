@@ -3,14 +3,19 @@ import type { SnapchatContext, UiNode } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForSuggestions } from "../navigation/openAddFriends";
 import { handleFriendRequestLimit } from "../navigation/handleFriendRequestCooldown";
 import { scrollAddFriendsListOneSlot } from "../navigation/scrollAddFriendsListOneSlot";
-import { center, dump, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
+import { center, dump, logAction, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
 
 export async function runAddFriends(context: SnapchatContext): Promise<boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked"> {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
   if (!context.tools.addFriends.enabled || requested === 0) return false;
-  if (!await openAddFriendsForSuggestions(context)) return false;
+  logAction(context, `Add ${requested} friends`);
+  if (!await openAddFriendsForSuggestions(context)) {
+    logAction(context, "0 friends added; could not open the friend list");
+    return false;
+  }
   const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let added = 0;
+  let noMoreAvailable = false;
   const attemptedFriends = new Set<string>();
   const recoveryAttempts = new Map<string, number>();
   const findAddCandidates = (nodes: UiNode[]) => {
@@ -41,11 +46,15 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   while (added < requested && !context.isAborted()) {
     let state = await dump(context.serial);
     const cooldownResult = await handleFriendRequestLimit(context, "Add Friends", state.nodes);
-    if (cooldownResult) return cooldownResult;
+    if (cooldownResult) {
+      logAction(context, `${added} of ${requested} friends added; paused by Snapchat's friend-request limit`);
+      return cooldownResult;
+    }
     let { addButtons, candidates } = findAddCandidates(state.nodes);
     let selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
     const candidate = selected?.candidate;
     if (!selected || !candidate) {
+      noMoreAvailable = true;
       context.onLog(addButtons.length
         ? "Add Friends: no unattempted friend-row Add controls remain; continuing to the next tool."
         : "Add Friends: no friend-row Add controls are currently exposed; continuing to the next tool.");
@@ -61,7 +70,10 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       if (context.isAborted()) break;
       state = await dump(context.serial);
       const cooldownAfterWait = await handleFriendRequestLimit(context, "Add Friends", state.nodes);
-      if (cooldownAfterWait) return cooldownAfterWait;
+      if (cooldownAfterWait) {
+        logAction(context, `${added} of ${requested} friends added; paused by Snapchat's friend-request limit`);
+        return cooldownAfterWait;
+      }
       ({ addButtons, candidates } = findAddCandidates(state.nodes));
       selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
       if (!selected) continue;
@@ -73,7 +85,10 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
 
     const afterTap = await dump(context.serial);
     const cooldownAfterTap = await handleFriendRequestLimit(context, "Add Friends", afterTap.nodes);
-    if (cooldownAfterTap) return cooldownAfterTap;
+    if (cooldownAfterTap) {
+      logAction(context, `${added} of ${requested} friends added; paused by Snapchat's friend-request limit`);
+      return cooldownAfterTap;
+    }
     if (hasSnapchatChatComposer(afterTap.nodes)) {
       const recoveries = (recoveryAttempts.get(friendKey) ?? 0) + 1;
       recoveryAttempts.set(friendKey, recoveries);
@@ -98,5 +113,11 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     }
   }
   context.onLog(`Add Friends: processed ${added}/${requested} live friend-row Add tap(s).`);
+  const result = added === requested
+    ? `${added} ${added === 1 ? "friend" : "friends"} added`
+    : `${added} ${added === 1 ? "friend" : "friends"} added; ${
+      noMoreAvailable ? "no more available" : context.isAborted() ? "cycle stopped" : `stopped before the target of ${requested}`
+    }`;
+  logAction(context, result);
   return true;
 }

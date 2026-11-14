@@ -13216,11 +13216,6 @@ function serialToBrowserId(serial: string): number {
 // excluded so user taps aren't double-counted as bot markers.
 const BOT_TAP_RE = /tapp(?:ing|ed)[^\n(]*\((\d+),\s*(\d+)\)/i;
 
-// Regex for filtering action-only lines into the Action Log tab.
-// Matches automation action keywords emitted by the engine.
-// Only cycle-level outcome lines go to the Action Log — no debug noise.
-const ACTION_LOG_RE = /Cycle\s+(complete|failed|aborted)/i;
-
 export function MobilePage() {
   // When navigated from the Phone Farm grid (/mobile/farm/:serial), only this
   // phone's serial is shown. When navigated directly (/mobile/farm with no

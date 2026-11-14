@@ -3,12 +3,16 @@ import type { SnapchatContext, UiNode } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForAccepts } from "../navigation/openAddFriends";
 import { handleFriendRequestLimit } from "../navigation/handleFriendRequestCooldown";
 import { scrollAcceptFriendsListOneSlot } from "../navigation/scrollAcceptFriendsListOneSlot";
-import { center, dump, findOccludingBanner, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
+import { center, dump, findOccludingBanner, logAction, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
 
 export async function runAcceptFriends(context: SnapchatContext): Promise<boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked"> {
   const requested = randomCount(context.tools.acceptFriends.min, context.tools.acceptFriends.max);
   if (!context.tools.acceptFriends.enabled || requested === 0) return false;
-  if (!await openAddFriendsForAccepts(context)) return false;
+  logAction(context, `Accept up to ${requested} friend requests`);
+  if (!await openAddFriendsForAccepts(context)) {
+    logAction(context, "0 friend requests accepted; could not open the request list");
+    return false;
+  }
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let blockedAcceptance = "";
   let viewMoreBannerWaitLogged = false;
@@ -35,7 +39,10 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
 
   let state = await dump(context.serial);
   const initialCooldownResult = await handleFriendRequestLimit(context, "Accept Friends", state.nodes);
-  if (initialCooldownResult) return initialCooldownResult;
+  if (initialCooldownResult) {
+    logAction(context, `0 of ${requested} friend requests accepted; paused by Snapchat's friend-request limit`);
+    return initialCooldownResult;
+  }
 
   for (let expansion = 0; expansion < 10 && !context.isAborted(); expansion++) {
     const moreButton = state.nodes.find(node =>
@@ -53,7 +60,10 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
       await context.sleep(120, "exact");
       state = await dump(context.serial);
       const cooldownWhileExpanding = await handleFriendRequestLimit(context, "Accept Friends", state.nodes);
-      if (cooldownWhileExpanding) return cooldownWhileExpanding;
+      if (cooldownWhileExpanding) {
+        logAction(context, `0 of ${requested} friend requests accepted; paused by Snapchat's friend-request limit`);
+        return cooldownWhileExpanding;
+      }
       expansion--;
       continue;
     }
@@ -76,6 +86,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
   }
 
   let accepted = 0;
+  let noMoreAvailable = false;
   let pendingAcceptance: { name: string; row: UiNode } | null = null;
   const attemptedAcceptances = new Set<string>();
   while (accepted < requested && !context.isAborted()) {
@@ -134,6 +145,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
     const candidate = getAcceptRows(state.nodes)
       .find(row => !attemptedAcceptances.has(acceptanceKey(row.name)));
     if (!candidate) {
+      noMoreAvailable = true;
       context.onLog("Accept Friends: no unattempted Accept requests remain; continuing to the next tool.");
       break;
     }
@@ -149,9 +161,18 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
     if (!await tapNode(context, candidate.button, `accept ${candidate.name} under Added Me`, 250)) break;
     state = await dump(context.serial);
     const cooldownAfterTap = await handleFriendRequestLimit(context, "Accept Friends", state.nodes);
-    if (cooldownAfterTap) return cooldownAfterTap;
+    if (cooldownAfterTap) {
+      logAction(context, `${accepted} of ${requested} friend requests accepted; paused by Snapchat's friend-request limit`);
+      return cooldownAfterTap;
+    }
     pendingAcceptance = { name: candidate.name, row: candidate.row };
   }
   context.onLog(`Accept Friends: accepted ${accepted}/${requested} visible incoming requests.`);
+  const result = accepted === requested
+    ? `${accepted} friend request${accepted === 1 ? "" : "s"} accepted`
+    : `${accepted} friend request${accepted === 1 ? "" : "s"} accepted; ${
+      noMoreAvailable ? "no more available" : context.isAborted() ? "cycle stopped" : `stopped before the target of ${requested}`
+    }`;
+  logAction(context, result);
   return true;
 }

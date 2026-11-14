@@ -151,6 +151,7 @@
 - [Snapchat idle recovery ordering](snapchat-idle-recovery-ordering.md) — reopen Snapchat from cycle finalization after the stalled tool unwinds, before releasing the device lease
 - [Snapchat notification permission prompt](snapchat-notification-permission.md) — tap the visible Don't allow before account/banner navigation; do not add a dedicated post-tap dismissal check
 - [Snapchat Add Friends confirmation](snapchat-add-friends-confirmation.md) — detect incoming banners; tap live Add buttons and scroll only 30% of a row
+- [Snapchat incoming-call dismissal](snapchat-incoming-call-dismissal.md) — piggyback detection on existing UI reads; tap only the live Not Now control
 - [Snapchat module isolation](snapchat-tool-isolation.md) — keep tools isolated; Upload a Snap crops before Send To and falls back to Friends Only if Public is missing
 - [Per-device remote input latency](device-remote-input-latency.md) — fast physical touches with slow ADB-injected inputs point to the device/transport path, not the typing profile
 - [Never open Snapchat My AI](snapchat-my-ai-exclusion.md) — exclude the exact My AI row during unread-chat discovery and recheck immediately before tapping
