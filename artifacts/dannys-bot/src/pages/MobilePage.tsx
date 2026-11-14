@@ -13349,10 +13349,9 @@ export function MobilePage() {
   // ← back button can return them to the exact same location (tab + slot).
   const [prevLogLocation, setPrevLogLocation] = useState<{ tab: MobileTab; slotIdx: number | null } | null>(null);
   const accountPanelRef = useRef<AccountSettingsPanelHandle>(null);
-  // Per-serial "user explicitly turned the live view on" flag. Visiting the
-  // Mobile tab, or a phone simply being connected, must never by itself
-  // start streaming/waking the device — only pressing Power (below) or the
-  // automation toggle being enabled does.
+  // Per-serial explicit live-view request. Visiting the general Mobile tab or
+  // merely connecting a phone must not wake/stream it; an explicit Farm-card
+  // selection, Power press, or enabled automation may do so.
   const [liveOn, setLiveOn] = useState<Record<string, boolean>>(() => (
     targetSerial && autoPowerOn ? { [targetSerial]: true } : {}
   ));
@@ -13537,8 +13536,8 @@ export function MobilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phones.map(p => p.serial).join(","), targetSerial, restartRequested]);
 
-  // Only true once we have real data AND either a phone is connected or one
-  // of the setup panels needs to take over the whole content area.
+  // A selected Farm device may mount its mirror while USB inventory is still
+  // loading. All other views wait for confirmed device data before splitting.
   const showSplitView = detailPhoneDataPending ||
     !!(data && data.adbFound && !error && (phones.length > 0 || loading));
 
