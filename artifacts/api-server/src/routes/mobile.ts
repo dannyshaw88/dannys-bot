@@ -5097,7 +5097,44 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         unique.repairs,
         cfg[serial]?.slotAutomation,
       );
-      cfg[serial] = { ...cfg[serial], account: input, slotAutomation };
+      // Older builds stored per-slot HST settings under numeric slot indexes.
+      // Account edits post the full slot list, so migrate legacy records for
+      // each still-existing slot before the stale-slot cleanup below. Without
+      // this, an ordinary username/email/password edit could discard settings
+      // that the settings endpoint still knows how to read by numeric index.
+      const automationWithMigratedLegacyKeys = { ...slotAutomation };
+      const repairedSlotIndexes = new Set(unique.repairs.map(repair => repair.slotIdx));
+      let migratedLegacyAutomationCount = 0;
+      input.slots.forEach((slot, slotIdx) => {
+        const previousIndex = previousSlots.findIndex(previous => previous.slotId === slot.slotId);
+        const sourceIndex = previousIndex >= 0
+          ? previousIndex
+          : repairedSlotIndexes.has(slotIdx)
+            ? slotIdx
+            : -1;
+        if (sourceIndex < 0) return;
+        const legacyKey = String(sourceIndex);
+        if (
+          Object.prototype.hasOwnProperty.call(automationWithMigratedLegacyKeys, legacyKey) &&
+          !Object.prototype.hasOwnProperty.call(automationWithMigratedLegacyKeys, slot.slotId)
+        ) {
+          automationWithMigratedLegacyKeys[slot.slotId] = JSON.parse(
+            JSON.stringify(automationWithMigratedLegacyKeys[legacyKey]),
+          );
+          migratedLegacyAutomationCount += 1;
+        }
+      });
+      if (migratedLegacyAutomationCount > 0) {
+        logger.info(
+          { serial, migratedLegacyAutomationCount },
+          "[mobile-account] migrated legacy numeric HST settings to stable slot IDs",
+        );
+      }
+      cfg[serial] = {
+        ...cfg[serial],
+        account: input,
+        slotAutomation: automationWithMigratedLegacyKeys,
+      };
       saveInstanceConfigs(cfg);
       await Promise.all(input.slots.map(slot => persistSlotPersonalityToDatabase(serial, slot)));
       // Account saves are also a state-boundary checkpoint. The UI can save
@@ -5106,10 +5143,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // whose stable identity is no longer present, so a replacement slot
       // cannot inherit the deleted account's HST toggle/settings or TrustScore.
       if (!preserveExistingSlotState) {
+        for (const key of Object.keys(automationWithMigratedLegacyKeys)) {
+          if (/^\d+$/.test(key)) delete automationWithMigratedLegacyKeys[key];
+        }
         const liveAutomationKeys = new Set(
           input.slots.map(slot => `${serial}:${slot.slotId}`),
         );
-        const savedAutomation = cfg[serial]?.slotAutomation ?? {};
+        const savedAutomation = automationWithMigratedLegacyKeys;
         const nextAutomation = Object.fromEntries(
           Object.entries(savedAutomation).filter(([key]) =>
             liveAutomationKeys.has(key) ||
