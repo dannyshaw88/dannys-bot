@@ -108,6 +108,12 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 
 **How to apply:** Keep required/non-empty validation, but avoid `maxLength`, schema `.max()`, and route-level prompt-length rejection in the settings or test flow. Infrastructure request-body limits are separate.
 
+**Hard-coded reply-rule transparency:** When changing or diagnosing Reply to Unread Chats, identify fixed runtime filters, prompt instructions, reply-count rules, retry rules, and output-size limits separately from the user's editable slot prompt. Do not imply these are prompt rules, and explicitly surface any constraints the user did not request.
+
+**Why:** An unrequested 700-character incoming-message filter silently discarded a readable Snapchat message, and the user wants visibility into other fixed rules that may change or reject live replies.
+
+**How to apply:** Audit the live transcript extraction and Luna generator together, list the exact behavior-affecting rules, and distinguish user-directed behavior from internal limits before changing them.
+
 **Persona and multi-part replies:** Persona facts belong to each editable account-slot goal. Treat that goal's PERSONA section as authoritative, keep examples consistent with it, and answer every direct question in the newest message in order, even when the reply must exceed the usual short-reply limit. Mention Quick Add only when the contact asks where they were found or added.
 
 **Why:** A prompt test exposed conflicting identity details between the persona and examples, and a combined message asked several questions that the reply did not all answer. Slot-specific prompts may represent different personas, so one account's identity must not become a global default.

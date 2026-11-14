@@ -13252,8 +13252,16 @@ export function MobilePage() {
   // Derived phone/slot data — declared here so activeSerial is in scope for
   // all hooks below (useEffect dependency arrays are evaluated synchronously).
   const allPhones = data?.phones ?? [];
+  const matchedTargetPhone = targetSerial
+    ? allPhones.find(phone => phone.serial === targetSerial)
+    : undefined;
+  const detailPhoneDataPending = Boolean(targetSerial && data === null && loading && !error);
   const phones = targetSerial
-    ? allPhones.filter(p => p.serial === targetSerial)
+    ? matchedTargetPhone
+      ? [matchedTargetPhone]
+      : detailPhoneDataPending
+        ? [{ serial: targetSerial, state: "device" }]
+        : []
     : [...allPhones].sort((a, b) => a.serial.localeCompare(b.serial));
   const slots: (UsbPhone | null)[] = Array.from({ length: TOTAL_SLOTS }, (_, i) => phones[i] ?? null);
   const activeSerial = slots[0]?.serial ?? null;
@@ -13531,7 +13539,8 @@ export function MobilePage() {
 
   // Only true once we have real data AND either a phone is connected or one
   // of the setup panels needs to take over the whole content area.
-  const showSplitView = !!(data && data.adbFound && !error && (phones.length > 0 || loading));
+  const showSplitView = detailPhoneDataPending ||
+    !!(data && data.adbFound && !error && (phones.length > 0 || loading));
 
   // Resolved display info for the header when viewing a specific device.
   const targetPhone = targetSerial ? allPhones.find(p => p.serial === targetSerial) : null;
@@ -13667,7 +13676,7 @@ export function MobilePage() {
                   )
                 ))}
                 <div className="flex-1" />
-                <DeviceQuickControls serial={activeSerial} />
+                <DeviceQuickControls serial={detailPhoneDataPending ? null : activeSerial} />
                 {MOBILE_TABS_RIGHT.map(t => (
                   (!deviceDetailView || t.id !== "actionlog") && (
                   <button
@@ -13694,7 +13703,13 @@ export function MobilePage() {
                 {/* Accounts panel: always mounted so each slot's automation
                     hook persists across tab switches and navigation. */}
                 <div className={activeTab === "account" ? "h-full" : "hidden"}>
-                  <AccountSettingsPanel key={stickySlot0Ref.current?.serial ?? "no-device"} ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} onPhoneAppsInspectionHold={setPhoneAppsInspectionHold} onOpenBrowserProfile={openBrowserProfile} />
+                  {detailPhoneDataPending ? (
+                    <div className="h-full flex items-center justify-center text-sm text-muted-foreground" data-testid="status-device-data-loading">
+                      Connecting to the selected phone…
+                    </div>
+                  ) : (
+                    <AccountSettingsPanel key={stickySlot0Ref.current?.serial ?? "no-device"} ref={accountPanelRef} phone={stickySlot0Ref.current} addLog={addLog} onSlotChange={setOpenAccountSlot} initialSlot={initialSlot} onAnyEnabled={setHstEnabled} onPhoneAppsRunning={setPhoneAppsRunning} onPhoneAppsInspectionHold={setPhoneAppsInspectionHold} onOpenBrowserProfile={openBrowserProfile} />
+                  )}
                 </div>
                 {/* Browser tab — isolated ghost browser per device serial */}
                 {/* Positioned absolutely so it spans the full split-view width
