@@ -11,7 +11,7 @@
 - [Make a Post flow safety](make-a-post-log.md) — use the repair history, verify processed media before navigation, and keep action names aligned at dispatch boundaries
 - [Automation image consumption](automation-image-consumption.md) — Make a Post/Avatar delete sources; Upload a Snap removes only the phone copy and keeps its local PC source
 - [Activate Percentage gate levels](activate-percentage-gate-levels.md) — per-execution tool-level gate (View Feed/Stories/Follow/Jitter) vs per-user Inject Browsing gate are distinct; don't conflate
-- [Mobile settings save/load schema drift](mobile-settings-schema-drift.md) — add fields to the persistence schema or settings can silently reset on restart
+- [Mobile settings persistence safety](mobile-settings-schema-drift.md) — schema omissions and failed reads must never turn saved slot settings into defaults
 - [leaksPage.ts client script must be plain JS](leaks-page-ts-syntax.md) — TS syntax in the embedded `<script>` string is a silent SyntaxError that freezes every Leak Check card in "pending" forever
 - [Fingerprint noise entropy floor](fingerprint-noise-entropy.md) — canvas/audio noise must be full 32-bit ints, not modulo/rounded-float derived, or accounts collide at scale
 - [Artifact duplicate-engine hazard](artifact-duplicate-engine-hazard.md) — artifact workflows can start a second stateful backend; guard ownership with a cross-process lock

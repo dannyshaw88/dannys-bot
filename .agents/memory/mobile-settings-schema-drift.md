@@ -18,6 +18,12 @@ When clearing a persisted nested setting, send explicit `null` through JSON and 
 
 **How to apply:** Use `null` as the explicit clear value for persisted optional objects, preserve it through the frontend type and validation schema, then confirm reload still returns the cleared state.
 
+Never treat a failed or incomplete per-slot settings read as a valid defaults snapshot. Keep the last known values, keep autosave gated, and retry until the server returns a complete response.
+
+**Why:** The HST hydration failure path previously substituted frontend defaults and marked them loaded. A later edit could then autosave disabled tools and default execution windows over the slot's saved configuration.
+
+**How to apply:** Only mark the settings as hydrated after validating the server response. Recheck the save gate inside pending debounce callbacks, because a request may fail after an autosave timer was already scheduled.
+
 ## Tab-scoped autosave
 
 Any debounced save owned by a panel that unmounts when the user changes tabs must not cancel its pending timer during unmount. Gate the save on a per-device hydration marker instead, so initial values do not overwrite another device while still allowing the final user edit to flush after navigation.

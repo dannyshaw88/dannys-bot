@@ -4950,7 +4950,17 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           const response = await fetch(settingsUrl, { cache: "no-store" });
           if (!response.ok) throw new Error(`settings request failed (${response.status})`);
           const data = await response.json();
-          if (!data || typeof data !== "object" || Array.isArray(data)) {
+          if (
+            !data ||
+            typeof data !== "object" ||
+            Array.isArray(data) ||
+            typeof data.enabled !== "boolean" ||
+            typeof data.cycleIntervalMin !== "number" ||
+            typeof data.cycleIntervalMax !== "number" ||
+            !data.snapchatTools ||
+            typeof data.snapchatTools !== "object" ||
+            Array.isArray(data.snapchatTools)
+          ) {
             throw new Error("settings response was incomplete");
           }
           retryAttempt = 0;
