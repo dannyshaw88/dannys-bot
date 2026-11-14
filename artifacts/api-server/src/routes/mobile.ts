@@ -12317,7 +12317,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
   // Captures one physical tap via getevent so the UI can build a per-device
   // key map for real-tap keyboard typing (each keystroke = real OS touch event).
 
-  // Fixed Instagram controls use a separate strict map. Runtime HST navigation
+  // Fixed app controls use a separate strict map. Runtime HST navigation
   // never falls back to accessibility, reference images, or guessed positions.
   app.post("/api/mobile/devices/:serial/navigation-calibration/prefetch", async (req: Request, res: Response) => {
     try {

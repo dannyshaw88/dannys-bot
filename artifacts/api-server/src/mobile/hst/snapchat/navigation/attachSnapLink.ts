@@ -1,6 +1,6 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
-import { center, dump, shortResourceId, tapNode } from "../runtime";
+import { center, dump, tapNode } from "../runtime";
 
 function normalize(value: string): string {
   return value.trim().toLowerCase().replace(/[·•–—-]/g, " ").replace(/\s+/g, " ");
@@ -66,55 +66,6 @@ function hasClipboardAccessPrompt(nodes: UiNode[]): boolean {
   return hasTitle && hasExplanation;
 }
 
-function findMoreToolsControl(nodes: UiNode[]): UiNode | undefined {
-  return nodes.find(node =>
-    shortResourceId(node) === "more" ||
-    ["more", "more tools", "show more tools", "expand tools"].includes(normalize(node.text || node.desc)),
-  );
-}
-
-function findLabeledPaperclip(nodes: UiNode[]): UiNode | undefined {
-  return nodes.find(node =>
-    /paperclip|attachmenttool|(?:^|[/_])(?:link|url|attachment)(?:$|[/_])/i.test(
-      `${node.text} ${node.desc} ${node.resourceId}`,
-    ),
-  );
-}
-
-function paperclipToolbarNodeSummary(nodes: UiNode[]): string {
-  const root = nodes[0];
-  if (!root) return "no UI nodes";
-  const [rootLeft, rootTop, rootRight, rootBottom] = root.bounds;
-  const width = rootRight - rootLeft;
-  const height = rootBottom - rootTop;
-  if (width <= 0 || height <= 0) return "invalid root bounds";
-
-  const candidates = nodes.filter(node => {
-    const [left, top, right, bottom] = node.bounds;
-    const nodeWidth = right - left;
-    const nodeHeight = bottom - top;
-    const x = (left + right) / 2;
-    const y = (top + bottom) / 2;
-    return x >= rootLeft + width * 0.76 &&
-      y >= rootTop + height * 0.06 &&
-      y <= rootTop + height * 0.88 &&
-      nodeWidth >= 1 &&
-      nodeHeight >= 1 &&
-      nodeWidth <= width * 0.22 &&
-      nodeHeight <= height * 0.12;
-  });
-
-  if (!candidates.length) return "no small right-toolbar nodes in the live tree";
-  return candidates.slice(0, 24).map((node, index) => {
-    const label = node.text.trim() || node.desc.trim();
-    return `${index + 1}:${node.className || "View"}` +
-      ` id=${JSON.stringify(node.resourceId || "(none)")}` +
-      ` label=${JSON.stringify(label || "(none)")}` +
-      ` clickable=${node.clickable}` +
-      ` bounds=[${node.bounds.join(",")}]`;
-  }).join(" | ");
-}
-
 export async function attachSnapLink(context: SnapchatContext, rawUrl: string): Promise<boolean> {
   const url = rawUrl.trim();
   if (!url) {
@@ -129,35 +80,22 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
     return false;
   }
 
-  let linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]) ??
-    findLabeledPaperclip(state.nodes);
-  if (!linkControl) {
-    const moreTools = findMoreToolsControl(state.nodes);
-    if (!moreTools) {
-      context.onLog(
-        `Upload a Video diagnostic: no More node; live right-toolbar nodes: ${paperclipToolbarNodeSummary(state.nodes)}`,
-      );
-      context.onLog("Upload a Video stopped: neither the paperclip icon nor Snapchat's More chevron could be identified in the live editor.");
-      return false;
-    }
-    if (!await tapNode(context, moreTools, "expand the Snap editor tools with the live More chevron", 700, true)) return false;
-
-    state = await dump(context.serial);
-    linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]) ??
-      findLabeledPaperclip(state.nodes);
-    if (!linkControl) {
-      context.onLog(
-        `Upload a Video diagnostic: no Paperclip/Link node after More; live right-toolbar nodes: ${paperclipToolbarNodeSummary(state.nodes)}`,
-      );
-    }
-  }
-
-  if (!linkControl) {
-    context.onLog("Upload a Video stopped: Snapchat did not expose an accessibility node for the paperclip/Link control.");
+  context.onLog("Upload a Video: tapping this device's calibrated Click Paperclip point.");
+  try {
+    const point = await android.tapCalibratedNavigationControl(
+      context.serial,
+      "snapchatClickPaperclip",
+      message => context.onLog(`Upload a Video: ${message}`),
+      "Snapchat: tap the calibrated Paperclip control in the video editor",
+    );
+    context.onLog(`Upload a Video: calibrated Paperclip tap sent at (${point.x},${point.y}).`);
+  } catch (error) {
+    context.onLog(
+      `Upload a Video stopped: Click Paperclip is not calibrated for this device${error instanceof Error ? ` (${error.message})` : ""}.`,
+    );
     return false;
   }
-  context.onLog("Upload a Video: opening the live paperclip/Link accessibility node.");
-  if (!await tapNode(context, linkControl, "open the exposed paperclip Link control in the video Snap editor", 1_000, true)) return false;
+  await context.sleep(1_000, "exact");
 
   let clipboardPromptVisible = false;
   for (let attempt = 0; attempt < 8; attempt++) {

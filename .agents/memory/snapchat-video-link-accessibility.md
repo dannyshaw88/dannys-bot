@@ -1,10 +1,10 @@
 ---
-name: Snapchat Upload Video paperclip targeting
-description: Target the video Snap Link tool through accessibility nodes and make misses actionable without screenshots.
+name: Snapchat Upload Video paperclip calibration
+description: Use an explicit per-device Mirror Controls calibration for the Snapchat video editor Paperclip.
 ---
 
-For Snapchat Upload a Video, find the Paperclip/Link control from its live accessibility text, content description, or resource ID. Do not use screenshot-based icon matching or guessed coordinates. After opening More, use the fresh UI tree already required for the tap; if no control is identified, log the right-toolbar node IDs, labels, clickability, and bounds from that same tree, then stop without another tap.
+For Snapchat Upload a Video, tap the visible Paperclip using the per-device, display-bound `snapchatClickPaperclip` point captured in Mirror Controls. Do not use accessibility-name guesses, screenshot matching, or fallback taps. If that calibration is missing or stale, stop and require recalibration.
 
-**Why:** The user explicitly requires node targeting, rejects screenshots and fallback taps, and needs a useful explanation when the correct node is not exposed.
+**Why:** The user explicitly requested a calibrated tap in Mirror Controls to replace the existing paperclip lookup because the icon is visible after expanding the editor controls.
 
-**How to apply:** Keep the failure diagnostic to one existing tree snapshot. Use its node evidence to identify the exact Paperclip/Link node before changing the selector; do not infer the icon from pixels or send speculative input.
+**How to apply:** Keep this Snapchat-only control separate from Instagram and WhatsApp controls. Show distinct app headings in Mirror Controls and route only Upload a Video's paperclip action through this calibration.

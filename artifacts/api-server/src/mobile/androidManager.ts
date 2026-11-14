@@ -15189,6 +15189,7 @@ function _calibrationPath(serial: string): string {
 // not add these to KeyCalibrationMap: keyboard maps may be partial, change
 // layers, and are intentionally allowed to merge over time.
 export const NAVIGATION_CONTROL_IDS = [
+  "snapchatClickPaperclip",
   "home",
   "reels",
   "directMessages",
@@ -15310,7 +15311,7 @@ export function deleteNavigationCalibrationControl(
 }
 
 /**
- * Strictly tap one fixed Instagram control. This is the only fixed-control
+ * Strictly tap one fixed app control. This is the only fixed-control
  * lookup used by HST operations: no reference image, accessibility, or
  * positional fallback is permitted here.
  */

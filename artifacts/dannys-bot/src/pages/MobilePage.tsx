@@ -3045,10 +3045,18 @@ function CalibrationDialog({
 }
 
 type NavigationControlId =
+  | "snapchatClickPaperclip"
   | "home" | "reels" | "directMessages" | "search" | "profile"
   | "createPost" | "makePostCropToFit" | "makePostFilters" | "makePostMostRightFilter" | "makePostFinishFilterSelection"
   | "makePostFirstNext" | "makePostSecondNext" | "makePostShare" | "userSearch" | "notifications" | "settingsBack" | "whatsappFirstMediaGallery";
 type NavigationPoint = { x: number; y: number };
+type NavigationApp = "Snapchat" | "Instagram" | "WhatsApp";
+type NavigationControl = {
+  id: NavigationControlId;
+  app: NavigationApp;
+  label: string;
+  instruction: string;
+};
 type NavigationMap = {
   version: 1;
   serial: string;
@@ -3056,28 +3064,26 @@ type NavigationMap = {
   points: Partial<Record<NavigationControlId, NavigationPoint>>;
 };
 
-const NAVIGATION_CONTROLS: Array<{
-  id: NavigationControlId;
-  label: string;
-  instruction: string;
-}> = [
-  { id: "home", label: "Home", instruction: "Show the Instagram home feed, then tap the Home tab on the physical phone." },
-  { id: "reels", label: "Reels", instruction: "Show Instagram's bottom navigation, then tap the Reels tab on the physical phone." },
-  { id: "directMessages", label: "Direct Messages", instruction: "Show the Instagram home header, then tap the Direct Messages icon on the physical phone." },
-  { id: "search", label: "Search", instruction: "Show Instagram's bottom navigation, then tap the Search tab on the physical phone." },
-  { id: "profile", label: "Profile", instruction: "Show Instagram's bottom navigation, then tap the Profile tab on the physical phone." },
-  { id: "createPost", label: "Plus / create post", instruction: "Show the Instagram surface where the post + button is visible, then tap that + on the physical phone." },
-  { id: "makePostCropToFit", label: "Make-a-Post Crop to Fit", instruction: "Open Instagram's Make-a-Post image picker with an image selected, then tap the two-arrow Crop to Fit control on the physical phone." },
-  { id: "makePostFilters", label: "Make-a-Post Filters", instruction: "After tapping Crop to Fit and the first Next in the Make-a-Post picker, wait for the editor, then tap the Filters button on the physical phone." },
-  { id: "makePostMostRightFilter", label: "Make-a-Post Most-Right Filter", instruction: "After opening Make-a-Post Filters, tap the most-right filter thumbnail on the physical phone." },
-  { id: "makePostFinishFilterSelection", label: "Make-a-Post Finish Filter Selection", instruction: "After selecting a Make-a-Post filter, tap the button that finishes filter selection on the physical phone." },
-  { id: "makePostFirstNext", label: "Make-a-Post First Next (top)", instruction: "Open the Make-a-Post image picker with an image selected, then tap the first Next button at the top of the physical phone." },
-  { id: "makePostSecondNext", label: "Make-a-Post Second Next (bottom)", instruction: "Open the Make-a-Post editor screen, then tap the second Next button at the bottom of the physical phone." },
-  { id: "makePostShare", label: "Make-a-Post Share", instruction: "Open the Make-a-Post caption screen where Share is visible, then tap the Share button on the physical phone." },
-  { id: "userSearch", label: "Central user-search field", instruction: "Open Instagram Search/Explore and tap the central user-search field on the physical phone." },
-  { id: "notifications", label: "Notifications", instruction: "Show the Instagram home header, then tap the Notifications icon on the physical phone." },
-  { id: "settingsBack", label: "Instagram Settings Back", instruction: "Open an Instagram Settings detail page, then tap its upper-left Instagram Back arrow (not Android system Back)." },
-  { id: "whatsappFirstMediaGallery", label: "WhatsApp First Media Gallery Tap", instruction: "Open WhatsApp's attachment Gallery until the first image thumbnail is visible, then tap that first image thumbnail on the physical phone." },
+const NAVIGATION_APP_ORDER: NavigationApp[] = ["Snapchat", "Instagram", "WhatsApp"];
+const NAVIGATION_CONTROLS: NavigationControl[] = [
+  { id: "snapchatClickPaperclip", app: "Snapchat", label: "Click Paperclip", instruction: "Open Snapchat's video Snap editor, tap the down chevron to expose the paperclip, then capture and tap the paperclip on the physical phone." },
+  { id: "home", app: "Instagram", label: "Home", instruction: "Show the Instagram home feed, then tap the Home tab on the physical phone." },
+  { id: "reels", app: "Instagram", label: "Reels", instruction: "Show Instagram's bottom navigation, then tap the Reels tab on the physical phone." },
+  { id: "directMessages", app: "Instagram", label: "Direct Messages", instruction: "Show the Instagram home header, then tap the Direct Messages icon on the physical phone." },
+  { id: "search", app: "Instagram", label: "Search", instruction: "Show Instagram's bottom navigation, then tap the Search tab on the physical phone." },
+  { id: "profile", app: "Instagram", label: "Profile", instruction: "Show Instagram's bottom navigation, then tap the Profile tab on the physical phone." },
+  { id: "createPost", app: "Instagram", label: "Plus / create post", instruction: "Show the Instagram surface where the post + button is visible, then tap that + on the physical phone." },
+  { id: "makePostCropToFit", app: "Instagram", label: "Make-a-Post Crop to Fit", instruction: "Open Instagram's Make-a-Post image picker with an image selected, then tap the two-arrow Crop to Fit control on the physical phone." },
+  { id: "makePostFilters", app: "Instagram", label: "Make-a-Post Filters", instruction: "After tapping Crop to Fit and the first Next in the Make-a-Post picker, wait for the editor, then tap the Filters button on the physical phone." },
+  { id: "makePostMostRightFilter", app: "Instagram", label: "Make-a-Post Most-Right Filter", instruction: "After opening Make-a-Post Filters, tap the most-right filter thumbnail on the physical phone." },
+  { id: "makePostFinishFilterSelection", app: "Instagram", label: "Make-a-Post Finish Filter Selection", instruction: "After selecting a Make-a-Post filter, tap the button that finishes filter selection on the physical phone." },
+  { id: "makePostFirstNext", app: "Instagram", label: "Make-a-Post First Next (top)", instruction: "Open the Make-a-Post image picker with an image selected, then tap the first Next button at the top of the physical phone." },
+  { id: "makePostSecondNext", app: "Instagram", label: "Make-a-Post Second Next (bottom)", instruction: "Open the Make-a-Post editor screen, then tap the second Next button at the bottom of the physical phone." },
+  { id: "makePostShare", app: "Instagram", label: "Make-a-Post Share", instruction: "Open the Make-a-Post caption screen where Share is visible, then tap the Share button on the physical phone." },
+  { id: "userSearch", app: "Instagram", label: "Central user-search field", instruction: "Open Instagram Search/Explore and tap the central user-search field on the physical phone." },
+  { id: "notifications", app: "Instagram", label: "Notifications", instruction: "Show the Instagram home header, then tap the Notifications icon on the physical phone." },
+  { id: "settingsBack", app: "Instagram", label: "Settings Back", instruction: "Open an Instagram Settings detail page, then tap its upper-left Instagram Back arrow (not Android system Back)." },
+  { id: "whatsappFirstMediaGallery", app: "WhatsApp", label: "First Media Gallery Tap", instruction: "Open WhatsApp's attachment Gallery until the first image thumbnail is visible, then tap that first image thumbnail on the physical phone." },
 ];
 
 function NavigationCalibrationDialog({
@@ -3245,7 +3251,7 @@ function NavigationCalibrationDialog({
         className="fixed right-4 top-4 left-auto w-[38.5rem] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] translate-x-0 translate-y-0 overflow-y-auto border-amber-700/70 bg-slate-950 text-slate-100"
       >
         <DialogHeader>
-          <DialogTitle className="text-sm">Fixed Navigation Calibration</DialogTitle>
+          <DialogTitle className="text-sm">Mirror Controls</DialogTitle>
         </DialogHeader>
 
         <div className="rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 py-2.5">
@@ -3265,7 +3271,7 @@ function NavigationCalibrationDialog({
         {mode === "intro" && (
           <div className="space-y-3">
             <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-5 text-slate-300">
-              <li>Keep the physical phone awake and Instagram visible.</li>
+              <li>Keep the physical phone awake and show the app/control named in each prompt.</li>
               <li>For each prompt, put the named control on screen before starting capture.</li>
               <li>Press Capture, then tap the matching control on the physical phone.</li>
               <li>Instagram Settings Back means the in-app arrow, not Android system Back.</li>
@@ -3309,6 +3315,7 @@ function NavigationCalibrationDialog({
                   <div className="h-full rounded-full bg-amber-500 transition-all" style={{ width: `${Math.round((step / NAVIGATION_CONTROLS.length) * 100)}%` }} />
                 </div>
                 <div className="rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-amber-300">{current.app}</p>
                   <p className="text-sm font-semibold text-amber-100">{current.label}</p>
                   <p className="mt-1 text-xs leading-5 text-amber-100/80">{current.instruction}</p>
                 </div>
@@ -3334,34 +3341,49 @@ function NavigationCalibrationDialog({
                 ← Back
               </Button>
             </div>
-            {NAVIGATION_CONTROLS.map(control => {
-              const point = points[control.id];
-              const isCapturing = capturing === control.id;
-              const isTesting = testing === control.id;
+            {NAVIGATION_APP_ORDER.map(app => {
+              const appControls = NAVIGATION_CONTROLS.filter(control => control.app === app);
+              if (!appControls.length) return null;
               return (
-                <div key={control.id} className={`rounded-md border px-2.5 py-2 ${isCapturing || isTesting ? "border-amber-600/70 bg-amber-950/30" : "border-slate-800 bg-slate-900"}`}>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold ${point ? "text-green-400" : "text-red-400"}`}>{point ? "✓" : "✗"}</span>
-                    <span className="min-w-0 flex-1 text-xs text-slate-200">{control.label}</span>
-                    {point && <span className="font-mono text-[10px] text-slate-500">({point.x}, {point.y})</span>}
-                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-slate-300 hover:bg-slate-700" onClick={() => void capture(control)} disabled={!!capturing || !!testing}>
-                      {isCapturing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Re-tap"}
-                    </Button>
-                    {point && (
-                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-cyan-300 hover:bg-cyan-950/50" onClick={() => onCalibrationPosition?.({ ...point, label: control.label, screen: map?.screen })} disabled={!!capturing || !!testing}>
-                        Position
-                      </Button>
-                    )}
-                    {point && (
-                      <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-red-300 hover:bg-red-950/50" onClick={() => void clearPoint(control.id)} disabled={!!capturing || !!testing}>
-                        Clear
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-amber-300 hover:bg-amber-950/50" onClick={() => void test(control.id)} disabled={!point || !!capturing || !!testing}>
-                      {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
-                    </Button>
+                <section key={app} className="space-y-2" data-testid={`mirror-controls-app-${app.toLowerCase()}`}>
+                  <div className="flex items-center gap-2 border-b border-slate-700 px-1 pb-1">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-200" data-testid={`mirror-controls-heading-${app.toLowerCase()}`}>
+                      {app}
+                    </h3>
+                    <span className="text-[10px] text-slate-500">{appControls.length} controls</span>
+                    <div className="h-px flex-1 bg-slate-800" />
                   </div>
-                </div>
+                  {appControls.map(control => {
+                    const point = points[control.id];
+                    const isCapturing = capturing === control.id;
+                    const isTesting = testing === control.id;
+                    return (
+                      <div key={control.id} data-testid={`mirror-control-${control.id}`} className={`rounded-md border px-2.5 py-2 ${isCapturing || isTesting ? "border-amber-600/70 bg-amber-950/30" : "border-slate-800 bg-slate-900"}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-bold ${point ? "text-green-400" : "text-red-400"}`}>{point ? "✓" : "✗"}</span>
+                          <span className="min-w-0 flex-1 text-xs text-slate-200">{control.label}</span>
+                          {point && <span className="font-mono text-[10px] text-slate-500">({point.x}, {point.y})</span>}
+                          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-slate-300 hover:bg-slate-700" data-testid={`capture-mirror-control-${control.id}`} onClick={() => void capture(control)} disabled={!!capturing || !!testing}>
+                            {isCapturing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Re-tap"}
+                          </Button>
+                          {point && (
+                              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-cyan-300 hover:bg-cyan-950/50" data-testid={`position-mirror-control-${control.id}`} onClick={() => onCalibrationPosition?.({ ...point, label: control.label, screen: map?.screen })} disabled={!!capturing || !!testing}>
+                              Position
+                            </Button>
+                          )}
+                          {point && (
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-red-300 hover:bg-red-950/50" data-testid={`clear-mirror-control-${control.id}`} onClick={() => void clearPoint(control.id)} disabled={!!capturing || !!testing}>
+                              Clear
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-amber-300 hover:bg-amber-950/50" data-testid={`test-mirror-control-${control.id}`} onClick={() => void test(control.id)} disabled={!point || !!capturing || !!testing}>
+                            {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </section>
               );
             })}
             <Button variant="outline" className="mt-2 w-full border-slate-600 text-slate-200 hover:bg-slate-800" onClick={() => onOpenChange(false)} disabled={!!capturing || !!testing}>
