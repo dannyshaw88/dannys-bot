@@ -13723,7 +13723,10 @@ export function MobilePage() {
                   )
                 ))}
                 <div className="flex-1" />
-                <DeviceQuickControls serial={detailPhoneDataPending ? null : activeSerial} />
+                <DeviceQuickControls
+                  serial={detailPhoneDataPending ? null : activeSerial}
+                  onOpenLog={() => setActiveTab("actionlog")}
+                />
                 {MOBILE_TABS_RIGHT.map(t => (
                   (!deviceDetailView || t.id !== "actionlog") && (
                   <button

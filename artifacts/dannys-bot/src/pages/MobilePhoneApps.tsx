@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Plane, MessageCircle } from "lucide-react";
+import { CheckCircle2, Fingerprint, LockKeyhole, Loader2, Power, RotateCcw, Plane, MessageCircle, ClipboardList } from "lucide-react";
 import type { CollisionLease, CollisionSource } from "@/lib/collisionCoordinator";
 
 // Collision preventer slot index reserved for phone apps (outside Instagram slot range 0..N).
@@ -192,7 +192,10 @@ interface MobilePhoneAppsProps {
   onToggle:    (v: boolean) => void;
 }
 
-export function DeviceQuickControls({ serial }: { serial: string | null | undefined }) {
+export function DeviceQuickControls({ serial, onOpenLog }: {
+  serial: string | null | undefined;
+  onOpenLog?: () => void;
+}) {
   const [screenOn, setScreenOn] = useState(true);
   const [rebooting, setRebooting] = useState(false);
   const [airplaneRemaining, setAirplaneRemaining] = useState<number | null>(null);
@@ -262,6 +265,15 @@ export function DeviceQuickControls({ serial }: { serial: string | null | undefi
         title={airplaneRemaining === null ? "Cycle airplane mode for 10–15 seconds" : `Airplane mode — ${airplaneRemaining}s remaining`}
         className={`${buttonClass} border border-gray-300 bg-white text-gray-500 hover:bg-blue-500 hover:border-blue-500 hover:text-white ${airplaneRemaining !== null ? "ring-2 ring-blue-300" : ""}`}>
         {airplaneRemaining !== null ? <span className="text-[10px] font-bold tabular-nums">{airplaneRemaining}</span> : <Plane className="w-[13px] h-[13px]" />}
+      </button>
+      <button
+        type="button"
+        onClick={onOpenLog}
+        disabled={!serial || !onOpenLog}
+        title="Open the action-only device log"
+        className="px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 border-transparent text-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Log<ClipboardList className="w-3.5 h-3.5 opacity-70" />
       </button>
     </div>
   );
