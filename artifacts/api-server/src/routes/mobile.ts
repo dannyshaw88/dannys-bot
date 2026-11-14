@@ -1484,8 +1484,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         const val = String(st.stdout ?? "").trim();
         if (val && /^\d+$/.test(val)) originalScreenTimeout = val;
       } catch { /* ignore */ }
-      adbShell("settings", "put", "system", "screen_off_timeout", "2147483647");
-      logger.info({ serial, originalScreenTimeout }, "[mobile-ws] screen timeout disabled for session");
+      try {
+        await execFileP(adbPath, [
+          "-s", serial, "shell", "settings", "put", "system", "screen_off_timeout", "2147483647",
+        ], { encoding: "utf8", timeout: 5000 } as any);
+        logger.info({ serial, originalScreenTimeout }, "[mobile-ws] screen timeout disabled for session");
+      } catch (error: any) {
+        logger.warn({ serial, error: error?.message ?? String(error) }, "[mobile-ws] could not extend screen timeout before mirror wake");
+      }
+      // On a new manual Power On, the client intentionally waits for this
+      // protected startup path instead of sending WAKEUP concurrently with
+      // stream setup. The H.264 endpoint follows the same lease-then-wake order.
+      try {
+        await android.ensureScreenOn(serial);
+        logger.info({ serial }, "[mobile-ws] display ready after timeout protection");
+      } catch (error: any) {
+        logger.warn({ serial, error: error?.message ?? String(error) }, "[mobile-ws] display readiness failed");
+      }
 
       ws.on("close", (code, reason) => {
         logger.info({ serial, code, reason: reason?.toString() }, "[mobile-ws] client disconnected");

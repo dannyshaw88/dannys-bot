@@ -3611,13 +3611,19 @@ const PhoneSlot = React.forwardRef<PhoneSlotHandle, { phone: UsbPhone | null; id
       onPower();
       sendKey(phone.serial, 223, "Sleep", onLog);
     } else {
-      // If the manual session is already requested but the mirror went black,
-      // keep it live and only wake the physical screen. This is the important
-      // distinction from the old manualLive-only toggle.
       if (!manualLive) onPower();
-      sendKey(phone.serial, 224, "Wake", onLog);
+      // On a new mirror session, let the video endpoint acquire its temporary
+      // screen-timeout lease before it wakes the phone. Sending WAKEUP here in
+      // parallel can start the device's short OEM timeout before stream setup
+      // has secured that lease. If the stream is already open, the lease is
+      // already held, so an immediate wake remains safe and useful.
+      if (live) {
+        sendKey(phone.serial, 224, "Wake", onLog);
+      } else {
+        onLog?.("Power on requested; the mirror will wake the phone after protecting the screen timeout.");
+      }
     }
-  }, [manualLive, manualPowerActuallyOn, onLog, onPower, phone]);
+  }, [live, manualLive, manualPowerActuallyOn, onLog, onPower, phone]);
 
   // ── Element tree inspector ─────────────────────────────────────────────────
   // Full UIAutomator node tree shown below the mirror when inspect mode is on.
