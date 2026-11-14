@@ -1,7 +1,6 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { center, dump, shortResourceId, tapNode } from "../runtime";
-import { findPaperclipIconByShape } from "./findPaperclipIconByShape";
 
 function normalize(value: string): string {
   return value.trim().toLowerCase().replace(/[·•–—-]/g, " ").replace(/\s+/g, " ");
@@ -82,77 +81,6 @@ function findLabeledPaperclip(nodes: UiNode[]): UiNode | undefined {
   );
 }
 
-async function findPaperclipByShape(
-  context: SnapchatContext,
-  nodes: UiNode[],
-): Promise<{ x: number; y: number; score: number } | null> {
-  const root = nodes[0];
-  if (!root) return null;
-  const [rootLeft, rootTop, rootRight, rootBottom] = root.bounds;
-  const uiWidth = rootRight - rootLeft;
-  const uiHeight = rootBottom - rootTop;
-  if (uiWidth <= 0 || uiHeight <= 0) {
-    context.onLog("Upload a Video: the live editor tree reported invalid screen bounds for paperclip detection.");
-    return null;
-  }
-
-  const candidates = nodes.filter(node => {
-    const [left, top, right, bottom] = node.bounds;
-    const width = right - left;
-    const height = bottom - top;
-    const point = center(node);
-    return point.x >= rootLeft + uiWidth * 0.76 &&
-      point.y >= rootTop + uiHeight * 0.06 &&
-      point.y <= rootTop + uiHeight * 0.88 &&
-      width >= 24 && height >= 24 &&
-      width <= uiWidth * 0.22 &&
-      height <= uiHeight * 0.12;
-  });
-  if (!candidates.length) {
-    context.onLog("Upload a Video: no small controls were exposed in the live right-side editor toolbar.");
-    return null;
-  }
-
-  const screenshot = await android.captureScreenPixels(context.serial, 6_000);
-  if (!screenshot) {
-    context.onLog("Upload a Video: the live editor screenshot was unavailable within 6 seconds; paperclip detection will retry.");
-    return null;
-  }
-  const scaleX = screenshot.width / uiWidth;
-  const scaleY = screenshot.height / uiHeight;
-  const match = findPaperclipIconByShape(
-    screenshot,
-    candidates.map(node => {
-      const point = center(node);
-      return {
-        x: (point.x - rootLeft) * scaleX,
-        y: (point.y - rootTop) * scaleY,
-      };
-    }),
-  );
-  if (!match) {
-    context.onLog(
-      `Upload a Video: paperclip shape did not match among ${candidates.length} live right-toolbar controls ` +
-      `(UI ${uiWidth}×${uiHeight}, screenshot ${screenshot.width}×${screenshot.height}, ` +
-      `candidates=${candidates.map(node => {
-        const point = center(node);
-        const text = node.text.trim().slice(0, 80);
-        const desc = node.desc.trim().slice(0, 80);
-        return `${node.className || "View"}:${shortResourceId(node) || "unlabelled"}@${point.x},${point.y}` +
-          `[${node.bounds.join(",")}] clickable=${node.clickable}` +
-          `${text ? ` text=${JSON.stringify(text)}` : ""}` +
-          `${desc ? ` desc=${JSON.stringify(desc)}` : ""}`;
-      }).join("; ")}).`,
-    );
-    return null;
-  }
-  return {
-    x: rootLeft + match.x / scaleX,
-    y: rootTop + match.y / scaleY,
-    score: match.score,
-  };
-}
-
 export async function attachSnapLink(context: SnapchatContext, rawUrl: string): Promise<boolean> {
   const url = rawUrl.trim();
   if (!url) {
@@ -169,53 +97,25 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
 
   let linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]) ??
     findLabeledPaperclip(state.nodes);
-  let paperclipMatch = linkControl
-    ? null
-    : await findPaperclipByShape(context, state.nodes);
-
-  if (!linkControl && !paperclipMatch) {
+  if (!linkControl) {
     const moreTools = findMoreToolsControl(state.nodes);
     if (!moreTools) {
       context.onLog("Upload a Video stopped: neither the paperclip icon nor Snapchat's More chevron could be identified in the live editor.");
       return false;
     }
-    const morePoint = center(moreTools);
-    context.onLog(
-      `Upload a Video: paperclip is not visible yet; tapping the live More chevron at (${morePoint.x},${morePoint.y}) to reveal it.`,
-    );
     if (!await tapNode(context, moreTools, "expand the Snap editor tools with the live More chevron", 700, true)) return false;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) await context.sleep(350, "exact");
-      state = await dump(context.serial);
-      linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]) ??
-        findLabeledPaperclip(state.nodes);
-      paperclipMatch = linkControl
-        ? null
-        : await findPaperclipByShape(context, state.nodes);
-      if (linkControl || paperclipMatch) break;
-    }
+    state = await dump(context.serial);
+    linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]) ??
+      findLabeledPaperclip(state.nodes);
   }
 
-  if (linkControl) {
-    context.onLog("Upload a Video: opening the exposed paperclip/Link control.");
-    if (!await tapNode(context, linkControl, "open the exposed paperclip Link control in the video Snap editor", 1_000, true)) return false;
-  } else if (paperclipMatch) {
-    context.onLog(`Upload a Video: paperclip icon identified by shape (score=${paperclipMatch.score.toFixed(3)}); tapping its live position at (${paperclipMatch.x},${paperclipMatch.y}).`);
-    await android.tap(
-      context.serial,
-      paperclipMatch.x,
-      paperclipMatch.y,
-      "bot",
-      "Snapchat: open the paperclip link editor on the video Snap",
-      "automation",
-      { exact: true },
-    );
-    await context.sleep(1_000, "exact");
-  } else {
-    context.onLog("Upload a Video stopped: Snapchat's paperclip/Link icon was not identified after opening More.");
+  if (!linkControl) {
+    context.onLog("Upload a Video stopped: Snapchat did not expose an accessibility node for the paperclip/Link control.");
     return false;
   }
+  context.onLog("Upload a Video: opening the live paperclip/Link accessibility node.");
+  if (!await tapNode(context, linkControl, "open the exposed paperclip Link control in the video Snap editor", 1_000, true)) return false;
 
   let clipboardPromptVisible = false;
   for (let attempt = 0; attempt < 8; attempt++) {

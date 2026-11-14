@@ -256,6 +256,11 @@ function unreadChatRows(
       )
       .map(node => node.text.trim())
       .filter(Boolean);
+    const hasUnreadNewChatMarker = [markerLabel, ...rowNodes
+      .filter(node => node !== nameNode)
+      .map(node => `${node.text} ${node.desc}`)]
+      .some(value => /^(?:(?:\d+)\s+)?new chats?\b/i.test(value.trim()));
+    if (!hasUnreadNewChatMarker) return [];
     if (displayName && isMyAiChat(displayName)) {
       onSkippedRow?.(displayName, "My AI", previewValues);
       return [];
