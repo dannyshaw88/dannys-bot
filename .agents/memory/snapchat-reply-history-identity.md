@@ -15,6 +15,8 @@ Store one conversation per contact, device, and account slot. Merge sent replies
 
 Open Chat once, wait for the Unread tab to appear, and tap Unread once. After exiting a replied conversation, the Unread filter remains selected; dump the list and continue without tapping Chat or Unread again. Choose eligible rows using their visible new-message markers.
 
+Before opening each unread contact, rescan the current list and perform the row tap plus confirmation inside one per-device input transaction. If the same row remains visible and the chat did not open, retry once using its refreshed bounds; if it still does not open, skip that row and continue with other unread contacts.
+
 An unread row can open a received photo/video Snap instead of the chat thread. When the live screen confirms Snapchat's media viewer, swipe down to close it, exit the conversation with the top-left chevron, verify the chat list, and continue to the next unread row rather than aborting the tool.
 
 When replying, verify the chat header, tap the display-name text to read the profile username, then return to the thread before checking its composer. Do not require a Send button before typing: Snapchat shows it only after reply text is entered.
@@ -23,6 +25,6 @@ Before profile lookup, Luna generation, and typing, check the live conversation 
 
 Enter Snapchat replies using Android clipboard set-and-paste, not per-character `adb input text`; try Ctrl+V first because `KEYCODE_PASTE` can return without populating the composer, retry with the native Paste key only after checking the field, then press Android `KEYCODE_ENTER` (66) and confirm the message appeared and composer cleared.
 
-**Why:** the user said display names can collide, chose to retain conversation logs until manually cleared, specified stopping replies after the link, wants each slot to be able to use its own Boundlus link, confirmed Unread stays selected after its first tap, and provided Inspect evidence showing the reply lives in the chat composer. Device evidence also showed non-friend notices and unread photo/video items; these should be handled without sending to an undeliverable contact or abandoning the remaining unread chats.
+**Why:** the user said display names can collide, chose to retain conversation logs until manually cleared, specified stopping replies after the link, wants each slot to be able to use its own Boundlus link, confirmed Unread stays selected after its first tap, and provided Inspect evidence showing the reply lives in the chat composer. Device evidence also showed non-friend notices, unread photo/video items, and overlapping input during an unread-row tap; these should be handled without sending to an undeliverable contact or abandoning the remaining unread chats.
 
 **How to apply:** when changing Snapchat reply automation or its history UI, capture the username from the profile screen, never merge contacts by display name alone, provide stored per-contact history to Luna, use stored link-sent and explicit non-friend notice checks as code-level gates (not prompt-only instructions), preserve the selected Unread list across chat exits without tapping bottom Chat again, and dismiss confirmed received media with a downward swipe before exiting and continuing.

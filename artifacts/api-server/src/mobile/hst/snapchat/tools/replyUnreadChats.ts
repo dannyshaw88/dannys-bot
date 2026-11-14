@@ -195,8 +195,8 @@ async function tapUnreadChatNameArea(
   }
   if (row.chatActionNode) {
     const { x, y } = center(row.chatActionNode);
-    context.onLog(`Reply to Unread Chats: "${row.displayName}" has mixed media and chat activity; tapping its chat-only right-side icon at (${x},${y}).`);
-    await android.tap(context.serial, x, y, "bot", `Snapchat: open chat-only action for ${row.displayName}`, "automation");
+    context.onLog(`Reply to Unread Chats: "${row.displayName}" has mixed media and chat activity; tapping its live chat-only icon bounds=[${row.chatActionNode.bounds.join(",")}] at (${x},${y}).`);
+    await android.tap(context.serial, x, y, "bot", `Snapchat: open chat-only action for ${row.displayName}`, "automation", { exact: true });
     await context.sleep(700);
     return !context.isAborted();
   }
@@ -205,8 +205,8 @@ async function tapUnreadChatNameArea(
   const x = Math.round(rowWidth >= screenWidth * 0.6 ? rowLeft + rowWidth / 2 : screenWidth / 2);
   const nameCenter = center(row.nameNode);
   const y = Math.max(rowTop + 1, Math.min(rowBottom - 1, nameCenter.y));
-  context.onLog(`Reply to Unread Chats: tapping the central name area for "${row.displayName}" at (${x},${y}), between the avatar and right-side icon.`);
-  await android.tap(context.serial, x, y, "bot", `Snapchat: open unread chat for ${row.displayName}`, "automation");
+  context.onLog(`Reply to Unread Chats: tapping the live central row for "${row.displayName}" at (${x},${y}); row=[${row.marker.bounds.join(",")}], name=[${row.nameNode.bounds.join(",")}].`);
+  await android.tap(context.serial, x, y, "bot", `Snapchat: open unread chat for ${row.displayName}`, "automation", { exact: true });
   await context.sleep(700);
   return !context.isAborted();
 }
@@ -284,6 +284,70 @@ function unreadChatRows(
     return nameNode && displayName
       ? [{ marker, nameNode, displayName, chatActionNode: hasMedia ? chatActionNode : undefined, preview: previewValues }]
       : [];
+  });
+}
+
+async function openUnreadChatFromLiveList(
+  context: SnapchatContext,
+  displayName: string,
+  screenWidth: number,
+  screenHeight: number,
+): Promise<{
+  state: UiState;
+  tapped: boolean;
+  stillOnChatList: boolean;
+  targetStillVisible: boolean;
+}> {
+  return android.withInputTransaction(context.serial, async () => {
+    let state = await dump(context.serial);
+    let tapped = false;
+    for (let attempt = 1; attempt <= 2 && !context.isAborted(); attempt++) {
+      const stillOnChatList =
+        Boolean(exactClickable(state.nodes, ["Chat"])) &&
+        !findChatComposer(state.nodes, screenHeight);
+      if (!stillOnChatList) {
+        return { state, tapped, stillOnChatList: false, targetStillVisible: false };
+      }
+
+      const liveRow = unreadChatRows(state.nodes).find(row =>
+        normalizedText(row.displayName) === normalizedText(displayName),
+      );
+      if (!liveRow) {
+        return { state, tapped, stillOnChatList: true, targetStillVisible: false };
+      }
+
+      if (attempt > 1) {
+        context.onLog(`Reply to Unread Chats: "${displayName}" is still in the live Unread list after the first tap; retrying once with refreshed row bounds.`);
+      }
+      if (!await tapUnreadChatNameArea(context, liveRow, screenWidth)) {
+        return { state, tapped, stillOnChatList: true, targetStillVisible: true };
+      }
+      tapped = true;
+      state = await dump(context.serial);
+
+      const remainsOnList =
+        Boolean(exactClickable(state.nodes, ["Chat"])) &&
+        !findChatComposer(state.nodes, screenHeight);
+      if (!remainsOnList) {
+        return { state, tapped, stillOnChatList: false, targetStillVisible: false };
+      }
+
+      const targetStillVisible = unreadChatRows(state.nodes).some(row =>
+        normalizedText(row.displayName) === normalizedText(displayName),
+      );
+      if (!targetStillVisible || attempt === 2) {
+        return { state, tapped, stillOnChatList: true, targetStillVisible };
+      }
+    }
+
+    return {
+      state,
+      tapped,
+      stillOnChatList:
+        Boolean(exactClickable(state.nodes, ["Chat"])) &&
+        !findChatComposer(state.nodes, screenHeight),
+      targetStillVisible: false,
+    };
   });
 }
 
@@ -411,16 +475,40 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       capturedMessages: row.preview,
     };
     context.onLog(`Reply to Unread Chats: noted unread contact name "${row.displayName}" from the list.`);
-    if (!await tapUnreadChatNameArea(context, row, screenWidth)) {
+    const openResult = await openUnreadChatFromLiveList(
+      context,
+      row.displayName,
+      screenWidth,
+      screenHeight,
+    );
+    if (!openResult.tapped) {
       recordNotReplied(
         row.displayName,
         "opening-chat",
-        "automation was aborted or the chat could not be opened.",
+        context.isAborted()
+          ? "automation was aborted before the live unread row could be tapped."
+          : "the contact was no longer visible in a fresh Unread-list scan, so no tap was made.",
         row.preview,
       );
+      if (openResult.stillOnChatList && !context.isAborted()) {
+        list = openResult.state;
+        continue;
+      }
       break;
     }
-    const openedThread = await dump(context.serial);
+    if (openResult.stillOnChatList) {
+      recordNotReplied(
+        row.displayName,
+        "opening-chat",
+        openResult.targetStillVisible
+          ? "the contact remained in the Unread list after two exact taps using fresh row bounds; no conversation opened."
+          : "the contact left the Unread list, but no conversation composer appeared to confirm it opened.",
+        row.preview,
+      );
+      list = openResult.state;
+      continue;
+    }
+    const openedThread = openResult.state;
     const snapRecovery = await recoverFromUnreadSnapViewer(context, row.displayName, openedThread);
     if (snapRecovery.detected) {
       recordNotReplied(
