@@ -87,12 +87,6 @@ function findUrlField(nodes: UiNode[]): UiNode | undefined {
     )[0];
 }
 
-function findAttachButton(nodes: UiNode[]): UiNode | undefined {
-  return nodes.find(node =>
-    node.resourceId.split("/").pop() === "attachment-editor-attach-button",
-  ) ?? findLabeledControl(nodes, ["attach to snap"]);
-}
-
 function hasClipboardAccessPrompt(nodes: UiNode[]): boolean {
   const hasTitle = nodes.some(node =>
     /show links i['’]ve recently copied\?/i.test(`${node.text} ${node.desc}`),
@@ -124,7 +118,7 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
   }
   const morePoint = center(moreChevron);
   context.onLog(`Upload a Video: tapping the live downward More chevron at (${morePoint.x},${morePoint.y}) to expose the Paperclip.`);
-  if (!await tapNode(context, moreChevron, "expand the video editor toolbar with its downward More chevron", 700, true)) return false;
+  if (!await tapNode(context, moreChevron, "expand the video editor toolbar with its downward More chevron", 2_500, true)) return false;
 
   context.onLog("Upload a Video: tapping this device's calibrated Click Paperclip point.");
   try {
@@ -141,64 +135,42 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
     );
     return false;
   }
-  await context.sleep(1_000, "exact");
-
-  let clipboardPromptVisible = false;
-  for (let attempt = 0; attempt < 8; attempt++) {
-    state = await dump(context.serial);
-    clipboardPromptVisible = hasClipboardAccessPrompt(state.nodes) ||
-      Boolean(findLabeledControl(state.nodes, ["not now"]));
-    if (clipboardPromptVisible || findUrlField(state.nodes)) break;
-    if (attempt < 7) await context.sleep(400, "exact");
-  }
-
-  if (clipboardPromptVisible) {
-    const notNowButton = findLabeledControl(state.nodes, ["not now"]);
+  await context.sleep(500, "exact");
+  state = await dump(context.serial);
+  let notNowButton = findLabeledControl(state.nodes, ["not now"]);
+  if (hasClipboardAccessPrompt(state.nodes) || notNowButton) {
     if (!notNowButton) {
       context.onLog("Upload a Video stopped: Snapchat's clipboard prompt appeared without a visible Not now button.");
       return false;
     }
     context.onLog("Upload a Video: dismissing Snapchat's clipboard prompt with Not now.");
-    if (!await tapNode(context, notNowButton, "dismiss Snapchat's clipboard prompt with Not now", 500, true)) return false;
-
-    for (let attempt = 0; attempt < 6; attempt++) {
-      state = await dump(context.serial);
-      clipboardPromptVisible = hasClipboardAccessPrompt(state.nodes);
-      if (!clipboardPromptVisible) break;
-      if (attempt < 5) await context.sleep(300, "exact");
-    }
-    if (clipboardPromptVisible) {
-      context.onLog("Upload a Video stopped: Snapchat's clipboard prompt remained open after tapping Not now.");
-      return false;
-    }
+    if (!await tapNode(context, notNowButton, "dismiss Snapchat's clipboard prompt with Not now", 350, true)) return false;
+    state = await dump(context.serial);
   }
 
-  let urlField: UiNode | undefined;
-  for (let attempt = 0; attempt < 8; attempt++) {
+  let urlField = findUrlField(state.nodes);
+  if (!urlField) {
+    await context.sleep(350, "exact");
     state = await dump(context.serial);
     urlField = findUrlField(state.nodes);
-    if (urlField) break;
-    if (attempt < 7) await context.sleep(400, "exact");
   }
   if (!urlField) {
     context.onLog("Upload a Video stopped: the Snapchat Link screen did not expose a URL text field.");
     return false;
   }
-  if (!await tapNode(context, urlField, "focus the Snapchat link text field", 300)) return false;
 
-  // Focusing the URL field can trigger Snapchat's clipboard-access prompt.
-  // Dismiss its visible Not now button before typing; do not inspect or clear
-  // the field's contents.
-  state = await dump(context.serial);
-  const focusedFieldNotNow = findLabeledControl(state.nodes, ["not now"]);
-  if (hasClipboardAccessPrompt(state.nodes) || focusedFieldNotNow) {
-    const notNowButton = focusedFieldNotNow;
-    if (!notNowButton) {
-      context.onLog("Upload a Video stopped: Snapchat's clipboard prompt appeared after focusing the URL field without a visible Not now button.");
-      return false;
+  if (!urlField.focused) {
+    if (!await tapNode(context, urlField, "focus the Snapchat link text field", 200)) return false;
+    state = await dump(context.serial);
+    notNowButton = findLabeledControl(state.nodes, ["not now"]);
+    if (hasClipboardAccessPrompt(state.nodes) || notNowButton) {
+      if (!notNowButton) {
+        context.onLog("Upload a Video stopped: Snapchat's clipboard prompt appeared after focusing the URL field without a visible Not now button.");
+        return false;
+      }
+      context.onLog("Upload a Video: dismissing the clipboard prompt after focusing the URL field.");
+      if (!await tapNode(context, notNowButton, "dismiss Snapchat's clipboard prompt with Not now", 350, true)) return false;
     }
-    context.onLog("Upload a Video: dismissing the clipboard prompt after focusing the URL field.");
-    if (!await tapNode(context, notNowButton, "dismiss Snapchat's clipboard prompt with Not now", 500, true)) return false;
   }
 
   let typed;
@@ -230,28 +202,46 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
   }
   context.onLog("Upload a Video: link text entered using the device's saved keyboard calibration.");
 
-  context.onLog("Upload a Video: pressing the device's calibrated Enter/Search keyboard key to load the link preview.");
+  context.onLog("Upload a Video: pressing the saved Enter/Search calibration directly to load the link preview.");
   if (!await android.tapCalibratedKeyboardKey(
     context.serial,
     "enter",
     message => context.onLog(`Upload a Video: ${message}`),
+    { directSavedCalibration: true },
   )) {
     context.onLog("Upload a Video stopped: the calibrated keyboard Enter/Search key could not be tapped.");
     return false;
   }
 
-  let attachControl: UiNode | undefined;
-  for (let attempt = 0; attempt < 24; attempt++) {
-    state = await dump(context.serial);
-    attachControl = findAttachButton(state.nodes);
-    if (attachControl) break;
-    if (attempt < 23) await context.sleep(500, "exact");
-  }
-  if (!attachControl) {
-    context.onLog("Upload a Video stopped: Snapchat did not show the link preview or its Attach to Snap button after the URL search.");
+  await context.sleep(3_000, "exact");
+  const screenRoot = state.nodes[0];
+  if (!screenRoot) {
+    context.onLog("Upload a Video stopped: the link editor tree did not provide screen bounds for the Attach to Snap button.");
     return false;
   }
-  if (!await tapNode(context, attachControl, "tap the blue Attach to Snap button after the URL preview loads", 700)) return false;
-  context.onLog("Upload a Video: link attached to the Snap.");
+  const [screenLeft, screenTop, screenRight, screenBottom] = screenRoot.bounds;
+  const screenWidth = screenRight - screenLeft;
+  const screenHeight = screenBottom - screenTop;
+  if (screenWidth <= 0 || screenHeight <= 0) {
+    context.onLog("Upload a Video stopped: the link editor tree provided invalid screen bounds for Attach to Snap.");
+    return false;
+  }
+  const attachX = Math.round(screenLeft + screenWidth * 0.5);
+  const attachY = Math.round(screenTop + screenHeight * 0.904);
+  context.onLog(
+    `Upload a Video: the live tree does not expose Snapchat's web-preview Attach to Snap button; ` +
+    `tapping its fixed bottom-center position at (${attachX},${attachY}).`,
+  );
+  await android.tap(
+    context.serial,
+    attachX,
+    attachY,
+    "bot",
+    "Snapchat: attach the loaded link preview to the video Snap",
+    "automation",
+    { exact: true },
+  );
+  await context.sleep(700, "exact");
+  context.onLog("Upload a Video: Attach to Snap tap sent; continuing with the Snap editor flow.");
   return true;
 }

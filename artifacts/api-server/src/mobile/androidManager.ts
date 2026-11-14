@@ -15523,6 +15523,7 @@ export async function tapCalibratedKeyboardKey(
   serial: string,
   keyName: string,
   onLog?: (msg: string) => void,
+  options?: { directSavedCalibration?: boolean },
 ): Promise<boolean> {
   const normalized = keyName.trim().toLowerCase();
   const isEmojiAction = normalized === "emoji" || normalized === "emoticon" || normalized === "smiley";
@@ -15539,6 +15540,38 @@ export async function tapCalibratedKeyboardKey(
       `[cal-keyboard] '${keyName}' is not in calibration map — ` +
       `continuing with ${isEmojiAction ? "live/visual" : "live-node"} lookup`,
     );
+  }
+
+  if (options?.directSavedCalibration) {
+    // The caller already knows the intended named key. Skip the full live-IME
+    // hierarchy scan when it explicitly requests its saved physical bind.
+    const savedPoint = mapKey && map ? map[mapKey] : undefined;
+    const { w: screenW, h: screenH } = await getScreenSizeAsync(serial);
+    const safe = !!savedPoint &&
+      Number.isFinite(savedPoint.x) &&
+      Number.isFinite(savedPoint.y) &&
+      savedPoint.x >= 0 &&
+      savedPoint.x < screenW &&
+      savedPoint.y >= Math.round(screenH * 0.45) &&
+      savedPoint.y < screenH;
+    if (!safe || !savedPoint) {
+      onLog?.(`[cal-keyboard] '${keyName}' has no safe saved keyboard calibration; refusing the direct tap`);
+      return false;
+    }
+    const x = Math.round(savedPoint.x);
+    const y = Math.round(savedPoint.y);
+    await tap(
+      serial,
+      x,
+      y,
+      "bot",
+      `Calibrated keyboard: tap ${keyName}`,
+      "automation",
+      { exact: true },
+    );
+    await _sleep(180);
+    onLog?.(`[cal-keyboard] tapped saved physical bind '${mapKey}' directly at (${x},${y})`);
+    return true;
   }
 
   // Prefer the live IME hierarchy whenever Gboard exposes it. Some builds

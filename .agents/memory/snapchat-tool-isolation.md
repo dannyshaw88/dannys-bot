@@ -68,7 +68,7 @@ After selecting a Snapchat Story audience in either Upload a Snap or Upload a Vi
 
 **How to apply:** Check for this dialog immediately after audience selection in both upload tools. Tap its clickable confirmation control, confirm the dialog has cleared, then continue with the existing story notice and Send flow. Keep the handler shared only by these two Snapchat upload tools.
 
-On the video Snap editor, Snapchat initially hides the paperclip under the right-side downward chevron. Upload a Video must find and tap that live More node, allow the toolbar transition to settle, and only then use the saved Paperclip point.
+On the video Snap editor, Snapchat initially hides the paperclip under the right-side downward chevron. Upload a Video must find and tap that live More node, wait 2.5 seconds for the toolbar transition, and only then use the saved Paperclip point.
 
 **Why:** The link tap missed because it targeted the paperclip position while the toolbar was still collapsed.
 
@@ -92,9 +92,9 @@ The Snapchat video attachment URL field is blank for this flow. Do not inspect, 
 
 **How to apply:** Keep URL entry direct. Handle only the actual Snapchat clipboard prompt when it appears; never run existing-text cleanup or readback checks.
 
-After typing an Upload a Video URL, press the device-calibrated Enter/Search key to load Snapchat’s link preview. Wait for the preview’s Attach to Snap button, tap it, then continue to the optional caption. After typing the caption, press the same saved Enter/tick key and proceed to Send To after a brief settle; do not run repeated UI-tree dumps for a known editor button. For link/caption flows, tap Send To at its known bottom-right position directly, then follow Upload a Snap’s audience selection and send flow.
+After typing an Upload a Video URL, tap the saved Enter/Search key directly without scanning the IME hierarchy. Snapchat’s web-preview `Attach to Snap` button is not exposed in the supplied UIAutomator tree; after a short page-load settle, tap its fixed bottom-center position once instead of repeatedly dumping the tree. After typing the caption, press the same saved Enter/tick key and proceed to Send To after a brief settle; do not run repeated UI-tree dumps for a known editor button. For link/caption flows, tap Send To at its known bottom-right position directly, then follow Upload a Snap’s audience selection and send flow.
 
-**Why:** Typing alone leaves the editor on the URL-entry screen; Snapchat only exposes the attach action after the keyboard’s search/enter action loads the link preview. Caption text also remains in edit mode until the keyboard’s tick/Enter action is pressed.
+**Why:** Typing alone leaves the editor on the URL-entry screen; Snapchat only exposes the attach action after the keyboard’s search/enter action loads the link preview. The user's inspect export showed the web-preview content under `opera_viewer` without an accessible Attach button, so repeated node scans cannot find it. Caption text also remains in edit mode until the keyboard’s tick/Enter action is pressed.
 
 **How to apply:** Use the per-device named Enter keyboard bind to load the URL preview and commit the caption. Wait for the live Attach to Snap control before tapping it. After caption Enter, allow the existing brief settle, then tap Send To directly at the confirmed bottom-right position for link/caption flows. Retain accessibility discovery for flows without a link or caption, and keep audience selection identical to Upload a Snap.
 
