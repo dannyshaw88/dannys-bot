@@ -1,11 +1,8 @@
 import * as android from "../../../androidManager";
-import type { SnapchatContext, UiNode } from "../context";
+import type { SnapchatContext, UiNode, UiState } from "../context";
 import { center, dump, logAction, randomCount, tapNode } from "../runtime";
-import { openUploadSnapCamera } from "../navigation/openUploadSnapCamera";
-import { tapUploadSnapMemories } from "../navigation/tapUploadSnapMemories";
 import { attachSnapLink } from "../navigation/attachSnapLink";
 import { addSnapCaption } from "../navigation/addSnapCaption";
-import { dismissAddToStoryNotice } from "../navigation/dismissAddToStoryNotice";
 
 export type UploadVideoResult = "not-started" | "completed" | "failed";
 
@@ -35,6 +32,154 @@ function findLabeledControl(nodes: UiNode[], label: string): UiNode | undefined 
     )[0] ?? labelNode;
 }
 
+function isVideoCameraReady(state: UiState): boolean {
+  return state.nodes.some(node =>
+    node.resourceId.split("/").pop() === "camera_capture_button" &&
+    node.desc.trim().toLowerCase() === "camera capture",
+  ) && state.nodes.some(node =>
+    node.resourceId.split("/").pop() === "ngs_memories_icon" ||
+    node.desc.trim().toLowerCase() === "memories",
+  );
+}
+
+async function openVideoCamera(context: SnapchatContext): Promise<UiState | null> {
+  let state = await dump(context.serial);
+  if (isVideoCameraReady(state)) {
+    context.onLog("Upload a Video: Camera shutter and Memories icon are already visible; opening Memories directly.");
+    return state;
+  }
+  const cameraTab = state.nodes.find(node =>
+    node.clickable && node.resourceId.split("/").pop() === "ngs_camera_icon_container",
+  );
+  if (!cameraTab) {
+    context.onLog("Upload a Video stopped: Snapchat's Camera tab was not exposed on the current screen.");
+    return null;
+  }
+  const point = center(cameraTab);
+  context.onLog(`Upload a Video: Camera controls are not visible; tapping the Camera tab at (${point.x},${point.y}).`);
+  if (!await tapNode(context, cameraTab, "open Camera before Upload a Video", 0, true)) return null;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    state = await dump(context.serial);
+    if (isVideoCameraReady(state)) return state;
+    if (attempt < 9) await context.sleep(500, "exact");
+  }
+  context.onLog("Upload a Video stopped: Snapchat's Camera screen did not expose its shutter after navigation.");
+  return null;
+}
+
+async function openVideoMemories(context: SnapchatContext, nodes: UiNode[]): Promise<boolean> {
+  const shutter = nodes.find(node =>
+    node.resourceId.split("/").pop() === "camera_capture_button" &&
+    node.desc.trim().toLowerCase() === "camera capture",
+  );
+  if (!shutter) {
+    context.onLog("Upload a Video: Camera shutter was not exposed; no other navigation control was tapped.");
+    return false;
+  }
+  const shutterCenter = center(shutter);
+  const memoriesIcon = nodes.find(node => {
+    const label = node.desc.trim().toLowerCase();
+    const matchesMemories = node.resourceId.split("/").pop() === "ngs_memories_icon" || label === "memories";
+    const boundsValid = node.bounds[2] > node.bounds[0] && node.bounds[3] > node.bounds[1];
+    const point = center(node);
+    return matchesMemories && boundsValid && node.bounds[2] < shutter.bounds[0] &&
+      point.y >= shutter.bounds[1] && point.y <= shutter.bounds[3];
+  });
+  if (!memoriesIcon) {
+    context.onLog("Upload a Video: the live Memories icon left of the Camera shutter was not found; no other navigation control was tapped.");
+    return false;
+  }
+  const target = center(memoriesIcon);
+  context.onLog(
+    `Upload a Video: tapping Memories at (${target.x},${target.y}), left of the Camera shutter at (${shutterCenter.x},${shutterCenter.y}).`,
+  );
+  return tapNode(context, memoriesIcon, "open Memories from its icon left of the Camera shutter", 0, true);
+}
+
+function isVideoAddToStoryNotice(state: UiState): boolean {
+  return state.nodes.some(node => {
+    const text = `${node.text} ${node.desc}`.trim().replace(/\s+/g, " ").toLowerCase();
+    return text === "add to your story?" ||
+      (node.resourceId.split("/").pop() === "alert_dialog_title" && text.includes("add to your story"));
+  });
+}
+
+function findVideoAddToStoryOkay(nodes: UiNode[]): UiNode | undefined {
+  const byId = nodes.find(node =>
+    node.clickable && node.resourceId.split("/").pop() === "add_to_story_dialog_confirm_view",
+  );
+  if (byId) return byId;
+  const label = nodes.find(node =>
+    [node.text, node.desc].some(value => /^(?:okay|ok)$/i.test(value.trim())),
+  );
+  if (!label || label.clickable) return label;
+  const point = center(label);
+  return nodes
+    .filter(node => {
+      const [left, top, right, bottom] = node.bounds;
+      return node.clickable && point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
+    })
+    .sort((a, b) =>
+      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) -
+      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]),
+    )[0];
+}
+
+async function dismissVideoAddToStoryNotice(
+  context: SnapchatContext,
+  initialState: UiState,
+): Promise<"not-present" | "dismissed" | "failed" | "aborted"> {
+  const deadline = Date.now() + 1_800;
+  let state = initialState;
+  let noticeSeen = false;
+  let missingOkayLogged = false;
+  let tapAttempts = 0;
+  while (!context.isAborted() && Date.now() < deadline) {
+    if (isVideoAddToStoryNotice(state)) {
+      noticeSeen = true;
+      const okay = findVideoAddToStoryOkay(state.nodes);
+      if (!okay) {
+        if (!missingOkayLogged) {
+          context.onLog("Upload a Video: Add To Your Story confirmation is visible, but its Okay control is not available yet.");
+          missingOkayLogged = true;
+        }
+      } else {
+        const point = center(okay);
+        context.onLog(`Upload a Video: Add To Your Story confirmation found; tapping Okay at (${point.x},${point.y}).`);
+        try {
+          if (!await tapNode(context, okay, "confirm Add To Your Story notice", 0, true)) return "aborted";
+        } catch (error) {
+          context.onLog(`Upload a Video: could not tap Okay on Add To Your Story confirmation (${error instanceof Error ? error.message : String(error)}).`);
+          return "failed";
+        }
+        tapAttempts++;
+        await context.sleep(350, "exact");
+        if (context.isAborted()) return "aborted";
+        state = await dump(context.serial);
+        if (!isVideoAddToStoryNotice(state)) {
+          context.onLog("Upload a Video: Add To Your Story confirmation cleared; continuing.");
+          return "dismissed";
+        }
+        if (tapAttempts >= 2) {
+          context.onLog("Upload a Video stopped: Add To Your Story confirmation remained after tapping Okay twice.");
+          return "failed";
+        }
+        context.onLog("Upload a Video: confirmation remained visible; retrying its Okay control once.");
+        continue;
+      }
+    }
+    await context.sleep(250, "exact");
+    if (context.isAborted()) return "aborted";
+    state = await dump(context.serial);
+  }
+  if (context.isAborted()) return "aborted";
+  if (noticeSeen) {
+    context.onLog("Upload a Video stopped: Add To Your Story confirmation appeared without an actionable Okay control.");
+    return "failed";
+  }
+  return "not-present";
+}
+
 async function uploadOneVideo(context: SnapchatContext, fileName: string): Promise<UploadVideoResult> {
   const settings = context.tools.uploadVideo;
   const localFilePath = context.path.join(settings.directoryPath, fileName);
@@ -45,8 +190,8 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
     context.onLog(`Upload a Video: video staged and scanned (${devicePath}).`);
     await context.sleep(1000, "exact");
 
-    let state = await openUploadSnapCamera(context);
-    if (!state || !await tapUploadSnapMemories(context, state.nodes)) return "failed";
+    let state = await openVideoCamera(context);
+    if (!state || !await openVideoMemories(context, state.nodes)) return "failed";
 
     state = await dump(context.serial);
     const cameraRollTab = findLabeledControl(state.nodes, "camera roll");
@@ -153,7 +298,7 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
     if (!await tapNode(context, audienceControl, `select ${selectedAudience}`)) return "failed";
 
     state = await dump(context.serial);
-    const addToStoryResult = await dismissAddToStoryNotice(context, state);
+    const addToStoryResult = await dismissVideoAddToStoryNotice(context, state);
     if (addToStoryResult === "failed" || addToStoryResult === "aborted") return "failed";
     state = await dump(context.serial);
     const publicStoryNoticeVisible = Boolean(publicStory) && state.nodes.some(node =>

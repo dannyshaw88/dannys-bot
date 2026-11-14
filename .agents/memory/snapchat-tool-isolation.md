@@ -5,6 +5,12 @@ description: Keep each Snapchat tool, its settings, and its navigation flow isol
 
 Each Snapchat tool, its settings, and each navigation flow belongs in its own dedicated module. Keep shared code limited to low-level utilities and explicit dispatch. For Upload a Snap, tap Memories directly when already on Camera; from another screen, tap the live `ngs_camera_icon_container` first, wait for Camera, then tap Memories.
 
+Do not share tool-specific navigation or prompt handlers between Upload a Snap and Upload a Video; keep each upload flow's Camera, Memories, and Add To Your Story handling inside its own tool module. Shared Android input, UI parsing, context types, and dispatcher lifecycle remain platform infrastructure.
+
+**Why:** The user explicitly requested that each tool's behavior remain independent even when two tools currently perform similar steps, to prevent an edit to one tool from affecting another.
+
+**How to apply:** Before changing a Snapchat tool, inspect its import graph for helpers also used by sibling tools. Duplicate sibling-specific behavior into the owning tool rather than editing a shared feature helper; retain only generic device and dispatch services as shared dependencies.
+
 For Upload a Snap, do not abort solely because a resource-ID check fails when the user reports a control is visibly present. Use the requested screen-relative tap and keep the flow moving. On Send To, dismiss the optional Public Story notice with its Okay button when shown, then tap the bottom-right Send chevron whether the notice appeared or not; press Android Back three times only after that tap.
 
 After selecting a Camera Roll image, expand the editor's More tools, identify the Crop control by its crop-corners shape when it has no useful label, tap Zoom to fill, and confirm with Finish before opening Send To. Prefer My Story - Public; if it is unavailable, select My Story - Friends Only.
