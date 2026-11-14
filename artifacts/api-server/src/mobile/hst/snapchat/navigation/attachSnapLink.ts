@@ -1,9 +1,52 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
-import { center, dump, tapNode } from "../runtime";
+import { center, dump, shortResourceId, tapNode } from "../runtime";
 
 function normalize(value: string): string {
   return value.trim().toLowerCase().replace(/[·•–—-]/g, " ").replace(/\s+/g, " ");
+}
+
+function findEditorMoreChevron(nodes: UiNode[]): UiNode | undefined {
+  const root = nodes[0];
+  if (!root) return undefined;
+  const [rootLeft, rootTop, rootRight, rootBottom] = root.bounds;
+  const screenWidth = rootRight - rootLeft;
+  const screenHeight = rootBottom - rootTop;
+  if (screenWidth <= 0 || screenHeight <= 0) return undefined;
+
+  const isRightToolbarNode = (node: UiNode) => {
+    const [left, top, right, bottom] = node.bounds;
+    const point = center(node);
+    return point.x >= rootLeft + screenWidth * 0.68 &&
+      point.y >= rootTop + screenHeight * 0.06 &&
+      point.y <= rootTop + screenHeight * 0.86 &&
+      right - left <= screenWidth * 0.2 &&
+      bottom - top <= screenHeight * 0.12;
+  };
+  const labels = new Set(["more", "more tools", "show more tools", "expand tools"]);
+  const labelNode = nodes.find(node =>
+    isRightToolbarNode(node) &&
+    (shortResourceId(node) === "more" ||
+      labels.has(normalize(node.text)) ||
+      labels.has(normalize(node.desc))),
+  );
+  if (!labelNode || labelNode.clickable) return labelNode;
+
+  const point = center(labelNode);
+  return nodes
+    .filter(node => {
+      const [left, top, right, bottom] = node.bounds;
+      return node.clickable &&
+        isRightToolbarNode(node) &&
+        point.x >= left &&
+        point.x <= right &&
+        point.y >= top &&
+        point.y <= bottom;
+    })
+    .sort((a, b) =>
+      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) -
+      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]),
+    )[0] ?? labelNode;
 }
 
 function findLabeledControl(nodes: UiNode[], labels: string[]): UiNode | undefined {
@@ -79,6 +122,15 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
     context.onLog("Upload a Video stopped: the video Snap editor was not visible before opening the paperclip.");
     return false;
   }
+
+  const moreChevron = findEditorMoreChevron(state.nodes);
+  if (!moreChevron) {
+    context.onLog("Upload a Video stopped: Snapchat's right-side downward More chevron was not exposed as a live UI node.");
+    return false;
+  }
+  const morePoint = center(moreChevron);
+  context.onLog(`Upload a Video: tapping the live downward More chevron at (${morePoint.x},${morePoint.y}) to expose the Paperclip.`);
+  if (!await tapNode(context, moreChevron, "expand the video editor toolbar with its downward More chevron", 700, true)) return false;
 
   context.onLog("Upload a Video: tapping this device's calibrated Click Paperclip point.");
   try {

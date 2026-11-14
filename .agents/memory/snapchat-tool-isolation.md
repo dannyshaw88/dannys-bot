@@ -68,17 +68,17 @@ After selecting a Snapchat Story audience in either Upload a Snap or Upload a Vi
 
 **How to apply:** Check for this dialog immediately after audience selection in both upload tools. Tap its clickable confirmation control, confirm the dialog has cleared, then continue with the existing story notice and Send flow. Keep the handler shared only by these two Snapchat upload tools.
 
-On the video Snap editor, Snapchat initially hides the paperclip under the right-side downward chevron. Upload a Video must expand that toolbar before tapping the paperclip to open the link editor.
+On the video Snap editor, Snapchat initially hides the paperclip under the right-side downward chevron. Upload a Video must find and tap that live More node, allow the toolbar transition to settle, and only then use the saved Paperclip point.
 
 **Why:** The link tap missed because it targeted the paperclip position while the toolbar was still collapsed.
 
 **How to apply:** In Upload a Video only, tap the More/down-chevron control first, wait for the toolbar to expand, then tap the paperclip and continue with URL entry.
 
-When the paperclip is already visible, identify it by its live label/resource ID or screenshot icon shape; do not tap a fixed toolbar coordinate or assume a stable icon order. Expand More only when the live paperclip icon is not present, then identify the paperclip again.
+Do not use screenshot matching or an inferred toolbar position for the Paperclip. The saved per-device calibration is its only tap target, and it is valid only after the More chevron has expanded the toolbar.
 
-**Why:** Snapchat changed the editor toolbar ordering, and a fixed paperclip coordinate landed on Crop instead. A later screenshot showed the paperclip is a tilted diagonal glyph; an upright generic mask caused the tool to stop before sending the paperclip tap. Device logs also showed short ADB screenshot timeouts and that live UI bounds can use different dimensions from the raw screenshot, causing a visible paperclip to be missed.
+**Why:** The user's run log showed the calibrated point was sent without any preceding More-chevron action. The paperclip is hidden until that action, so the saved tap cannot be used first.
 
-**How to apply:** Prefer exact live icon labels, then match Snapchat's screenshot-derived tilted silhouette with normalized correlation against current right-toolbar nodes. Use the UI tree root bounds to map candidate centers into the captured pixel dimensions and map the match back to tap coordinates; allow at least six seconds for a device screenshot. Recheck briefly after expanding More, and tap only a unique shape match; never guess by toolbar position.
+**How to apply:** Keep the order explicit in `attachSnapLink`: verify the video editor, tap the live downward More node, wait for that tap to settle, then tap `snapchatClickPaperclip`. Never reorder or skip the chevron step.
 
 The Snapchat URL editor may show a “Show links I’ve recently copied?” clipboard-access dialog. When that exact prompt is present, tap **Not now**, verify it is gone, and only then type the configured URL.
 
