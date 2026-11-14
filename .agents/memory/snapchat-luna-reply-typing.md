@@ -114,6 +114,12 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 
 **How to apply:** Audit the live transcript extraction and Luna generator together, list the exact behavior-affecting rules, and distinguish user-directed behavior from internal limits before changing them.
 
+**Incomplete calibrated typing:** Keep `skipMissingKeys` behavior that sends the remaining mapped characters; do not make the reply fail closed solely because some keyboard keys are unmapped.
+
+**Why:** The user explicitly chose to allow partial replies when a calibrated key is missing.
+
+**How to apply:** Preserve this behavior unless the user changes the decision. Continue to verify and record the actual text Snapchat sent.
+
 **Persona and multi-part replies:** Persona facts belong to each editable account-slot goal. Treat that goal's PERSONA section as authoritative, keep examples consistent with it, and answer every direct question in the newest message in order, even when the reply must exceed the usual short-reply limit. Mention Quick Add only when the contact asks where they were found or added.
 
 **Why:** A prompt test exposed conflicting identity details between the persona and examples, and a combined message asked several questions that the reply did not all answer. Slot-specific prompts may represent different personas, so one account's identity must not become a global default.
