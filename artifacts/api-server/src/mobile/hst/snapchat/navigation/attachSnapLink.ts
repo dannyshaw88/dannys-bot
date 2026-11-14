@@ -87,12 +87,6 @@ function findUrlField(nodes: UiNode[]): UiNode | undefined {
     )[0];
 }
 
-function getUrlFieldValue(node: UiNode): string {
-  return [node.text, node.desc]
-    .map(value => value.trim())
-    .find(value => value && !/^type (?:a )?url$/i.test(value)) ?? "";
-}
-
 function findAttachButton(nodes: UiNode[]): UiNode | undefined {
   return nodes.find(node =>
     node.resourceId.split("/").pop() === "attachment-editor-attach-button",
@@ -152,7 +146,8 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
   let clipboardPromptVisible = false;
   for (let attempt = 0; attempt < 8; attempt++) {
     state = await dump(context.serial);
-    clipboardPromptVisible = hasClipboardAccessPrompt(state.nodes);
+    clipboardPromptVisible = hasClipboardAccessPrompt(state.nodes) ||
+      Boolean(findLabeledControl(state.nodes, ["not now"]));
     if (clipboardPromptVisible || findUrlField(state.nodes)) break;
     if (attempt < 7) await context.sleep(400, "exact");
   }
@@ -191,30 +186,23 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
   }
   if (!await tapNode(context, urlField, "focus the Snapchat link text field", 300)) return false;
 
-  // Snapchat's empty URL field reports its hint ("Type a URL") as both text
-  // and content description in some builds. Do not mistake that placeholder
-  // for a pre-existing URL or the flow will stop before calibrated typing.
-  const previousText = getUrlFieldValue(urlField);
-  if (previousText) {
-    try {
-      await android.clearFocusedTextField(
-        context.serial,
-        message => context.onLog(`Upload a Video: ${message}`),
-      );
-    } catch (error) {
-      context.onLog(`Upload a Video stopped: could not clear the existing Snapchat link text${error instanceof Error ? ` (${error.message})` : ""}.`);
+  // Focusing the URL field can trigger Snapchat's clipboard-access prompt.
+  // Dismiss its visible Not now button before typing; do not inspect or clear
+  // the field's contents.
+  state = await dump(context.serial);
+  const focusedFieldNotNow = findLabeledControl(state.nodes, ["not now"]);
+  if (hasClipboardAccessPrompt(state.nodes) || focusedFieldNotNow) {
+    const notNowButton = focusedFieldNotNow;
+    if (!notNowButton) {
+      context.onLog("Upload a Video stopped: Snapchat's clipboard prompt appeared after focusing the URL field without a visible Not now button.");
       return false;
     }
-    state = await dump(context.serial);
-    urlField = findUrlField(state.nodes);
-    if (!urlField || getUrlFieldValue(urlField)) {
-      context.onLog("Upload a Video stopped: the existing link text could not be cleared and verified.");
-      return false;
-    }
+    context.onLog("Upload a Video: dismissing the clipboard prompt after focusing the URL field.");
+    if (!await tapNode(context, notNowButton, "dismiss Snapchat's clipboard prompt with Not now", 500, true)) return false;
   }
 
   let typed;
-  context.onLog("Upload a Video: starting URL entry with this device's saved keyboard calibration.");
+  context.onLog("Upload a Video: typing the configured URL directly with this device's saved keyboard calibration.");
   try {
     typed = await android.typeViaSavedCalibrationMap(
       context.serial,
