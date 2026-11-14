@@ -81,6 +81,40 @@ function findLabeledPaperclip(nodes: UiNode[]): UiNode | undefined {
   );
 }
 
+function paperclipToolbarNodeSummary(nodes: UiNode[]): string {
+  const root = nodes[0];
+  if (!root) return "no UI nodes";
+  const [rootLeft, rootTop, rootRight, rootBottom] = root.bounds;
+  const width = rootRight - rootLeft;
+  const height = rootBottom - rootTop;
+  if (width <= 0 || height <= 0) return "invalid root bounds";
+
+  const candidates = nodes.filter(node => {
+    const [left, top, right, bottom] = node.bounds;
+    const nodeWidth = right - left;
+    const nodeHeight = bottom - top;
+    const x = (left + right) / 2;
+    const y = (top + bottom) / 2;
+    return x >= rootLeft + width * 0.76 &&
+      y >= rootTop + height * 0.06 &&
+      y <= rootTop + height * 0.88 &&
+      nodeWidth >= 1 &&
+      nodeHeight >= 1 &&
+      nodeWidth <= width * 0.22 &&
+      nodeHeight <= height * 0.12;
+  });
+
+  if (!candidates.length) return "no small right-toolbar nodes in the live tree";
+  return candidates.slice(0, 24).map((node, index) => {
+    const label = node.text.trim() || node.desc.trim();
+    return `${index + 1}:${node.className || "View"}` +
+      ` id=${JSON.stringify(node.resourceId || "(none)")}` +
+      ` label=${JSON.stringify(label || "(none)")}` +
+      ` clickable=${node.clickable}` +
+      ` bounds=[${node.bounds.join(",")}]`;
+  }).join(" | ");
+}
+
 export async function attachSnapLink(context: SnapchatContext, rawUrl: string): Promise<boolean> {
   const url = rawUrl.trim();
   if (!url) {
@@ -100,6 +134,9 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
   if (!linkControl) {
     const moreTools = findMoreToolsControl(state.nodes);
     if (!moreTools) {
+      context.onLog(
+        `Upload a Video diagnostic: no More node; live right-toolbar nodes: ${paperclipToolbarNodeSummary(state.nodes)}`,
+      );
       context.onLog("Upload a Video stopped: neither the paperclip icon nor Snapchat's More chevron could be identified in the live editor.");
       return false;
     }
@@ -108,6 +145,11 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
     state = await dump(context.serial);
     linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]) ??
       findLabeledPaperclip(state.nodes);
+    if (!linkControl) {
+      context.onLog(
+        `Upload a Video diagnostic: no Paperclip/Link node after More; live right-toolbar nodes: ${paperclipToolbarNodeSummary(state.nodes)}`,
+      );
+    }
   }
 
   if (!linkControl) {
