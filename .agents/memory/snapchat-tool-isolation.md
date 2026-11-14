@@ -86,11 +86,11 @@ The Snapchat URL editor may show a “Show links I’ve recently copied?” clip
 
 **How to apply:** Check the settled URL-editor screen for both the prompt title and its clipboard-access explanation; dismiss only that dialog and fail closed if it remains.
 
-Snapchat may expose the empty URL field’s “Type a URL” hint through both accessibility text and description. Treat that exact hint as empty; otherwise the replacement check can abort before saved-keyboard typing begins.
+The Snapchat video attachment URL field is blank for this flow. Do not inspect, clear, or verify its contents; focus it and type the configured URL directly. The clipboard-access prompt is separate: if its live “Not now” control appears, tap that control and continue.
 
-**Why:** An inspect dump showed the placeholder in both fields, and the previous non-empty check interpreted it as existing link content.
+**Why:** The user confirmed that no URL is prewritten in this field, and the prior content-clearing check stopped a valid upload.
 
-**How to apply:** Ignore the placeholder when deciding whether to clear the field, then proceed to the device’s saved keyboard calibration for URL entry.
+**How to apply:** Keep URL entry direct. Handle only the actual Snapchat clipboard prompt when it appears; never run existing-text cleanup or readback checks.
 
 After typing an Upload a Video URL, press the device-calibrated Enter/Search key to load Snapchat’s link preview. Wait for the preview’s Attach to Snap button, tap it, then continue to the optional caption. After typing the caption, press the same saved Enter/tick key and proceed to Send To after a brief settle; do not run repeated UI-tree dumps for a known editor button. For link/caption flows, tap Send To at its known bottom-right position directly, then follow Upload a Snap’s audience selection and send flow.
 
