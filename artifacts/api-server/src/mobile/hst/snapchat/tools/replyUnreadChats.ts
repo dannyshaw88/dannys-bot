@@ -216,7 +216,7 @@ function unreadChatRows(
   nodes: UiNode[],
   onSkippedRow?: (
     displayName: string,
-    reason: "Delivered" | "empty" | "media-only" | "My AI",
+    reason: "Delivered" | "media-only" | "My AI",
     preview: string[],
   ) => void,
 ) {
@@ -231,12 +231,6 @@ function unreadChatRows(
       node.bounds[3] <= marker.bounds[3],
     );
     const rowLabel = [markerLabel, ...rowNodes.map(nodeLabel)].join(" ");
-    const hasMedia = /\b(snaps?|photos?|videos?)\b/i.test(rowLabel);
-    const hasChats = /\bchats?\b/i.test(rowLabel);
-    const chatActionNode = rowNodes.find(node =>
-      /feed_chat_button/i.test(`${node.text} ${node.desc} ${node.resourceId}`) &&
-      node.bounds[0] >= marker.bounds[0] + rowHeight * 0.65,
-    );
     const names = nodes.filter(node =>
       node.text.trim() &&
       node.bounds[1] >= marker.bounds[1] &&
@@ -246,6 +240,19 @@ function unreadChatRows(
     ).sort((a, b) => a.bounds[1] - b.bounds[1]);
     const nameNode = names[0];
     const displayName = nameNode?.text.trim();
+    const withoutDisplayName = (value: string) => displayName
+      ? value.toLocaleLowerCase().split(displayName.toLocaleLowerCase()).join(" ")
+      : value;
+    const activityLabel = [
+      withoutDisplayName(markerLabel),
+      ...rowNodes.filter(node => node !== nameNode).map(node => withoutDisplayName(nodeLabel(node))),
+    ].join(" ");
+    const hasMedia = /\b(snaps?|photos?|videos?)\b/i.test(activityLabel);
+    const hasChats = /\bchats?\b/i.test(rowLabel);
+    const chatActionNode = rowNodes.find(node =>
+      /feed_chat_button/i.test(`${node.text} ${node.desc} ${node.resourceId}`) &&
+      node.bounds[0] >= marker.bounds[0] + rowHeight * 0.65,
+    );
     const nameBottom = nameNode?.bounds[3];
     const previewValues = rowNodes
       .filter(node =>
@@ -271,20 +278,6 @@ function unreadChatRows(
     }
     if (displayName && /\bdelivered\b/i.test(rowLabel)) {
       onSkippedRow?.(displayName, "Delivered", previewValues);
-      return [];
-    }
-    const emptyPreview = /\b(?:you are now friends|double[\s-]+tap to snap|tap to chat|start a chat|say hi|no messages yet)\b/i;
-    const nonMessagePreview = /^(?:new\s+chats?|unread|received|sent|opened|delivered|camera|chat|call|video|audio|more|today|yesterday|\d+\s*(?:s|sec(?:onds)?|m|min(?:utes)?|h|hr(?:ours)?|d|days?))\b/i;
-    const hasMessagePreview = previewValues.some(value =>
-      !emptyPreview.test(value) &&
-      !nonMessagePreview.test(value) &&
-      !/\b\d+\s*(?:s|m|h|d)\b/i.test(value),
-    );
-    if (
-      displayName &&
-      (emptyPreview.test(rowLabel) || !hasMessagePreview)
-    ) {
-      onSkippedRow?.(displayName, "empty", previewValues);
       return [];
     }
     return nameNode && displayName
@@ -461,7 +454,6 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     // contact audit after the corresponding sent-reply record.
     if (reason === "Delivered") return;
     const explanations: Record<typeof reason, string> = {
-      empty: "the row has no readable incoming message preview.",
       "media-only": "the row contains only Snap/photo/video activity, not a text chat.",
       "My AI": "it is Snapchat's My AI conversation, which is intentionally excluded.",
     };
