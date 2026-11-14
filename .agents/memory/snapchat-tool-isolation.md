@@ -68,11 +68,11 @@ For View Snaps, the purple Story ring alone does not prove a Story is viewable. 
 
 **How to apply:** Use current Friends-row accessibility bounds with screenshot pixels to detect the filled purple pill and its separate white plus/person glyphs. Do not classify by the common purple ring. If all cards are add-person suggestions or no story circle remains, return normally without tapping; the dispatcher restores Camera and continues the next enabled tool.
 
-After selecting a Snapchat Story audience in either Upload a Snap or Upload a Video, an “Add To Your Story?” confirmation can appear. Dismiss it using the live `add_to_story_dialog_confirm_view` Okay control, not Cancel; stop that upload if the confirmation cannot be cleared.
+After selecting a Snapchat Story audience in either Upload a Snap or Upload a Video, an “Add To Your Story?” confirmation can appear. Dismiss it using the live `add_to_story_dialog_confirm_view` Okay control, not Cancel; stop that upload if the confirmation cannot be cleared. Keep a separate handler in each upload tool.
 
 **Why:** A real-device UI dump showed the confirmation overlay blocking the Send To flow, with Okay exposed by a resource ID but no accessible text.
 
-**How to apply:** Check for this dialog immediately after audience selection in both upload tools. Tap its clickable confirmation control, confirm the dialog has cleared, then continue with the existing story notice and Send flow. Keep the handler shared only by these two Snapchat upload tools.
+**How to apply:** Check for this dialog immediately after audience selection in both upload tools. Tap its clickable confirmation control, confirm the dialog has cleared, then continue with the existing story notice and Send flow. Copy the handler into each upload tool rather than importing one tool's logic into the other.
 
 On the video Snap editor, Snapchat initially hides the paperclip under the right-side downward chevron. Upload a Video must find and tap that live More node, wait 2.5 seconds for the toolbar transition, and only then use the saved Paperclip point.
 

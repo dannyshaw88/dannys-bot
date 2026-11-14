@@ -23,7 +23,7 @@ export function formatCooldownTime(timestamp: number): string {
 
 export async function handleFriendRequestLimit(
   context: SnapchatContext,
-  toolName: "Add Friends" | "Accept Friends",
+  toolName: "Add Friends",
   nodes: UiNode[],
 ): Promise<false | "friend-request-cooldown" | "friend-request-cooldown-blocked"> {
   if (!isFriendRequestLimitDialog(nodes)) return false;

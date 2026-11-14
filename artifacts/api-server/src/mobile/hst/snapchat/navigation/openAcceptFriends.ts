@@ -1,0 +1,217 @@
+import * as android from "../../../androidManager";
+import type { SnapchatContext, UiNode } from "../context";
+import {
+  center,
+  dump,
+  nodeLabel,
+  shortResourceId,
+  tapNode,
+} from "../runtime";
+
+const ACCEPT_FRIENDS_BANNER_RECHECK_MS = 5_000;
+
+function hasSnapchatChatComposer(nodes: UiNode[]): boolean {
+  return nodes.some(node =>
+    /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+  );
+}
+
+function findAddFriendsEntry(nodes: UiNode[]): UiNode | undefined {
+  const byResource = nodes.find(node =>
+    node.clickable && shortResourceId(node) === "neon_add_friend_button_container",
+  );
+  if (byResource) return byResource;
+
+  const label = nodes.find(node => /^add\s+friends?$/i.test(nodeLabel(node)));
+  if (!label) return undefined;
+  if (label.clickable) return label;
+
+  const point = center(label);
+  const labelArea = (label.bounds[2] - label.bounds[0]) * (label.bounds[3] - label.bounds[1]);
+  return nodes
+    .filter(node => {
+      if (!node.clickable) return false;
+      const [left, top, right, bottom] = node.bounds;
+      const area = (right - left) * (bottom - top);
+      return point.x >= left && point.x <= right &&
+        point.y >= top && point.y <= bottom &&
+        area >= labelArea;
+    })
+    .sort((a, b) =>
+      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) -
+      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]),
+    )[0] ?? label;
+}
+
+function findAddFriendsBanner(
+  nodes: UiNode[],
+  target: UiNode,
+  screenWidth: number,
+  screenHeight: number,
+): UiNode | undefined {
+  const point = center(target);
+  const targetWidth = target.bounds[2] - target.bounds[0];
+  const targetHeight = target.bounds[3] - target.bounds[1];
+  const targetArea = targetWidth * targetHeight;
+  const screenArea = screenWidth * screenHeight;
+  const incomingActivity = /\b(?:is|are)\s+typing\b|\btyping(?:\s*\.{1,3}|\s*…)?\b|\b(?:sent|sending|received|delivered)\s+(?:(?:you|me)\s+)?(?:(?:a|an)\s+)?(?:snap|chat|photo|video|message)\b|\bnew\s+(?:snap|chat|message)\b/i;
+  const isLargeTopOverlay = (node: UiNode) => {
+    const [left, top, right, bottom] = node.bounds;
+    const width = right - left;
+    const height = bottom - top;
+    const area = width * height;
+    return top <= screenHeight * 0.25 &&
+      bottom <= screenHeight * 0.45 &&
+      width >= screenWidth * 0.4 &&
+      height >= Math.max(targetHeight * 1.4, 36) &&
+      area >= targetArea * 2.5 &&
+      area < screenArea * 0.5;
+  };
+  const coversPoint = (node: UiNode, x: number, y: number) =>
+    x >= node.bounds[0] && x <= node.bounds[2] &&
+    y >= node.bounds[1] && y <= node.bounds[3];
+  const eventLabels = nodes.filter(node =>
+    incomingActivity.test(`${node.text} ${node.desc}`) &&
+    node.bounds[1] <= screenHeight * 0.35 &&
+    node.bounds[3] <= screenHeight * 0.45,
+  );
+
+  return nodes.find(node => {
+    if (node === target) return false;
+    if (!coversPoint(node, point.x, point.y) || !isLargeTopOverlay(node)) return false;
+
+    const identity = `${node.packageName} ${node.className} ${node.resourceId}`;
+    const explicitBanner = /camera_sticky_toast|banner|snackbar|toast|heads.?up|notification/i.test(identity);
+    const systemNotification = /com\.android\.systemui/i.test(node.packageName);
+    const containsIncomingActivity = eventLabels.some(label => {
+      const eventPoint = center(label);
+      return coversPoint(node, eventPoint.x, eventPoint.y);
+    });
+    return explicitBanner || systemNotification || containsIncomingActivity;
+  });
+}
+
+function findFriendSuggestionsControl(nodes: UiNode[], labels: string | string[]): UiNode | undefined {
+  const wanted = new Set((Array.isArray(labels) ? labels : [labels]).map(label => label.trim().toLowerCase()));
+  const textNode = nodes.find(node =>
+    [node.text, node.desc].some(value => wanted.has(value.trim().toLowerCase())),
+  );
+  if (!textNode) return undefined;
+  if (textNode.clickable) return textNode;
+
+  const point = center(textNode);
+  return nodes
+    .filter(node => {
+      if (!node.clickable) return false;
+      const [left, top, right, bottom] = node.bounds;
+      return point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
+    })
+    .sort((a, b) =>
+      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) -
+      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]),
+    )[0];
+}
+
+async function handleFriendSuggestionsPrompt(
+  context: SnapchatContext,
+  nodes: UiNode[],
+): Promise<{ nodes: UiNode[]; ok: boolean }> {
+  const enableButton = findFriendSuggestionsControl(nodes, "Enable Friend Suggestions");
+  if (!enableButton) return { nodes, ok: true };
+
+  context.onLog("Snapchat: enabling Friend Suggestions from the Add Friends page.");
+  if (!await tapNode(context, enableButton, "enable Friend Suggestions", 500, true)) {
+    return { nodes, ok: false };
+  }
+
+  let state = await dump(context.serial);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const warningVisible = state.nodes.some(node =>
+      [node.text, node.desc].some(value =>
+        /think carefully before adding and accepting friends/i.test(value),
+      ),
+    );
+    if (warningVisible) {
+      const okayButton = findFriendSuggestionsControl(state.nodes, ["OK", "Okay"]);
+      if (!okayButton) {
+        context.onLog("Snapchat: the Friend Suggestions warning appeared, but its Okay control was not found.");
+        return { nodes: state.nodes, ok: false };
+      }
+      context.onLog("Snapchat: confirming Friend Suggestions with OK.");
+      if (!await tapNode(context, okayButton, "confirm Friend Suggestions with OK", 700, true)) {
+        return { nodes: state.nodes, ok: false };
+      }
+      return { nodes: (await dump(context.serial)).nodes, ok: true };
+    }
+    if (!state.nodes.some(node =>
+      [node.text, node.desc].some(value =>
+        value.trim().toLowerCase() === "enable friend suggestions",
+      ),
+    )) {
+      context.onLog("Snapchat: the Friend Suggestions prompt closed without showing the confirmation.");
+      return { nodes: state.nodes, ok: false };
+    }
+    await context.sleep(300, "exact");
+    state = await dump(context.serial);
+  }
+
+  context.onLog("Snapchat: the Friend Suggestions confirmation did not appear; stopping this friend tool safely.");
+  return { nodes: state.nodes, ok: false };
+}
+
+async function openAcceptFriendsPage(context: SnapchatContext): Promise<boolean> {
+  let state = await dump(context.serial);
+  if (hasSnapchatChatComposer(state.nodes)) {
+    if (await android.isKeyboardShown(context.serial).catch(() => false)) {
+      await android.keyevent(context.serial, 4);
+      await context.sleep(300, "exact");
+      state = await dump(context.serial);
+    }
+    if (hasSnapchatChatComposer(state.nodes)) {
+      await android.keyevent(context.serial, 4);
+      await context.sleep(400, "exact");
+      state = await dump(context.serial);
+    }
+    if (hasSnapchatChatComposer(state.nodes)) return false;
+  }
+
+  const initialSuggestions = await handleFriendSuggestionsPrompt(context, state.nodes);
+  if (!initialSuggestions.ok) return false;
+  state = { ...state, nodes: initialSuggestions.nodes };
+
+  const acceptActionIsVisible = (nodes: UiNode[]) => nodes.some(node =>
+    shortResourceId(node) === "scu_search_action_button" &&
+    [node.text, node.desc].some(value => value.trim().toLowerCase() === "accept"),
+  );
+  const friendRowIsVisible = (nodes: UiNode[]) =>
+    nodes.some(node => shortResourceId(node) === "scu_search_friend_cell");
+  if (acceptActionIsVisible(state.nodes) || friendRowIsVisible(state.nodes)) return true;
+
+  let entry = findAddFriendsEntry(state.nodes);
+  if (!entry) return false;
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+  for (let check = 1; check <= 10; check++) {
+    if (!findAddFriendsBanner(state.nodes, entry, screenWidth, screenHeight)) {
+      context.onLog("Accept Friends: tapping the live entry control; proceeding without checking a page marker.");
+      if (!await tapNode(context, entry, "open Add Friends from its live accessibility bounds", 0)) return false;
+      await context.sleep(3_000, "exact");
+      state = await dump(context.serial);
+      const suggestions = await handleFriendSuggestionsPrompt(context, state.nodes);
+      return suggestions.ok;
+    }
+    if (check === 10) return false;
+    await context.sleep(ACCEPT_FRIENDS_BANNER_RECHECK_MS, "exact");
+    state = await dump(context.serial);
+    const suggestions = await handleFriendSuggestionsPrompt(context, state.nodes);
+    if (!suggestions.ok) return false;
+    state = { ...state, nodes: suggestions.nodes };
+    if (acceptActionIsVisible(state.nodes) || friendRowIsVisible(state.nodes)) return true;
+    entry = findAddFriendsEntry(state.nodes);
+    if (!entry) return false;
+  }
+  return false;
+}
+
+export function openAddFriendsForAccepts(context: SnapchatContext): Promise<boolean> {
+  return openAcceptFriendsPage(context);
+}

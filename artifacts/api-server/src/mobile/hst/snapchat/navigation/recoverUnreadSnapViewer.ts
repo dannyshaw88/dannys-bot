@@ -1,20 +1,29 @@
 import * as android from "../../../androidManager";
-import type { SnapchatContext, UiState } from "../context";
+import type { SnapchatContext, UiNode, UiState } from "../context";
 import { exitSnapchatConversation } from "./exitConversation";
-import { isSnapMediaViewer } from "./exitSnapViewer";
-import { dump, exactClickable } from "../runtime";
+import { dump, exactClickable, shortResourceId } from "../runtime";
+
+function isUnreadReplySnapViewer(xml: string, nodes: UiNode[]): boolean {
+  return /opera_viewer/i.test(xml) &&
+    nodes.some(node => shortResourceId(node) === "chrome_title") &&
+    nodes.some(node =>
+      shortResourceId(node) === "base_image_layer_container" ||
+      /base_.*video.*layer|video.*viewer/i.test(shortResourceId(node)) ||
+      /(?:SurfaceView|TextureView|VideoView)$/i.test(node.className),
+    );
+}
 
 export async function recoverFromUnreadSnapViewer(
   context: SnapchatContext,
   displayName: string,
   opened: UiState,
 ): Promise<{ detected: boolean; list?: UiState }> {
-  if (!isSnapMediaViewer(opened.xml, opened.nodes)) return { detected: false };
+  if (!isUnreadReplySnapViewer(opened.xml, opened.nodes)) return { detected: false };
 
   context.onLog(`Reply to Unread Chats: ${displayName}'s unread item opened a photo/video Snap; swiping down to close it.`);
   const { w, h } = await android.getScreenSizeAsync(context.serial);
   let state = opened;
-  for (let attempt = 0; attempt < 2 && isSnapMediaViewer(state.xml, state.nodes); attempt++) {
+  for (let attempt = 0; attempt < 2 && isUnreadReplySnapViewer(state.xml, state.nodes); attempt++) {
     if (context.isAborted()) return { detected: true };
     await android.swipe(
       context.serial,
@@ -27,11 +36,11 @@ export async function recoverFromUnreadSnapViewer(
     );
     await context.sleep(500, "exact");
     state = await dump(context.serial);
-    if (isSnapMediaViewer(state.xml, state.nodes) && attempt === 0) {
+    if (isUnreadReplySnapViewer(state.xml, state.nodes) && attempt === 0) {
       context.onLog("Reply to Unread Chats: Snap viewer is still open; retrying the downward dismiss swipe.");
     }
   }
-  if (isSnapMediaViewer(state.xml, state.nodes)) {
+  if (isUnreadReplySnapViewer(state.xml, state.nodes)) {
     context.onLog("Reply to Unread Chats stopped: Snapchat's photo/video viewer did not close after two downward swipes.");
     return { detected: true };
   }

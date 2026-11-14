@@ -10,7 +10,6 @@ import { runUploadSnap, type UploadSnapResult } from "./tools/uploadSnap";
 import { runUploadVideo, type UploadVideoResult } from "./tools/uploadVideo";
 import { runViewSnaps } from "./tools/viewSnaps";
 import { runViewSpotlights } from "./tools/viewSpotlights";
-import { formatCooldownTime } from "./navigation/handleFriendRequestCooldown";
 import { withSnapchatContext } from "./runtime";
 
 type SnapchatToolEntry = {
@@ -23,6 +22,12 @@ type SnapchatToolEntry = {
   };
   run: () => Promise<void | UploadSnapResult | UploadVideoResult | boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked">;
 };
+
+function formatFriendCooldownTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  const two = (value: number) => String(value).padStart(2, "0");
+  return `${two(date.getHours())}:${two(date.getMinutes())}-${two(date.getDate())}/${two(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
 
 async function restoreCameraBeforeNextTool(
   context: SnapchatContext,
@@ -72,7 +77,7 @@ async function runSnapchatToolsInContext(context: SnapchatContext): Promise<void
   const initialFriendCooldownUntil = await getFriendRequestCooldownUntil();
   if (initialFriendCooldownUntil) {
     context.onLog(
-      `Snapchat: Add Friends and Accept Friends are paused by the 3-hour cooldown until ${formatCooldownTime(initialFriendCooldownUntil)}.`,
+      `Snapchat: Add Friends and Accept Friends are paused by the 3-hour cooldown until ${formatFriendCooldownTime(initialFriendCooldownUntil)}.`,
     );
   }
 
@@ -115,7 +120,7 @@ async function runSnapchatToolsInContext(context: SnapchatContext): Promise<void
       const activeUntil = await getFriendRequestCooldownUntil();
       if (activeUntil) {
         context.onLog(
-          `Snapchat: ${tool.name} skipped; the friend-request cooldown remains active until ${formatCooldownTime(activeUntil)}.`,
+          `Snapchat: ${tool.name} skipped; the friend-request cooldown remains active until ${formatFriendCooldownTime(activeUntil)}.`,
         );
         continue;
       }

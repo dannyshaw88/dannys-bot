@@ -1,9 +1,13 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
-import { hasSnapchatChatComposer, openAddFriendsForAccepts } from "../navigation/openAddFriends";
-import { handleFriendRequestLimit } from "../navigation/handleFriendRequestCooldown";
+import { openAddFriendsForAccepts } from "../navigation/openAcceptFriends";
+import { handleAcceptFriendRequestLimit } from "../navigation/acceptFriendsCooldown";
 import { scrollAcceptFriendsListOneSlot } from "../navigation/scrollAcceptFriendsListOneSlot";
 import { center, dump, findOccludingBanner, logAction, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
+
+const hasAcceptFriendChatComposer = (nodes: UiNode[]) => nodes.some(node =>
+  /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
+);
 
 export async function runAcceptFriends(context: SnapchatContext): Promise<boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked"> {
   const requested = randomCount(context.tools.acceptFriends.min, context.tools.acceptFriends.max);
@@ -38,7 +42,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
   const acceptanceKey = (name: string) => name.toLowerCase().replace(/\s+/g, " ").trim();
 
   let state = await dump(context.serial);
-  const initialCooldownResult = await handleFriendRequestLimit(context, "Accept Friends", state.nodes);
+  const initialCooldownResult = await handleAcceptFriendRequestLimit(context, state.nodes);
   if (initialCooldownResult) {
     logAction(context, `0 of ${requested} friend requests accepted; paused by Snapchat's friend-request limit`);
     return initialCooldownResult;
@@ -59,7 +63,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
       }
       await context.sleep(120, "exact");
       state = await dump(context.serial);
-      const cooldownWhileExpanding = await handleFriendRequestLimit(context, "Accept Friends", state.nodes);
+      const cooldownWhileExpanding = await handleAcceptFriendRequestLimit(context, state.nodes);
       if (cooldownWhileExpanding) {
         logAction(context, `0 of ${requested} friend requests accepted; paused by Snapchat's friend-request limit`);
         return cooldownWhileExpanding;
@@ -100,7 +104,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
       );
       if (context.isAborted()) break;
       state = await dump(context.serial);
-      if (hasSnapchatChatComposer(state.nodes)) {
+      if (hasAcceptFriendChatComposer(state.nodes)) {
         attemptedAcceptances.add(acceptanceKey(currentAcceptance.name));
         pendingAcceptance = null;
         context.onLog(`Accept Friends: a chat opened after tapping Accept for ${currentAcceptance.name}; leaving it and continuing.`);
@@ -160,7 +164,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
     blockedAcceptance = "";
     if (!await tapNode(context, candidate.button, `accept ${candidate.name} under Added Me`, 250)) break;
     state = await dump(context.serial);
-    const cooldownAfterTap = await handleFriendRequestLimit(context, "Accept Friends", state.nodes);
+    const cooldownAfterTap = await handleAcceptFriendRequestLimit(context, state.nodes);
     if (cooldownAfterTap) {
       logAction(context, `${accepted} of ${requested} friend requests accepted; paused by Snapchat's friend-request limit`);
       return cooldownAfterTap;

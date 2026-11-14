@@ -1,13 +1,14 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import {
-  ADD_FRIENDS_BANNER_RECHECK_MS,
   center,
   dump,
   nodeLabel,
   shortResourceId,
   tapNode,
 } from "../runtime";
+
+const ADD_FRIENDS_BANNER_RECHECK_MS = 5_000;
 
 export function hasSnapchatChatComposer(nodes: UiNode[]): boolean {
   return nodes.some(node =>
@@ -160,8 +161,6 @@ async function handleFriendSuggestionsPrompt(
 
 async function openAddFriendsForAction(
   context: SnapchatContext,
-  actionLabel: "Add" | "Accept",
-  toolName: "Add Friends" | "Accept Friends",
 ): Promise<boolean> {
   let state = await dump(context.serial);
   if (hasSnapchatChatComposer(state.nodes)) {
@@ -184,7 +183,7 @@ async function openAddFriendsForAction(
 
   const friendActionIsVisible = (nodes: UiNode[]) => nodes.some(node =>
     shortResourceId(node) === "scu_search_action_button" &&
-    [node.text, node.desc].some(value => value.trim().toLowerCase() === actionLabel.toLowerCase()),
+    [node.text, node.desc].some(value => value.trim().toLowerCase() === "add"),
   );
   const friendRowIsVisible = (nodes: UiNode[]) =>
     nodes.some(node => shortResourceId(node) === "scu_search_friend_cell");
@@ -195,7 +194,7 @@ async function openAddFriendsForAction(
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   for (let check = 1; check <= 10; check++) {
     if (!findAddFriendsBanner(state.nodes, entry, screenWidth, screenHeight)) {
-      context.onLog(`${toolName}: tapping the live entry control; proceeding without checking a page marker.`);
+      context.onLog("Add Friends: tapping the live entry control; proceeding without checking a page marker.");
       if (!await tapNode(context, entry, "open Add Friends from its live accessibility bounds", 0)) return false;
       await context.sleep(3_000, "exact");
       state = await dump(context.serial);
@@ -220,9 +219,5 @@ async function openAddFriendsForAction(
  * row-level Add or Accept controls without page/resource-marker confirmation.
  */
 export function openAddFriendsForSuggestions(context: SnapchatContext): Promise<boolean> {
-  return openAddFriendsForAction(context, "Add", "Add Friends");
-}
-
-export function openAddFriendsForAccepts(context: SnapchatContext): Promise<boolean> {
-  return openAddFriendsForAction(context, "Accept", "Accept Friends");
+  return openAddFriendsForAction(context);
 }

@@ -1,6 +1,5 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext } from "../context";
-import { exitSnapViewer } from "../navigation/exitSnapViewer";
 import { openStoriesList, scanFreshStoryCircles } from "../navigation/openStoriesList";
 import { dump, logAction, randomCount, randomSeconds, tapNode } from "../runtime";
 
@@ -59,7 +58,14 @@ export async function runViewSnaps(context: SnapchatContext): Promise<void> {
     viewed++;
     context.onMetric?.("snapchat_snaps");
   }
-  if (!context.isAborted()) await exitSnapViewer(context);
+  if (!context.isAborted()) {
+    context.onLog("View Snaps: pressing Android Back once to exit the Snap viewer.");
+    try {
+      await android.keyevent(context.serial, 4);
+    } catch {
+      context.onLog("View Snaps stopped: Android Back failed while exiting the Snap viewer.");
+    }
+  }
   context.onLog(`View Snaps: viewed ${viewed}/${requested} Snap(s).`);
   logAction(context, viewed === requested
     ? `${viewed} Snaps viewed`

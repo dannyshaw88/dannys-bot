@@ -4,7 +4,6 @@ import type { SnapchatContext, UiNode, UiState } from "./context";
 import { dismissIncomingCallIfPresent } from "./navigation/dismissIncomingCall";
 
 export const BANNER_RECHECK_MS = 120;
-export const ADD_FRIENDS_BANNER_RECHECK_MS = 5_000;
 
 const snapchatContextStorage = new AsyncLocalStorage<SnapchatContext>();
 
