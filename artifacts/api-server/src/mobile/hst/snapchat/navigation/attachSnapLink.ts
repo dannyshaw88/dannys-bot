@@ -213,28 +213,8 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
     );
     await context.sleep(1_000, "exact");
   } else {
-    // Keep the original screenshot-grounded tap as a last resort. Some
-    // Snapchat builds expose the toolbar items as anonymous nodes and render
-    // the paperclip differently enough that the shape matcher rejects it.
-    // The tap is still gated by the confirmed Snap editor and the More-tools
-    // expansion above; the URL-field check below verifies that it opened Link.
-    const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
-    const paperclipX = Math.round(screenWidth * 0.935);
-    const paperclipY = Math.round(screenHeight * 0.60);
-    context.onLog(
-      `Upload a Video: shape matching missed the paperclip; tapping its screenshot-confirmed position ` +
-      `at (${paperclipX},${paperclipY}) on ${screenWidth}×${screenHeight}, then checking for the Link field.`,
-    );
-    await android.tap(
-      context.serial,
-      paperclipX,
-      paperclipY,
-      "bot",
-      "Snapchat: open the screenshot-confirmed paperclip position in the video Snap editor",
-      "automation",
-      { exact: true },
-    );
-    await context.sleep(1_000, "exact");
+    context.onLog("Upload a Video stopped: Snapchat's paperclip/Link icon was not identified after opening More.");
+    return false;
   }
 
   let clipboardPromptVisible = false;

@@ -132,7 +132,7 @@ function senderFromDescription(
 }
 
 function visibleConversation(nodes: UiNode[], composerTop: number, peerName: string): string[] {
-  const excluded = /^(send|chat|call|video|audio|camera|back|more|typing|delivered|opened|seen|unread|new snap|today|yesterday|message)$/i;
+  const excluded = /^(send|chat|call|video|audio|camera|back|more|typing|delivered|opened|seen|unread|new snap|today|yesterday|message|me|you|you sent|sent by you)$/i;
   const seen = new Set<string>();
   return nodes
     .filter(node => node.bounds[1] >= 220 && node.bounds[1] < composerTop && !/edittext/i.test(node.className))
