@@ -609,6 +609,14 @@ const LiveCanvas = React.memo(React.forwardRef<LiveCanvasHandle, { serial: strin
 
     const setMirrorStatus = (next: MirrorStatus, reason: string) => {
       const previous = statusRef.current;
+      if (next === "asleep") {
+        // A stopped/black device can leave the last decoded frame painted on
+        // the canvas. Remove it as soon as the mirror is no longer considered
+        // live, rather than showing stale app content behind the asleep label.
+        const canvas = canvasRef.current;
+        const ctx = ctxRef.current;
+        if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
       if (previous === next) return;
       statusRef.current = next;
       setStatus(next);
