@@ -4855,6 +4855,30 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // Hydration requires the JSON body; a cache-busting query prevents a 304
     // from silently leaving `hydrated` false and permanently disabling HST.
     const hydrateCacheKey = `hstHydrate=${Date.now()}`;
+    let retryAttempt = 0;
+    let retryTimer: number | undefined;
+    let loadStage: "slot-state" | "slot-settings" = "slot-state";
+    const retryHydration = (error: unknown) => {
+      if (!active) return;
+      // A failed read is not a settings snapshot. Keep the current values and
+      // keep autosave gated until a real server response arrives; otherwise a
+      // later edit could persist AUTOMATION_DEFAULTS over the saved slot.
+      hydratedRef.current = false;
+      const retryDelays = [2_000, 5_000, 15_000, 30_000];
+      const retryMs = retryDelays[Math.min(retryAttempt, retryDelays.length - 1)];
+      retryAttempt += 1;
+      const detail = error instanceof Error ? error.message : String(error ?? "request failed");
+      setSaveError(`Couldn't load this slot's saved settings (${loadStage}); keeping them unchanged and retrying.`);
+      writeUiSpeedLog("automation-settings-hydration-failed", {
+        serial,
+        slotId: slotId ?? null,
+        slotIdx: slotIdx ?? 0,
+        stage: loadStage,
+        retryMs,
+        error: detail,
+      });
+      retryTimer = window.setTimeout(hydrate, retryMs);
+    };
     const applyHydratedSettings = (d: Record<string, any>) => {
       if (!active) return;
       const incomingSnapchatTools =
@@ -4892,14 +4916,17 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       setSettings(settingsWereEditedDuringFetch ? settingsRef.current : merged);
       setHydrated(true);
       hydratedRef.current = true;
+      setSaveError(null);
     };
     const slotIdentityQuery = slotId ? `&slotId=${encodeURIComponent(slotId)}` : "";
     const stateUrl = `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx ?? 0}/automation-state?${hydrateCacheKey}${slotIdentityQuery}`;
     const hydrate = () => {
+      loadStage = "slot-state";
       fetch(stateUrl, { cache: "no-store" })
         .then(r => r.ok ? r.json() : null)
         .then(async d => {
-          if (!active || typeof d?.enabled !== "boolean") return;
+          if (!active) return;
+          if (typeof d?.enabled !== "boolean") throw new Error("slot state response was incomplete");
           // The lightweight state endpoint is authoritative for the slot
           // toggle. Paint it immediately instead of making the account list
           // wait for the larger TrustScore-resolved settings payload below.
@@ -4916,22 +4943,23 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             applyHydratedSettings({ enabled: false });
             return;
           }
+          loadStage = "slot-settings";
           const settingsUrl = slotIdx !== undefined
              ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings?${hydrateCacheKey}${slotIdentityQuery}`
             : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings?${hydrateCacheKey}`;
           const response = await fetch(settingsUrl, { cache: "no-store" });
-          if (!response.ok) throw new Error("settings request failed");
-          applyHydratedSettings(await response.json());
-        })
-        .catch(() => {
-          // Keep defaults on a transient failure, but do not leave a disabled
-          // slot permanently blocked from rendering its lightweight controls.
-          if (active) {
-            applyHydratedSettings({ enabled: false });
-            setLoading(false);
+          if (!response.ok) throw new Error(`settings request failed (${response.status})`);
+          const data = await response.json();
+          if (!data || typeof data !== "object" || Array.isArray(data)) {
+            throw new Error("settings response was incomplete");
           }
+          retryAttempt = 0;
+          applyHydratedSettings(data);
         })
-        .finally(() => { if (active) setLoading(false); });
+        .catch(retryHydration)
+        .finally(() => {
+          if (active && hydratedRef.current) setLoading(false);
+        });
     };
     // The account list is the navigation-critical surface. Hidden HST slots
     // remain mounted for scheduling, but should not monopolize the browser's
@@ -4940,6 +4968,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     return () => {
       active = false;
       window.clearTimeout(hydrationTimer);
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectedKey, phone?.serial, slotIdx, slotId, refreshKey, invalidHstSlot, isActive]);
@@ -5060,6 +5089,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const snapchatToolsSnapshot = JSON.stringify(toSave.snapchatTools);
     const snapchatToolsChanged = snapchatToolsSnapshot !== lastSavedSnapchatToolsRef.current;
     const t = setTimeout(() => {
+      // A request that was already debounced when a refresh failed must not
+      // write its stale snapshot after the failure has closed the save gate.
+      if (!hydratedRef.current) return;
       const slotIdentityQuery = slotId ? `?slotId=${encodeURIComponent(slotId)}` : "";
       const saveUrl = slotIdx !== undefined
         ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotIdentityQuery}`
