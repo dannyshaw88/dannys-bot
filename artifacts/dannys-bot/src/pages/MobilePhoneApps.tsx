@@ -271,7 +271,7 @@ export function DeviceQuickControls({ serial, onOpenLog }: {
         onClick={onOpenLog}
         disabled={!serial || !onOpenLog}
         title="Open the action-only device log"
-        className="px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 border-transparent text-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        className="pl-3 pr-0 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 border-transparent text-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
       >
         Log<ClipboardList className="w-3.5 h-3.5 opacity-70" />
       </button>

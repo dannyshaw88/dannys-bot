@@ -13293,14 +13293,11 @@ export function MobilePage() {
   }, [paneEl]);
   const [activeTab, setActiveTab] = useState<MobileTab>("account");
 
-  // Metrics and Action Log are overview-level tabs. Once the user opens a
-  // specific device from the Phone Farm grid, the screen is dedicated to that
-  // device and those two tabs are not useful visually. Keep the tab state
-  // intact for the farm overview, but never leave the detail view showing a
-  // panel whose tab has been hidden.
+  // Metrics stays overview-only. The per-device Action Log is available from
+  // the Log quick button beside Airplane in the device toolbar.
   const deviceDetailView = !!targetSerial;
   useEffect(() => {
-    if (deviceDetailView && (activeTab === "metrics" || activeTab === "actionlog")) {
+    if (deviceDetailView && activeTab === "metrics") {
       setActiveTab("account");
     }
   }, [deviceDetailView, activeTab]);
