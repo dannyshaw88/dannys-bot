@@ -136,7 +136,12 @@ async function findPaperclipByShape(
       `(UI ${uiWidth}×${uiHeight}, screenshot ${screenshot.width}×${screenshot.height}, ` +
       `candidates=${candidates.map(node => {
         const point = center(node);
-        return `${node.className || "View"}:${shortResourceId(node) || "unlabelled"}@${point.x},${point.y}`;
+        const text = node.text.trim().slice(0, 80);
+        const desc = node.desc.trim().slice(0, 80);
+        return `${node.className || "View"}:${shortResourceId(node) || "unlabelled"}@${point.x},${point.y}` +
+          `[${node.bounds.join(",")}] clickable=${node.clickable}` +
+          `${text ? ` text=${JSON.stringify(text)}` : ""}` +
+          `${desc ? ` desc=${JSON.stringify(desc)}` : ""}`;
       }).join("; ")}).`,
     );
     return null;
