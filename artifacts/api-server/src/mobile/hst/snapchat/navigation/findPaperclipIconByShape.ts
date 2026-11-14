@@ -90,8 +90,8 @@ export function findPaperclipIconByShape(
   }
 
   const matches: Array<{ x: number; y: number; score: number }> = [];
-  const scales = [1.4, 1.8, 2.2, 2.6, 3, 3.4, 3.8, 4.2, 4.6];
-  const offsets = [-15, -10, -5, 0, 5, 10, 15];
+  const scales = [1.2, 1.6, 2, 2.4, 2.8, 3.2, 3.6, 4, 4.4, 4.8, 5.2, 5.6];
+  const offsets = [-30, -25, -20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30];
   for (const point of uniqueCenters) {
     let centerBest = -Infinity;
     let bestPoint = point;

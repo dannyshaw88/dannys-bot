@@ -76,9 +76,9 @@ On the video Snap editor, Snapchat initially hides the paperclip under the right
 
 When the paperclip is already visible, identify it by its live label/resource ID or screenshot icon shape; do not tap a fixed toolbar coordinate or assume a stable icon order. Expand More only when the live paperclip icon is not present, then identify the paperclip again.
 
-**Why:** Snapchat changed the editor toolbar ordering, and a fixed paperclip coordinate landed on Crop instead. A later screenshot showed the paperclip is a tilted diagonal glyph; an upright generic mask caused the tool to stop before sending the paperclip tap.
+**Why:** Snapchat changed the editor toolbar ordering, and a fixed paperclip coordinate landed on Crop instead. A later screenshot showed the paperclip is a tilted diagonal glyph; an upright generic mask caused the tool to stop before sending the paperclip tap. Device logs also showed short ADB screenshot timeouts and that live UI bounds can use different dimensions from the raw screenshot, causing a visible paperclip to be missed.
 
-**How to apply:** Prefer exact live icon labels, then match Snapchat's screenshot-derived tilted silhouette with normalized correlation against current right-toolbar nodes. Recheck briefly after expanding More, and tap only a unique shape match; never guess by toolbar position.
+**How to apply:** Prefer exact live icon labels, then match Snapchat's screenshot-derived tilted silhouette with normalized correlation against current right-toolbar nodes. Use the UI tree root bounds to map candidate centers into the captured pixel dimensions and map the match back to tap coordinates; allow at least six seconds for a device screenshot. Recheck briefly after expanding More, and tap only a unique shape match; never guess by toolbar position.
 
 The Snapchat URL editor may show a “Show links I’ve recently copied?” clipboard-access dialog. When that exact prompt is present, tap **Not now**, verify it is gone, and only then type the configured URL.
 

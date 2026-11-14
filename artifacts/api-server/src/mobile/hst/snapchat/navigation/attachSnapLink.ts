@@ -85,38 +85,67 @@ function findLabeledPaperclip(nodes: UiNode[]): UiNode | undefined {
 async function findPaperclipByShape(
   context: SnapchatContext,
   nodes: UiNode[],
-  screenWidth: number,
-  screenHeight: number,
 ): Promise<{ x: number; y: number; score: number } | null> {
+  const root = nodes[0];
+  if (!root) return null;
+  const [rootLeft, rootTop, rootRight, rootBottom] = root.bounds;
+  const uiWidth = rootRight - rootLeft;
+  const uiHeight = rootBottom - rootTop;
+  if (uiWidth <= 0 || uiHeight <= 0) {
+    context.onLog("Upload a Video: the live editor tree reported invalid screen bounds for paperclip detection.");
+    return null;
+  }
+
   const candidates = nodes.filter(node => {
     const [left, top, right, bottom] = node.bounds;
     const width = right - left;
     const height = bottom - top;
     const point = center(node);
-    return point.x >= screenWidth * 0.76 &&
-      point.y >= screenHeight * 0.06 &&
-      point.y <= screenHeight * 0.88 &&
+    return point.x >= rootLeft + uiWidth * 0.76 &&
+      point.y >= rootTop + uiHeight * 0.06 &&
+      point.y <= rootTop + uiHeight * 0.88 &&
       width >= 24 && height >= 24 &&
-      width <= screenWidth * 0.22 &&
-      height <= screenHeight * 0.12;
+      width <= uiWidth * 0.22 &&
+      height <= uiHeight * 0.12;
   });
   if (!candidates.length) {
     context.onLog("Upload a Video: no small controls were exposed in the live right-side editor toolbar.");
     return null;
   }
 
-  const screenshot = await android.captureScreenPixels(context.serial, 2_200);
+  const screenshot = await android.captureScreenPixels(context.serial, 6_000);
   if (!screenshot) {
-    context.onLog("Upload a Video: the editor screenshot was unavailable within 2.2 seconds; paperclip detection will retry.");
+    context.onLog("Upload a Video: the live editor screenshot was unavailable within 6 seconds; paperclip detection will retry.");
     return null;
   }
-  const match = findPaperclipIconByShape(screenshot, candidates.map(center));
+  const scaleX = screenshot.width / uiWidth;
+  const scaleY = screenshot.height / uiHeight;
+  const match = findPaperclipIconByShape(
+    screenshot,
+    candidates.map(node => {
+      const point = center(node);
+      return {
+        x: (point.x - rootLeft) * scaleX,
+        y: (point.y - rootTop) * scaleY,
+      };
+    }),
+  );
   if (!match) {
     context.onLog(
-      `Upload a Video: paperclip shape did not match among ${candidates.length} live right-toolbar controls.`,
+      `Upload a Video: paperclip shape did not match among ${candidates.length} live right-toolbar controls ` +
+      `(UI ${uiWidth}×${uiHeight}, screenshot ${screenshot.width}×${screenshot.height}, ` +
+      `candidates=${candidates.map(node => {
+        const point = center(node);
+        return `${node.className || "View"}:${shortResourceId(node) || "unlabelled"}@${point.x},${point.y}`;
+      }).join("; ")}).`,
     );
+    return null;
   }
-  return match;
+  return {
+    x: rootLeft + match.x / scaleX,
+    y: rootTop + match.y / scaleY,
+    score: match.score,
+  };
 }
 
 export async function attachSnapLink(context: SnapchatContext, rawUrl: string): Promise<boolean> {
@@ -133,12 +162,11 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
     return false;
   }
 
-  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let linkControl = findLabeledControl(state.nodes, ["link", "add link", "attach link", "link sticker"]) ??
     findLabeledPaperclip(state.nodes);
   let paperclipMatch = linkControl
     ? null
-    : await findPaperclipByShape(context, state.nodes, screenWidth, screenHeight);
+    : await findPaperclipByShape(context, state.nodes);
 
   if (!linkControl && !paperclipMatch) {
     const moreTools = findMoreToolsControl(state.nodes);
@@ -159,7 +187,7 @@ export async function attachSnapLink(context: SnapchatContext, rawUrl: string): 
         findLabeledPaperclip(state.nodes);
       paperclipMatch = linkControl
         ? null
-        : await findPaperclipByShape(context, state.nodes, screenWidth, screenHeight);
+        : await findPaperclipByShape(context, state.nodes);
       if (linkControl || paperclipMatch) break;
     }
   }
