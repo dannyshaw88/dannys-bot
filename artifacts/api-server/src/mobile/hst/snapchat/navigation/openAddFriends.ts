@@ -90,9 +90,10 @@ export function findAddFriendsBanner(
   });
 }
 
-function findFriendSuggestionsControl(nodes: UiNode[], label: string): UiNode | undefined {
+function findFriendSuggestionsControl(nodes: UiNode[], labels: string | string[]): UiNode | undefined {
+  const wanted = new Set((Array.isArray(labels) ? labels : [labels]).map(label => label.trim().toLowerCase()));
   const textNode = nodes.find(node =>
-    [node.text, node.desc].some(value => value.trim().toLowerCase() === label.toLowerCase()),
+    [node.text, node.desc].some(value => wanted.has(value.trim().toLowerCase())),
   );
   if (!textNode) return undefined;
   if (textNode.clickable) return textNode;
@@ -130,13 +131,13 @@ async function handleFriendSuggestionsPrompt(
       ),
     );
     if (warningVisible) {
-      const okayButton = findFriendSuggestionsControl(state.nodes, "Okay");
+      const okayButton = findFriendSuggestionsControl(state.nodes, ["OK", "Okay"]);
       if (!okayButton) {
         context.onLog("Snapchat: the Friend Suggestions warning appeared, but its Okay control was not found.");
         return { nodes: state.nodes, ok: false };
       }
-      context.onLog("Snapchat: confirming Friend Suggestions with Okay.");
-      if (!await tapNode(context, okayButton, "confirm Friend Suggestions with Okay", 700, true)) {
+      context.onLog("Snapchat: confirming Friend Suggestions with OK.");
+      if (!await tapNode(context, okayButton, "confirm Friend Suggestions with OK", 700, true)) {
         return { nodes: state.nodes, ok: false };
       }
       return { nodes: (await dump(context.serial)).nodes, ok: true };
