@@ -216,7 +216,7 @@ function unreadChatRows(
   nodes: UiNode[],
   onSkippedRow?: (
     displayName: string,
-    reason: "Delivered" | "empty" | "media-only" | "My AI",
+    reason: "media-only" | "My AI",
     preview: string[],
   ) => void,
 ) {
@@ -256,35 +256,22 @@ function unreadChatRows(
       )
       .map(node => node.text.trim())
       .filter(Boolean);
-    const hasUnreadNewChatMarker = [markerLabel, ...rowNodes
+    const rowStatusLabels = [markerLabel, ...rowNodes
       .filter(node => node !== nameNode)
-      .map(node => `${node.text} ${node.desc}`)]
-      .some(value => /^(?:(?:\d+)\s+)?new chats?\b/i.test(value.trim()));
-    if (!hasUnreadNewChatMarker) return [];
+      .map(node => `${node.text} ${node.desc}`)];
+    const hasNewChatMarker = rowStatusLabels.some(value =>
+      /^(?:(?:\d+)\s+)?new chats?\b/i.test(value.trim()),
+    );
+    const hasMixedSnapAndChatMarker =
+      /\b(?:\d+\s+)?snaps?\s+and\s+chats?\b/i.test(rowLabel);
+    const hasRepliedToChatMarker = /\breplied to your chats?\b/i.test(rowLabel);
+    if (!hasNewChatMarker && !hasMixedSnapAndChatMarker && !hasRepliedToChatMarker) return [];
     if (displayName && isMyAiChat(displayName)) {
       onSkippedRow?.(displayName, "My AI", previewValues);
       return [];
     }
     if (hasMedia && !(hasChats && chatActionNode)) {
       if (displayName) onSkippedRow?.(displayName, "media-only", previewValues);
-      return [];
-    }
-    if (displayName && /\bdelivered\b/i.test(rowLabel)) {
-      onSkippedRow?.(displayName, "Delivered", previewValues);
-      return [];
-    }
-    const emptyPreview = /\b(?:you are now friends|double[\s-]+tap to snap|tap to chat|start a chat|say hi|no messages yet)\b/i;
-    const nonMessagePreview = /^(?:new\s+chats?|unread|received|sent|opened|delivered|camera|chat|call|video|audio|more|today|yesterday|\d+\s*(?:s|sec(?:onds)?|m|min(?:utes)?|h|hr(?:ours)?|d|days?))\b/i;
-    const hasMessagePreview = previewValues.some(value =>
-      !emptyPreview.test(value) &&
-      !nonMessagePreview.test(value) &&
-      !/\b\d+\s*(?:s|m|h|d)\b/i.test(value),
-    );
-    if (
-      displayName &&
-      (emptyPreview.test(rowLabel) || !hasMessagePreview)
-    ) {
-      onSkippedRow?.(displayName, "empty", previewValues);
       return [];
     }
     return nameNode && displayName
@@ -456,12 +443,7 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
   let noMoreEligible = false;
   const visited = new Set<string>();
   const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, (displayName, reason, preview) => {
-    // Delivered rows are ordinary outgoing conversations, not missed incoming
-    // chats. Keep excluding them from processing, but don't write a skipped
-    // contact audit after the corresponding sent-reply record.
-    if (reason === "Delivered") return;
     const explanations: Record<typeof reason, string> = {
-      empty: "the row has no readable incoming message preview.",
       "media-only": "the row contains only Snap/photo/video activity, not a text chat.",
       "My AI": "it is Snapchat's My AI conversation, which is intentionally excluded.",
     };
