@@ -132,7 +132,7 @@ function senderFromDescription(
 }
 
 function visibleConversation(nodes: UiNode[], composerTop: number, peerName: string): string[] {
-  const excluded = /^(send|chat|call|video|audio|camera|back|more|typing|delivered|opened|seen|unread|new snap|today|yesterday|message|me|you|you sent|sent by you)$/i;
+  const excluded = /^(send|chat|call|video|audio|camera|back|more|typing|delivered|opened|seen|unread|new snap|today|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|message|me|you|you sent|sent by you)$/i;
   const seen = new Set<string>();
   return nodes
     .filter(node => node.bounds[1] >= 220 && node.bounds[1] < composerTop && !/edittext/i.test(node.className))
@@ -150,7 +150,8 @@ function visibleConversation(nodes: UiNode[], composerTop: number, peerName: str
     })
     .filter(text => {
       const key = text.toLowerCase().replace(/\s+/g, " ");
-      if (!key || excluded.test(text) || seen.has(key)) return false;
+      const messageText = text.replace(/^(?:luna|contact)\s*:\s*/i, "").trim();
+      if (!key || excluded.test(messageText) || seen.has(key)) return false;
       seen.add(key);
       return true;
     })

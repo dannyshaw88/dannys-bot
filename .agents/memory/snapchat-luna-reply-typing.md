@@ -114,6 +114,12 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 
 **How to apply:** Audit the live transcript extraction and Luna generator together, list the exact behavior-affecting rules, and distinguish user-directed behavior from internal limits before changing them.
 
+**Do not use output blocking as a substitute for diagnosis:** When Prompt Test and live Snapchat produce different replies, find and correct the difference in the prompt, transcript, history, or runtime input. Do not propose post-generation semantic checks or blocking replies as the fix.
+
+**Why:** The user explicitly rejected “checking and blocking” as a fix and wants the cause of Prompt Test/live output differences identified.
+
+**How to apply:** Compare the exact live `latestIncomingMessage`, transcript, and sent-reply history with the Prompt Test payload. Correct source-input mismatches instead of rejecting generated replies after the fact.
+
 **Incomplete calibrated typing:** Keep `skipMissingKeys` behavior that sends the remaining mapped characters; do not make the reply fail closed solely because some keyboard keys are unmapped.
 
 **Why:** The user explicitly chose to allow partial replies when a calibrated key is missing.
