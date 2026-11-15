@@ -9,6 +9,7 @@ import {
 import { generateSnapchatLunaReply } from "../../../snapchatLuna";
 import type { SnapchatContext, UiNode, UiState } from "../context";
 import { exitSnapchatConversation, hasNotAddedFriendNotice } from "../navigation/exitConversation";
+import { dismissAdExperiencePrompt, isAdExperiencePrompt } from "../navigation/dismissAdExperiencePrompt";
 import { recoverFromUnreadSnapViewer } from "../navigation/recoverUnreadSnapViewer";
 import { waitForUnreadTab } from "../navigation/openUnreadTab";
 import {
@@ -374,10 +375,43 @@ async function generateContextualReply(
 }
 
 export async function runReplyUnreadChats(context: SnapchatContext): Promise<void> {
-  const { enabled, replyGoal } = context.tools.replyUnreadChats;
   const requested = randomCount(context.tools.replyUnreadChats.min, context.tools.replyUnreadChats.max);
+  return runReplyUnreadChatsAttempt(context, requested, false);
+}
+
+async function recoverAdExperiencePromptAfterChatMiss(
+  context: SnapchatContext,
+  state: UiState,
+  retryAlreadyUsed: boolean,
+): Promise<{
+  action: "continue" | "retry-tool" | "stop";
+  state: UiState;
+}> {
+  if (!isAdExperiencePrompt(state)) return { action: "continue", state };
+
+  const clearedState = await dismissAdExperiencePrompt(
+    context,
+    state,
+    () => dump(context.serial),
+  );
+  if (isAdExperiencePrompt(clearedState)) return { action: "stop", state: clearedState };
+  return {
+    action: retryAlreadyUsed ? "continue" : "retry-tool",
+    state: clearedState,
+  };
+}
+
+async function runReplyUnreadChatsAttempt(
+  context: SnapchatContext,
+  requested: number,
+  adPopupRetryUsed: boolean,
+): Promise<void> {
+  const { enabled, replyGoal } = context.tools.replyUnreadChats;
   if (!enabled || requested === 0) return;
   logAction(context, `Reply to up to ${requested} unread chats`);
+  if (adPopupRetryUsed) {
+    context.onLog("Reply to Unread Chats: restarting once after clearing Snapchat's ad-experience prompt.");
+  }
   context.onLog(`Reply to Unread Chats: target ${requested} unread contact(s), one reply per contact.`);
   if (!context.slotId) {
     context.onLog("Reply to Unread Chats stopped: this Snapchat slot has no stable saved ID for private history.");
@@ -427,13 +461,67 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
     logAction(context, "0 replies sent; the Chat tab was unavailable");
     return;
   }
-  let list = await waitForUnreadTab(context);
-  if (!list) {
+  let unreadWait = await waitForUnreadTab(context, state =>
+    recoverAdExperiencePromptAfterChatMiss(context, state, adPopupRetryUsed),
+  );
+  if (unreadWait.status === "retry-tool") {
+    context.onLog("Reply to Unread Chats: the ad-experience prompt was cleared; restarting the tool once.");
+    logAction(context, "0 replies sent; the ad-experience prompt was cleared and the tool restarted");
+    return runReplyUnreadChatsAttempt(context, requested, true);
+  }
+  if (
+    unreadWait.status === "missing" &&
+    isAdExperiencePrompt(unreadWait.state)
+  ) {
+    const recovery = await recoverAdExperiencePromptAfterChatMiss(
+      context,
+      unreadWait.state,
+      adPopupRetryUsed,
+    );
+    if (recovery.action === "retry-tool") {
+      context.onLog("Reply to Unread Chats: the ad-experience prompt appeared while waiting; restarting the tool once.");
+      logAction(context, "0 replies sent; the ad-experience prompt was cleared and the tool restarted");
+      return runReplyUnreadChatsAttempt(context, requested, true);
+    }
+    if (recovery.action === "stop") {
+      context.onLog("Reply to Unread Chats stopped: Snapchat's ad-experience prompt could not be cleared.");
+      logAction(context, "0 replies sent; the ad-experience prompt remained open");
+      return;
+    }
+    unreadWait = await waitForUnreadTab(context);
+  }
+  if (unreadWait.status === "stopped") {
+    if (isAdExperiencePrompt(unreadWait.state)) {
+      context.onLog("Reply to Unread Chats stopped: Snapchat's ad-experience prompt could not be cleared.");
+      logAction(context, "0 replies sent; the ad-experience prompt remained open");
+      return;
+    }
+    logAction(context, "0 replies sent; the Unread list could not be opened");
+    return;
+  }
+  if (unreadWait.status !== "ready") {
     logAction(context, "0 replies sent; the Unread list did not open");
     return;
   }
-  if (!exactClickable(list.nodes, ["Chat"]) ||
-      list.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId))) {
+  let list = unreadWait.state;
+  const isConfirmedUnreadList = (state: UiState) =>
+    Boolean(exactClickable(state.nodes, ["Chat"])) &&
+    !state.nodes.some(node => /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId));
+  if (!isConfirmedUnreadList(list) && isAdExperiencePrompt(list)) {
+    const recovery = await recoverAdExperiencePromptAfterChatMiss(context, list, adPopupRetryUsed);
+    if (recovery.action === "retry-tool") {
+      context.onLog("Reply to Unread Chats: the ad-experience prompt was cleared; restarting the tool once.");
+      logAction(context, "0 replies sent; the ad-experience prompt was cleared and the tool restarted");
+      return runReplyUnreadChatsAttempt(context, requested, true);
+    }
+    if (recovery.action === "stop") {
+      context.onLog("Reply to Unread Chats stopped: Snapchat's ad-experience prompt could not be cleared.");
+      logAction(context, "0 replies sent; the ad-experience prompt remained open");
+      return;
+    }
+    list = recovery.state;
+  }
+  if (!isConfirmedUnreadList(list)) {
     context.onLog("Reply to Unread Chats stopped: the Unread chat list was not confirmed after tapping its tab.");
     logAction(context, "0 replies sent; the Unread list could not be confirmed");
     return;
@@ -458,6 +546,21 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       list = await dump(context.serial);
       rows = readUnreadRows(list.nodes);
     }
+    if (rows.length === 0 && isAdExperiencePrompt(list)) {
+      const recovery = await recoverAdExperiencePromptAfterChatMiss(context, list, adPopupRetryUsed);
+      if (recovery.action === "retry-tool") {
+        context.onLog("Reply to Unread Chats: the ad-experience prompt blocked the chat list; restarting the tool once.");
+        logAction(context, "0 replies sent; the ad-experience prompt was cleared and the tool restarted");
+        return runReplyUnreadChatsAttempt(context, requested, true);
+      }
+      if (recovery.action === "stop") {
+        context.onLog("Reply to Unread Chats stopped: Snapchat's ad-experience prompt could not be cleared.");
+        logAction(context, "0 replies sent; the ad-experience prompt remained open");
+        return;
+      }
+      list = recovery.state;
+      rows = readUnreadRows(list.nodes);
+    }
     context.onLog(`Reply to Unread Chats: found ${rows.length} eligible text-chat row(s) in the Unread list.`);
     const row = rows.find(item => !visited.has(normalizedText(item.displayName)));
     if (!row) {
@@ -480,6 +583,32 @@ export async function runReplyUnreadChats(context: SnapchatContext): Promise<voi
       screenWidth,
       screenHeight,
     );
+    if (isAdExperiencePrompt(openResult.state)) {
+      const recovery = await recoverAdExperiencePromptAfterChatMiss(
+        context,
+        openResult.state,
+        adPopupRetryUsed,
+      );
+      if (recovery.action === "retry-tool") {
+        context.onLog("Reply to Unread Chats: Snapchat's ad-experience prompt blocked the chat; restarting the tool once.");
+        logAction(context, "0 replies sent; the ad-experience prompt was cleared and the tool restarted");
+        return runReplyUnreadChatsAttempt(context, requested, true);
+      }
+      if (recovery.action === "stop") {
+        recordNotReplied(
+          row.displayName,
+          "opening-chat",
+          "Snapchat's ad-experience prompt blocked the conversation and could not be cleared.",
+          row.preview,
+        );
+        logAction(context, `${replied} replies sent; the ad-experience prompt remained open`);
+        return;
+      }
+      activeContact = null;
+      visited.delete(identity);
+      list = recovery.state;
+      continue;
+    }
     if (!openResult.tapped) {
       recordNotReplied(
         row.displayName,
