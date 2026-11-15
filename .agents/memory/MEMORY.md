@@ -158,3 +158,4 @@
 - [Never open Snapchat My AI](snapchat-my-ai-exclusion.md) — exclude the exact My AI row during unread-chat discovery and recheck immediately before tapping
 - [Snapchat tools from an open chat](snapchat-tools-open-chat.md) — dismiss the keyboard, exit the verified chat, then confirm Camera before Add/Accept Friends
 - [Farm device proxy routing](farm-device-proxy-routing.md) — prefer laptop broadband plus a per-device proxy exit; device Wi-Fi plus assigned proxy is the fallback
+- [Snapchat ad-experience popup](snapchat-ad-experience-popup.md) — piggyback on existing UI reads and select the exact Smaller In-Feed Ads option

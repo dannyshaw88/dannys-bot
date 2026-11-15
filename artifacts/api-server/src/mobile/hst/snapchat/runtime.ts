@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import * as android from "../../androidManager";
 import type { SnapchatContext, UiNode, UiState } from "./context";
+import { dismissAdExperiencePrompt } from "./navigation/dismissAdExperiencePrompt";
 import { dismissIncomingCallIfPresent } from "./navigation/dismissIncomingCall";
 
 export const BANNER_RECHECK_MS = 120;
@@ -65,7 +66,8 @@ export async function dump(serial: string): Promise<UiState> {
   const state = await readFreshState();
   const context = snapchatContextStorage.getStore();
   if (!context || context.serial !== serial || context.isAborted()) return state;
-  return dismissIncomingCallIfPresent(context, state, readFreshState);
+  const afterIncomingCall = await dismissIncomingCallIfPresent(context, state, readFreshState);
+  return dismissAdExperiencePrompt(context, afterIncomingCall, readFreshState);
 }
 
 export async function tapNode(
