@@ -15,6 +15,12 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 
 **How to apply:** Compare the logged `latestIncomingMessage` against the visible live chat before investigating model wording. Keep Prompt Test and live replies on the shared reply generator, and use role-labelled live transcripts so the newest contact message is unambiguous.
 
+**Unicode contact labels:** Decode Snapchat's numeric XML character references once. Before building Luna's transcript, remove an exact contact-name prefix from a message node (including decorative-symbol variants) so only the bubble text is labelled `Contact`. Compare existing saved history aliases after decoding numeric emoji entities.
+
+**Why:** Snapchat accessibility and exported history can represent emoji in a contact name as numeric entities, while the visible name may include decorative symbols. A combined `name: message` accessibility node must not make that name part of `latestIncomingMessage` or split saved reply history.
+
+**How to apply:** Keep the original contact name as identity metadata, but pass only the extracted bubble text in the transcript and newest-message field. Decode XML entities in one pass so escaped literal entity text is not decoded a second time.
+
 ## Batched calibrated reply typing
 When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB shell command. Keep keyboard-layer controls as separate commands and preserve the configured pauses inside the batch.
 

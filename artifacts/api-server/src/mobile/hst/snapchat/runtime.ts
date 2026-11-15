@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import * as android from "../../androidManager";
 import type { SnapchatContext, UiNode, UiState } from "./context";
 import { dismissIncomingCallIfPresent } from "./navigation/dismissIncomingCall";
+import { decodeXmlText } from "./xmlText";
 
 export const BANNER_RECHECK_MS = 120;
 
@@ -25,20 +26,13 @@ export const center = (node: UiNode) => ({
   y: Math.round((node.bounds[1] + node.bounds[3]) / 2),
 });
 
-const decodeXml = (value: string) => value
-  .replace(/&quot;/g, '"')
-  .replace(/&apos;/g, "'")
-  .replace(/&lt;/g, "<")
-  .replace(/&gt;/g, ">")
-  .replace(/&amp;/g, "&");
-
 export function parseNodes(xml: string): UiNode[] {
   const nodes: UiNode[] = [];
   const nodeRegex = /<node\b([^>]*)\/?>/g;
   let match: RegExpExecArray | null;
   while ((match = nodeRegex.exec(xml)) !== null) {
     const attrs = match[1];
-    const get = (key: string) => decodeXml((attrs.match(new RegExp(`${key}="([^"]*)"`)) ?? [])[1] ?? "");
+    const get = (key: string) => decodeXmlText((attrs.match(new RegExp(`${key}="([^"]*)"`)) ?? [])[1] ?? "");
     const boundsMatch = get("bounds").match(/^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$/);
     if (!boundsMatch) continue;
     nodes.push({

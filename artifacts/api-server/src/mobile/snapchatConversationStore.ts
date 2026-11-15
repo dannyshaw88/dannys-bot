@@ -81,8 +81,30 @@ function readJsonLines<T>(filePath: string): T[] {
   }
 }
 
+function decodeContactEntities(value: string): string {
+  return value.replace(/&#(x[\da-f]+|\d+);/gi, (entity, code: string) => {
+    const codePoint = code[0].toLowerCase() === "x"
+      ? Number.parseInt(code.slice(1), 16)
+      : Number.parseInt(code, 10);
+    if (
+      !Number.isInteger(codePoint) ||
+      codePoint < 0 ||
+      codePoint > 0x10ffff ||
+      (codePoint >= 0xd800 && codePoint <= 0xdfff)
+    ) {
+      return entity;
+    }
+    return String.fromCodePoint(codePoint);
+  });
+}
+
 function normalizeContact(value: string): string {
-  return value.replace(/^@/, "").trim().toLowerCase();
+  return decodeContactEntities(value)
+    .replace(/^@/, "")
+    .normalize("NFKC")
+    .replace(/[\u200b-\u200d\u2060\ufeff\ufe0e\ufe0f]/g, "")
+    .trim()
+    .toLocaleLowerCase();
 }
 
 function parseTime(value: string): number {
@@ -225,7 +247,7 @@ function findOrCreateConversation(
   let conversation = conversations.find(existing =>
     existing.slotId === identity.slotId &&
     existing.serial === identity.serial &&
-    aliases.some(alias => existing.aliases.includes(alias)),
+    aliases.some(alias => existing.aliases.some(existingAlias => normalizeContact(existingAlias) === alias)),
   );
   if (!conversation) {
     conversation = {
@@ -243,7 +265,9 @@ function findOrCreateConversation(
     conversations.push(conversation);
   } else {
     for (const alias of aliases) {
-      if (!conversation.aliases.includes(alias)) conversation.aliases.push(alias);
+      if (!conversation.aliases.some(existingAlias => normalizeContact(existingAlias) === alias)) {
+        conversation.aliases.push(alias);
+      }
     }
     if (
       identity.username &&
@@ -266,7 +290,9 @@ function addReply(
   const highestReplyNumber = conversations
     .filter(conversation =>
       conversation.slotId === entry.slotId &&
-      [...aliases].some(alias => conversation.aliases.includes(alias)),
+      [...aliases].some(alias =>
+        conversation.aliases.some(existingAlias => normalizeContact(existingAlias) === alias),
+      ),
     )
     .flatMap(conversation => conversation.messages)
     .reduce((max, message) =>
@@ -394,6 +420,8 @@ function formatHistoryTimestamp(value: string): string {
 }
 
 function formatConversation(conversation: SnapchatConversation): string {
+  const displayName = decodeContactEntities(conversation.displayName);
+  const username = decodeContactEntities(conversation.username);
   const messages = [...conversation.messages].sort((a, b) =>
     parseTime(a.timestamp) - parseTime(b.timestamp) || a.sequence - b.sequence,
   );
@@ -415,10 +443,10 @@ function formatConversation(conversation: SnapchatConversation): string {
     if (message.sender === "FAILED") {
       return [`FAILED | ${timestamp} | ${message.reason || "Reply was not sent."}`];
     }
-    return [`SEEN ${timestamp} | ${conversation.displayName}: ${message.text}`];
+    return [`SEEN ${timestamp} | ${displayName}: ${message.text}`];
   });
   return [
-    `Username: ${conversation.username || conversation.displayName || "Unknown"}`,
+    `Username: ${username || displayName || "Unknown"}`,
     `Device ID: ${conversation.serial || "Unknown"}`,
     `Account slot: ${accountSlot}`,
     ...messageLines,
@@ -449,7 +477,7 @@ export function getSnapchatReplyHistory(slotId: string, contactKey: string): {
   const expected = normalizeContact(contactKey);
   const conversations = readConversations().filter(entry =>
     entry.slotId === slotId &&
-    entry.aliases.includes(expected),
+    entry.aliases.some(alias => normalizeContact(alias) === expected),
   );
   const replies = conversations.flatMap(conversation =>
     conversation.messages

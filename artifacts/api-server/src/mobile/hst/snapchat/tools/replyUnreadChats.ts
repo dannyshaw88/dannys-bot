@@ -22,6 +22,10 @@ import {
   shortResourceId,
   tapExact,
 } from "../runtime";
+import {
+  normalizeSnapchatContactLabel,
+  stripSnapchatPeerNamePrefix,
+} from "./replyUnreadChatText";
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 const comparableMessageText = (value: string) => value
@@ -126,7 +130,7 @@ function senderFromDescription(
 ): "Luna" | "Contact" | undefined {
   const leadingLabel = description.trim().split(/[,\n:|]/, 1)[0].trim();
   if (/^(?:me|you|luna|you sent|sent by you)$/i.test(leadingLabel)) return "Luna";
-  if (peerName && leadingLabel.toLocaleLowerCase() === peerName.trim().toLocaleLowerCase()) {
+  if (peerName && normalizeSnapchatContactLabel(leadingLabel) === normalizeSnapchatContactLabel(peerName)) {
     return "Contact";
   }
   return undefined;
@@ -141,6 +145,10 @@ function visibleConversation(nodes: UiNode[], composerTop: number, peerName: str
     .map(node => {
       const text = node.text.trim();
       const description = node.desc.trim();
+      const textPeerMessage = stripSnapchatPeerNamePrefix(node.text, peerName);
+      if (textPeerMessage !== undefined) return `Contact: ${textPeerMessage}`;
+      const descriptionPeerMessage = stripSnapchatPeerNamePrefix(node.desc, peerName);
+      if (descriptionPeerMessage !== undefined) return `Contact: ${descriptionPeerMessage}`;
       const sender = senderFromDescription(description, peerName);
       if (text && sender) return `${sender}: ${text}`;
       if (text && description && description.toLowerCase() !== text.toLowerCase() &&
