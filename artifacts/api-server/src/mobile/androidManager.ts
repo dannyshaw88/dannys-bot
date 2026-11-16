@@ -5032,10 +5032,15 @@ type CalibratedTapBatchItem = { x: number; y: number; pauseMs: number };
 async function runCalibratedTapBatch(
   serial: string,
   taps: CalibratedTapBatchItem[],
-): Promise<void> {
-  if (taps.length === 0) return;
+): Promise<{ totalMs: number; gateWaitMs: number; adbMs: number; configuredPauseMs: number }> {
+  if (taps.length === 0) {
+    return { totalMs: 0, gateWaitMs: 0, adbMs: 0, configuredPauseMs: 0 };
+  }
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
+  const totalStartedAt = Date.now();
+  let gateWaitMs = 0;
+  let adbMs = 0;
   const commands = taps.flatMap(({ x, y, pauseMs }) => {
     const safeX = Math.round(x), safeY = Math.round(y);
     const tap = `input tap ${safeX} ${safeY}`;
@@ -5046,9 +5051,12 @@ async function runCalibratedTapBatch(
   });
   try {
     await runWithDeviceInputGate(serial, async () => {
+      gateWaitMs = Date.now() - totalStartedAt;
+      const adbStartedAt = Date.now();
       const { stdout, stderr } = await execFileP(adb, [
         "-s", serial, "shell", commands.join(" && "),
       ], { encoding: "utf8", timeout: 30_000 } as any);
+      adbMs = Date.now() - adbStartedAt;
       const output = `${stdout ?? ""}${stderr ?? ""}`.trim();
       if (/error|exception|permission denied/i.test(output)) {
         throw new Error(output);
@@ -5059,6 +5067,12 @@ async function runCalibratedTapBatch(
     const detail = output || error?.message || "unknown error";
     throw new Error(`adb calibrated tap batch failed: ${detail}`);
   }
+  return {
+    totalMs: Date.now() - totalStartedAt,
+    gateWaitMs,
+    adbMs,
+    configuredPauseMs: taps.reduce((total, tap) => total + Math.max(0, Math.round(tap.pauseMs)), 0),
+  };
 }
 
 export async function inputText(serial: string, text: string): Promise<void> {
@@ -14923,7 +14937,9 @@ export async function typeViaOnscreenKeyboard(
 
     if (missingCalKeys.size === 0) {
       onLog?.(`[keyboard] using calibration map (${Object.keys(calMap).length} keys)`);
-      const result = await typeViaCalibrationMap(serial, text, calMap, onLog, typingProfile);
+      const result = await typeViaCalibrationMap(serial, text, calMap, onLog, typingProfile, {
+        batchTaps: true,
+      });
       if (result.ok) return;
       throw new Error(`Calibrated typing incomplete — missing ${result.missing.join(", ")}`);
     } else {
@@ -16089,13 +16105,13 @@ export async function typeViaCalibrationMap(
   const flushPendingTaps = async () => {
     if (pendingTaps.length === 0) return;
     const batch = pendingTaps.splice(0, pendingTaps.length);
-    const batchStartedAt = Date.now();
-    await runCalibratedTapBatch(serial, batch);
+    const timings = await runCalibratedTapBatch(serial, batch);
     for (const _tap of batch) options?.onProgress?.();
     if (options?.batchTaps) {
       onLog?.(
         `[${options?.debugLabel ?? "cal-keyboard"}] sent ${batch.length} calibrated key tap(s) ` +
-        `in ${Date.now() - batchStartedAt}ms`,
+        `in ${timings.totalMs}ms (ADB ${timings.adbMs}ms, queued ${timings.gateWaitMs}ms, ` +
+        `configured pauses ${timings.configuredPauseMs}ms)`,
       );
     }
   };

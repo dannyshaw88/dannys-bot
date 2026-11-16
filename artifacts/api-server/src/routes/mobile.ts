@@ -10344,7 +10344,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       req.log.info({ serial, characterCount: input.text.length }, "[mirror-calibrated-type] starting");
       const result = await android.typeViaSavedCalibrationMap(serial, input.text, effectiveTypingProfile(serial), message => {
         req.log.info({ serial, message }, "[mirror-calibrated-type]");
-      });
+      }, { batchTaps: true });
       if (!result.ok) {
         return void res.status(422).json({
           ok: false,
@@ -12415,9 +12415,15 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
         });
       }
       const typingProfile = effectiveTypingProfile(serial);
+      if (!typingProfile) {
+        return void res.status(422).json({
+          ok: false,
+          error: "No typing speed profile is saved for this device",
+        });
+      }
       const result = await android.typeViaCalibrationMap(serial, text, map, message => {
         req.log.info({ serial, message }, "[keyboard-calibration]");
-      }, typingProfile);
+      }, typingProfile, { batchTaps: true });
       req.log.info(
         { serial, characterCount: text.length, missing: result.missing },
         "[keyboard-calibration] test complete",
