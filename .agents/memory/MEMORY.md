@@ -146,7 +146,7 @@
 - [Manual Android diagnostics across USB disconnects](manual-android-disconnect-diagnostics.md) — persist minimal state on-device while unplugged, then retrieve after reconnect; host-only ADB capture cannot observe the disconnected interval
 - [Idle phone-mirror log volume](idle-phone-mirror-log-volume.md) — suppress routine mirror heartbeats and restart chatter while automation is idle; preserve active-cycle diagnostics and real errors
 - [Snapchat Luna reply typing](snapchat-luna-reply-typing.md) — decode emoji entities and strip an exact contact-name prefix before sending live chat text to Luna
-- [Snapchat video paperclip calibration](snapchat-video-link-accessibility.md) — tap the live downward More chevron first, then the per-device calibrated Paperclip; never invert that order
+- [Snapchat Upload Video tap calibration](snapchat-video-link-accessibility.md) — expand More before the calibrated Paperclip, then use a separate per-device calibrated Text tap
 - [Snapchat View Snaps navigation](snapchat-view-snaps-exit.md) — exact right-edge midpoint tap advances; send one Android Back at completion
 - [Uncapped quantity maxima](uncapped-quantity-maxima.md) — count/amount maxima stay uncapped while numeric settings fields remain fixed at 3 characters wide
 - [Snapchat idle recovery ordering](snapchat-idle-recovery-ordering.md) — reopen Snapchat from cycle finalization after the stalled tool unwinds, before releasing the device lease

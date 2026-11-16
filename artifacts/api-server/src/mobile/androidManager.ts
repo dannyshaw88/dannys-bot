@@ -15191,6 +15191,7 @@ function _calibrationPath(serial: string): string {
 // layers, and are intentionally allowed to merge over time.
 export const NAVIGATION_CONTROL_IDS = [
   "snapchatClickPaperclip",
+  "snapchatClickText",
   "home",
   "reels",
   "directMessages",

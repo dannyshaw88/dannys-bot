@@ -25,32 +25,6 @@ function findSendTo(nodes: UiNode[]): UiNode | undefined {
     )[0] ?? label;
 }
 
-function findTextTool(nodes: UiNode[], screenWidth: number, screenHeight: number): UiNode | undefined {
-  const textTool = nodes.find(node => {
-    const point = center(node);
-    const label = normalize(`${node.text} ${node.desc}`);
-    const resource = node.resourceId.split("/").pop() ?? node.resourceId;
-    return point.x >= screenWidth * 0.78 &&
-      point.y >= screenHeight * 0.025 &&
-      point.y <= screenHeight * 0.13 &&
-      (/^(?:t|text|add text|caption)$/.test(label) ||
-        /(?:text|caption).*tool|tool.*(?:text|caption)/i.test(resource));
-  });
-  if (!textTool || textTool.clickable) return textTool;
-  const point = center(textTool);
-  return nodes
-    .filter(node => {
-      const [left, top, right, bottom] = node.bounds;
-      return node.clickable &&
-        point.x >= left && point.x <= right &&
-        point.y >= top && point.y <= bottom;
-    })
-    .sort((a, b) =>
-      (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]) -
-      (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]),
-    )[0] ?? textTool;
-}
-
 export async function addSnapCaption(
   context: SnapchatContext,
   rawCaption: string,
@@ -72,9 +46,7 @@ export async function addSnapCaption(
     context.onLog("Upload a Video: Send To is not exposed in the accessibility tree after Attach to Snap; continuing from the confirmed link-attach transition to open the text tool.");
   }
 
-  // Tapping the text toolbar button opens Snapchat's caption editor and
-  // keyboard. The current Snapchat UI exposes no reliable label for this
-  // icon, so use its observed top-right location only on the confirmed editor.
+  // Close an already-open keyboard only when this flow did not just attach a link.
   if (!linkWasJustAttached && await android.isKeyboardShown(context.serial).catch(() => false)) {
     await android.keyevent(context.serial, 4);
     await context.sleep(350, "exact");
@@ -88,29 +60,22 @@ export async function addSnapCaption(
     context.onLog("Upload a Video: link attachment was confirmed; proceeding directly to the top-right T icon without an Android Back or keyboard precheck.");
   }
 
-  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
-  const textTool = findTextTool(state.nodes, screenWidth, screenHeight);
-  if (textTool) {
-    const point = center(textTool);
-    context.onLog(`Upload a Video: tapping the detected T caption icon at (${point.x},${point.y}) on ${screenWidth}×${screenHeight}.`);
-    if (!await tapNode(context, textTool, "open the Snapchat caption editor with the top-right T icon", 700, true)) return false;
-  } else {
-    // On some Snapchat builds the T icon has no accessibility label. Its
-    // known location is at the top-right of the confirmed Snap editor.
-    const textToolX = Math.round(screenWidth * 0.93);
-    const textToolY = Math.round(screenHeight * 0.065);
-    context.onLog(`Upload a Video: tapping the top-right T caption icon at (${textToolX},${textToolY}) on ${screenWidth}×${screenHeight}.`);
-    await android.tap(
+  context.onLog("Upload a Video: tapping this device's calibrated Click Text point.");
+  try {
+    const point = await android.tapCalibratedNavigationControl(
       context.serial,
-      textToolX,
-      textToolY,
-      "bot",
-      "Snapchat: tap the top-right T icon to start caption entry",
-      "automation",
-      { exact: true },
+      "snapchatClickText",
+      message => context.onLog(`Upload a Video: ${message}`),
+      "Snapchat: tap the calibrated Text control in the video editor",
     );
-    await context.sleep(700, "exact");
+    context.onLog(`Upload a Video: calibrated Text tap sent at (${point.x},${point.y}).`);
+  } catch (error) {
+    context.onLog(
+      `Upload a Video stopped: Click Text is not calibrated for this device${error instanceof Error ? ` (${error.message})` : ""}.`,
+    );
+    return false;
   }
+  await context.sleep(700, "exact");
 
   let keyboardVisible = false;
   for (let attempt = 0; attempt < 8; attempt++) {
