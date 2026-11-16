@@ -2524,28 +2524,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           : "Browser uploads are limited to 70 MB; use the Windows app for larger media files");
       }
 
-      const devicePath = await android.pushFileToDevice(serial, sourcePath, body.fileName, false);
-      // `/sdcard` is a symlink on Android. Ask MediaStore to scan the canonical
-      // emulated-storage path, then verify that the exact file was indexed.
-      const mediaScanPath = devicePath.replace(/^\/sdcard(?=\/)/, "/storage/emulated/0");
-      let mediaIndexed = false;
-      let mediaIndexError: string | undefined;
-      try {
-        await android.scanMediaFile(serial, mediaScanPath, true);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const mediaRow = await android.queryMediaStoreFile(serial, mediaScanPath);
-        mediaIndexed = mediaRow.found;
-        if (!mediaIndexed) {
-          mediaIndexError = mediaRow.raw.slice(0, 1200) || "No matching MediaStore row was returned";
-        }
-      } catch (error: any) {
-        mediaIndexError = error?.message ?? String(error);
-      }
-      logger.info(
-        { serial, fileName: body.fileName, devicePath, mediaIndexed, mediaIndexError },
-        "[manual-media] copied media to phone",
-      );
-      res.json({ ok: true, fileName: body.fileName, devicePath, mediaIndexed, mediaIndexError });
+      const devicePath = await android.pushFileToDevice(serial, sourcePath, body.fileName);
+      logger.info({ serial, fileName: body.fileName, devicePath }, "[manual-media] loaded media onto phone");
+      res.json({ ok: true, fileName: body.fileName, devicePath });
     } catch (e: any) {
       logger.warn({ err: e }, "[manual-media] load failed");
       res.status(400).json({ ok: false, error: e?.message ?? "Could not load media onto phone" });

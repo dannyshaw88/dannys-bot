@@ -203,15 +203,8 @@ export async function runUploadSnap(context: SnapchatContext): Promise<UploadSna
   try {
     context.onLog(`Upload a Snap: pushing "${fileName}" to the phone gallery before opening Snapchat Memories.`);
     devicePath = await android.pushFileToDevice(context.serial, localFilePath, fileName, true, true);
-    context.onLog(`Upload a Snap: copied media; waiting for Android Gallery indexing (${devicePath}).`);
+    context.onLog(`Upload a Snap: phone gallery copy staged; media scan requested (${devicePath}).`);
     await context.sleep(1000, "exact");
-    const galleryPath = devicePath.replace(/^\/sdcard(?=\/)/, "/storage/emulated/0");
-    const mediaRow = await android.queryMediaStoreFile(context.serial, galleryPath);
-    if (!mediaRow.found) {
-      const detail = mediaRow.raw ? ` MediaStore details: ${mediaRow.raw.slice(0, 600)}` : "";
-      throw new Error(`Android Gallery did not index the staged image; Snapchat was not opened to avoid selecting another photo.${detail}`);
-    }
-    context.onLog(`Upload a Snap: Android Gallery indexed the staged image (${mediaRow.fields._display_name ?? fileName}).`);
 
     let state = await openSnapCamera(context);
     if (!state || !await openSnapMemories(context, state.nodes)) {
