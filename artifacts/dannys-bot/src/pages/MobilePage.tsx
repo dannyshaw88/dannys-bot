@@ -6055,7 +6055,8 @@ function useCollisionPreventer(serial: string | null) {
 // CopySubSetting, CopySection, and COPY_SECTIONS are imported from mobileShared
 
 type CopyTarget = { serial: string; slotIdx: number; slotId?: string };
-type DeviceSlots = { phone: UsbPhone; slots: Array<{ slotId?: string; username: string; platform?: AccountPlatform; snapchatTrustScoreLabel?: SnapchatTrustScoreLabel }> };
+type CopyDevicePhone = UsbPhone & { displayName?: string };
+type DeviceSlots = { phone: CopyDevicePhone; slots: Array<{ slotId?: string; username: string; platform?: AccountPlatform; snapchatTrustScoreLabel?: SnapchatTrustScoreLabel }> };
 const SNAPCHAT_COPY_OPTIONS = [
   { key: "step1", label: "Step 1", settings: [
     { key: "enabled", label: "Enabled", fields: ["enabled"] },
@@ -6130,7 +6131,8 @@ const SNAPCHAT_COPY_DEFAULT_SUBSETTING_KEYS = SNAPCHAT_COPY_SUBSETTING_KEYS.filt
   key => key !== snapchatCopySubKey("replyUnreadChats", "replyGoal"),
 );
 
-function deviceLabel(p: UsbPhone): string {
+function deviceLabel(p: CopyDevicePhone): string {
+  if (p.state === "offline" && p.displayName?.trim()) return p.displayName.trim();
   return [p.manufacturer, p.marketName || p.model].filter(Boolean).join(" ") || p.serial;
 }
 
@@ -6260,12 +6262,29 @@ function CopySettingsDialog({
       fetch("/api/mobile/usb-phones").then(r => r.json()),
       fetch("/api/mobile/farm-devices").then(r => r.json()).catch(() => ({ devices: [] })),
     ])
-      .then(async ([phonesData, farmData]: [{ phones?: UsbPhone[] }, { devices?: Array<{ slotIndex: number; serial: string }> }]) => {
-        const all: UsbPhone[] = phonesData.phones ?? [];
+      .then(async ([phonesData, farmData]: [
+        { phones?: UsbPhone[] },
+        { devices?: Array<{ slotIndex: number; serial: string; displayName?: string; model?: string; manufacturer?: string; androidVersion?: string }> },
+      ]) => {
+        const all = new Map<string, CopyDevicePhone>(
+          (phonesData.phones ?? []).map(phone => [phone.serial, phone]),
+        );
         const farmDevices = farmData.devices ?? [];
+        for (const farmDevice of farmDevices) {
+          const connected = all.get(farmDevice.serial);
+          all.set(farmDevice.serial, {
+            ...connected,
+            serial: farmDevice.serial,
+            state: connected?.state ?? "offline",
+            model: connected?.model || farmDevice.model || "",
+            manufacturer: connected?.manufacturer || farmDevice.manufacturer || "",
+            androidVersion: connected?.androidVersion || farmDevice.androidVersion || "",
+            displayName: farmDevice.displayName,
+          });
+        }
 
         const withSlots: DeviceSlots[] = await Promise.all(
-          all.map(async p => {
+          [...all.values()].map(async p => {
             try {
               const r = await fetch(`/api/mobile/devices/${encodeURIComponent(p.serial)}/account`);
               const data = await r.json();
