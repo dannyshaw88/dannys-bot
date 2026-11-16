@@ -3476,12 +3476,19 @@ function ManualPhoneMediaPanel({ serial, onLog, open, onClose }: { serial: strin
         });
         const result = await r.json().catch(() => null);
         if (!r.ok || !result?.ok) throw new Error(result?.error ?? `Load failed (${r.status})`);
-        rememberLoaded(result.devicePath, result.fileName ?? selected.name);
-        onLog?.(`Manual media: loaded ${result.fileName ?? selected.name} → ${result.devicePath}`);
+        const fileName = result.fileName ?? selected.name;
+        rememberLoaded(result.devicePath, fileName);
+        if (result.mediaIndexed === false) {
+          const detail = String(result.mediaIndexError ?? "Gallery did not report the new file");
+          onLog?.(`Manual media: copied ${fileName} to ${result.devicePath}, but Gallery did not index it — ${detail}`);
+          setMessage(`Copied ${fileName} to the phone, but Gallery did not index it.`);
+        } else {
+          onLog?.(`Manual media: loaded ${fileName} → ${result.devicePath}; Gallery index confirmed`);
+          setMessage(`Loaded ${selectedFiles.length} media file${selectedFiles.length === 1 ? "" : "s"} onto phone and confirmed in Gallery.`);
+        }
       }
       setSelectedFiles([]);
       if (browserFileRef.current) browserFileRef.current.value = "";
-      setMessage(`Loaded ${selectedFiles.length} media file${selectedFiles.length === 1 ? "" : "s"} onto phone.`);
     } catch (e: any) {
       setMessage(e?.message ?? "Could not load media onto phone");
       onLog?.(`Manual media: load failed — ${e?.message ?? "unknown error"}`);
