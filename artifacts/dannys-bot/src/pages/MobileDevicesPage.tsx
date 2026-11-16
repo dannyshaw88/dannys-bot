@@ -1,7 +1,7 @@
 /**
  * Phone Farm — device grid entry point.
  *
- * Shows a 3-column × 2-row grid (6 slots max).
+ * Shows a selectable device grid with up to 32 slots.
  * Only slots up to the next available one are visible:
  *   • Registered devices  → device card, click → open that phone's control page
  *   • Next empty slot     → "Add Device" card, click → inline USB phone picker
@@ -1085,6 +1085,8 @@ function DeviceCard({
   onRemove,
   custom,
   onCustomize,
+  compact = false,
+  denseControls = false,
 }: {
   device:      FarmDevice;
   phone?:      UsbPhone;
@@ -1100,6 +1102,8 @@ function DeviceCard({
   onRemove:    () => void;
   custom:      SlotCustomization;
   onCustomize: (c: SlotCustomization) => void;
+  compact?:    boolean;
+  denseControls?: boolean;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [rebooting, setRebooting] = useState(false);
@@ -1259,7 +1263,7 @@ function DeviceCard({
             onClick();
           }
         }}
-        className={`flex-1 flex flex-col items-center gap-1.5 py-2 px-2 rounded-2xl border border-border bg-card transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40${active ? ' device-card-active' : ''}`}
+        className={`flex-1 flex flex-col items-center ${compact ? "gap-1 py-1 px-1" : "gap-1.5 py-2 px-2"} rounded-2xl border border-border bg-card transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40${active ? ' device-card-active' : ''}`}
       >
         {/* Phone shell — wallpaper and text rendered natively inside the SVG screen */}
         <div ref={phoneAreaRef} className="relative flex min-h-0 w-full flex-1 items-center justify-center">
@@ -1302,19 +1306,19 @@ function DeviceCard({
           })()}
         </div>
         <div className="shrink-0 text-center space-y-0.5">
-          <p className="text-base font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
+          <p className={`${compact ? "text-[11px]" : "text-base"} font-semibold text-foreground group-hover:text-primary transition-colors leading-tight max-w-full truncate`}>
             {resolveDisplayName(device, phone)}
           </p>
           <div className="flex items-center justify-center gap-1 mt-1 flex-wrap">
             {online ? (
               <>
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                <span className="text-sm text-muted-foreground">Connected</span>
+                <span className={`${compact ? "text-[10px]" : "text-sm"} text-muted-foreground`}>Connected</span>
               </>
             ) : (
               <>
                 <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
-                <span className="text-sm text-muted-foreground">Offline</span>
+                <span className={`${compact ? "text-[10px]" : "text-sm"} text-muted-foreground`}>Offline</span>
               </>
             )}
           </div>
@@ -1323,7 +1327,7 @@ function DeviceCard({
 
       {/* Persistent device controls — kept in the top-right so they are
           discoverable without hovering over the card. */}
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+      <div className={`absolute top-2 right-2 z-10 flex items-center gap-1${denseControls ? " origin-top-right scale-[0.58]" : ""}`}>
         <button
           onClick={event => { void handleBrightnessAdjust(event, "down"); }}
           disabled={!online || rebooting || brightnessAdjusting !== null}
@@ -1423,6 +1427,19 @@ export function MobileDevicesPage() {
   const [devices,    setDevices]    = useState<FarmDevice[]>([]);
   const [loadingDb,  setLoadingDb]  = useState(true);
   const [addingSlot, setAddingSlot] = useState<number | null>(null);
+  const [devicesPerPage, setDevicesPerPage] = useState<number>(() => {
+    try {
+      const stored = Number(localStorage.getItem("phone-farm-devices-per-page"));
+      return [3, 6, 8, 12, 16, 32].includes(stored) ? stored : 6;
+    } catch {
+      return 6;
+    }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("phone-farm-devices-per-page", String(devicesPerPage)); }
+    catch { /* Keep the in-memory choice if storage is unavailable. */ }
+  }, [devicesPerPage]);
 
   // ── Slot customizations — shared with MobilePage via same localStorage key
   const [slotCustom, setSlotCustom] = useState<Record<number, SlotCustomization>>(() => {
@@ -1653,7 +1670,9 @@ export function MobileDevicesPage() {
   // All slots beyond that are hidden.
   const maxSlot   = devices.length > 0 ? Math.max(...devices.map(d => d.slotIndex)) : 0;
   const addSlot   = maxSlot + 1;  // the "Add Device" cell index (1-based)
-  const visibleUp = 6; // always show all 6 slots (2 rows × 3 columns)
+  const visibleUp = devicesPerPage;
+  const gridColumns = devicesPerPage <= 6 ? 3 : devicesPerPage <= 16 ? 4 : 8;
+  const gridRows = Math.ceil(devicesPerPage / gridColumns);
 
   // slotMap: slot index → device (or null)
   const slotMap = new Map<number, FarmDevice>();
@@ -1683,9 +1702,22 @@ export function MobileDevicesPage() {
       <main className="ml-[133px] flex-1 h-screen flex flex-col overflow-hidden">
         <LiveActivityTicker />
         {/* Header */}
-        <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-center gap-3">
+        <div className="relative shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-center gap-3">
           <PhoneFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
           <h1 className="text-lg font-bold text-foreground">Phone Farm - Manage Your Devices</h1>
+          <label className="absolute right-6 flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="hidden sm:inline">Devices shown</span>
+            <select
+              aria-label="Devices shown on Phone Farm"
+              value={devicesPerPage}
+              onChange={event => setDevicesPerPage(Number(event.target.value))}
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {[3, 6, 8, 12, 16, 32].map(count => (
+                <option key={count} value={count}>{count}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {loadingDb ? (
@@ -1696,10 +1728,10 @@ export function MobileDevicesPage() {
           <div className="flex-1 overflow-hidden p-6 flex gap-4">
             {/* Device grid — only visible slots rendered */}
             <div
-              className="flex-1 grid gap-4"
+              className="min-w-0 min-h-0 flex-1 grid gap-4"
               style={{
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gridTemplateRows:    "repeat(2, 1fr)",
+                gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
               }}
             >
               {Array.from({ length: visibleUp }).map((_, i) => {
@@ -1725,6 +1757,8 @@ export function MobileDevicesPage() {
                       onRemove={() => handleRemove(device.slotIndex)}
                       custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}
                       onCustomize={c => setSlotCustom(prev => ({ ...prev, [device.slotIndex]: c }))}
+                      compact={devicesPerPage >= 16}
+                      denseControls={devicesPerPage >= 32}
                     />
                   );
                 }
