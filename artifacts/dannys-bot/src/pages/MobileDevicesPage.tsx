@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check, Sun, Search } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check, Sun, Search, LayoutGrid } from "lucide-react";
 import { FaInstagram, FaSnapchatGhost } from "react-icons/fa";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
@@ -1325,9 +1325,8 @@ function DeviceCard({
         </div>
       </div>
 
-      {/* Persistent device controls — kept in the top-right so they are
-          discoverable without hovering over the card. */}
-      <div className={`absolute top-2 right-2 z-10 flex items-center gap-1${denseControls ? " origin-top-right scale-[0.58]" : ""}`}>
+      {/* Brightness controls sit on the top-left, clear of the phone preview. */}
+      <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
         <button
           onClick={event => { void handleBrightnessAdjust(event, "down"); }}
           disabled={!online || rebooting || brightnessAdjusting !== null}
@@ -1352,6 +1351,10 @@ function DeviceCard({
             ? <Loader2 className="w-3 h-3 animate-spin" />
             : <span className="inline-flex items-center gap-px"><Sun className="w-3 h-3" /><span className="text-[9px] font-bold leading-none">+</span></span>}
         </button>
+      </div>
+
+      {/* Remaining persistent device controls stay in the top-right. */}
+      <div className={`absolute top-2 right-2 z-10 flex items-center gap-1${denseControls ? " origin-top-right scale-[0.58]" : ""}`}>
         <button
           onClick={handleRestart}
           disabled={rebooting}
@@ -1705,8 +1708,8 @@ export function MobileDevicesPage() {
         <div className="relative shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-center gap-3">
           <PhoneFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
           <h1 className="text-lg font-bold text-foreground">Phone Farm - Manage Your Devices</h1>
-          <label className="absolute right-6 flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="hidden sm:inline">Devices shown</span>
+          <label className="absolute right-6 flex items-center gap-1.5 text-sm text-muted-foreground" title="Devices shown on Phone Farm">
+            <LayoutGrid className="h-4 w-4" aria-hidden="true" />
             <select
               aria-label="Devices shown on Phone Farm"
               value={devicesPerPage}
