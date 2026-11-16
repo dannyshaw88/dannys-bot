@@ -98,6 +98,12 @@ The Snapchat video attachment URL field is blank for this flow. Do not inspect, 
 
 **How to apply:** Keep URL entry direct. Handle only the actual Snapchat clipboard prompt when it appears; never run existing-text cleanup or readback checks.
 
+Upload a Snap and Upload a Video each verify their own staged file's exact MediaStore entry before opening Camera Roll. Keep these checks in their separate tool modules; the shared Android utility only normalizes the scan path from `/sdcard` to `/storage/emulated/0`.
+
+**Why:** On a new Moto device, ADB copied the image into DCIM but Gallery did not show it; the prior best-effort scan was never verified and the tools could otherwise select the wrong gallery item.
+
+**How to apply:** Preserve the existing short post-copy settle, perform one exact MediaStore lookup per staged file, and stop that tool before Camera Roll selection if the file is not indexed. Do not add shared Snapchat navigation or upload logic.
+
 After typing an Upload a Video URL, tap the saved Enter/Search key directly without scanning the IME hierarchy. Snapchat’s web-preview `Attach to Snap` button is not exposed in the supplied UIAutomator tree; after a short page-load settle, tap its fixed bottom-center position once instead of repeatedly dumping the tree. After typing the caption, press the same saved Enter/tick key and proceed to Send To after a brief settle; do not run repeated UI-tree dumps for a known editor button. For link/caption flows, tap Send To at its known bottom-right position directly, then follow Upload a Snap’s audience selection and send flow.
 
 **Why:** Typing alone leaves the editor on the URL-entry screen; Snapchat only exposes the attach action after the keyboard’s search/enter action loads the link preview. The user's inspect export showed the web-preview content under `opera_viewer` without an accessible Attach button, so repeated node scans cannot find it. Caption text also remains in edit mode until the keyboard’s tick/Enter action is pressed.

@@ -187,8 +187,15 @@ async function uploadOneVideo(context: SnapchatContext, fileName: string): Promi
   try {
     context.onLog(`Upload a Video: staging "${fileName}" in the phone gallery.`);
     devicePath = await android.pushFileToDevice(context.serial, localFilePath, fileName, true, true);
-    context.onLog(`Upload a Video: video staged and scanned (${devicePath}).`);
+    context.onLog(`Upload a Video: copied video; waiting for Android Gallery indexing (${devicePath}).`);
     await context.sleep(1000, "exact");
+    const galleryPath = devicePath.replace(/^\/sdcard(?=\/)/, "/storage/emulated/0");
+    const mediaRow = await android.queryMediaStoreFile(context.serial, galleryPath);
+    if (!mediaRow.found) {
+      const detail = mediaRow.raw ? ` MediaStore details: ${mediaRow.raw.slice(0, 600)}` : "";
+      throw new Error(`Android Gallery did not index the staged video; Snapchat was not opened to avoid selecting another video.${detail}`);
+    }
+    context.onLog(`Upload a Video: Android Gallery indexed the staged video (${mediaRow.fields._display_name ?? fileName}).`);
 
     let state = await openVideoCamera(context);
     if (!state || !await openVideoMemories(context, state.nodes)) return "failed";

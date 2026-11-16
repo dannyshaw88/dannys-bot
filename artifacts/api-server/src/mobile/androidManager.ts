@@ -10960,10 +10960,11 @@ export async function scanMediaFile(
 ): Promise<void> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
+  const scanPath = devicePath.replace(/^\/sdcard(?=\/)/, "/storage/emulated/0");
   const args = [
     "-s", serial, "shell", "am", "broadcast",
     "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-    "-d", `file://${devicePath}`,
+    "-d", `file://${scanPath}`,
   ];
   if (strict) {
     // Make a Post must know whether ADB accepted the scan request. The
