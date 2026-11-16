@@ -35,6 +35,10 @@ export function SnapchatSettingsPanel({
     ...snapchatToolSettingsDefaults.uploadVideo,
     ...settings.uploadVideo,
   };
+  const replyUnreadChatsSettings = {
+    ...snapchatToolSettingsDefaults.replyUnreadChats,
+    ...settings.replyUnreadChats,
+  };
 
   return (
     <div className="bg-card border border-border rounded-xl p-5 space-y-5">
@@ -89,7 +93,7 @@ export function SnapchatSettingsPanel({
         onUpdate={patch => onToolUpdate("massSnap", patch as Record<string, unknown>)}
       />
       <ReplyUnreadChatsSetting
-        value={settings.replyUnreadChats}
+        value={replyUnreadChatsSettings}
         loading={loading}
         phoneSerial={phoneSerial}
         slotIdx={slotIdx}

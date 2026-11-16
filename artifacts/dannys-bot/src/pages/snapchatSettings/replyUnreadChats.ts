@@ -5,6 +5,7 @@ export type ReplyUnreadChatsSettings = {
   activatePctMin: number;
   activatePctMax: number;
   replyGoal: string;
+  replyToEverything: boolean;
 };
 
 export const replyUnreadChatsSettingsDefault: ReplyUnreadChatsSettings = {
@@ -14,4 +15,5 @@ export const replyUnreadChatsSettingsDefault: ReplyUnreadChatsSettings = {
   activatePctMin: 100,
   activatePctMax: 100,
   replyGoal: "",
+  replyToEverything: false,
 };

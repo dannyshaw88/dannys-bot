@@ -224,9 +224,10 @@ async function tapUnreadChatNameArea(
 
 function unreadChatRows(
   nodes: UiNode[],
+  replyToEverything = false,
   onSkippedRow?: (
     displayName: string,
-    reason: "media-only" | "My AI",
+    reason: "media-only" | "media-no-chat-icon" | "My AI",
     preview: string[],
   ) => void,
 ) {
@@ -272,20 +273,38 @@ function unreadChatRows(
     const hasNewChatMarker = rowStatusLabels.some(value =>
       /^(?:(?:\d+)\s+)?new chats?\b/i.test(value.trim()),
     );
+    const hasNewMediaMarker =
+      /\b(?:new|unread)\b.*\b(?:snaps?|photos?|videos?)\b/i.test(rowStatusLabels.join(" "));
     const hasMixedSnapAndChatMarker =
       /\b(?:\d+\s+)?snaps?\s+and\s+chats?\b/i.test(rowLabel);
     const hasRepliedToChatMarker = /\breplied to your chats?\b/i.test(rowLabel);
-    if (!hasNewChatMarker && !hasMixedSnapAndChatMarker && !hasRepliedToChatMarker) return [];
+    const isNewMediaConversation = replyToEverything && hasMedia && hasNewMediaMarker;
+    if (
+      !hasNewChatMarker &&
+      !hasMixedSnapAndChatMarker &&
+      !hasRepliedToChatMarker &&
+      !isNewMediaConversation
+    ) return [];
     if (displayName && isMyAiChat(displayName)) {
       onSkippedRow?.(displayName, "My AI", previewValues);
       return [];
     }
-    if (hasMedia && !(hasChats && chatActionNode)) {
-      if (displayName) onSkippedRow?.(displayName, "media-only", previewValues);
+    const canOpenMediaAsConversation = Boolean(
+      chatActionNode &&
+      (hasChats || (replyToEverything && (isNewMediaConversation || hasNewChatMarker || hasRepliedToChatMarker))),
+    );
+    if (hasMedia && !canOpenMediaAsConversation) {
+      if (displayName) {
+        onSkippedRow?.(
+          displayName,
+          isNewMediaConversation ? "media-no-chat-icon" : "media-only",
+          previewValues,
+        );
+      }
       return [];
     }
     return nameNode && displayName
-      ? [{ marker, nameNode, displayName, chatActionNode: hasMedia ? chatActionNode : undefined, preview: previewValues }]
+      ? [{ marker, nameNode, displayName, chatActionNode: canOpenMediaAsConversation ? chatActionNode : undefined, preview: previewValues }]
       : [];
   });
 }
@@ -295,6 +314,7 @@ async function openUnreadChatFromLiveList(
   displayName: string,
   screenWidth: number,
   screenHeight: number,
+  replyToEverything: boolean,
 ): Promise<{
   state: UiState;
   tapped: boolean;
@@ -312,7 +332,7 @@ async function openUnreadChatFromLiveList(
         return { state, tapped, stillOnChatList: false, targetStillVisible: false };
       }
 
-      const liveRow = unreadChatRows(state.nodes).find(row =>
+      const liveRow = unreadChatRows(state.nodes, replyToEverything).find(row =>
         normalizedText(row.displayName) === normalizedText(displayName),
       );
       if (!liveRow) {
@@ -335,7 +355,7 @@ async function openUnreadChatFromLiveList(
         return { state, tapped, stillOnChatList: false, targetStillVisible: false };
       }
 
-      const targetStillVisible = unreadChatRows(state.nodes).some(row =>
+      const targetStillVisible = unreadChatRows(state.nodes, replyToEverything).some(row =>
         normalizedText(row.displayName) === normalizedText(displayName),
       );
       if (!targetStillVisible || attempt === 2) {
@@ -414,12 +434,15 @@ async function runReplyUnreadChatsAttempt(
   requested: number,
   adPopupRetryUsed: boolean,
 ): Promise<void> {
-  const { enabled, replyGoal } = context.tools.replyUnreadChats;
+  const { enabled, replyGoal, replyToEverything } = context.tools.replyUnreadChats;
   if (!enabled || requested === 0) return;
   logAction(context, `Reply to up to ${requested} unread chats`);
   if (adPopupRetryUsed) {
     context.onLog("Reply to Unread Chats: restarting once after clearing Snapchat's ad-experience prompt.");
   }
+  context.onLog(
+    `Reply to Unread Chats: Reply to everything is ${replyToEverything ? "on (media rows open through the conversation icon)" : "off (media-only rows stay excluded)"}.`,
+  );
   context.onLog(`Reply to Unread Chats: target ${requested} unread contact(s), one reply per contact.`);
   if (!context.slotId) {
     context.onLog("Reply to Unread Chats stopped: this Snapchat slot has no stable saved ID for private history.");
@@ -539,9 +562,10 @@ async function runReplyUnreadChatsAttempt(
   let replied = 0;
   let noMoreEligible = false;
   const visited = new Set<string>();
-  const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, (displayName, reason, preview) => {
+  const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, replyToEverything, (displayName, reason, preview) => {
     const explanations: Record<typeof reason, string> = {
-      "media-only": "the row contains only Snap/photo/video activity, not a text chat.",
+      "media-only": "the row contains only Snap/photo/video activity, and Reply to everything is off.",
+      "media-no-chat-icon": "the unread media row has no visible conversation icon to open without viewing the media.",
       "My AI": "it is Snapchat's My AI conversation, which is intentionally excluded.",
     };
     recordNotReplied(displayName, "unread-list", explanations[reason], preview);
@@ -569,11 +593,11 @@ async function runReplyUnreadChatsAttempt(
       list = recovery.state;
       rows = readUnreadRows(list.nodes);
     }
-    context.onLog(`Reply to Unread Chats: found ${rows.length} eligible text-chat row(s) in the Unread list.`);
+    context.onLog(`Reply to Unread Chats: found ${rows.length} eligible conversation row(s) in the Unread list.`);
     const row = rows.find(item => !visited.has(normalizedText(item.displayName)));
     if (!row) {
       noMoreEligible = true;
-      context.onLog("Reply to Unread Chats: no eligible text-chat row remains in Snapchat's Unread list.");
+      context.onLog("Reply to Unread Chats: no eligible conversation row remains in Snapchat's Unread list.");
       break;
     }
     const identity = normalizedText(row.displayName);
@@ -590,6 +614,7 @@ async function runReplyUnreadChatsAttempt(
       row.displayName,
       screenWidth,
       screenHeight,
+      replyToEverything,
     );
     if (isAdExperiencePrompt(openResult.state)) {
       const recovery = await recoverAdExperiencePromptAfterChatMiss(

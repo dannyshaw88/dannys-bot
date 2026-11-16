@@ -6117,6 +6117,7 @@ const SNAPCHAT_COPY_OPTIONS = [
     { key: "enabled", label: "Enabled", fields: ["enabled"] },
     { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
     { key: "amount", label: "Count", fields: ["min", "max"] },
+    { key: "replyToEverything", label: "Reply to everything", fields: ["replyToEverything"] },
     { key: "replyGoal", label: "Copy reply prompt", fields: ["replyGoal"] },
   ] },
 ] as const;

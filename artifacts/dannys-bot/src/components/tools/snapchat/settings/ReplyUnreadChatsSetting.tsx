@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import type { ReplyUnreadChatsSettings } from "@/pages/snapchatSettings/replyUnreadChats";
 import { ToolSettingFrame } from "./ToolSettingFrame";
 
@@ -27,6 +29,22 @@ export function ReplyUnreadChatsSetting({
       onUpdate={onUpdate}
       childrenBelow={(
       <div className="space-y-1">
+        <div className="mb-3 flex items-start gap-2">
+          <Switch
+            id={`reply-to-everything-${slotIdx ?? 0}`}
+            checked={value.replyToEverything}
+            onCheckedChange={replyToEverything => onUpdate({ replyToEverything })}
+            disabled={loading || !value.enabled}
+          />
+          <div className="space-y-0.5">
+            <Label htmlFor={`reply-to-everything-${slotIdx ?? 0}`} className="text-sm">
+              Reply to everything
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Include unread photo and video conversations by opening their conversation icon, not the media.
+            </p>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <label className="text-sm text-muted-foreground">Conversation goal and purpose</label>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
