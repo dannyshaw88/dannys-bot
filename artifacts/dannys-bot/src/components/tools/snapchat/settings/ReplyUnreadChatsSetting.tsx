@@ -26,21 +26,23 @@ export function ReplyUnreadChatsSetting({
       value={value}
       loading={loading}
       onUpdate={onUpdate}
-      childrenBelow={(
-      <div className="space-y-1">
-        <div className="mb-3 flex items-start gap-2">
+      children={(
+        <div className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap pl-1">
           <input
             type="checkbox"
             id={`reply-to-everything-${slotIdx ?? 0}`}
             checked={value.replyToEverything}
             onChange={event => onUpdate({ replyToEverything: event.target.checked })}
             disabled={loading || !value.enabled}
-            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-4 w-4 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50"
           />
           <Label htmlFor={`reply-to-everything-${slotIdx ?? 0}`} className="text-sm">
             Reply to everything
           </Label>
         </div>
+      )}
+      childrenBelow={(
+      <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <label className="text-sm text-muted-foreground">Conversation goal and purpose</label>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
