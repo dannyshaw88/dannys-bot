@@ -15,8 +15,8 @@ The delete endpoint must accept known-safe paths from older app versions as well
 
 **How to apply:** When generated phone filenames or supported formats change, preserve exact safe legacy patterns in the delete validator and test old/new names plus arbitrary paths and traversal rejection.
 
-Manual media must distinguish a successful ADB copy from Gallery visibility. Scan the canonical `/storage/emulated/0/DCIM/Camera/` path and verify the exact MediaStore row before reporting that Gallery indexed the file.
+Manual media writes to DCIM/Camera and triggers a scan using the canonical `/storage/emulated/0/DCIM/Camera/` path. Report that the file was copied; do not claim Gallery indexing was verified.
 
-**Why:** A file can exist under DCIM while Gallery remains empty if the media scan silently fails; recording only the ADB push as “on phone” hides that difference.
+**Why:** On Motorola moto e30, Gallery displayed the copied image while `content query` failed and added roughly ten times the normal delay. That query was not reliable evidence of Gallery visibility.
 
-**How to apply:** After manual ADB pushes, scan once, check MediaStore for that exact file, and report copy success separately from indexing status. Never delete the copied file just because Gallery indexing failed.
+**How to apply:** After manual ADB pushes, keep the single canonical-path scan and avoid MediaStore query loops. Never delete the copied file because a MediaStore query failed.
