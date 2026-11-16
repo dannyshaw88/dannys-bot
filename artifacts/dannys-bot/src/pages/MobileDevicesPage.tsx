@@ -287,6 +287,9 @@ function SimCardSelector({
   const selectedProvider = providers.includes(custom.simProvider ?? "")
     ? custom.simProvider
     : null;
+  const selectedProviderLabel = selectedProvider === "Tesco Mobile"
+    ? "Tesco"
+    : selectedProvider;
   const filteredCountries = SIM_COUNTRIES.filter(option => {
     const query = countrySearch.trim().toLowerCase();
     return !query || option.name.toLowerCase().includes(query) || option.code.toLowerCase().includes(query);
@@ -386,12 +389,12 @@ function SimCardSelector({
       <div className="relative min-w-0">
         <button
           type="button"
-          title={selectedProvider ? `SIM provider: ${selectedProvider}` : "Choose SIM provider"}
-          aria-label={selectedProvider ? `SIM provider ${selectedProvider}` : "Choose SIM provider"}
+          title={selectedProviderLabel ? `SIM provider: ${selectedProviderLabel}` : "Choose SIM provider"}
+          aria-label={selectedProviderLabel ? `SIM provider ${selectedProviderLabel}` : "Choose SIM provider"}
           onClick={() => setOpenMenu(openMenu === "provider" ? null : "provider")}
           className="flex h-7 max-w-[5.75rem] items-center gap-0.5 rounded bg-transparent px-1 text-[10px] font-medium text-foreground hover:bg-accent/50"
         >
-          <span className="truncate">{selectedProvider ?? "SIM provider"}</span>
+          <span className="truncate">{selectedProviderLabel ?? "SIM provider"}</span>
           <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
         </button>
       </div>
@@ -408,7 +411,7 @@ function SimCardSelector({
               onClick={() => chooseProvider(provider)}
               className="relative flex h-6 w-full items-center justify-center rounded px-2 text-center text-[10px] text-black hover:bg-slate-100"
             >
-              <span className="truncate">{provider}</span>
+              <span className="truncate">{provider === "Tesco Mobile" ? "Tesco" : provider}</span>
               {provider === selectedProvider && <Check className="absolute right-2 h-3 w-3 text-primary" />}
             </button>
           ))}
@@ -431,20 +434,35 @@ function AccountSlotCounter({
   snapchatTotal: number;
   centerX: number | null;
 }) {
+  const statusLabels = [
+    instagramTotal > 0 ? `Instagram: ${instagramActive} of ${instagramTotal} slots active` : null,
+    snapchatTotal > 0 ? `Snapchat: ${snapchatActive} of ${snapchatTotal} slots active` : null,
+  ].filter((label): label is string => label !== null);
+
+  if (statusLabels.length === 0) return null;
+
   return (
     <div
       style={{ left: centerX === null ? "82%" : `${centerX}px` }}
       className="absolute top-[calc(50%+0.75rem)] z-20 grid w-fit -translate-x-1/2 grid-cols-[14px_auto] items-center gap-x-1 gap-y-1 text-[11px] font-medium text-muted-foreground"
-      aria-label={`Instagram: ${instagramActive} of ${instagramTotal} slots active. Snapchat: ${snapchatActive} of ${snapchatTotal} slots active.`}
+      aria-label={statusLabels.join(". ")}
     >
-      <span className="flex items-center justify-center">
-        <FaInstagram className="h-3.5 w-3.5 shrink-0 text-[#E1306C]" aria-hidden="true" />
-      </span>
-      <span className="text-left text-black">{instagramActive}/{instagramTotal}</span>
-      <span className="flex items-center justify-center">
-        <FaSnapchatGhost className="h-3.5 w-3.5 shrink-0 rounded-full bg-[#FFFC00] p-[1px] text-black" aria-hidden="true" />
-      </span>
-      <span className="text-left text-black">{snapchatActive}/{snapchatTotal}</span>
+      {instagramTotal > 0 && (
+        <>
+          <span className="flex items-center justify-center">
+            <FaInstagram className="h-3.5 w-3.5 shrink-0 text-[#E1306C]" aria-hidden="true" />
+          </span>
+          <span className="text-left text-black">{instagramActive}/{instagramTotal}</span>
+        </>
+      )}
+      {snapchatTotal > 0 && (
+        <>
+          <span className="flex items-center justify-center">
+            <FaSnapchatGhost className="h-3.5 w-3.5 shrink-0 rounded-full bg-[#FFFC00] p-[1px] text-black" aria-hidden="true" />
+          </span>
+          <span className="text-left text-black">{snapchatActive}/{snapchatTotal}</span>
+        </>
+      )}
     </div>
   );
 }
