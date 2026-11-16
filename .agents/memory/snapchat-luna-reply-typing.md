@@ -162,6 +162,12 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 
 **How to apply:** Remove duplicated or conflicting instructions while preserving required factual answers. Use the Settings Prompt Test on ordinary Reply 3, early media requests, and post-link support before delivering revised prompt files.
 
+**Prompt simplification outcome:** The user reports that their simplified Snapchat prompt works better after removing some rules and wording previously added by the assistant. Treat the user's working prompt as the baseline; do not restore removed constraints or add overlapping instructions unless asked.
+
+**Why:** The user directly observed better live replies after simplifying the prompt, so additional detailed wording is not automatically an improvement and may create competing instructions.
+
+**How to apply:** When adjusting reply behavior, keep the editable prompt concise and change only what the user requests. Attribute this improvement to the user's reported live result; do not present it as independently verified by Prompt Test or code.
+
 **Post-link Boundlus questions:** After the URL has already been sent, interpret a direct “what’s that/it/this?” question as referring to Boundlus. Answer the platform question and use the remaining post-link support slot; do not restart the normal link step or repeat its URL/call to action.
 
 **Why:** The user showed an early media-request link followed by “what’s that?”; the model repeated the link pitch or gave a vague answer despite the conversation history.
