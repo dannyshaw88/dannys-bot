@@ -57,7 +57,7 @@ router.get("/mobile/farm-devices", (_req, res) => {
  * POST /api/mobile/farm-devices
  * Body: { serial, displayName?, model?, manufacturer?, androidVersion? }
  *
- * Assigns the phone to the lowest available slot (1–6).
+ * Assigns the phone to the lowest available positive slot.
  * If the serial is already registered, returns its existing slot.
  */
 router.post("/mobile/farm-devices", (req, res) => {
@@ -76,21 +76,20 @@ router.post("/mobile/farm-devices", (req, res) => {
     return;
   }
 
-  // Find lowest available slot (1–6)
-  const usedSlots = (
+  // Find the first available slot without imposing a farm-size ceiling.
+  const usedSlots = new Set((
     sqlite
       .prepare("SELECT slot_index FROM phone_farm_devices ORDER BY slot_index ASC")
       .all() as { slot_index: number }[]
-  ).map(r => r.slot_index);
+  ).map(r => r.slot_index));
 
-  let nextSlot: number | null = null;
-  for (let i = 1; i <= 6; i++) {
-    if (!usedSlots.includes(i)) { nextSlot = i; break; }
-  }
-
-  if (nextSlot === null) {
-    res.status(409).json({ ok: false, error: "All 6 slots are full" });
-    return;
+  let nextSlot = 1;
+  while (usedSlots.has(nextSlot)) {
+    nextSlot += 1;
+    if (!Number.isSafeInteger(nextSlot)) {
+      res.status(500).json({ ok: false, error: "No available device slot index" });
+      return;
+    }
   }
 
   const addedAt = new Date().toISOString();
@@ -120,7 +119,7 @@ router.post("/mobile/farm-devices", (req, res) => {
  */
 router.delete("/mobile/farm-devices/:slotIndex", (req, res) => {
   const slotIndex = parseInt(req.params.slotIndex, 10);
-  if (isNaN(slotIndex) || slotIndex < 1 || slotIndex > 6) {
+  if (!Number.isSafeInteger(slotIndex) || slotIndex < 1) {
     res.status(400).json({ ok: false, error: "Invalid slotIndex" });
     return;
   }

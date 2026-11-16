@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, Check, Sun, Search, LayoutGrid } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, ChevronLeft, ChevronRight, Check, Sun, Search, LayoutGrid } from "lucide-react";
 import { FaInstagram, FaSnapchatGhost } from "react-icons/fa";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
@@ -1448,6 +1448,7 @@ export function MobileDevicesPage() {
   const [devices,    setDevices]    = useState<FarmDevice[]>([]);
   const [loadingDb,  setLoadingDb]  = useState(true);
   const [addingSlot, setAddingSlot] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
   const [devicesPerPage, setDevicesPerPage] = useState<number>(() => {
     try {
       const stored = Number(localStorage.getItem("phone-farm-devices-per-page"));
@@ -1685,15 +1686,20 @@ export function MobileDevicesPage() {
 
   const registeredSerials = new Set(devices.map(d => d.serial));
 
-  // Build the visible slots.
-  // Registered devices occupy their persisted slot_index.
-  // The next slot (maxSlot + 1) is the "Add Device" cell.
-  // All slots beyond that are hidden.
+  // Registered devices occupy their persisted slot_index. Pages contain the
+  // selected number of slots, so device registration has no display-page cap.
   const maxSlot   = devices.length > 0 ? Math.max(...devices.map(d => d.slotIndex)) : 0;
   const addSlot   = maxSlot + 1;  // the "Add Device" cell index (1-based)
   const visibleUp = devicesPerPage;
   const gridColumns = devicesPerPage <= 6 ? 3 : devicesPerPage <= 16 ? 4 : 8;
   const gridRows = Math.ceil(devicesPerPage / gridColumns);
+  const pageCount = Math.max(1, Math.ceil(addSlot / devicesPerPage));
+  const activePage = Math.min(currentPage, pageCount - 1);
+  const firstVisibleSlot = activePage * devicesPerPage + 1;
+
+  useEffect(() => {
+    if (currentPage !== activePage) setCurrentPage(activePage);
+  }, [currentPage, activePage]);
 
   // slotMap: slot index → device (or null)
   const slotMap = new Map<number, FarmDevice>();
@@ -1710,6 +1716,7 @@ export function MobileDevicesPage() {
       const without = prev.filter(d => d.slotIndex !== device.slotIndex);
       return [...without, device].sort((a, b) => a.slotIndex - b.slotIndex);
     });
+    setCurrentPage(Math.floor((device.slotIndex - 1) / devicesPerPage));
     setAddingSlot(null);
   };
 
@@ -1731,7 +1738,10 @@ export function MobileDevicesPage() {
             <select
               aria-label="Devices shown on Phone Farm"
               value={devicesPerPage}
-              onChange={event => setDevicesPerPage(Number(event.target.value))}
+              onChange={event => {
+                setDevicesPerPage(Number(event.target.value));
+                setCurrentPage(0);
+              }}
               className="h-9 rounded-md border border-input bg-background px-2 text-sm font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               {[3, 6, 8, 12, 16, 32].map(count => (
@@ -1746,8 +1756,8 @@ export function MobileDevicesPage() {
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="flex-1 overflow-hidden p-6 flex gap-4">
-            {/* Device grid — only visible slots rendered */}
+          <div className="flex-1 min-h-0 overflow-hidden p-6 flex flex-col gap-3">
+            {/* Device grid — show the selected number of slots on this page. */}
             <div
               className="min-w-0 min-h-0 flex-1 grid gap-4"
               style={{
@@ -1756,7 +1766,7 @@ export function MobileDevicesPage() {
               }}
             >
               {Array.from({ length: visibleUp }).map((_, i) => {
-                const slotIndex = i + 1;
+                const slotIndex = firstVisibleSlot + i;
                 const device    = slotMap.get(slotIndex) ?? null;
 
                 if (device) {
@@ -1796,6 +1806,32 @@ export function MobileDevicesPage() {
                 return <div key={`empty-${slotIndex}`} />;
               })}
             </div>
+
+            {pageCount > 1 && (
+              <div className="flex shrink-0 items-center justify-center gap-3 text-xs text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(activePage - 1)}
+                  disabled={activePage === 0}
+                  aria-label="Previous device page"
+                  className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Previous
+                </button>
+                <span>Page {activePage + 1} of {pageCount} · {devices.length} devices</span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(activePage + 1)}
+                  disabled={activePage >= pageCount - 1}
+                  aria-label="Next device page"
+                  className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2.5 text-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+                >
+                  Next
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* Add Device popup — floats above the unchanged device grid */}
             {showingAddPanel && (

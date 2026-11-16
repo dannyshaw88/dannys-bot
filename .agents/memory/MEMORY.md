@@ -159,3 +159,4 @@
 - [Snapchat tools from an open chat](snapchat-tools-open-chat.md) — dismiss the keyboard, exit the verified chat, then confirm Camera before Add/Accept Friends
 - [Farm device proxy routing](farm-device-proxy-routing.md) — prefer laptop broadband plus a per-device proxy exit; device Wi-Fi plus assigned proxy is the fallback
 - [Snapchat ad-experience popup](snapchat-ad-experience-popup.md) — check only when Reply to Unread Chats cannot find/open chats, then choose Smaller In-Feed Ads and retry once
+- [Phone Farm device capacity](phone-farm-device-capacity.md) — device slots have no fixed total cap; the grid-size selector controls per-page visibility
