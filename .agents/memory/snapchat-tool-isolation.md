@@ -62,7 +62,7 @@ For Snapchat switching, always refresh the Camera UI immediately before tapping 
 
 ## Upload a Video link toolbar
 
-For View Snaps, the purple Story ring alone does not prove a Story is viewable. Snapchat may show a purple add-person badge with a plus and person glyph on suggested friend cards; never tap those cards. Check the live screenshot for both glyphs, exclude those cards, and skip View Snaps normally if no viewable friend Story remains so the dispatcher can continue.
+For View Snaps, the purple Story ring alone does not prove a Story is viewable. Snapchat may show a purple add-person badge with a plus and person glyph on suggested friend cards; the badge sits across the lower edge of the story thumbnail, below the accessibility card's midpoint. Check that lower-center screenshot area for both glyphs, exclude those cards, and skip View Snaps normally if no viewable friend Story remains so the dispatcher can continue.
 
 **Why:** The user identified the add-person badge on the Stories tab as a profile/Add action rather than a Story. Tapping it can derail the Snapchat tool sequence.
 
