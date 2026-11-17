@@ -1,9 +1,170 @@
+import fs from "node:fs";
+import path from "node:path";
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForSuggestions } from "../navigation/openAddFriends";
 import { handleFriendRequestLimit } from "../navigation/handleFriendRequestCooldown";
 import { scrollAddFriendsListOneSlot } from "../navigation/scrollAddFriendsListOneSlot";
-import { center, dump, logAction, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
+import { sqlite } from "../../../../storage";
+import { center, dump, logAction, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
+
+const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
+const STALE_RESERVATION_MS = 30 * 60 * 1000;
+// Packaged Electron sets EQUINOX_DATA_DIR to app.getPath("userData"), under %APPDATA%\Aura Farming.
+const ADDED_FRIENDS_FILE = path.join(
+  process.env.EQUINOX_DATA_DIR || path.dirname(sqlite.name),
+  "snapchat-added-friends.txt",
+);
+const ADDED_FRIENDS_HEADER = "# ISO timestamp | Tool | Display name\n";
+
+type AddedFriendRecord = {
+  displayName: string;
+  source: "Add Friends" | "Accept Friends";
+  addedAt: string;
+};
+
+let legacyHistoryMigrated = false;
+const pendingNameReservations = new Map<string, number>();
+
+function normalizeFriendDisplayName(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200d\u2060\ufeff\ufe0e\ufe0f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("en-US");
+}
+
+function ensureAddedFriendsDirectory(): void {
+  fs.mkdirSync(path.dirname(ADDED_FRIENDS_FILE), { recursive: true });
+}
+
+function ensureAddedFriendsFile(): void {
+  ensureAddedFriendsDirectory();
+  try {
+    fs.writeFileSync(ADDED_FRIENDS_FILE, ADDED_FRIENDS_HEADER, { encoding: "utf8", flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+}
+
+function cleanDisplayNameForFile(value: string): string {
+  return value.replace(/[\r\n\t]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function appendHistoryRecord(record: AddedFriendRecord): void {
+  ensureAddedFriendsFile();
+  fs.appendFileSync(
+    ADDED_FRIENDS_FILE,
+    `${record.addedAt} | ${record.source} | ${cleanDisplayNameForFile(record.displayName)}\n`,
+    "utf8",
+  );
+}
+
+function readAddedFriendsFile(): AddedFriendRecord[] {
+  ensureAddedFriendsFile();
+  const contents = fs.readFileSync(ADDED_FRIENDS_FILE, "utf8");
+  return contents.split(/\r?\n/).flatMap(line => {
+    const timestampSeparator = line.indexOf(" | ");
+    const sourceSeparator = timestampSeparator < 0 ? -1 : line.indexOf(" | ", timestampSeparator + 3);
+    if (timestampSeparator < 0 || sourceSeparator < 0) return [];
+    const addedAt = line.slice(0, timestampSeparator).trim();
+    const source = line.slice(timestampSeparator + 3, sourceSeparator).trim();
+    const displayName = line.slice(sourceSeparator + 3).trim();
+    if (
+      !Number.isFinite(Date.parse(addedAt)) ||
+      (source !== "Add Friends" && source !== "Accept Friends") ||
+      !displayName
+    ) return [];
+    return [{ displayName, source, addedAt }];
+  });
+}
+
+function historyRecordKey(record: AddedFriendRecord): string {
+  return `${normalizeFriendDisplayName(record.displayName)}\u0000${record.source}\u0000${Date.parse(record.addedAt)}`;
+}
+
+function migrateLegacyDatabaseHistory(): void {
+  ensureAddedFriendsFile();
+  if (legacyHistoryMigrated) return;
+  const entries = readAddedFriendsFile();
+  const existing = new Set(entries.map(historyRecordKey));
+  try {
+    const legacyEntries = sqlite.prepare(`
+      SELECT display_name AS displayName, source, added_at AS addedAt
+      FROM snapchat_added_friend_history
+      WHERE status = 'added'
+    `).all() as Array<{ displayName: string; source: AddedFriendRecord["source"]; addedAt: number }>;
+    for (const row of legacyEntries) {
+      if (
+        typeof row.displayName !== "string" ||
+        (row.source !== "Add Friends" && row.source !== "Accept Friends") ||
+        !Number.isFinite(Number(row.addedAt))
+      ) continue;
+      const record: AddedFriendRecord = {
+        displayName: row.displayName,
+        source: row.source,
+        addedAt: new Date(row.addedAt).toISOString(),
+      };
+      const key = historyRecordKey(record);
+      if (existing.has(key)) continue;
+      appendHistoryRecord(record);
+      existing.add(key);
+    }
+  } catch (error) {
+    if (!(error instanceof Error) || !/no such table: snapchat_added_friend_history/i.test(error.message)) {
+      throw error;
+    }
+  }
+  legacyHistoryMigrated = true;
+}
+
+function appendAddedFriendName(displayName: string, source: AddedFriendRecord["source"]): boolean {
+  const cleanDisplayName = displayName.trim();
+  if (!normalizeFriendDisplayName(cleanDisplayName)) return false;
+  migrateLegacyDatabaseHistory();
+  const record: AddedFriendRecord = {
+    displayName: cleanDisplayName,
+    source,
+    addedAt: new Date().toISOString(),
+  };
+  appendHistoryRecord(record);
+  return true;
+}
+
+function wasRecentlyAddedToFarm(displayName: string): boolean {
+  const normalizedName = normalizeFriendDisplayName(displayName);
+  if (!normalizedName) return false;
+  const now = Date.now();
+  const reservationAt = pendingNameReservations.get(normalizedName);
+  if (reservationAt !== undefined && now - reservationAt < STALE_RESERVATION_MS) return true;
+  if (reservationAt !== undefined) pendingNameReservations.delete(normalizedName);
+  migrateLegacyDatabaseHistory();
+  return readAddedFriendsFile().some(record =>
+    normalizeFriendDisplayName(record.displayName) === normalizedName &&
+    now - Date.parse(record.addedAt) <= FIVE_DAYS_MS,
+  );
+}
+
+function reserveFriendName(displayName: string): string | null {
+  const normalizedName = normalizeFriendDisplayName(displayName);
+  if (!normalizedName || wasRecentlyAddedToFarm(displayName)) return null;
+  pendingNameReservations.set(normalizedName, Date.now());
+  return normalizedName;
+}
+
+function finishFriendReservation(reservationKey: string, displayName: string): void {
+  appendAddedFriendName(displayName, "Add Friends");
+  pendingNameReservations.delete(reservationKey);
+}
+
+function releaseFriendReservation(reservationKey: string): void {
+  pendingNameReservations.delete(reservationKey);
+}
+
+function recordAddedFriendName(displayName: string): void {
+  appendAddedFriendName(displayName, "Add Friends");
+}
 
 export async function runAddFriends(context: SnapchatContext): Promise<boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked"> {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
@@ -16,8 +177,37 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let added = 0;
   let noMoreAvailable = false;
+  let delaySatisfiedSinceLastAdd = false;
   const attemptedFriends = new Set<string>();
   const recoveryAttempts = new Map<string, number>();
+  const skipAdded = context.tools.addFriends.skipAdded === true;
+  const wasRecentlyAdded = (friendName: string): boolean | null => {
+    if (!skipAdded) return false;
+    try {
+      return wasRecentlyAddedToFarm(friendName);
+    } catch {
+      context.onLog("Add Friends stopped: the farm-wide Skip Added list could not be read; no more friend requests will be sent.");
+      return null;
+    }
+  };
+  const skipAndScroll = async (
+    state: { nodes: UiNode[] },
+    selectedFriend: { friendName: string; friendKey: string; row: UiNode },
+  ) => {
+    const { friendName, friendKey, row } = selectedFriend;
+    attemptedFriends.add(friendKey);
+    context.onLog(`Add Friends: skipping ${friendName}; it is already on the farm list or is currently being added.`);
+    if (!await scrollAddFriendsListOneSlot(
+      context,
+      state.nodes,
+      row,
+      screenHeight,
+      friendName,
+      "skipping a recently added name",
+    )) {
+      context.onLog("Add Friends: could not scroll past that name; continuing with currently visible candidates.");
+    }
+  };
   const findAddCandidates = (nodes: UiNode[]) => {
     const addButtons = nodes.filter(node =>
       shortResourceId(node) === "scu_search_action_button" &&
@@ -36,8 +226,8 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         shortResourceId(node) === "result-title" &&
         node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
       );
-      const friendName = username ? nodeLabel(username) : "";
-      const friendKey = friendName.toLowerCase().replace(/\s+/g, " ").trim();
+      const friendName = username?.text.trim() || username?.desc.trim() || "";
+      const friendKey = normalizeFriendDisplayName(friendName);
       return friendName ? [{ candidate, friendName, friendKey, row }] : [];
     });
     return { addButtons, candidates };
@@ -60,7 +250,16 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         : "Add Friends: no friend-row Add controls are currently exposed; continuing to the next tool.");
       break;
     }
-    if (added > 0) {
+    const alreadyAddedBeforeWait = wasRecentlyAdded(selected.friendName);
+    if (alreadyAddedBeforeWait === null) {
+      logAction(context, `${added} friends added; stopped because the Skip Added list could not be read`);
+      return false;
+    }
+    if (alreadyAddedBeforeWait) {
+      await skipAndScroll(state, selected);
+      continue;
+    }
+    if (added > 0 && !delaySatisfiedSinceLastAdd) {
       await waitBetweenActions(
         context,
         context.tools.addFriends.delayMinSeconds,
@@ -68,6 +267,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         "Add Friends",
       );
       if (context.isAborted()) break;
+      delaySatisfiedSinceLastAdd = true;
       state = await dump(context.serial);
       const cooldownAfterWait = await handleFriendRequestLimit(context, "Add Friends", state.nodes);
       if (cooldownAfterWait) {
@@ -77,19 +277,47 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       ({ addButtons, candidates } = findAddCandidates(state.nodes));
       selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
       if (!selected) continue;
+      const alreadyAddedAfterWait = wasRecentlyAdded(selected.friendName);
+      if (alreadyAddedAfterWait === null) {
+        logAction(context, `${added} friends added; stopped because the Skip Added list could not be read`);
+        return false;
+      }
+      if (alreadyAddedAfterWait) {
+        await skipAndScroll(state, selected);
+        continue;
+      }
     }
     const currentCandidate = selected.candidate;
     const { friendName, friendKey } = selected;
     if (context.isAborted()) break;
-    if (!await tapNode(context, currentCandidate, `tap Add for ${friendName} under Find Friends`, 0, true)) break;
+    let reservationKey: string | null = null;
+    if (skipAdded) {
+      try {
+        reservationKey = reserveFriendName(friendName);
+      } catch {
+        context.onLog("Add Friends stopped: the farm-wide Skip Added list could not be updated; no more friend requests will be sent.");
+        logAction(context, `${added} friends added; stopped because the Skip Added list could not be updated`);
+        return false;
+      }
+      if (reservationKey === null) {
+        await skipAndScroll(state, selected);
+        continue;
+      }
+    }
+    if (!await tapNode(context, currentCandidate, `tap Add for ${friendName} under Find Friends`, 0, true)) {
+      if (reservationKey !== null) releaseFriendReservation(reservationKey);
+      break;
+    }
 
     const afterTap = await dump(context.serial);
     const cooldownAfterTap = await handleFriendRequestLimit(context, "Add Friends", afterTap.nodes);
     if (cooldownAfterTap) {
+      if (reservationKey !== null) releaseFriendReservation(reservationKey);
       logAction(context, `${added} of ${requested} friends added; paused by Snapchat's friend-request limit`);
       return cooldownAfterTap;
     }
     if (hasSnapchatChatComposer(afterTap.nodes)) {
+      if (reservationKey !== null) releaseFriendReservation(reservationKey);
       const recoveries = (recoveryAttempts.get(friendKey) ?? 0) + 1;
       recoveryAttempts.set(friendKey, recoveries);
       context.onLog(`Add Friends: tapping the live Add control opened a chat for ${friendName}; leaving it and retrying the friend row (${recoveries}/3).`);
@@ -106,8 +334,18 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     attemptedFriends.add(friendKey);
     recoveryAttempts.delete(friendKey);
     added++;
+    delaySatisfiedSinceLastAdd = false;
     context.onMetric?.("snapchat_add_friends");
-    context.onLog(`Add Friends: tapped Add for ${friendName}; continuing without waiting for Snapchat's confirmation.`);
+    try {
+      if (reservationKey !== null) {
+        finishFriendReservation(reservationKey, friendName);
+      } else {
+        recordAddedFriendName(friendName);
+      }
+    } catch {
+      context.onLog(`Add Friends: ${friendName} was added, but could not be saved to the farm-wide name list.`);
+    }
+    context.onLog(`Add Friends: added ${friendName}; saved the display name to the farm-wide list.`);
     if (!await scrollAddFriendsListOneSlot(context, afterTap.nodes, selected.row, screenHeight, friendName)) {
       context.onLog("Add Friends: could not scroll after this Add; continuing with currently visible candidates.");
     }

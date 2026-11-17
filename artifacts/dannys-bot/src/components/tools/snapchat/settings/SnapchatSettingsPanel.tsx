@@ -35,6 +35,10 @@ export function SnapchatSettingsPanel({
     ...snapchatToolSettingsDefaults.uploadVideo,
     ...settings.uploadVideo,
   };
+  const addFriendsSettings = {
+    ...snapchatToolSettingsDefaults.addFriends,
+    ...settings.addFriends,
+  };
   const replyUnreadChatsSettings = {
     ...snapchatToolSettingsDefaults.replyUnreadChats,
     ...settings.replyUnreadChats,
@@ -68,7 +72,8 @@ export function SnapchatSettingsPanel({
         onUpdate={patch => onToolUpdate("uploadVideo", patch as Record<string, unknown>)}
       />
       <AddFriendsSetting
-        value={settings.addFriends}
+        key={`${phoneSerial ?? ""}:${slotIdx ?? 0}`}
+        value={addFriendsSettings}
         loading={loading}
         onUpdate={patch => onToolUpdate("addFriends", patch as Record<string, unknown>)}
       />

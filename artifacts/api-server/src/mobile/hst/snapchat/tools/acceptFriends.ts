@@ -1,9 +1,103 @@
+import fs from "node:fs";
+import path from "node:path";
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { openAddFriendsForAccepts } from "../navigation/openAcceptFriends";
 import { handleAcceptFriendRequestLimit } from "../navigation/acceptFriendsCooldown";
 import { scrollAcceptFriendsListOneSlot } from "../navigation/scrollAcceptFriendsListOneSlot";
+import { sqlite } from "../../../../storage";
 import { center, dump, findOccludingBanner, logAction, nodeLabel, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
+
+const ADDED_FRIENDS_FILE = path.join(
+  process.env.EQUINOX_DATA_DIR || path.dirname(sqlite.name),
+  "snapchat-added-friends.txt",
+);
+const ADDED_FRIENDS_HEADER = "# ISO timestamp | Tool | Display name\n";
+type AddedFriendRecord = {
+  displayName: string;
+  source: "Add Friends" | "Accept Friends";
+  addedAt: string;
+};
+let legacyHistoryMigrated = false;
+
+function normalizeFriendDisplayName(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200d\u2060\ufeff\ufe0e\ufe0f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("en-US");
+}
+
+function ensureAddedFriendsFile(): void {
+  fs.mkdirSync(path.dirname(ADDED_FRIENDS_FILE), { recursive: true });
+  try {
+    fs.writeFileSync(ADDED_FRIENDS_FILE, ADDED_FRIENDS_HEADER, { encoding: "utf8", flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+}
+
+function appendAcceptedHistoryLine(record: AddedFriendRecord): void {
+  ensureAddedFriendsFile();
+  const safeName = record.displayName.replace(/[\r\n\t]/g, " ").replace(/\s+/g, " ").trim();
+  fs.appendFileSync(ADDED_FRIENDS_FILE, `${record.addedAt} | ${record.source} | ${safeName}\n`, "utf8");
+}
+
+function migrateLegacyDatabaseHistory(): void {
+  ensureAddedFriendsFile();
+  if (legacyHistoryMigrated) return;
+  const existing = new Set(fs.readFileSync(ADDED_FRIENDS_FILE, "utf8").split(/\r?\n/).flatMap(line => {
+    const first = line.indexOf(" | ");
+    const second = first < 0 ? -1 : line.indexOf(" | ", first + 3);
+    if (first < 0 || second < 0) return [];
+    const addedAt = line.slice(0, first).trim();
+    const source = line.slice(first + 3, second).trim();
+    const displayName = line.slice(second + 3).trim();
+    if (!Number.isFinite(Date.parse(addedAt)) || !displayName) return [];
+    return [`${normalizeFriendDisplayName(displayName)}\u0000${source}\u0000${Date.parse(addedAt)}`];
+  }));
+  try {
+    const entries = sqlite.prepare(`
+      SELECT display_name AS displayName, source, added_at AS addedAt
+      FROM snapchat_added_friend_history
+      WHERE status = 'added'
+    `).all() as Array<{ displayName: string; source: AddedFriendRecord["source"]; addedAt: number }>;
+    for (const entry of entries) {
+      if (
+        typeof entry.displayName !== "string" ||
+        (entry.source !== "Add Friends" && entry.source !== "Accept Friends") ||
+        !Number.isFinite(Number(entry.addedAt))
+      ) continue;
+      const record: AddedFriendRecord = {
+        displayName: entry.displayName,
+        source: entry.source,
+        addedAt: new Date(entry.addedAt).toISOString(),
+      };
+      const key = `${normalizeFriendDisplayName(record.displayName)}\u0000${record.source}\u0000${Date.parse(record.addedAt)}`;
+      if (existing.has(key)) continue;
+      appendAcceptedHistoryLine(record);
+      existing.add(key);
+    }
+  } catch (error) {
+    if (!(error instanceof Error) || !/no such table: snapchat_added_friend_history/i.test(error.message)) {
+      throw error;
+    }
+  }
+  legacyHistoryMigrated = true;
+}
+
+function recordAcceptedFriendName(displayName: string): boolean {
+  const cleanDisplayName = displayName.replace(/[\r\n\t]/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalizeFriendDisplayName(cleanDisplayName)) return false;
+  migrateLegacyDatabaseHistory();
+  appendAcceptedHistoryLine({
+    displayName: cleanDisplayName,
+    source: "Accept Friends",
+    addedAt: new Date().toISOString(),
+  });
+  return true;
+}
 
 const hasAcceptFriendChatComposer = (nodes: UiNode[]) => nodes.some(node =>
   /edittext/i.test(node.className) && /chat_input_text_field/i.test(node.resourceId),
@@ -37,9 +131,10 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
           shortResourceId(node) === "result-title" &&
           node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
         );
-        return row && name ? [{ button, name: nodeLabel(name), row }] : [];
+        const displayName = name?.text.trim() || name?.desc.trim() || "";
+        return row && displayName ? [{ button, name: displayName, row }] : [];
       });
-  const acceptanceKey = (name: string) => name.toLowerCase().replace(/\s+/g, " ").trim();
+  const acceptanceKey = normalizeFriendDisplayName;
 
   let state = await dump(context.serial);
   const initialCooldownResult = await handleAcceptFriendRequestLimit(context, state.nodes);
@@ -132,6 +227,15 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
       }
       accepted++;
       context.onMetric?.("snapchat_accept_friends");
+      try {
+        if (recordAcceptedFriendName(currentAcceptance.name)) {
+          context.onLog(`Accept Friends: accepted ${currentAcceptance.name}; saved the display name to the farm-wide list.`);
+        } else {
+          context.onLog("Accept Friends: accepted a request, but its display name was empty and could not be saved.");
+        }
+      } catch {
+        context.onLog(`Accept Friends: ${currentAcceptance.name} was accepted, but could not be saved to the farm-wide name list.`);
+      }
       pendingAcceptance = null;
       const scrolled = await scrollAcceptFriendsListOneSlot(
         context,

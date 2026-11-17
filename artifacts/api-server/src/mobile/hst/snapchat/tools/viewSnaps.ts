@@ -1,6 +1,7 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext } from "../context";
 import { openStoriesList, scanFreshStoryCircles } from "../navigation/openStoriesList";
+import { filterSuggestedFriendStories } from "../navigation/suggestedFriendBadge";
 import { dump, logAction, randomCount, randomSeconds, tapNode } from "../runtime";
 
 export async function runViewSnaps(context: SnapchatContext): Promise<void> {
@@ -22,12 +23,28 @@ export async function runViewSnaps(context: SnapchatContext): Promise<void> {
   if (scan.addFriendCount) {
     context.onLog(`View Snaps: skipped ${scan.addFriendCount} Friends bubble(s) with an accessibility add-person marker.`);
   }
-  if (scan.circles.length === 0) {
+  let viewableCircles = scan.circles;
+  if (viewableCircles.length > 0) {
+    const screenshot = await android.captureScreenPixels(context.serial);
+    if (!screenshot) {
+      context.onLog("View Snaps skipped: the live screenshot was unavailable, so friend suggestions could not be checked.");
+      logAction(context, "0 Snaps viewed; friend Stories could not be safely identified");
+      return;
+    }
+    const filtered = filterSuggestedFriendStories(screenshot, viewableCircles);
+    viewableCircles = filtered.circles;
+    if (filtered.addFriendCount) {
+      context.onLog(
+        `View Snaps: skipped ${filtered.addFriendCount} Friends bubble(s) with the screenshot-confirmed purple add-person badge.`,
+      );
+    }
+  }
+  if (viewableCircles.length === 0) {
     context.onLog("View Snaps skipped: the Friends row has no fresh, viewable Story bubbles.");
     logAction(context, "0 Snaps viewed; no viewable Stories available");
     return;
   }
-  const story = scan.circles[Math.floor(Math.random() * scan.circles.length)];
+  const story = viewableCircles[Math.floor(Math.random() * viewableCircles.length)];
   if (!await tapNode(context, story, "open a circular story")) {
     logAction(context, "0 Snaps viewed; the Story did not open");
     return;
