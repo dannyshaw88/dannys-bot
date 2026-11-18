@@ -45,3 +45,9 @@ When adding a new tool under a nested per-slot settings object, deep-merge that 
 **Why:** A newly added Snapchat tool was absent from older slot records, and the UI dereferenced the missing nested object.
 
 **How to apply:** Merge tool-level defaults with each persisted tool object on load; keep a local component fallback so incomplete legacy payloads cannot break page rendering.
+
+Account-slot hydration follows the same fail-closed rule: reject failed or malformed GET responses, do not mark the slot list hydrated, and never autosave defaults as if they were a real empty list. Preserve a valid `slots: []` exactly.
+
+**Why:** The account panel previously swallowed GET errors, then marked itself hydrated; a later autosave could overwrite saved accounts with blank slots. It also treated a valid empty array as missing data and displayed padded defaults.
+
+**How to apply:** Check the HTTP status and slot payload before updating state; only enable autosave after a valid response, including an explicitly empty list.
