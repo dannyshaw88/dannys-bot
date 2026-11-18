@@ -10743,6 +10743,7 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
       elapsedMs: null,
     });
     setLoading(true);
+    setSaveError(null);
     fetch(`/api/mobile/devices/${encodeURIComponent(phone.serial)}/account`)
       .then(async r => {
         const responseAt = performance.now();
@@ -10754,13 +10755,30 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
           responseMs: Math.round((responseAt - startedAt) * 10) / 10,
           jsonMs: Math.round((performance.now() - responseAt) * 10) / 10,
         });
+        if (!r.ok) {
+          throw new Error(
+            typeof payload?.error === "string" ? payload.error : `Server error (${r.status})`,
+          );
+        }
+        const validSlots = payload &&
+          Array.isArray(payload.slots) &&
+          payload.slots.every((slot: any) =>
+            slot &&
+            typeof slot === "object" &&
+            typeof slot.username === "string" &&
+            typeof slot.password === "string",
+          );
+        const validLegacyAccount = payload && typeof payload.username === "string";
+        if (!validSlots && !validLegacyAccount) {
+          throw new Error("The server returned an incomplete account-slots response");
+        }
         return payload;
       })
       .then(async d => {
         if (!active) return;
         // Server returns { slots: [...] }; also handle legacy { username, password }
         let loaded: AccountSlot[];
-        if (d && Array.isArray(d.slots) && d.slots.length > 0) {
+        if (d && Array.isArray(d.slots)) {
           // Use the exact count the server stored — do NOT pad to ACCT_SLOT_COUNT.
           // Padding caused deleted slots to reappear every time the panel reloaded.
           loaded = d.slots.map((s: any) => ({
@@ -10843,8 +10861,22 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
         });
         lastSavedRef.current = JSON.stringify(loaded);
       })
-      .catch(() => {})
-      .finally(() => { if (active) { setLoading(false); hydratedRef.current = true; } });
+      .catch((error: any) => {
+        if (!active) return;
+        // A failed or incomplete account read is not an empty-account snapshot.
+        // Keep autosave gated so a transient API error cannot replace saved
+        // account slots with blank defaults.
+        hydratedRef.current = false;
+        setSaveError(
+          `Couldn't load this device's saved account slots; they were left unchanged. Reload the device to retry.`,
+        );
+        writeUiSpeedLog("account-slots-hydration-failed", {
+          serial: phone.serial,
+          error: error?.message ?? String(error ?? "request failed"),
+          elapsedMs: Math.round((performance.now() - startedAt) * 10) / 10,
+        });
+      })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [phone?.serial]);
 
