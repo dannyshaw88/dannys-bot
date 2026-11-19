@@ -11,6 +11,15 @@ airplane mode during the closing stage.
 **Why:** the user clarified that airplane mode is not needed at the end of the
 Human Session Tool cycle.
 
+For Snapchat account changes, a separate airplane-mode cycle is required only
+after the current account has been confirmed logged out and before selecting
+the next saved account: enable, wait exactly 15 seconds, then disable. Always
+attempt to disable it if the wait is aborted or enabling fails. Do not run this
+on an already-open signed-out picker or during Instagram account switching.
+
+**Why:** the user requested an IP-separation attempt specifically between a
+confirmed Snapchat logout and the next account selection.
+
 **How to apply / pitfalls already hit:**
 - Don't use a raw `KEYCODE_POWER` toggle for "power on"/"power off" — it's
   state-dependent (turns screen off if already on), so any step after it

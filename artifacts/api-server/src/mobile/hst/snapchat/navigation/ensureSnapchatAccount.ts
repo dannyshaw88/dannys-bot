@@ -17,6 +17,35 @@ function normalizeUsername(value: string): string {
   return value.trim().replace(/^@/, "").toLowerCase();
 }
 
+async function resetNetworkAfterConfirmedLogout(context: SnapchatContext): Promise<void> {
+  if (context.isAborted()) throw new Error("cycle-aborted");
+
+  context.onLog(
+    "Snapchat account switch: logout was confirmed; enabling Airplane mode for 15 seconds before selecting the saved account.",
+  );
+
+  let cycleError: unknown;
+  try {
+    await android.setAirplaneMode(context.serial, true);
+    context.onLog("Snapchat account switch: Airplane mode is on; waiting exactly 15 seconds.");
+    await context.sleep(15_000, "exact");
+  } catch (error) {
+    cycleError = error;
+  }
+
+  try {
+    await android.setAirplaneMode(context.serial, false);
+    context.onLog("Snapchat account switch: Airplane mode is off; continuing to the saved-account carousel.");
+  } catch (error) {
+    context.onLog(
+      `Snapchat account switch: failed to confirm Airplane mode is off (${error instanceof Error ? error.message : String(error)}).`,
+    );
+    throw error;
+  }
+
+  if (cycleError) throw cycleError;
+}
+
 function profileUsername(state: UiState): string | null {
   const explicit = state.nodes.find(node => shortResourceId(node) === "profile-username");
   const value = explicit?.text.trim() || explicit?.desc.trim();
@@ -147,6 +176,8 @@ export async function ensureSnapchatAccount(
 
     context.onLog(`Snapchat account check: slot expects @${expectedUsername}; current profile is @${actualUsername}.`);
     if (!await logoutSnapchatAccount(context, profile)) return false;
+    await resetNetworkAfterConfirmedLogout(context);
+    if (context.isAborted()) return false;
     if (!await selectSnapchatAccountFromCarousel(context, expectedUsername)) return false;
     context.onLog(`Snapchat account check: @${expectedUsername} was selected and Camera is ready; starting this slot's tools without reopening the profile.`);
     return true;
