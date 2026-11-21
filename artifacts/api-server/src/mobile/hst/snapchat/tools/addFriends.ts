@@ -292,16 +292,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     if (!await tapNode(context, dismiss, `dismiss avoided suggestion ${friendName} with its row Hide control`, 350, true)) {
       return false;
     }
-    if (!await scrollAddFriendsListOneSlot(
-      context,
-      state.nodes,
-      row,
-      screenHeight,
-      friendName,
-      "dismissing an avoided suggestion",
-    )) {
-      context.onLog("Add Friends: could not scroll after dismissing this suggestion; continuing with currently visible candidates.");
-    }
+    context.onLog(`Add Friends: dismissed ${friendName}; using Snapchat's refreshed list position without an extra scroll.`);
     return !context.isAborted();
   };
 
