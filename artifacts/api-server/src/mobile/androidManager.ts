@@ -5049,29 +5049,57 @@ async function runCalibratedTapBatch(
       ? [tap, `sleep ${(pause / 1000).toFixed(3)}`]
       : [tap];
   });
+  const configuredPauseMs = taps.reduce(
+    (total, tap) => total + Math.max(0, Math.round(tap.pauseMs)),
+    0,
+  );
+  let inputGateEntered = false;
+  let adbStartedAt: number | null = null;
+  let commandOutput = "";
   try {
     await runWithDeviceInputGate(serial, async () => {
+      inputGateEntered = true;
       gateWaitMs = Date.now() - totalStartedAt;
-      const adbStartedAt = Date.now();
+      adbStartedAt = Date.now();
       const { stdout, stderr } = await execFileP(adb, [
         "-s", serial, "shell", commands.join(" && "),
       ], { encoding: "utf8", timeout: 30_000 } as any);
       adbMs = Date.now() - adbStartedAt;
-      const output = `${stdout ?? ""}${stderr ?? ""}`.trim();
-      if (/error|exception|permission denied/i.test(output)) {
-        throw new Error(output);
+      commandOutput = `${stdout ?? ""}${stderr ?? ""}`.trim();
+      if (/error|exception|permission denied/i.test(commandOutput)) {
+        throw new Error(commandOutput);
       }
     });
   } catch (error: any) {
-    const output = `${error?.stderr ?? ""}${error?.stdout ?? ""}`.trim();
-    const detail = output || error?.message || "unknown error";
-    throw new Error(`adb calibrated tap batch failed: ${detail}`);
+    if (adbStartedAt !== null && adbMs === 0) {
+      adbMs = Date.now() - adbStartedAt;
+    }
+    const processOutput = `${error?.stderr ?? ""}${error?.stdout ?? ""}`.trim();
+    const message = typeof error?.message === "string" &&
+      !/^Command failed:/i.test(error.message.trim())
+      ? error.message.trim()
+      : "";
+    const output = processOutput || commandOutput || message;
+    const conciseOutput = output
+      ? `${output.replace(/\s+/g, " ").slice(0, 600)}${output.length > 600 ? "…" : ""}`
+      : "none";
+    const exitCode = error?.code === undefined ? "unknown" : String(error.code);
+    const signal = typeof error?.signal === "string" ? error.signal : "none";
+    const killed = error?.killed === true;
+    const stage = inputGateEntered ? "adb-shell" : "input-gate";
+    throw new Error(
+      "adb calibrated tap batch failed " +
+      `(stage=${stage}, exitCode=${exitCode}, signal=${signal}, killed=${killed}, ` +
+      `elapsedMs=${Date.now() - totalStartedAt}, gateWaitMs=${gateWaitMs}, ` +
+      `adbMs=${adbStartedAt === null ? "not-started" : adbMs}, tapCount=${taps.length}, ` +
+      `configuredPauseMs=${configuredPauseMs}, output=${JSON.stringify(conciseOutput)})`,
+    );
   }
   return {
     totalMs: Date.now() - totalStartedAt,
     gateWaitMs,
     adbMs,
-    configuredPauseMs: taps.reduce((total, tap) => total + Math.max(0, Math.round(tap.pauseMs)), 0),
+    configuredPauseMs,
   };
 }
 
