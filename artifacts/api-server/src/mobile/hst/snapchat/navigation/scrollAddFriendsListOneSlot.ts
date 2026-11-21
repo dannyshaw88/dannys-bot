@@ -9,7 +9,7 @@ export async function scrollAddFriendsListOneSlot(
   screenHeight: number,
   friendName: string,
   actionLabel = "adding",
-  extraScrollPixels = 0,
+  extraScrollPixels = 10,
 ): Promise<boolean> {
   const findFriendsTitle = nodes.find(node =>
     shortResourceId(node) === "section-title" &&
