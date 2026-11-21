@@ -907,6 +907,7 @@ async function runReplyUnreadChatsAttempt(
           compactLogs: true,
           onProgress: context.onProgress,
           batchTaps: true,
+          measureTapTimings: true,
         },
       );
       if (!typed.available) {

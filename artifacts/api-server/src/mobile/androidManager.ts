@@ -5027,23 +5027,41 @@ async function runInputShell(serial: string, args: string[], label: string, tapI
   });
 }
 
-type CalibratedTapBatchItem = { x: number; y: number; pauseMs: number };
+type CalibratedTapBatchItem = { x: number; y: number; pauseMs: number; key: string };
 
 async function runCalibratedTapBatch(
   serial: string,
   taps: CalibratedTapBatchItem[],
-): Promise<{ totalMs: number; gateWaitMs: number; adbMs: number; configuredPauseMs: number }> {
+  measureTapTimings = false,
+): Promise<{
+  totalMs: number;
+  gateWaitMs: number;
+  adbMs: number;
+  configuredPauseMs: number;
+  tapTimings: Array<{ key: string; elapsedMs: number }>;
+}> {
   if (taps.length === 0) {
-    return { totalMs: 0, gateWaitMs: 0, adbMs: 0, configuredPauseMs: 0 };
+    return { totalMs: 0, gateWaitMs: 0, adbMs: 0, configuredPauseMs: 0, tapTimings: [] };
   }
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
   const totalStartedAt = Date.now();
   let gateWaitMs = 0;
   let adbMs = 0;
-  const commands = taps.flatMap(({ x, y, pauseMs }) => {
+  const commands = taps.flatMap(({ x, y, pauseMs }, index) => {
     const safeX = Math.round(x), safeY = Math.round(y);
-    const tap = `input tap ${safeX} ${safeY}`;
+    const inputTap = `input tap ${safeX} ${safeY}`;
+    const tap = measureTapTimings
+      ? [
+          "IFS='. '",
+          "read __aura_start_s __aura_start_cs _ < /proc/uptime",
+          "__aura_start_cs=${__aura_start_cs#0}",
+          inputTap,
+          "read __aura_end_s __aura_end_cs _ < /proc/uptime",
+          "__aura_end_cs=${__aura_end_cs#0}",
+          `echo __AURA_TAP_MS__${index}:$((((__aura_end_s - __aura_start_s) * 100 + __aura_end_cs - __aura_start_cs) * 10))`,
+        ].join(" && ")
+      : inputTap;
     const pause = Math.max(0, Math.round(pauseMs));
     return pause > 0
       ? [tap, `sleep ${(pause / 1000).toFixed(3)}`]
@@ -5056,6 +5074,7 @@ async function runCalibratedTapBatch(
   let inputGateEntered = false;
   let adbStartedAt: number | null = null;
   let commandOutput = "";
+  let tapTimings: Array<{ key: string; elapsedMs: number }> = [];
   try {
     await runWithDeviceInputGate(serial, async () => {
       inputGateEntered = true;
@@ -5068,6 +5087,16 @@ async function runCalibratedTapBatch(
       commandOutput = `${stdout ?? ""}${stderr ?? ""}`.trim();
       if (/error|exception|permission denied/i.test(commandOutput)) {
         throw new Error(commandOutput);
+      }
+      if (measureTapTimings) {
+        const elapsedByIndex = new Map<number, number>();
+        for (const match of commandOutput.matchAll(/__AURA_TAP_MS__(\d+):(-?\d+)/g)) {
+          elapsedByIndex.set(Number(match[1]), Number(match[2]));
+        }
+        tapTimings = taps.flatMap((tap, index) => {
+          const elapsedMs = elapsedByIndex.get(index);
+          return elapsedMs === undefined ? [] : [{ key: tap.key, elapsedMs }];
+        });
       }
     });
   } catch (error: any) {
@@ -5101,6 +5130,7 @@ async function runCalibratedTapBatch(
     gateWaitMs,
     adbMs,
     configuredPauseMs,
+    tapTimings,
   };
 }
 
@@ -15464,7 +15494,7 @@ export async function typeViaSavedCalibrationMap(
   text: string,
   typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
-  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean },
+  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean; measureTapTimings?: boolean },
 ): Promise<{ ok: boolean; available: boolean; missing: string[]; fatal?: boolean }> {
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
@@ -15549,6 +15579,7 @@ export async function typeViaSavedCalibrationMap(
     compactLogs: options?.compactLogs,
     onProgress: options?.onProgress,
     batchTaps: options?.batchTaps,
+    measureTapTimings: options?.measureTapTimings,
   });
   return { ...result, available: true };
 }
@@ -16133,7 +16164,7 @@ export async function typeViaCalibrationMap(
   map: KeyCalibrationMap,
   onLog?: (msg: string) => void,
   typingProfile: TypingSpeedProfile,
-  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean },
+  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean; measureTapTimings?: boolean },
 ): Promise<{ ok: boolean; missing: string[]; fatal?: boolean }> {
   if (!typingProfile ||
       !Number.isFinite(typingProfile.minMs) ||
@@ -16160,7 +16191,7 @@ export async function typeViaCalibrationMap(
   const flushPendingTaps = async () => {
     if (pendingTaps.length === 0) return;
     const batch = pendingTaps.splice(0, pendingTaps.length);
-    const timings = await runCalibratedTapBatch(serial, batch);
+    const timings = await runCalibratedTapBatch(serial, batch, options?.measureTapTimings);
     for (const _tap of batch) options?.onProgress?.();
     if (options?.batchTaps) {
       onLog?.(
@@ -16168,6 +16199,16 @@ export async function typeViaCalibrationMap(
         `in ${timings.totalMs}ms (ADB ${timings.adbMs}ms, queued ${timings.gateWaitMs}ms, ` +
         `configured pauses ${timings.configuredPauseMs}ms)`,
       );
+      if (options?.measureTapTimings) {
+        const timingDetails = timings.tapTimings
+          .map(({ key, elapsedMs }) => `${JSON.stringify(key)}:${elapsedMs}ms`)
+          .join(", ");
+        onLog?.(
+          `[${options.debugLabel ?? "cal-keyboard"}] per-tap ADB timings ` +
+          `(${timings.tapTimings.length}/${batch.length} captured, 10ms resolution): ` +
+          `[${timingDetails}]`,
+        );
+      }
     }
   };
   const activeIme = options?.compactLogs ? "" : await getActiveInputMethodPackage(serial).catch(() => "");
@@ -16238,7 +16279,7 @@ export async function typeViaCalibrationMap(
     const pause = dwellMin + Math.round(Math.random() * (dwellMax - dwellMin));
     const layerControl = label === "abc" || label === "symbols" || label === "moreSymbols";
     if (options?.batchTaps && !layerControl) {
-      pendingTaps.push({ x: dispatched.x, y: dispatched.y, pauseMs: pause });
+      pendingTaps.push({ x: dispatched.x, y: dispatched.y, pauseMs: pause, key: description });
       return true;
     }
     try {
