@@ -322,6 +322,11 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         : "Add Friends: no friend-row Add controls are currently exposed; continuing to the next tool.");
       break;
     }
+    const avoidedBeforeWait = getAvoidedTerm(selected);
+    if (avoidedBeforeWait) {
+      if (!await dismissAvoidedSuggestion(state, selected, avoidedBeforeWait)) break;
+      continue;
+    }
     const alreadyAddedBeforeWait = wasRecentlyAdded(selected.friendName);
     if (alreadyAddedBeforeWait === null) {
       logAction(context, `${added} friends added; stopped because the Skip Added list could not be read`);
@@ -329,11 +334,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     }
     if (alreadyAddedBeforeWait) {
       await skipAndScroll(state, selected);
-      continue;
-    }
-    const avoidedBeforeWait = getAvoidedTerm(selected);
-    if (avoidedBeforeWait) {
-      if (!await dismissAvoidedSuggestion(state, selected, avoidedBeforeWait)) break;
       continue;
     }
     if (added > 0 && !delaySatisfiedSinceLastAdd) {
