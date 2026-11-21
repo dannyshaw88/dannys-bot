@@ -5091,7 +5091,8 @@ async function runCalibratedTapBatch(
       "adb calibrated tap batch failed " +
       `(stage=${stage}, exitCode=${exitCode}, signal=${signal}, killed=${killed}, ` +
       `elapsedMs=${Date.now() - totalStartedAt}, gateWaitMs=${gateWaitMs}, ` +
-      `adbMs=${adbStartedAt === null ? "not-started" : adbMs}, tapCount=${taps.length}, ` +
+      `adbMs=${adbStartedAt === null ? "not-started" : adbMs}, adbTimeoutMs=30000, ` +
+      `tapCount=${taps.length}, ` +
       `configuredPauseMs=${configuredPauseMs}, output=${JSON.stringify(conciseOutput)})`,
     );
   }
