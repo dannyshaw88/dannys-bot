@@ -224,6 +224,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       screenHeight,
       friendName,
       "skipping a recently added name",
+      10,
     )) {
       context.onLog("Add Friends: could not scroll past that name; continuing with currently visible candidates.");
     }
