@@ -281,6 +281,7 @@ function SimCardSelector({
 }) {
   const [openMenu, setOpenMenu] = useState<"country" | "provider" | null>(null);
   const [countrySearch, setCountrySearch] = useState("");
+  const [popupGeometry, setPopupGeometry] = useState({ left: 0, width: 224 });
   const rootRef = useRef<HTMLDivElement>(null);
   const country = getSimCountry(custom.simCountryCode);
   const providers = [...country.providers, "Wi-Fi"];
@@ -305,6 +306,39 @@ function SimCardSelector({
     document.addEventListener("mousedown", closeOnOutsideClick);
     return () => document.removeEventListener("mousedown", closeOnOutsideClick);
   }, [openMenu]);
+
+  useLayoutEffect(() => {
+    if (!openMenu) return;
+    const root = rootRef.current;
+    const area = root?.parentElement;
+    if (!root || !area) return;
+
+    const repositionPopup = () => {
+      const rootRect = root.getBoundingClientRect();
+      const areaRect = area.getBoundingClientRect();
+      const mainRect = root.closest("main")?.getBoundingClientRect();
+      const edgePadding = 8;
+      const minX = (mainRect?.left ?? 0) + edgePadding;
+      const maxX = (mainRect?.right ?? window.innerWidth) - edgePadding;
+      const requestedWidth = openMenu === "country" ? 224 : 144;
+      const cardCenterX = areaRect.left + areaRect.width / 2;
+      const symmetricAvailableWidth = 2 * Math.min(cardCenterX - minX, maxX - cardCenterX);
+      const width = Math.min(
+        requestedWidth,
+        Math.max(120, Math.min(maxX - minX, symmetricAvailableWidth)),
+      );
+      const centerX = Math.max(
+        minX + width / 2,
+        Math.min(maxX - width / 2, cardCenterX),
+      );
+
+      setPopupGeometry({ left: centerX - rootRect.left, width });
+    };
+
+    repositionPopup();
+    window.addEventListener("resize", repositionPopup);
+    return () => window.removeEventListener("resize", repositionPopup);
+  }, [openMenu, centerX]);
 
   const chooseCountry = (nextCountry: SimCountry) => {
     onChange({
@@ -347,7 +381,11 @@ function SimCardSelector({
       </button>
 
       {openMenu === "country" && (
-        <div className="absolute bottom-[calc(100%+4px)] left-0 z-30 flex max-h-[18rem] w-56 flex-col overflow-hidden rounded-md border border-border bg-popover p-1 shadow-xl">
+        <div
+          data-testid="popover-sim-country"
+          className="absolute bottom-[calc(100%+4px)] z-30 flex max-h-[18rem] flex-col overflow-hidden rounded-md border border-border bg-popover p-1 shadow-xl"
+          style={{ left: popupGeometry.left, width: popupGeometry.width, transform: "translateX(-50%)" }}
+        >
           <div className="sticky top-0 z-10 flex shrink-0 items-center gap-1.5 border-b border-border bg-popover px-2 py-1.5">
             <Search className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
             <input
@@ -401,8 +439,15 @@ function SimCardSelector({
 
       {openMenu === "provider" && (
         <div
-          className="absolute left-1/2 top-[calc(100%+4px)] z-40 max-h-[7.5rem] w-36 -translate-x-1/2 overflow-y-auto rounded-md border border-border bg-white p-1 text-black opacity-100 shadow-xl"
-          style={{ backgroundColor: "#ffffff", opacity: 1 }}
+          data-testid="popover-sim-provider"
+          className="absolute top-[calc(100%+4px)] z-40 max-h-[7.5rem] overflow-y-auto rounded-md border border-border bg-white p-1 text-black opacity-100 shadow-xl"
+          style={{
+            left: popupGeometry.left,
+            width: popupGeometry.width,
+            transform: "translateX(-50%)",
+            backgroundColor: "#ffffff",
+            opacity: 1,
+          }}
         >
           {providers.map(provider => (
             <button
@@ -1452,7 +1497,7 @@ export function MobileDevicesPage() {
   const [devicesPerPage, setDevicesPerPage] = useState<number>(() => {
     try {
       const stored = Number(localStorage.getItem("phone-farm-devices-per-page"));
-      return [3, 6, 8, 12, 16, 32].includes(stored) ? stored : 6;
+      return [3, 6, 8, 10, 12, 16, 32].includes(stored) ? stored : 6;
     } catch {
       return 6;
     }
@@ -1691,7 +1736,7 @@ export function MobileDevicesPage() {
   const maxSlot   = devices.length > 0 ? Math.max(...devices.map(d => d.slotIndex)) : 0;
   const addSlot   = maxSlot + 1;  // the "Add Device" cell index (1-based)
   const visibleUp = devicesPerPage;
-  const gridColumns = devicesPerPage <= 6 ? 3 : devicesPerPage <= 16 ? 4 : 8;
+  const gridColumns = devicesPerPage === 10 ? 5 : devicesPerPage <= 6 ? 3 : devicesPerPage <= 16 ? 4 : 8;
   const gridRows = Math.ceil(devicesPerPage / gridColumns);
   const pageCount = Math.max(1, Math.ceil(addSlot / devicesPerPage));
   const activePage = Math.min(currentPage, pageCount - 1);
@@ -1744,7 +1789,7 @@ export function MobileDevicesPage() {
               }}
               className="h-9 rounded-md border border-input bg-background px-2 text-sm font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              {[3, 6, 8, 12, 16, 32].map(count => (
+              {[3, 6, 8, 10, 12, 16, 32].map(count => (
                 <option key={count} value={count}>{count}</option>
               ))}
             </select>

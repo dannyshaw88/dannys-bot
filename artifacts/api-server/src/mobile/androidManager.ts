@@ -6477,10 +6477,21 @@ export async function getForegroundPackage(serial: string): Promise<string | nul
  * delay comes from — not from a stale process.
  */
 export async function isScreenOn(serial: string): Promise<boolean | null> {
-  const tools = detectToolset();
+  const tools = await detectToolsetAsync();
   const adb = requireTool(tools.adb, "adb");
-  const r = spawnSync(adb, ["-s", serial, "shell", "dumpsys", "power"], { encoding: "utf8", timeout: 5000 });
-  const m = (r.stdout || "").match(/mWakefulness=(\w+)/) || (r.stdout || "").match(/mScreenOn=(\w+)/) || (r.stdout || "").match(/Display Power: state=(\w+)/i);
+  let stdout = "";
+  try {
+    const result = await execFileP(adb, ["-s", serial, "shell", "dumpsys", "power"], {
+      encoding: "utf8",
+      timeout: 5000,
+    } as any);
+    stdout = String(result.stdout ?? "");
+  } catch (error: any) {
+    // spawnSync used to expose stdout even when dumpsys exited unsuccessfully;
+    // retain that behavior while keeping the request path non-blocking.
+    stdout = String(error?.stdout ?? "");
+  }
+  const m = stdout.match(/mWakefulness=(\w+)/) || stdout.match(/mScreenOn=(\w+)/) || stdout.match(/Display Power: state=(\w+)/i);
   if (!m) return null;
   const v = m[1].toLowerCase();
   if (v === "awake" || v === "true" || v === "on") return true;
@@ -6495,15 +6506,30 @@ export async function isScreenOn(serial: string): Promise<boolean | null> {
  * racing the panel/compositor power-on. No-op (returns immediately) if the
  * screen is already on.
  */
+const ensureScreenOnInFlight = new Map<string, Promise<void>>();
+
 export async function ensureScreenOn(serial: string, timeoutMs = 2500): Promise<void> {
-  const already = await isScreenOn(serial);
-  if (already === true) return;
-  await wakeScreen(serial);
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const on = await isScreenOn(serial);
-    if (on === true || on === null) return; // null = can't tell, don't block forever
-    await new Promise(r => setTimeout(r, 150));
+  let inFlight = ensureScreenOnInFlight.get(serial);
+  if (!inFlight) {
+    inFlight = (async () => {
+      const already = await isScreenOn(serial);
+      if (already === true) return;
+      await wakeScreen(serial);
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const on = await isScreenOn(serial);
+        if (on === true || on === null) return; // null = can't tell, don't block forever
+        await new Promise(r => setTimeout(r, 150));
+      }
+    })();
+    ensureScreenOnInFlight.set(serial, inFlight);
+  }
+  try {
+    await inFlight;
+  } finally {
+    if (ensureScreenOnInFlight.get(serial) === inFlight) {
+      ensureScreenOnInFlight.delete(serial);
+    }
   }
 }
 

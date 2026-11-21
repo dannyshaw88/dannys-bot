@@ -162,6 +162,13 @@ function releaseFriendReservation(reservationKey: string): void {
   pendingNameReservations.delete(reservationKey);
 }
 
+function normalizeAvoidMatch(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200d\u2060\ufeff\ufe0e\ufe0f]/g, "")
+    .toLocaleLowerCase("en-US");
+}
+
 function recordAddedFriendName(displayName: string): void {
   appendAddedFriendName(displayName, "Add Friends");
 }
@@ -181,6 +188,19 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   const attemptedFriends = new Set<string>();
   const recoveryAttempts = new Map<string, number>();
   const skipAdded = context.tools.addFriends.skipAdded === true;
+  const avoidUsersContaining = context.tools.addFriends.avoidUsersContainingEnabled === true;
+  const avoidWordsText = typeof context.tools.addFriends.avoidUsersContainingWords === "string"
+    ? context.tools.addFriends.avoidUsersContainingWords
+    : "";
+  const avoidTerms = avoidUsersContaining
+    ? avoidWordsText
+      .split(",")
+      .map(term => normalizeAvoidMatch(term.trim()))
+      .filter(Boolean)
+    : [];
+  if (avoidUsersContaining && avoidTerms.length === 0) {
+    context.onLog("Add Friends: Avoid Users Containing is enabled, but no comma-separated words are loaded.");
+  }
   const wasRecentlyAdded = (friendName: string): boolean | null => {
     if (!skipAdded) return false;
     try {
@@ -228,9 +248,61 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       );
       const friendName = username?.text.trim() || username?.desc.trim() || "";
       const friendKey = normalizeFriendDisplayName(friendName);
-      return friendName ? [{ candidate, friendName, friendKey, row }] : [];
+      const identityText = nodes
+        .filter(node =>
+          node.bounds[0] >= row.bounds[0] &&
+          node.bounds[1] >= row.bounds[1] &&
+          node.bounds[2] <= row.bounds[2] &&
+          node.bounds[3] <= row.bounds[3] &&
+          !["scu_search_action_button", "friend-cell-dismiss"].includes(shortResourceId(node)),
+        )
+        .flatMap(node => [node.text, node.desc])
+        .filter(value => value.trim())
+        .map(normalizeAvoidMatch);
+      return friendName ? [{ candidate, friendName, friendKey, row, identityText }] : [];
     });
     return { addButtons, candidates };
+  };
+  const getAvoidedTerm = (selectedFriend: { identityText: string[] }): string | undefined =>
+    avoidTerms.find(term => selectedFriend.identityText.some(value => value.includes(term)));
+  const dismissAvoidedSuggestion = async (
+    state: { nodes: UiNode[] },
+    selectedFriend: { friendName: string; friendKey: string; row: UiNode },
+    matchedTerm: string,
+  ): Promise<boolean> => {
+    const { friendName, row } = selectedFriend;
+    attemptedFriends.add(selectedFriend.friendKey);
+    const rowBounds = row.bounds;
+    const dismiss = state.nodes.find(node =>
+      shortResourceId(node) === "friend-cell-dismiss" &&
+      /^(hide|dismiss)$/i.test(node.desc.trim() || node.text.trim()) &&
+      node.bounds[0] >= rowBounds[0] &&
+      node.bounds[1] >= rowBounds[1] &&
+      node.bounds[2] <= rowBounds[2] &&
+      node.bounds[3] <= rowBounds[3],
+    );
+    if (!dismiss) {
+      context.onLog(`Add Friends: ${friendName} matched the avoid list (“${matchedTerm}”), but its row Hide control was not exposed; it will not be added.`);
+      if (!await scrollAddFriendsListOneSlot(context, state.nodes, row, screenHeight, friendName, "skipping an avoided suggestion")) {
+        context.onLog("Add Friends: could not scroll past the avoided suggestion; continuing with currently visible candidates.");
+      }
+      return !context.isAborted();
+    }
+    context.onLog(`Add Friends: ${friendName} matched the avoid list (“${matchedTerm}”); dismissing it with the row Hide control.`);
+    if (!await tapNode(context, dismiss, `dismiss avoided suggestion ${friendName} with its row Hide control`, 350, true)) {
+      return false;
+    }
+    if (!await scrollAddFriendsListOneSlot(
+      context,
+      state.nodes,
+      row,
+      screenHeight,
+      friendName,
+      "dismissing an avoided suggestion",
+    )) {
+      context.onLog("Add Friends: could not scroll after dismissing this suggestion; continuing with currently visible candidates.");
+    }
+    return !context.isAborted();
   };
 
   while (added < requested && !context.isAborted()) {
@@ -259,6 +331,11 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       await skipAndScroll(state, selected);
       continue;
     }
+    const avoidedBeforeWait = getAvoidedTerm(selected);
+    if (avoidedBeforeWait) {
+      if (!await dismissAvoidedSuggestion(state, selected, avoidedBeforeWait)) break;
+      continue;
+    }
     if (added > 0 && !delaySatisfiedSinceLastAdd) {
       await waitBetweenActions(
         context,
@@ -277,6 +354,11 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       ({ addButtons, candidates } = findAddCandidates(state.nodes));
       selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
       if (!selected) continue;
+      const avoidedAfterWait = getAvoidedTerm(selected);
+      if (avoidedAfterWait) {
+        if (!await dismissAvoidedSuggestion(state, selected, avoidedAfterWait)) break;
+        continue;
+      }
       const alreadyAddedAfterWait = wasRecentlyAdded(selected.friendName);
       if (alreadyAddedAfterWait === null) {
         logAction(context, `${added} friends added; stopped because the Skip Added list could not be read`);

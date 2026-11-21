@@ -7,6 +7,9 @@ export const addFriendsSettingsDefault = {
   delayMinSeconds: 1,
   delayMaxSeconds: 3,
   skipAdded: false,
+  avoidUsersContainingEnabled: false,
+  avoidUsersContainingWords: "",
+  avoidUsersContainingFileName: "",
   activatePctMin: 100,
   activatePctMax: 100,
 };
@@ -18,6 +21,9 @@ export const addFriendsSettingsSchema = z.object({
   delayMinSeconds: z.number().int().min(1).default(1),
   delayMaxSeconds: z.number().int().min(1).default(3),
   skipAdded: z.boolean().default(false),
+  avoidUsersContainingEnabled: z.boolean().default(false),
+  avoidUsersContainingWords: z.string().max(1_000_000).default(""),
+  avoidUsersContainingFileName: z.string().max(255).default(""),
   activatePctMin: z.number().int().min(0).max(100).default(100),
   activatePctMax: z.number().int().min(0).max(100).default(100),
 }).default(addFriendsSettingsDefault);

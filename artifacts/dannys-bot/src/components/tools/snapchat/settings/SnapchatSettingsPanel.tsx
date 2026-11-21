@@ -38,6 +38,13 @@ export function SnapchatSettingsPanel({
   const addFriendsSettings = {
     ...snapchatToolSettingsDefaults.addFriends,
     ...settings.addFriends,
+    avoidUsersContainingEnabled: settings.addFriends?.avoidUsersContainingEnabled === true,
+    avoidUsersContainingWords: typeof settings.addFriends?.avoidUsersContainingWords === "string"
+      ? settings.addFriends.avoidUsersContainingWords
+      : "",
+    avoidUsersContainingFileName: typeof settings.addFriends?.avoidUsersContainingFileName === "string"
+      ? settings.addFriends.avoidUsersContainingFileName
+      : "",
   };
   const replyUnreadChatsSettings = {
     ...snapchatToolSettingsDefaults.replyUnreadChats,

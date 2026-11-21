@@ -6091,6 +6091,11 @@ const SNAPCHAT_COPY_OPTIONS = [
     { key: "amount", label: "Count", fields: ["min", "max"] },
     { key: "delay", label: "Delay between actions (s)", fields: ["delayMinSeconds", "delayMaxSeconds"] },
     { key: "skipAdded", label: "Skip Added", fields: ["skipAdded"] },
+    {
+      key: "avoidUsersContaining",
+      label: "Avoid Users Containing",
+      fields: ["avoidUsersContainingEnabled", "avoidUsersContainingWords", "avoidUsersContainingFileName"],
+    },
   ] },
   { key: "acceptFriends", label: "Accept Friends", settings: [
     { key: "enabled", label: "Enabled", fields: ["enabled"] },
