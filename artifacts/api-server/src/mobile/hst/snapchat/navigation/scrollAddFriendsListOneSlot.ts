@@ -19,7 +19,7 @@ export async function scrollAddFriendsListOneSlot(
     context.onLog(`Add Friends: could not calculate a safe short scroll after ${actionLabel} ${friendName}.`);
     return false;
   }
-  const scrollDistance = 182;
+  const scrollDistance = 150;
 
   const listTop = findFriendsTitle.bounds[3];
   const safeBottom = Math.floor(screenHeight * 0.82);
