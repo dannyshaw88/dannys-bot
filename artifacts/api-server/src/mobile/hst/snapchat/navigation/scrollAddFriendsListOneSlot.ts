@@ -9,6 +9,7 @@ export async function scrollAddFriendsListOneSlot(
   screenHeight: number,
   friendName: string,
   actionLabel = "adding",
+  scrollPathPixels = 125,
 ): Promise<boolean> {
   const findFriendsTitle = nodes.find(node =>
     shortResourceId(node) === "section-title" &&
@@ -19,7 +20,9 @@ export async function scrollAddFriendsListOneSlot(
     context.onLog(`Add Friends: could not calculate a safe short scroll after ${actionLabel} ${friendName}.`);
     return false;
   }
-  const scrollDistance = 150;
+  const scrollDistance = Number.isInteger(scrollPathPixels) && scrollPathPixels >= 1 && scrollPathPixels <= 999
+    ? scrollPathPixels
+    : 125;
 
   const listTop = findFriendsTitle.bounds[3];
   const safeBottom = Math.floor(screenHeight * 0.82);

@@ -58,6 +58,10 @@ export type SnapchatContext = {
     },
   ) => Promise<string | null>;
   tools: SnapchatToolSettings;
+  /** Read device-level Add Friends scroll path at each scroll, not just per cycle. */
+  getAddFriendsScrollPath?: () => number;
+  /** Read device-level Accept Friends scroll path at each scroll, independently. */
+  getAcceptFriendsScrollPath?: () => number;
   onLog: (message: string) => void;
   getFriendRequestCooldownUntil?: () => Promise<number | null>;
   onFriendRequestCooldown?: (until: number, toolName: "Add Friends" | "Accept Friends") => Promise<void>;

@@ -210,6 +210,10 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   const avoidWordsText = typeof context.tools.addFriends.avoidUsersContainingWords === "string"
     ? context.tools.addFriends.avoidUsersContainingWords
     : "";
+  const getScrollPathPixels = () => {
+    const value = context.getAddFriendsScrollPath?.() ?? 125;
+    return Number.isInteger(value) && value >= 1 && value <= 999 ? value : 125;
+  };
   const avoidTerms = avoidUsersContaining
     ? avoidWordsText
       .split(",")
@@ -246,6 +250,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       screenHeight,
       friendName,
       "skipping a recently added name",
+      getScrollPathPixels(),
     )) {
       context.onLog("Add Friends: could not scroll past that name; continuing with currently visible candidates.");
     }
@@ -321,7 +326,15 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     );
     if (!dismiss) {
       context.onLog(`Add Friends: ${friendName} matched the avoid list (“${matchedTerm}”), but its row Hide control was not exposed; it will not be added.`);
-      if (!await scrollAddFriendsListOneSlot(context, state.nodes, row, screenHeight, friendName, "skipping an avoided suggestion")) {
+      if (!await scrollAddFriendsListOneSlot(
+        context,
+        state.nodes,
+        row,
+        screenHeight,
+        friendName,
+        "skipping an avoided suggestion",
+        getScrollPathPixels(),
+      )) {
         context.onLog("Add Friends: could not scroll past the avoided suggestion; continuing with currently visible candidates.");
       }
       return !context.isAborted();
@@ -491,7 +504,15 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       context.onLog(`Add Friends: ${friendName} was added, but could not be saved to the farm-wide name list.`);
     }
     context.onLog(`Add Friends: added ${friendName}; saved the display name to the farm-wide list.`);
-    if (!await scrollAddFriendsListOneSlot(context, afterTap.nodes, selected.row, screenHeight, friendName)) {
+    if (!await scrollAddFriendsListOneSlot(
+      context,
+      afterTap.nodes,
+      selected.row,
+      screenHeight,
+      friendName,
+      "adding",
+      getScrollPathPixels(),
+    )) {
       context.onLog("Add Friends: could not scroll after this Add; continuing with currently visible candidates.");
     }
   }
