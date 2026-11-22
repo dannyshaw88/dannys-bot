@@ -206,6 +206,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   const attemptedFriends = new Set<string>();
   const recoveryAttempts = new Map<string, number>();
   const skipAdded = context.tools.addFriends.skipAdded === true;
+  const dismissNonEnglish = context.tools.addFriends.dismissNonEnglish === true;
   const avoidUsersContaining = context.tools.addFriends.avoidUsersContainingEnabled === true;
   const avoidWordsText = typeof context.tools.addFriends.avoidUsersContainingWords === "string"
     ? context.tools.addFriends.avoidUsersContainingWords
@@ -299,10 +300,20 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     );
     return match?.label;
   };
-  const dismissAvoidedSuggestion = async (
+  const getNonEnglishLetter = (selectedFriend: { identityText: string[] }): string | undefined =>
+    selectedFriend.identityText
+      .flatMap(value => [...value.normalize("NFKC")])
+      // Match writing letters outside the English A–Z alphabet; punctuation,
+      // symbols, digits, and emoji never qualify on their own.
+      .find(character => /\p{L}/u.test(character) && !/^[A-Za-z]$/.test(character));
+  const describeNonEnglishLetter = (character: string): string => {
+    const codePoint = character.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0") ?? "unknown";
+    return `non-English writing letter ${JSON.stringify(character)} (U+${codePoint})`;
+  };
+  const dismissSuggestion = async (
     state: { nodes: UiNode[] },
     selectedFriend: { friendName: string; friendKey: string; row: UiNode; candidate: UiNode },
-    matchedTerm: string,
+    matchDescription: string,
   ): Promise<boolean> => {
     const { friendName, row } = selectedFriend;
     attemptedFriends.add(selectedFriend.friendKey);
@@ -320,20 +331,20 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       Math.abs(center(node).y - addButtonCenterY) <= sameRowTolerance,
     );
     if (!dismiss) {
-      context.onLog(`Add Friends: ${friendName} matched the avoid list (“${matchedTerm}”), but its row Hide control was not exposed; it will not be added.`);
+      context.onLog(`Add Friends: ${friendName} matched ${matchDescription}, but its row Hide control was not exposed; it will not be added.`);
       if (!await scrollAddFriendsListOneSlot(
         context,
         state.nodes,
         screenWidth,
         screenHeight,
         friendName,
-        "skipping an avoided suggestion",
+        `skipping a suggestion matched by ${matchDescription}`,
       )) {
-        context.onLog("Add Friends: could not scroll past the avoided suggestion; continuing with currently visible candidates.");
+        context.onLog("Add Friends: could not scroll past the matched suggestion; continuing with currently visible candidates.");
       }
       return !context.isAborted();
     }
-    context.onLog(`Add Friends: ${friendName} matched the avoid list (“${matchedTerm}”); dismissing it with the row Hide control.`);
+    context.onLog(`Add Friends: ${friendName} matched ${matchDescription}; dismissing it with the row Hide control.`);
     if (context.isAborted()) return false;
     const liveRowY = center(selectedFriend.candidate).y;
     const calibration = android.loadNavigationCalibrationMap(context.serial);
@@ -345,7 +356,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
           "snapchatFriendSuggestionDismissX",
           liveRowY,
           message => context.onLog(`Add Friends: ${message}`),
-          `Snapchat: dismiss avoided suggestion ${friendName} at its live row`,
+          `Snapchat: dismiss matched suggestion ${friendName} at its live row`,
         );
       } else {
         const liveNodeCenterX = center(dismiss).x;
@@ -358,7 +369,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
           liveNodeCenterX,
           liveRowY,
           "manual",
-          `Snapchat: dismiss avoided suggestion ${friendName} at its live row`,
+          `Snapchat: dismiss matched suggestion ${friendName} at its live row`,
           "automation",
         );
       }
@@ -371,7 +382,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     }
     await context.sleep(350, "exact");
     if (context.isAborted()) return false;
-    context.onLog(`Add Friends: dismissed ${friendName}; using Snapchat's refreshed list position without an extra scroll.`);
+    context.onLog(`Add Friends: dismissed ${friendName} (${matchDescription}); using Snapchat's refreshed list position without an extra scroll.`);
     return !context.isAborted();
   };
 
@@ -392,9 +403,18 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         : "Add Friends: no friend-row Add controls are currently exposed; continuing to the next tool.");
       break;
     }
+    const nonEnglishLetterBeforeWait = dismissNonEnglish ? getNonEnglishLetter(selected) : undefined;
+    if (nonEnglishLetterBeforeWait) {
+      if (!await dismissSuggestion(
+        state,
+        selected,
+        describeNonEnglishLetter(nonEnglishLetterBeforeWait),
+      )) break;
+      continue;
+    }
     const avoidedBeforeWait = getAvoidedTerm(selected);
     if (avoidedBeforeWait) {
-      if (!await dismissAvoidedSuggestion(state, selected, avoidedBeforeWait)) break;
+      if (!await dismissSuggestion(state, selected, `Avoid Users Containing entry “${avoidedBeforeWait}”`)) break;
       continue;
     }
     const alreadyAddedBeforeWait = wasRecentlyAdded(selected.friendName);
@@ -424,9 +444,18 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       ({ addButtons, candidates } = findAddCandidates(state.nodes));
       selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
       if (!selected) continue;
+      const nonEnglishLetterAfterWait = dismissNonEnglish ? getNonEnglishLetter(selected) : undefined;
+      if (nonEnglishLetterAfterWait) {
+        if (!await dismissSuggestion(
+          state,
+          selected,
+          describeNonEnglishLetter(nonEnglishLetterAfterWait),
+        )) break;
+        continue;
+      }
       const avoidedAfterWait = getAvoidedTerm(selected);
       if (avoidedAfterWait) {
-        if (!await dismissAvoidedSuggestion(state, selected, avoidedAfterWait)) break;
+        if (!await dismissSuggestion(state, selected, `Avoid Users Containing entry “${avoidedAfterWait}”`)) break;
         continue;
       }
       const alreadyAddedAfterWait = wasRecentlyAdded(selected.friendName);

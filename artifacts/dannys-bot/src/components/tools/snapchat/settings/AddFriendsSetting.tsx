@@ -61,20 +61,37 @@ export function AddFriendsSetting({ value, loading, onUpdate }: AddFriendsSettin
             disabled={loading || !value.enabled}
             onChange={onUpdate}
           />
-          <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={value.skipAdded}
-              onChange={event => onUpdate({ skipAdded: event.target.checked })}
-              disabled={loading || !value.enabled}
-              className="h-4 w-4 accent-primary"
-            />
-            Skip Added
-          </label>
         </>
       }
       childrenBelow={
-        <div>
+        <div className="space-y-2">
+          <div className="flex flex-nowrap items-center gap-4 overflow-x-auto">
+            <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={value.skipAdded}
+                onChange={event => onUpdate({ skipAdded: event.target.checked })}
+                disabled={loading || !value.enabled}
+                className="h-4 w-4 accent-primary"
+                data-testid="checkbox-skip-added"
+              />
+              Skip Added
+            </label>
+            <label
+              className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"
+              title="Dismiss if the name or username contains letters outside A–Z. Symbols and emoji alone are ignored."
+            >
+              <input
+                type="checkbox"
+                checked={value.dismissNonEnglish}
+                onChange={event => onUpdate({ dismissNonEnglish: event.target.checked })}
+                disabled={loading || !value.enabled}
+                className="h-4 w-4 accent-primary"
+                data-testid="checkbox-dismiss-non-english"
+              />
+              Dismiss Non-English
+            </label>
+          </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
               <input

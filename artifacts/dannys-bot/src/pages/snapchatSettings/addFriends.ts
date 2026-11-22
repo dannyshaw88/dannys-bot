@@ -5,6 +5,7 @@ export type AddFriendsSettings = {
   delayMinSeconds: number;
   delayMaxSeconds: number;
   skipAdded: boolean;
+  dismissNonEnglish: boolean;
   avoidUsersContainingEnabled: boolean;
   avoidUsersContainingWords: string;
   avoidUsersContainingFileName: string;
@@ -19,6 +20,7 @@ export const addFriendsSettingsDefault: AddFriendsSettings = {
   delayMinSeconds: 1,
   delayMaxSeconds: 3,
   skipAdded: false,
+  dismissNonEnglish: false,
   avoidUsersContainingEnabled: false,
   avoidUsersContainingWords: "",
   avoidUsersContainingFileName: "",

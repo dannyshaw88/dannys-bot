@@ -6106,6 +6106,7 @@ const SNAPCHAT_COPY_OPTIONS = [
     { key: "amount", label: "Count", fields: ["min", "max"] },
     { key: "delay", label: "Delay between actions (s)", fields: ["delayMinSeconds", "delayMaxSeconds"] },
     { key: "skipAdded", label: "Skip Added", fields: ["skipAdded"] },
+    { key: "dismissNonEnglish", label: "Dismiss Non-English", fields: ["dismissNonEnglish"] },
     {
       key: "avoidUsersContaining",
       label: "Avoid Users Containing",

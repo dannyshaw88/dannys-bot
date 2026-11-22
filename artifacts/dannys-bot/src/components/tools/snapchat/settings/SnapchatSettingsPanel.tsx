@@ -38,6 +38,7 @@ export function SnapchatSettingsPanel({
   const addFriendsSettings = {
     ...snapchatToolSettingsDefaults.addFriends,
     ...settings.addFriends,
+    dismissNonEnglish: settings.addFriends?.dismissNonEnglish === true,
     avoidUsersContainingEnabled: settings.addFriends?.avoidUsersContainingEnabled === true,
     avoidUsersContainingWords: typeof settings.addFriends?.avoidUsersContainingWords === "string"
       ? settings.addFriends.avoidUsersContainingWords
