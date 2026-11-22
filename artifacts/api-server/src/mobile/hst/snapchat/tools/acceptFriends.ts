@@ -106,15 +106,6 @@ const hasAcceptFriendChatComposer = (nodes: UiNode[]) => nodes.some(node =>
 export async function runAcceptFriends(context: SnapchatContext): Promise<boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked"> {
   const requested = randomCount(context.tools.acceptFriends.min, context.tools.acceptFriends.max);
   if (!context.tools.acceptFriends.enabled || requested === 0) return false;
-  const getScrollPathPixels = () => {
-    const value = context.getAcceptFriendsScrollPath?.() ?? 125;
-    return Number.isFinite(value) &&
-      value >= 1 &&
-      value <= 999.9 &&
-      Math.abs(value * 10 - Math.round(value * 10)) < 1e-6
-      ? value
-      : 125;
-  };
   logAction(context, `Accept up to ${requested} friend requests`);
   if (!await openAddFriendsForAccepts(context)) {
     logAction(context, "0 friend requests accepted; could not open the request list");
@@ -228,7 +219,6 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
           stillPending.row,
           screenHeight,
           currentAcceptance.name,
-          getScrollPathPixels(),
         );
         if (!scrolled) {
           context.onLog("Accept Friends: could not scroll after that request; continuing with currently visible requests.");
@@ -253,7 +243,6 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
         currentAcceptance.row,
         screenHeight,
         currentAcceptance.name,
-        getScrollPathPixels(),
       );
       if (!scrolled && accepted < requested) {
         context.onLog("Accept Friends: could not scroll after accepting; continuing with currently visible requests.");

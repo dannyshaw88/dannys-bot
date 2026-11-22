@@ -9,42 +9,51 @@ export async function scrollAddFriendsListOneSlot(
   screenHeight: number,
   friendName: string,
   actionLabel = "adding",
-  scrollPathPixels = 125,
 ): Promise<boolean> {
   const findFriendsTitle = nodes.find(node =>
     shortResourceId(node) === "section-title" &&
     [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
   );
-  const rowHeight = addedRow.bounds[3] - addedRow.bounds[1];
+  const rowHeight = Math.round(addedRow.bounds[3] - addedRow.bounds[1]);
   if (!findFriendsTitle || rowHeight <= 0 || !Number.isFinite(screenHeight) || screenHeight <= 0) {
-    context.onLog(`Add Friends: could not calculate a safe short scroll after ${actionLabel} ${friendName}.`);
+    context.onLog(`Add Friends: could not calculate a safe full-row scroll after ${actionLabel} ${friendName}.`);
     return false;
   }
-  const scrollDistance = Number.isFinite(scrollPathPixels) &&
-    scrollPathPixels >= 1 &&
-    scrollPathPixels <= 999.9 &&
-    Math.abs(scrollPathPixels * 10 - Math.round(scrollPathPixels * 10)) < 1e-6
-    ? scrollPathPixels
-    : 125;
 
   const listTop = findFriendsTitle.bounds[3];
   const safeBottom = Math.floor(screenHeight * 0.82);
-  const x = center(addedRow).x;
+  const safeTop = Math.ceil(screenHeight * 0.12);
+  const targetCenterY = center(addedRow).y;
+  const liveRows = nodes.filter(node =>
+    shortResourceId(node) === "scu_search_friend_cell" &&
+    node.bounds[2] > node.bounds[0] &&
+    node.bounds[3] > node.bounds[1] &&
+    node.bounds[3] > listTop &&
+    node.bounds[1] < safeBottom,
+  );
+  const liveRow = liveRows
+    .map(row => ({ row, distance: Math.abs(center(row).y - targetCenterY) }))
+    .sort((a, b) => a.distance - b.distance)[0]?.row;
+  if (!liveRow) {
+    context.onLog(`Add Friends: no live Find Friends row is available to anchor a full-contact scroll after ${actionLabel} ${friendName}.`);
+    return false;
+  }
+  const liveRowHeight = liveRow.bounds[3] - liveRow.bounds[1];
+  const scrollDistance = rowHeight;
+  const x = center(liveRow).x;
   const startY = Math.min(
     safeBottom - 6,
-    Math.max(listTop + rowHeight + 8, addedRow.bounds[3] - 8),
+    Math.max(listTop + liveRowHeight + 8, liveRow.bounds[3] - 8),
   );
   const endY = startY - scrollDistance;
-  const dispatchedDistance = Math.round(startY) - Math.round(endY);
-  if (endY < listTop + 6) {
-    context.onLog(`Add Friends: not enough visible list space for a safe short scroll after ${actionLabel} ${friendName}.`);
+  if (endY < Math.max(listTop + 6, safeTop)) {
+    context.onLog(`Add Friends: not enough visible list space to scroll one full ${rowHeight}px contact after ${actionLabel} ${friendName}.`);
     return false;
   }
 
   context.onLog(
-    `Add Friends: requested ${scrollDistance} px on the Find Friends list after ${actionLabel} ${friendName} ` +
-    `but Android's whole-pixel coordinates move ${dispatchedDistance} px ` +
-    `(from ${x},${Math.round(startY)} to ${x},${Math.round(endY)}); staying above Android's bottom navigation.`,
+    `Add Friends: scrolling past ${friendName} by one full ${scrollDistance}px contact row, ` +
+    `using the live Find Friends node at (${x},${startY}) to (${x},${endY}).`,
   );
   await android.swipe(context.serial, x, startY, x, endY, 240, false);
   await context.sleep(250, "exact");

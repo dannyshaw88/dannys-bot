@@ -6111,14 +6111,12 @@ const SNAPCHAT_COPY_OPTIONS = [
       label: "Avoid Users Containing",
       fields: ["avoidUsersContainingEnabled", "avoidUsersContainingWords", "avoidUsersContainingFileName"],
     },
-    { key: "scrollPath", label: "Scroll Path (device-wide)", fields: [] },
   ] },
   { key: "acceptFriends", label: "Accept Friends", settings: [
     { key: "enabled", label: "Enabled", fields: ["enabled"] },
     { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
     { key: "amount", label: "Count", fields: ["min", "max"] },
     { key: "delay", label: "Delay between actions (s)", fields: ["delayMinSeconds", "delayMaxSeconds"] },
-    { key: "scrollPath", label: "Scroll Path (device-wide)", fields: [] },
   ] },
   { key: "viewStories", label: "View Spotlights", settings: [
     { key: "enabled", label: "Enabled", fields: ["enabled"] },
@@ -6152,14 +6150,8 @@ const snapchatCopySubKey = (toolKey: string, settingKey: string) => `${toolKey}.
 const SNAPCHAT_COPY_SUBSETTING_KEYS = SNAPCHAT_COPY_OPTIONS.flatMap(option =>
   option.settings.map(setting => snapchatCopySubKey(option.key, setting.key)),
 );
-const SNAPCHAT_COPY_DEVICE_SCROLL_PATH_KEYS = new Set([
-  snapchatCopySubKey("addFriends", "scrollPath"),
-  snapchatCopySubKey("acceptFriends", "scrollPath"),
-]);
 const SNAPCHAT_COPY_DEFAULT_SUBSETTING_KEYS = SNAPCHAT_COPY_SUBSETTING_KEYS.filter(
-  key =>
-    key !== snapchatCopySubKey("replyUnreadChats", "replyGoal") &&
-    !SNAPCHAT_COPY_DEVICE_SCROLL_PATH_KEYS.has(key),
+  key => key !== snapchatCopySubKey("replyUnreadChats", "replyGoal"),
 );
 
 function deviceLabel(p: CopyDevicePhone): string {
@@ -6275,9 +6267,6 @@ function CopySettingsDialog({
                     .filter(setting =>
                       includeReplyPrompt ||
                       snapchatCopySubKey(option.key, setting.key) !== snapchatCopySubKey("replyUnreadChats", "replyGoal"),
-                    )
-                    .filter(setting =>
-                      !SNAPCHAT_COPY_DEVICE_SCROLL_PATH_KEYS.has(snapchatCopySubKey(option.key, setting.key)),
                     )
                     .map(setting => snapchatCopySubKey(option.key, setting.key))
                 : [],
@@ -6516,7 +6505,6 @@ function CopySettingsDialog({
     setCopying(true);
     setResult(null);
     const partial: Record<string, unknown> = {};
-    const selectedDeviceScrollPathTools = new Set<"addFriends" | "acceptFriends">();
     const effectiveSelectedSubKeys = selectedSubKeys.size > 0
       ? selectedSubKeys
       : new Set(
@@ -6552,13 +6540,7 @@ function CopySettingsDialog({
           continue;
         }
 
-        if (option.key === "addFriends" || option.key === "acceptFriends") {
-          if (selectedSettings.some(setting => setting.key === "scrollPath")) {
-            selectedDeviceScrollPathTools.add(option.key);
-          }
-        }
-        const slotSettings = selectedSettings.filter(setting => setting.key !== "scrollPath");
-        if (slotSettings.length === 0) continue;
+        const slotSettings = selectedSettings;
         const sourceSettings = (settings.snapchatTools as unknown as Record<string, Record<string, unknown>>)[option.key] ?? {};
         const selectedToolSettings: Record<string, unknown> = {};
         for (const setting of slotSettings) {
@@ -6580,44 +6562,11 @@ function CopySettingsDialog({
         }
       }
     }
-    const sourceScrollPaths: Partial<Record<"addFriends" | "acceptFriends", number>> = {};
-    if (selectedDeviceScrollPathTools.size > 0) {
-      if (!phone?.serial) {
-        setResult("Could not read Scroll Path from the source device.");
-        setCopying(false);
-        return;
-      }
-      for (const toolKey of selectedDeviceScrollPathTools) {
-        const endpoint = toolKey === "addFriends" ? "add-friends-scroll-path" : "accept-friends-scroll-path";
-        try {
-          const response = await fetch(
-            `/api/mobile/devices/${encodeURIComponent(phone.serial)}/${endpoint}`,
-            { cache: "no-store" },
-          );
-          if (!response.ok) throw new Error("Source Scroll Path request failed.");
-          const payload = await response.json() as { scrollPath?: unknown };
-          if (
-            typeof payload.scrollPath !== "number" ||
-            !Number.isFinite(payload.scrollPath) ||
-            payload.scrollPath < 1 ||
-            payload.scrollPath > 999.9 ||
-            Math.abs(payload.scrollPath * 10 - Math.round(payload.scrollPath * 10)) >= 1e-6
-          ) throw new Error("Source Scroll Path is invalid.");
-          sourceScrollPaths[toolKey] = payload.scrollPath;
-        } catch {
-          const label = toolKey === "addFriends" ? "Add Friends" : "Accept Friends";
-          setResult(`Could not read the source ${label} Scroll Path; no settings were copied.`);
-          setCopying(false);
-          return;
-        }
-      }
-    }
-    if (Object.keys(partial).length === 0 && selectedDeviceScrollPathTools.size === 0) {
+    if (Object.keys(partial).length === 0) {
       setCopying(false);
       return;
     }
     let slotFailures = 0;
-    let deviceFailures = 0;
     const localSucceeded: number[] = [];
     if (Object.keys(partial).length > 0) {
       for (const target of effectiveTargets) {
@@ -6633,60 +6582,13 @@ function CopySettingsDialog({
         } catch { slotFailures++; }
       }
     }
-    if (selectedDeviceScrollPathTools.size > 0) {
-      const devicePathCopies = [
-        ...(selectedDeviceScrollPathTools.has("addFriends")
-          ? [{
-              toolKey: "addFriends" as const,
-              endpoint: "add-friends-scroll-path",
-              eventName: "device-add-friends-scroll-path-change",
-              value: sourceScrollPaths.addFriends!,
-            }]
-          : []),
-        ...(selectedDeviceScrollPathTools.has("acceptFriends")
-          ? [{
-              toolKey: "acceptFriends" as const,
-              endpoint: "accept-friends-scroll-path",
-              eventName: "device-accept-friends-scroll-path-change",
-              value: sourceScrollPaths.acceptFriends!,
-            }]
-          : []),
-      ];
-      const targetDeviceSerials = [...new Set(effectiveTargets.map(target => target.serial))];
-      for (const serial of targetDeviceSerials) {
-        let deviceFailed = false;
-        for (const setting of devicePathCopies) {
-          try {
-            const response = await fetch(
-              `/api/mobile/devices/${encodeURIComponent(serial)}/${setting.endpoint}`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ scrollPath: setting.value }),
-              },
-            );
-            if (!response.ok) {
-              deviceFailed = true;
-              continue;
-            }
-            window.dispatchEvent(new CustomEvent(setting.eventName, {
-              detail: { serial, value: String(setting.value), persisted: true },
-            }));
-          } catch {
-            deviceFailed = true;
-          }
-        }
-        if (deviceFailed) deviceFailures++;
-      }
-    }
     if (localSucceeded.length > 0) onCopied?.(localSucceeded);
-    if (slotFailures === 0 && deviceFailures === 0) {
+    if (slotFailures === 0) {
       setResult("ok");
       setTimeout(() => { onClose(); }, 500);
     } else {
       const failures = [
         slotFailures > 0 ? `${slotFailures} slot${slotFailures !== 1 ? "s" : ""} failed` : "",
-        deviceFailures > 0 ? `${deviceFailures} device Scroll Path cop${deviceFailures !== 1 ? "ies" : "y"} failed` : "",
       ].filter(Boolean);
       setResult(failures.join("; "));
       setCopying(false);
@@ -6817,7 +6719,7 @@ function CopySettingsDialog({
                 </div>
                 <div className="overflow-y-auto flex-1 min-h-0 space-y-1 px-3 py-2">
                   <p className="text-[11px] leading-snug text-muted-foreground">
-                    Copies only to Snapchat account slots. Selected Scroll Paths apply to the entire target device.
+                    Copies only to Snapchat account slots.
                   </p>
                   {SNAPCHAT_COPY_OPTIONS.map(option => {
                     const selectedCount = option.settings.filter(setting =>

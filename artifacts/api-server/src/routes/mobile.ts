@@ -817,19 +817,7 @@ type DeviceSettings = {
   googlePlayPassword?: string;
   selectedSimSlot?: number;
   simPhoneNumbers?: Record<string, string>;
-  snapchatAddFriendsScrollPath?: number;
-  snapchatAcceptFriendsScrollPath?: number;
 };
-const isValidDeviceScrollPath = (value: unknown): value is number =>
-  typeof value === "number" &&
-  Number.isFinite(value) &&
-  value >= 1 &&
-  value <= 999.9 &&
-  Math.abs(value * 10 - Math.round(value * 10)) < 1e-6;
-const deviceScrollPathSchema = z.number()
-  .min(1)
-  .max(999.9)
-  .refine(value => isValidDeviceScrollPath(value), "Scroll Path must use at most one decimal place.");
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up" | "custom";
   appCloseGestureMacro?: {
@@ -5361,7 +5349,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     }
   });
 
-  // ── Device settings (Google Play credentials, SIM selection, and per-device tool paths) ──
+  // ── Device settings (Google Play credentials and SIM selection) ──
   app.get("/api/mobile/devices/:serial/device-settings", (req: Request, res: Response) => {
     const cfg = loadInstanceConfigs();
     res.json(cfg[p(req, "serial")]?.deviceSettings ?? {});
@@ -5374,8 +5362,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          googlePlayPassword: z.string().optional(),
          selectedSimSlot: z.number().int().optional(),
          simPhoneNumbers: z.record(z.string(), z.string()).optional(),
-          snapchatAddFriendsScrollPath: deviceScrollPathSchema.optional(),
-          snapchatAcceptFriendsScrollPath: deviceScrollPathSchema.optional(),
        }).parse(req.body) as DeviceSettings;
       const cfg = loadInstanceConfigs();
        cfg[serial] = {
@@ -5389,63 +5375,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       res.json({ ok: true });
     } catch (e: any) { res.status(400).json({ error: e?.message }); }
   });
-  app.get("/api/mobile/devices/:serial/add-friends-scroll-path", (req: Request, res: Response) => {
-    const serial = p(req, "serial");
-    const saved = loadInstanceConfigs()[serial]?.deviceSettings?.snapchatAddFriendsScrollPath;
-    const scrollPath = isValidDeviceScrollPath(saved)
-      ? saved
-      : 125;
-    res.json({ scrollPath });
-  });
-  app.post("/api/mobile/devices/:serial/add-friends-scroll-path", (req: Request, res: Response) => {
-    try {
-      const serial = p(req, "serial");
-      const { scrollPath } = z.object({
-        scrollPath: deviceScrollPathSchema,
-      }).parse(req.body);
-      const cfg = loadInstanceConfigs();
-      cfg[serial] = {
-        ...cfg[serial],
-        deviceSettings: {
-          ...cfg[serial]?.deviceSettings,
-          snapchatAddFriendsScrollPath: scrollPath,
-        },
-      };
-      saveInstanceConfigs(cfg);
-      res.json({ ok: true, scrollPath });
-    } catch (e: any) {
-      res.status(400).json({ ok: false, error: e?.message ?? "Could not save Add Friends scroll path" });
-    }
-  });
-  app.get("/api/mobile/devices/:serial/accept-friends-scroll-path", (req: Request, res: Response) => {
-    const serial = p(req, "serial");
-    const saved = loadInstanceConfigs()[serial]?.deviceSettings?.snapchatAcceptFriendsScrollPath;
-    const scrollPath = isValidDeviceScrollPath(saved)
-      ? saved
-      : 125;
-    res.json({ scrollPath });
-  });
-  app.post("/api/mobile/devices/:serial/accept-friends-scroll-path", (req: Request, res: Response) => {
-    try {
-      const serial = p(req, "serial");
-      const { scrollPath } = z.object({
-        scrollPath: deviceScrollPathSchema,
-      }).parse(req.body);
-      const cfg = loadInstanceConfigs();
-      cfg[serial] = {
-        ...cfg[serial],
-        deviceSettings: {
-          ...cfg[serial]?.deviceSettings,
-          snapchatAcceptFriendsScrollPath: scrollPath,
-        },
-      };
-      saveInstanceConfigs(cfg);
-      res.json({ ok: true, scrollPath });
-    } catch (e: any) {
-      res.status(400).json({ ok: false, error: e?.message ?? "Could not save Accept Friends scroll path" });
-    }
-  });
-
   // ── Device spec — auto-detect hardware & software via adb getprop ──────────
   app.get("/api/mobile/devices/:serial/device-spec", async (req: Request, res: Response) => {
     try {
@@ -7997,26 +7926,6 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               pickLocalFolderImage,
               pickLocalFolderVideo,
               tools: snapchatTools,
-              getAddFriendsScrollPath: () => {
-                try {
-                  const saved = loadInstanceConfigs()[serial]?.deviceSettings?.snapchatAddFriendsScrollPath;
-                  return isValidDeviceScrollPath(saved)
-                    ? saved
-                    : 125;
-                } catch {
-                  return 125;
-                }
-              },
-              getAcceptFriendsScrollPath: () => {
-                try {
-                  const saved = loadInstanceConfigs()[serial]?.deviceSettings?.snapchatAcceptFriendsScrollPath;
-                  return isValidDeviceScrollPath(saved)
-                    ? saved
-                    : 125;
-                } catch {
-                  return 125;
-                }
-              },
               onLog: tLog,
               getFriendRequestCooldownUntil: async () => {
                 const settings = await storage.getGlobalSettings();

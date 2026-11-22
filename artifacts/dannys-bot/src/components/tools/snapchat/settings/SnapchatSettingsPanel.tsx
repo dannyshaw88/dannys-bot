@@ -82,13 +82,11 @@ export function SnapchatSettingsPanel({
         key={`${phoneSerial ?? ""}:${slotIdx ?? 0}`}
         value={addFriendsSettings}
         loading={loading}
-        phoneSerial={phoneSerial}
         onUpdate={patch => onToolUpdate("addFriends", patch as Record<string, unknown>)}
       />
       <AcceptFriendsSetting
         value={settings.acceptFriends}
         loading={loading}
-        phoneSerial={phoneSerial}
         onUpdate={patch => onToolUpdate("acceptFriends", patch as Record<string, unknown>)}
       />
       <ViewSpotlightsSetting

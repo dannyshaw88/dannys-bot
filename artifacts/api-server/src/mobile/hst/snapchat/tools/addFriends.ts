@@ -210,15 +210,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   const avoidWordsText = typeof context.tools.addFriends.avoidUsersContainingWords === "string"
     ? context.tools.addFriends.avoidUsersContainingWords
     : "";
-  const getScrollPathPixels = () => {
-    const value = context.getAddFriendsScrollPath?.() ?? 125;
-    return Number.isFinite(value) &&
-      value >= 1 &&
-      value <= 999.9 &&
-      Math.abs(value * 10 - Math.round(value * 10)) < 1e-6
-      ? value
-      : 125;
-  };
   const avoidTerms = avoidUsersContaining
     ? avoidWordsText
       .split(",")
@@ -255,7 +246,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       screenHeight,
       friendName,
       "skipping a recently added name",
-      getScrollPathPixels(),
     )) {
       context.onLog("Add Friends: could not scroll past that name; continuing with currently visible candidates.");
     }
@@ -338,7 +328,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         screenHeight,
         friendName,
         "skipping an avoided suggestion",
-        getScrollPathPixels(),
       )) {
         context.onLog("Add Friends: could not scroll past the avoided suggestion; continuing with currently visible candidates.");
       }
@@ -516,7 +505,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       screenHeight,
       friendName,
       "adding",
-      getScrollPathPixels(),
     )) {
       context.onLog("Add Friends: could not scroll after this Add; continuing with currently visible candidates.");
     }

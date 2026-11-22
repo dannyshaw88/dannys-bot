@@ -8,14 +8,13 @@ export async function scrollAcceptFriendsListOneSlot(
   acceptedRow: UiNode,
   screenHeight: number,
   friendName: string,
-  scrollPathPixels = 125,
 ): Promise<boolean> {
   const addedMeTitle = nodes.find(node =>
     shortResourceId(node) === "section-title" &&
     [node.text, node.desc].some(value => /^added me$/i.test(value.trim())),
   );
   if (!addedMeTitle || !Number.isFinite(screenHeight) || screenHeight <= 0) {
-    context.onLog(`Accept Friends: could not calculate a safe short scroll after accepting ${friendName}.`);
+    context.onLog(`Accept Friends: could not calculate a safe full-row scroll after accepting ${friendName}.`);
     return false;
   }
 
@@ -28,42 +27,45 @@ export async function scrollAcceptFriendsListOneSlot(
     [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
   );
   const addedMeNodes = nodes.slice(addedMeStart, findFriendsStart < 0 ? nodes.length : findFriendsStart);
-  const liveRow = addedMeNodes.find(node =>
+  const liveRows = addedMeNodes.filter(node =>
     shortResourceId(node) === "scu_search_friend_cell" &&
     node.bounds[2] > node.bounds[0] &&
     node.bounds[3] > node.bounds[1] &&
     node.bounds[3] > listTop &&
     node.bounds[1] < safeBottom,
   );
-  const gestureRow = liveRow ?? acceptedRow;
-  const rowHeight = gestureRow.bounds[3] - gestureRow.bounds[1];
+  const rowHeight = Math.round(acceptedRow.bounds[3] - acceptedRow.bounds[1]);
   if (rowHeight <= 0) {
-    context.onLog(`Accept Friends: could not calculate a safe short scroll after accepting ${friendName}.`);
+    context.onLog(`Accept Friends: could not calculate a safe full-row scroll after accepting ${friendName}.`);
     return false;
   }
 
-  const scrollDistance = Number.isFinite(scrollPathPixels) &&
-    scrollPathPixels >= 1 &&
-    scrollPathPixels <= 999.9 &&
-    Math.abs(scrollPathPixels * 10 - Math.round(scrollPathPixels * 10)) < 1e-6
-    ? scrollPathPixels
-    : 125;
+  const targetCenterY = center(acceptedRow).y;
+  const gestureRow = liveRows
+    .map(row => ({ row, distance: Math.abs(center(row).y - targetCenterY) }))
+    .sort((a, b) => a.distance - b.distance)[0]?.row;
+  if (!gestureRow) {
+    context.onLog(`Accept Friends: no live Added Me row remains after ${friendName}; no extra scroll is needed.`);
+    return true;
+  }
+
+  const liveRowHeight = gestureRow.bounds[3] - gestureRow.bounds[1];
+  const scrollDistance = rowHeight;
+  const safeTop = Math.ceil(screenHeight * 0.12);
   const x = center(gestureRow).x;
   const startY = Math.min(
     safeBottom - 6,
-    Math.max(listTop + rowHeight + 8, gestureRow.bounds[3] - 8),
+    Math.max(listTop + liveRowHeight + 8, gestureRow.bounds[3] - 8),
   );
   const endY = startY - scrollDistance;
-  const dispatchedDistance = Math.round(startY) - Math.round(endY);
-  if (endY < listTop + 6) {
-    context.onLog(`Accept Friends: not enough visible Added Me list space for a safe short scroll after ${friendName}.`);
+  if (endY < Math.max(listTop + 6, safeTop)) {
+    context.onLog(`Accept Friends: not enough visible list space to scroll one full ${rowHeight}px contact after ${friendName}.`);
     return false;
   }
 
   context.onLog(
-    `Accept Friends: requested ${scrollDistance} px on the Added Me list after an acceptance attempt for ${friendName} ` +
-    `but Android's whole-pixel coordinates move ${dispatchedDistance} px ` +
-    `(from ${x},${Math.round(startY)} to ${x},${Math.round(endY)}); staying above Android's bottom navigation.`,
+    `Accept Friends: scrolling past ${friendName} by one full ${scrollDistance}px contact row, ` +
+    `using the live Added Me node at (${x},${startY}) to (${x},${endY}).`,
   );
   await android.swipe(context.serial, x, startY, x, endY, 240, false);
   await context.sleep(250, "exact");
