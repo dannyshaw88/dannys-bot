@@ -194,6 +194,23 @@ function labelConversationForLuna(
   };
 }
 
+function formatKeyboardFailureDiagnostic(
+  failure: Awaited<ReturnType<typeof android.typeViaSavedCalibrationMap>>["failure"],
+): string {
+  if (!failure) return "keyboard layer transition failed but the typing engine returned no failure details";
+  const details = [
+    `phase=${failure.phase}`,
+    failure.fromLayer ? `from=${failure.fromLayer}` : "",
+    failure.targetLayer ? `target=${failure.targetLayer}` : "",
+    failure.transitionStep ? `step=${failure.transitionStep}` : "",
+    `control=${failure.control}`,
+    `cause=${failure.code}`,
+    failure.x !== undefined && failure.y !== undefined ? `point=(${failure.x},${failure.y})` : "",
+    failure.error ? `error=${failure.error}` : "",
+  ].filter(Boolean);
+  return `keyboard layer transition failed (${details.join("; ")})`;
+}
+
 async function tapUnreadChatNameArea(
   context: SnapchatContext,
   row: ReturnType<typeof unreadChatRows>[number],
@@ -923,12 +940,11 @@ async function runReplyUnreadChatsAttempt(
         break;
       }
       if (typed.fatal) {
+        const diagnostic = formatKeyboardFailureDiagnostic(typed.failure);
         recordNotReplied(
           row.displayName,
           "typing-reply",
-          typed.missing.includes("abc")
-            ? "the device's ABC key is not calibrated; the partial draft was not sent."
-            : "the calibrated keyboard could not return to letters; the partial draft was not sent.",
+          `the calibrated keyboard failed; ${diagnostic}; the partial draft was not sent.`,
           transcript,
         );
         await exitSnapchatConversation(context).catch(() => false);

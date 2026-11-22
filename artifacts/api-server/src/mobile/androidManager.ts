@@ -15527,7 +15527,7 @@ export async function typeViaSavedCalibrationMap(
   typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
   options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean; measureTapTimings?: boolean },
-): Promise<{ ok: boolean; available: boolean; missing: string[]; fatal?: boolean }> {
+): Promise<{ ok: boolean; available: boolean; missing: string[]; fatal?: boolean; failure?: CalibratedKeyboardFailure }> {
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
   const uniqueChars = [...new Set([...text])].join("");
@@ -15594,13 +15594,23 @@ export async function typeViaSavedCalibrationMap(
   if (needsSymbols || needsMoreSymbols) required.add("abc");
   const missing = [...required].filter(key => !hasPoint(key));
   if (missing.length) {
-    if (!options?.compactLogs) onLog?.(
+    const missingLayerControl = missing.find(key => ["symbols", "moreSymbols", "abc"].includes(key));
+    if (!options?.compactLogs || missingLayerControl) onLog?.(
       `[cal-keyboard] calibration preflight missing: ${missing.join(", ")} ` +
       `(serial=${serial}, mappedKeys=${Object.keys(map).length}` +
       `${options?.skipMissingKeys ? "; unmapped characters will be skipped" : ""})`,
     );
-    if (options?.skipMissingKeys && missing.some(key => ["symbols", "moreSymbols", "abc"].includes(key))) {
-      return { ok: false, available: true, missing, fatal: true };
+    if (options?.skipMissingKeys && missingLayerControl) {
+      const failure: CalibratedKeyboardFailure = {
+        code: "missing-calibration-coordinate",
+        control: missingLayerControl,
+        phase: "preflight",
+      };
+      onLog?.(
+        `[${options?.debugLabel ?? "cal-keyboard"}] keyboard preflight failed ` +
+        `control=${failure.control} cause=${failure.code}; no key taps were sent.`,
+      );
+      return { ok: false, available: true, missing, fatal: true, failure };
     }
     if (!options?.skipMissingKeys) return { ok: false, available: true, missing };
   }
@@ -16190,6 +16200,19 @@ export async function captureOneTap(
  * Each character is sent as `adb shell input tap x y` — a real OS touch event
  * processed by Android exactly as if a finger pressed the key.
  */
+type CalibratedKeyboardLayer = "letters" | "symbols" | "moreSymbols";
+type CalibratedKeyboardFailure = {
+  code: "missing-calibration-coordinate" | "adb-input-failed" | "unknown-tap-failure";
+  control: string;
+  phase: "preflight" | "layer-transition";
+  fromLayer?: CalibratedKeyboardLayer;
+  targetLayer?: CalibratedKeyboardLayer;
+  transitionStep?: string;
+  x?: number;
+  y?: number;
+  error?: string;
+};
+
 export async function typeViaCalibrationMap(
   serial: string,
   text: string,
@@ -16197,7 +16220,12 @@ export async function typeViaCalibrationMap(
   onLog?: (msg: string) => void,
   typingProfile: TypingSpeedProfile,
   options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean; measureTapTimings?: boolean },
-): Promise<{ ok: boolean; missing: string[]; fatal?: boolean }> {
+): Promise<{
+  ok: boolean;
+  missing: string[];
+  fatal?: boolean;
+  failure?: CalibratedKeyboardFailure;
+}> {
   if (!typingProfile ||
       !Number.isFinite(typingProfile.minMs) ||
       !Number.isFinite(typingProfile.maxMs) ||
@@ -16220,6 +16248,8 @@ export async function typeViaCalibrationMap(
   _calKeyboardLayer.set(serial, layer);
   const display = getScreenSize(serial);
   const pendingTaps: CalibratedTapBatchItem[] = [];
+  let lastTapFailure: Omit<CalibratedKeyboardFailure, "phase" | "fromLayer" | "targetLayer" | "transitionStep"> | undefined;
+  let fatalFailure: CalibratedKeyboardFailure | undefined;
   const flushPendingTaps = async () => {
     if (pendingTaps.length === 0) return;
     const batch = pendingTaps.splice(0, pendingTaps.length);
@@ -16260,6 +16290,7 @@ export async function typeViaCalibrationMap(
     _dwellOverrideMs?: number,
     allowDestructive = false,
   ): Promise<boolean> => {
+    lastTapFailure = undefined;
     if (/(?:backspace|delete|forward[ -]?delete)/i.test(label) ||
         /(?:backspace|delete|forward[ -]?delete)/i.test(description)) {
       if (!allowDestructive) {
@@ -16287,7 +16318,16 @@ export async function typeViaCalibrationMap(
       .map(alias => map[alias])
       .find(candidate => candidate && Number.isFinite(candidate.x) && Number.isFinite(candidate.y));
     if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
-      if (!options?.compactLogs) onLog?.(`[cal-keyboard] '${description}' is not in calibration map`);
+      lastTapFailure = {
+        code: "missing-calibration-coordinate",
+        control: label,
+      };
+      if (!options?.compactLogs || ["abc", "symbols", "moreSymbols"].includes(label)) {
+        onLog?.(
+          `[${options?.debugLabel ?? "cal-keyboard"}] calibrated control missing ` +
+          `control=${label} layer=${layer} cause=missing-calibration-coordinate`,
+        );
+      }
       return false;
     }
     if (!options?.compactLogs && options?.debugLabel) {
@@ -16328,7 +16368,19 @@ export async function typeViaCalibrationMap(
       );
       options?.onProgress?.();
     } catch (e: any) {
-      onLog?.(`[cal-keyboard] tap failed for ${description} at (${pos.x},${pos.y}) — ${e?.message}`);
+      const error = String(e?.message ?? e ?? "unknown error").replace(/\s+/g, " ").slice(0, 300);
+      lastTapFailure = {
+        code: "adb-input-failed",
+        control: label,
+        x: dispatched.x,
+        y: dispatched.y,
+        error,
+      };
+      onLog?.(
+        `[${options?.debugLabel ?? "cal-keyboard"}] calibrated control tap failed ` +
+        `control=${label} layer=${layer} point=(${dispatched.x},${dispatched.y}) ` +
+        `cause=adb-input-failed error=${JSON.stringify(error)}`,
+      );
       return false;
     }
     if (!options?.compactLogs) {
@@ -16428,7 +16480,34 @@ export async function typeViaCalibrationMap(
     }
   };
 
-  const switchLayer = async (target: "letters" | "symbols" | "moreSymbols"): Promise<boolean> => {
+  const failLayerSwitch = (
+    targetLayer: CalibratedKeyboardLayer,
+    transitionStep: string,
+    expectedControl: string,
+  ): false => {
+    const tapFailure = lastTapFailure ?? {
+      code: "unknown-tap-failure" as const,
+      control: expectedControl,
+    };
+    const currentFailure: CalibratedKeyboardFailure = {
+      ...tapFailure,
+      phase: "layer-transition",
+      fromLayer: layer,
+      targetLayer,
+      transitionStep,
+    };
+    fatalFailure ??= currentFailure;
+    onLog?.(
+      `[${options?.debugLabel ?? "cal-keyboard"}] fatal keyboard layer transition ` +
+      `from=${layer} target=${targetLayer} step=${transitionStep} control=${currentFailure.control} ` +
+      `cause=${currentFailure.code}` +
+      (currentFailure.x !== undefined && currentFailure.y !== undefined ? ` point=(${currentFailure.x},${currentFailure.y})` : "") +
+      (currentFailure.error ? ` error=${JSON.stringify(currentFailure.error)}` : ""),
+    );
+    return false;
+  };
+
+  const switchLayer = async (target: CalibratedKeyboardLayer): Promise<boolean> => {
     if (layer === target) return true;
     // The extended symbols screen is reached through ?123 first, and the
     // regular symbols screen is reached through ABC when returning from it.
@@ -16439,12 +16518,13 @@ export async function typeViaCalibrationMap(
       // A second ABC tap is required to reach the letters page.
       if (layer === "moreSymbols") {
         const returnedToSymbols = await tapMapped("abc", "ABC (back to symbols)");
-        if (!returnedToSymbols) return false;
+        if (!returnedToSymbols) return failLayerSwitch(target, "moreSymbols-to-symbols", "abc");
         await _sleep(120 + Math.round(Math.random() * 380));
         layer = "symbols";
         _calKeyboardLayer.set(serial, layer);
       }
       const switched = await tapMapped("abc", "ABC");
+      if (!switched) return failLayerSwitch(target, `${layer}-to-letters`, "abc");
       if (switched) {
         await _sleep(120 + Math.round(Math.random() * 380));
         layer = "letters";
@@ -16455,11 +16535,12 @@ export async function typeViaCalibrationMap(
     if (target === "symbols") {
       if (layer === "moreSymbols") {
         const returnedToLetters = await tapMapped("abc", "ABC");
-        if (!returnedToLetters) return false;
+        if (!returnedToLetters) return failLayerSwitch(target, "moreSymbols-to-letters", "abc");
         layer = "letters";
         _calKeyboardLayer.set(serial, layer);
       }
       const switched = await tapMapped("symbols", "?123");
+      if (!switched) return failLayerSwitch(target, `${layer}-to-symbols`, "symbols");
       if (switched) {
         await _sleep(120 + Math.round(Math.random() * 380));
         layer = "symbols";
@@ -16469,11 +16550,12 @@ export async function typeViaCalibrationMap(
     }
     if (layer === "letters") {
       const switchedToSymbols = await tapMapped("symbols", "?123");
-      if (!switchedToSymbols) return false;
+      if (!switchedToSymbols) return failLayerSwitch(target, "letters-to-symbols", "symbols");
       layer = "symbols";
       _calKeyboardLayer.set(serial, layer);
     }
     const switched = await tapMapped("moreSymbols", "more symbols");
+    if (!switched) return failLayerSwitch(target, "symbols-to-moreSymbols", "moreSymbols");
     if (switched) {
       await _sleep(120 + Math.round(Math.random() * 380));
       layer = "moreSymbols";
@@ -16591,7 +16673,12 @@ export async function typeViaCalibrationMap(
     `ime=${activeIme || "unknown"} finalLayer=${layer} ok=${missing.length === 0} ` +
     `missing=${missing.join(",") || "none"}`,
   );
-  return { ok: missing.length === 0 && !fatal, missing, ...(fatal ? { fatal: true } : {}) };
+  return {
+    ok: missing.length === 0 && !fatal,
+    missing,
+    ...(fatal ? { fatal: true } : {}),
+    ...(fatalFailure ? { failure: fatalFailure } : {}),
+  };
 }
 
 /**
