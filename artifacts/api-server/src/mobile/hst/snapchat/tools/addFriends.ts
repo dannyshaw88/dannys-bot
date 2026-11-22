@@ -162,11 +162,29 @@ function releaseFriendReservation(reservationKey: string): void {
   pendingNameReservations.delete(reservationKey);
 }
 
-function normalizeAvoidMatch(value: string): string {
+function normalizeAvoidText(value: string): string {
   return value
     .normalize("NFKC")
     .replace(/[\u0000-\u001f\u007f\u200b-\u200d\u2060\ufeff\ufe0e\ufe0f]/g, "")
     .toLocaleLowerCase("en-US");
+}
+
+function normalizeAvoidWords(value: string): string[] {
+  return normalizeAvoidText(value)
+    .split(/\s+/)
+    .map(word => word.replace(/[^\p{L}\p{N}]/gu, ""))
+    .filter(Boolean);
+}
+
+function normalizeAvoidSymbols(value: string): string {
+  return normalizeAvoidText(value).replace(/[\p{L}\p{N}\s]/gu, "");
+}
+
+function containsExactAvoidEntry(words: string[], entry: string[]): boolean {
+  if (!entry.length || entry.length > words.length) return false;
+  return words.some((_, start) =>
+    entry.every((word, offset) => words[start + offset] === word),
+  );
 }
 
 function recordAddedFriendName(displayName: string): void {
@@ -195,8 +213,12 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   const avoidTerms = avoidUsersContaining
     ? avoidWordsText
       .split(",")
-      .map(term => normalizeAvoidMatch(term.trim()))
-      .filter(Boolean)
+      .map(label => ({
+        label: label.trim(),
+        words: normalizeAvoidWords(label),
+        symbols: normalizeAvoidSymbols(label),
+      }))
+      .filter(term => term.words.length > 0 || term.symbols.length > 0)
     : [];
   if (avoidUsersContaining && avoidTerms.length === 0) {
     context.onLog("Add Friends: Avoid Users Containing is enabled, but no comma-separated words are loaded.");
@@ -254,17 +276,29 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
           node.bounds[1] >= row.bounds[1] &&
           node.bounds[2] <= row.bounds[2] &&
           node.bounds[3] <= row.bounds[3] &&
-          !["scu_search_action_button", "friend-cell-dismiss"].includes(shortResourceId(node)),
+          (
+            shortResourceId(node) === "result-title" ||
+            /(?:^|[_-])(?:username|user-name|display-name|display_name)(?:$|[_-])/i.test(shortResourceId(node))
+          ),
         )
         .flatMap(node => [node.text, node.desc])
-        .filter(value => value.trim())
-        .map(normalizeAvoidMatch);
+        .filter(value => value.trim());
       return friendName ? [{ candidate, friendName, friendKey, row, identityText }] : [];
     });
     return { addButtons, candidates };
   };
-  const getAvoidedTerm = (selectedFriend: { identityText: string[] }): string | undefined =>
-    avoidTerms.find(term => selectedFriend.identityText.some(value => value.includes(term)));
+  const getAvoidedTerm = (selectedFriend: { identityText: string[] }): string | undefined => {
+    const match = avoidTerms.find(term =>
+      selectedFriend.identityText.some(value => {
+        const wordMatch = term.words.length === 0 ||
+          containsExactAvoidEntry(normalizeAvoidWords(value), term.words);
+        const symbolMatch = term.symbols.length === 0 ||
+          normalizeAvoidText(value).includes(term.symbols);
+        return wordMatch && symbolMatch;
+      }),
+    );
+    return match?.label;
+  };
   const dismissAvoidedSuggestion = async (
     state: { nodes: UiNode[] },
     selectedFriend: { friendName: string; friendKey: string; row: UiNode; candidate: UiNode },
