@@ -4504,6 +4504,49 @@ function NoPhonesPanel({ rawOutput, restarting = false }: { rawOutput?: string |
 
 // AutomationSettingsData and AUTOMATION_DEFAULTS are imported from mobileShared
 
+function describeChangedSettingFields(before: unknown, after: unknown): string[] {
+  const changed: string[] = [];
+  const visit = (left: any, right: any, prefix = "", depth = 0) => {
+    if (Object.is(left, right) || changed.length >= 60) return;
+    const leftIsObject = left !== null && typeof left === "object" && !Array.isArray(left);
+    const rightIsObject = right !== null && typeof right === "object" && !Array.isArray(right);
+    if (!leftIsObject || !rightIsObject || depth >= 5) {
+      changed.push(prefix || "$");
+      return;
+    }
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+    if (keys.size === 0 && JSON.stringify(left) !== JSON.stringify(right)) {
+      changed.push(prefix || "$");
+      return;
+    }
+    for (const key of keys) {
+      if (changed.length >= 60) break;
+      visit(left[key], right[key], prefix ? `${prefix}.${key}` : key, depth + 1);
+    }
+  };
+  visit(before, after);
+  if (changed.length === 60) changed.push("…");
+  return changed;
+}
+
+function snapchatToolSwitchState(value: unknown): Record<string, boolean | null> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, any>).map(([key, tool]) => [
+      key,
+      typeof tool?.enabled === "boolean" ? tool.enabled : null,
+    ]),
+  );
+}
+
+function parseSettingsSnapshot(snapshot: string): unknown {
+  try {
+    return JSON.parse(snapshot);
+  } catch {
+    return {};
+  }
+}
+
 // Three-character value area, shared by every numeric field in this panel.
 const NUM_INPUT_CLASS = "box-content w-[3ch] text-center px-1";
 const CYCLE_INTERVAL_INPUT_CLASS = "box-content w-[3ch] !h-[26px] text-center px-1";
@@ -4606,6 +4649,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const lastSavedSnapchatToolsRef = useRef<string>(JSON.stringify(AUTOMATION_DEFAULTS.snapchatTools));
   const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const settingsSaveSequenceRef = useRef(new Map<string, number>());
+  const settingsDebugRequestCounterRef = useRef(0);
   const markOnlyEnabledAsSaved = (enabled: boolean) => {
     try {
       const saved = JSON.parse(lastSavedRef.current);
@@ -4903,6 +4947,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const snapchatToolsDirtyAtHydrationStart =
       !identityChanged &&
       JSON.stringify(settingsRef.current.snapchatTools) !== lastSavedSnapchatToolsRef.current;
+    writeUiSpeedLog("automation-settings-hydration-start", {
+      serial,
+      slotIdx: slotIdx ?? 0,
+      slotIdPresent: Boolean(slotId),
+      identityChanged,
+      active: isActive,
+      localSettingsDirty: JSON.stringify(settingsRef.current) !== lastSavedRef.current,
+      localSnapchatToolsDirty: snapchatToolsDirtyAtHydrationStart,
+      localToolSwitches: snapchatToolSwitchState(settingsRef.current.snapchatTools),
+    });
     if (identityChanged) {
       hydratedRef.current = false;
       setHydrated(false);
@@ -4977,6 +5031,19 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // started a new hydration request.
       const preserveLocalSettings =
         settingsWereEditedDuringFetch || snapchatToolsDirtyAtHydrationStart;
+      const displayedSettings = preserveLocalSettings ? settingsRef.current : merged;
+      writeUiSpeedLog("automation-settings-hydration-applied", {
+        serial,
+        slotIdx: slotIdx ?? 0,
+        slotIdPresent: Boolean(slotId),
+        preserveLocalSettings,
+        settingsEditedDuringFetch: settingsWereEditedDuringFetch,
+        localToolsDirtyAtStart: snapchatToolsDirtyAtHydrationStart,
+        serverEnabled: merged.enabled,
+        serverToolSwitches: snapchatToolSwitchState(merged.snapchatTools),
+        displayedEnabled: displayedSettings.enabled,
+        displayedToolSwitches: snapchatToolSwitchState(displayedSettings.snapchatTools),
+      });
       setSettings(preserveLocalSettings ? { ...settingsRef.current } : merged);
       setHydrated(true);
       hydratedRef.current = true;
@@ -4987,7 +5054,16 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const hydrate = () => {
       loadStage = "slot-state";
       fetch(stateUrl, { cache: "no-store" })
-        .then(r => r.ok ? r.json() : null)
+        .then(async r => {
+          writeUiSpeedLog("automation-settings-slot-state-response", {
+            serial,
+            slotIdx: slotIdx ?? 0,
+            slotIdPresent: Boolean(slotId),
+            status: r.status,
+            ok: r.ok,
+          });
+          return r.ok ? r.json() : null;
+        })
         .then(async d => {
           if (!active) return;
           if (typeof d?.enabled !== "boolean") throw new Error("slot state response was incomplete");
@@ -5015,6 +5091,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             setHydrated(true);
             hydratedRef.current = true;
             setSaveError(null);
+            writeUiSpeedLog("automation-settings-hydration-short-circuit", {
+              serial,
+              slotIdx: slotIdx ?? 0,
+              reason: "hidden-disabled-slot",
+              enabled: false,
+            });
             return;
           }
           loadStage = "slot-settings";
@@ -5022,8 +5104,26 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
              ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings?${hydrateCacheKey}${slotIdentityQuery}`
             : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings?${hydrateCacheKey}`;
           const response = await fetch(settingsUrl, { cache: "no-store" });
+          writeUiSpeedLog("automation-settings-read-response", {
+            serial,
+            slotIdx: slotIdx ?? 0,
+            slotIdPresent: Boolean(slotId),
+            status: response.status,
+            ok: response.ok,
+          });
           if (!response.ok) throw new Error(`settings request failed (${response.status})`);
           const data = await response.json();
+          writeUiSpeedLog("automation-settings-read-snapshot", {
+            serial,
+            slotIdx: slotIdx ?? 0,
+            slotIdPresent: Boolean(slotId),
+            enabled: typeof data?.enabled === "boolean" ? data.enabled : null,
+            toolSwitches: snapchatToolSwitchState(data?.snapchatTools),
+            requiredFieldsPresent:
+              typeof data?.cycleIntervalMin === "number" &&
+              typeof data?.cycleIntervalMax === "number" &&
+              Boolean(data?.snapchatTools && typeof data.snapchatTools === "object" && !Array.isArray(data.snapchatTools)),
+          });
           if (
             !data ||
             typeof data !== "object" ||
@@ -5050,6 +5150,13 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // request queue before the selected device's accounts can paint.
     const hydrationTimer = window.setTimeout(hydrate, isActive ? 0 : 250);
     return () => {
+      writeUiSpeedLog("automation-settings-hydration-cleanup", {
+        serial,
+        slotIdx: slotIdx ?? 0,
+        slotIdPresent: Boolean(slotId),
+        hydrated: hydratedRef.current,
+        localSettingsDirty: JSON.stringify(settingsRef.current) !== lastSavedRef.current,
+      });
       active = false;
       window.clearTimeout(hydrationTimer);
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
@@ -5164,13 +5271,30 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const enqueueSlotSettingsSave = useCallback((
     toSave: AutomationSettingsData,
     reportErrors = true,
+    source = "unspecified",
   ): Promise<boolean> => {
     const serial = phone?.serial;
-    if (!serial) return Promise.resolve(false);
+    if (!serial) {
+      writeUiSpeedLog("automation-settings-save-skipped", {
+        reason: "no-device-serial",
+        slotIdx: slotIdx ?? 0,
+        source,
+      });
+      return Promise.resolve(false);
+    }
     const settingsEditRevision = settingsEditRevisionRef.current;
     const enabledEditRevision = enabledEditRevisionRef.current;
     const toSaveStr = JSON.stringify(toSave);
     const snapchatToolsSnapshot = JSON.stringify(toSave.snapchatTools);
+    settingsDebugRequestCounterRef.current += 1;
+    const debugRequestId = `${Date.now().toString(36)}-${settingsDebugRequestCounterRef.current.toString(36)}`;
+    let lastSavedSnapshot: unknown = {};
+    try {
+      lastSavedSnapshot = JSON.parse(lastSavedRef.current);
+    } catch {
+      lastSavedSnapshot = {};
+    }
+    const changedFields = describeChangedSettingFields(lastSavedSnapshot, toSave);
     const slotIdentityQuery = slotId ? `?slotId=${encodeURIComponent(slotId)}` : "";
     const saveUrl = slotIdx !== undefined
       ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotIdentityQuery}`
@@ -5182,19 +5306,57 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const payload = slotIdx !== undefined
       ? JSON.stringify(settingsWithoutToggle)
       : toSaveStr;
+    const saveDetail = {
+      debugRequestId,
+      serial,
+      slotIdx: slotIdx ?? 0,
+      slotIdPresent: Boolean(slotId),
+      source,
+      requestSequence,
+      hydrated: hydratedRef.current,
+      changedFields,
+      toolSwitches: snapchatToolSwitchState(toSave.snapchatTools),
+    };
+    writeUiSpeedLog("automation-settings-save-queued", saveDetail);
 
     const request = settingsSaveQueueRef.current.catch(() => undefined).then(async () => {
       // Coalesce queued snapshots and never let an older response declare
       // itself current after a newer edit or explicit master-toggle change.
-      if (requestSequence !== settingsSaveSequenceRef.current.get(saveUrl) || !hydratedRef.current) return false;
+      if (requestSequence !== settingsSaveSequenceRef.current.get(saveUrl)) {
+        writeUiSpeedLog("automation-settings-save-skipped", {
+          ...saveDetail,
+          reason: "superseded-before-send",
+          latestSequence: settingsSaveSequenceRef.current.get(saveUrl) ?? null,
+        });
+        return false;
+      }
+      if (!hydratedRef.current) {
+        writeUiSpeedLog("automation-settings-save-skipped", {
+          ...saveDetail,
+          reason: "settings-not-hydrated",
+        });
+        return false;
+      }
       try {
+        writeUiSpeedLog("automation-settings-save-start", saveDetail);
         const response = await fetch(saveUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Settings-Debug-Id": debugRequestId,
+          },
           keepalive: true,
           body: payload,
         });
         const body = await response.json().catch(() => null);
+        writeUiSpeedLog("automation-settings-save-response", {
+          ...saveDetail,
+          status: response.status,
+          httpOk: response.ok,
+          apiOk: body?.ok === true,
+          diskVerification: body?.diagnostics?.diskVerification ?? null,
+          returnedDebugRequestId: body?.diagnostics?.debugRequestId ?? null,
+        });
         if (!response.ok || !body?.ok) {
           if (
             reportErrors &&
@@ -5203,6 +5365,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           ) {
             setSaveError(body?.error ?? `Server rejected the settings (${response.status})`);
           }
+          writeUiSpeedLog("automation-settings-save-failed", {
+            ...saveDetail,
+            reason: "server-rejected",
+            status: response.status,
+          });
           return false;
         }
         const snapshotIsCurrent =
@@ -5216,6 +5383,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           lastSavedSnapchatToolsRef.current = snapchatToolsSnapshot;
           setSaveError(null);
         }
+        writeUiSpeedLog("automation-settings-save-settled", {
+          ...saveDetail,
+          snapshotIsCurrent,
+          localSettingsStillMatch: JSON.stringify(settingsRef.current) === toSaveStr,
+        });
         return true;
       } catch (error: any) {
         if (
@@ -5225,6 +5397,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         ) {
           setSaveError(error?.message ?? "Couldn't reach the server");
         }
+        writeUiSpeedLog("automation-settings-save-failed", {
+          ...saveDetail,
+          reason: "request-threw",
+          errorName: error?.name ?? null,
+          error: String(error?.message ?? error ?? "unknown error").slice(0, 180),
+        });
         return false;
       }
     });
@@ -5245,8 +5423,17 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const t = setTimeout(() => {
       // A request that was already debounced when a refresh failed must not
       // write its stale snapshot after the failure has closed the save gate.
-      if (!hydratedRef.current) return;
-      void enqueueSlotSettingsSave(toSave);
+      if (!hydratedRef.current) {
+        writeUiSpeedLog("automation-settings-autosave-skipped", {
+          serial: phone.serial,
+          slotIdx: slotIdx ?? 0,
+          slotIdPresent: Boolean(slotId),
+          reason: "settings-not-hydrated-at-debounce",
+          changedFields: describeChangedSettingFields(parseSettingsSnapshot(lastSavedRef.current), toSave),
+        });
+        return;
+      }
+      void enqueueSlotSettingsSave(toSave, true, "debounced-autosave");
     }, snapchatToolsChanged ? 100 : 500);
     return () => clearTimeout(t);
   }, [settings, phone?.serial, slotIdx, slotId, enqueueSlotSettingsSave]);
@@ -5256,11 +5443,23 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // source-list changes before they reach the slot automation record.
   useEffect(() => {
     return () => {
-      if (!phone || !hydratedRef.current) return;
+      if (!phone) return;
       const toSave = settingsRef.current;
       const toSaveStr = JSON.stringify(toSave);
-      if (toSaveStr === lastSavedRef.current) return;
-      void enqueueSlotSettingsSave(toSave, false);
+      const hasUnsavedChanges = toSaveStr !== lastSavedRef.current;
+      writeUiSpeedLog("automation-settings-editor-unmount", {
+        serial: phone.serial,
+        slotIdx: slotIdx ?? 0,
+        slotIdPresent: Boolean(slotId),
+        hydrated: hydratedRef.current,
+        hasUnsavedChanges,
+        changedFields: hasUnsavedChanges
+          ? describeChangedSettingFields(parseSettingsSnapshot(lastSavedRef.current), toSave)
+          : [],
+        toolSwitches: snapchatToolSwitchState(toSave.snapchatTools),
+      });
+      if (!hydratedRef.current || !hasUnsavedChanges) return;
+      void enqueueSlotSettingsSave(toSave, false, "editor-unmount-flush");
     };
   }, [phone?.serial, slotIdx, slotId, enqueueSlotSettingsSave]);
 
@@ -6033,10 +6232,23 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
 
   const setSettingsFromPanel = useCallback<React.Dispatch<React.SetStateAction<AutomationSettingsData>>>(
     update => {
+      const previous = settingsRef.current;
+      const next = typeof update === "function" ? update(previous) : update;
+      const changedFields = describeChangedSettingFields(previous, next);
+      if (changedFields.length === 0) return;
       settingsEditRevisionRef.current += 1;
-      setSettings(update);
+      settingsRef.current = next;
+      setSettings(next);
+      writeUiSpeedLog("automation-setting-edited", {
+        serial: phone?.serial ?? null,
+        slotIdx: slotIdx ?? 0,
+        slotIdPresent: Boolean(slotId),
+        changedFields,
+        toolSwitches: snapchatToolSwitchState(next.snapchatTools),
+        hydrated: hydratedRef.current,
+      });
     },
-    [],
+    [phone?.serial, slotIdx, slotId],
   );
   const updateSnapchatToolFromPanel = useCallback((
     tool: Exclude<keyof AutomationSettingsData["snapchatTools"], "shuffleToolOrder">,
@@ -6057,18 +6269,26 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     settingsEditRevisionRef.current += 1;
     settingsRef.current = next;
     setSettings(next);
+    const changedFields = describeChangedSettingFields(current, next);
+    const detail = {
+      serial: phone?.serial ?? null,
+      slotIdPresent: Boolean(slotId),
+      slotIdx: slotIdx ?? 0,
+      tool,
+      changedFields,
+      toolSwitches: snapchatToolSwitchState(next.snapchatTools),
+      hydrated: hydratedRef.current,
+    };
+    writeUiSpeedLog("snapchat-tool-setting-edited", detail);
 
     if (typeof patch.enabled === "boolean") {
-      const detail = {
-        serial: phone?.serial ?? null,
-        slotId: slotId ?? null,
-        slotIdx: slotIdx ?? null,
-        tool,
+      const toggleDetail = {
+        ...detail,
         enabled: patch.enabled,
       };
-      writeUiSpeedLog("snapchat-tool-toggle-requested", detail);
-      void enqueueSlotSettingsSave(next).then(persisted => {
-        writeUiSpeedLog("snapchat-tool-toggle-save-result", { ...detail, persisted });
+      writeUiSpeedLog("snapchat-tool-toggle-requested", toggleDetail);
+      void enqueueSlotSettingsSave(next, true, "snapchat-tool-toggle").then(persisted => {
+        writeUiSpeedLog("snapchat-tool-toggle-save-result", { ...toggleDetail, persisted });
       });
     }
   }, [phone?.serial, slotIdx, slotId, enqueueSlotSettingsSave]);

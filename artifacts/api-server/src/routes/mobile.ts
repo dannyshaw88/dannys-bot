@@ -903,6 +903,41 @@ async function resolveReverseTetherProxy(proxyId: number | null): Promise<revers
   };
 }
 
+function listSettingsChangedKeys(before: unknown, after: unknown): string[] {
+  const changed: string[] = [];
+  const visit = (left: any, right: any, prefix = "", depth = 0) => {
+    if (Object.is(left, right) || changed.length >= 80) return;
+    const leftIsObject = left !== null && typeof left === "object" && !Array.isArray(left);
+    const rightIsObject = right !== null && typeof right === "object" && !Array.isArray(right);
+    if (!leftIsObject || !rightIsObject || depth >= 6) {
+      changed.push(prefix || "$");
+      return;
+    }
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+    if (keys.size === 0 && JSON.stringify(left) !== JSON.stringify(right)) {
+      changed.push(prefix || "$");
+      return;
+    }
+    for (const key of keys) {
+      if (changed.length >= 80) break;
+      visit(left[key], right[key], prefix ? `${prefix}.${key}` : key, depth + 1);
+    }
+  };
+  visit(before, after);
+  if (changed.length === 80) changed.push("…");
+  return changed;
+}
+
+function getSnapchatToolSwitchState(value: unknown): Record<string, boolean | null> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, any>).map(([key, tool]) => [
+      key,
+      typeof tool?.enabled === "boolean" ? tool.enabled : null,
+    ]),
+  );
+}
+
 function configFilePath(): string {
   if (process.env.EQUINOX_DATA_DIR) {
     return path.join(process.env.EQUINOX_DATA_DIR, "mobile-instances.json");
@@ -3960,6 +3995,15 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // My Computer is the implicit and always-enabled Make a Post source.
       resolved.settings.makePostLocalFolderEnabled = true;
       logger.info(`[TOGGLE-DBG] GET slot settings  serial=${serial} slotIdx=${slotIdx} enabled=${resolved.settings.enabled} trustScore=${resolved.scoreId ?? "manual"}`);
+      logger.info(
+        `[SETTINGS-DIAG] read serial=${serial} slotIdx=${slotIdx}` +
+        ` slotIdRequested=${Boolean(requestedSlotId)}` +
+        ` ifNoneMatch=${Boolean(req.get("if-none-match"))}` +
+        ` savedRecordFound=${Boolean(saved)}` +
+        ` savedToolSwitches=${JSON.stringify(getSnapchatToolSwitchState(saved?.snapchatTools))}` +
+        ` returnedEnabled=${resolved.settings.enabled}` +
+        ` returnedToolSwitches=${JSON.stringify(getSnapchatToolSwitchState(resolved.settings.snapchatTools))}`,
+      );
       res.json({
         ...resolved.settings,
         trustScoreId: resolved.scoreId,
@@ -3969,9 +4013,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           : [],
         trustScoreTemplateDisabledTools: resolved.settings.trustScoreTemplateDisabledTools ?? [],
       });
-    } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to load slot automation settings" }); }
+    } catch (e: any) {
+      logger.error(
+        `[SETTINGS-DIAG] read-failed serial=${p(req, "serial")}` +
+        ` slotIdx=${req.params.slotIdx}` +
+        ` errorName=${e?.name ?? "Error"}` +
+        ` error=${String(e?.message ?? e ?? "unknown error").slice(0, 180)}`,
+      );
+      res.status(400).json({ error: e?.message ?? "Failed to load slot automation settings" });
+    }
   });
   app.post("/api/mobile/devices/:serial/slots/:slotIdx/automation-settings", async (req: Request, res: Response) => {
+    const debugRequestId = String(req.get("x-settings-debug-id") ?? "missing").slice(0, 100);
     try {
       const slotIdx = parseMobileSlotIndex(req.params.slotIdx);
       if (slotIdx === null) { res.status(400).json({ error: "Invalid slot index" }); return; }
@@ -4108,12 +4161,48 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           .filter(([, toolSettings]) => Boolean(toolSettings) && typeof toolSettings === "object")
           .map(([toolKey, toolSettings]) => [toolKey, (toolSettings as { enabled?: boolean }).enabled]),
       );
+      logger.info(
+        `[SETTINGS-DIAG] save-received debugId=${debugRequestId}` +
+        ` serial=${serial} slotIdx=${slotIdx}` +
+        ` slotIdRequested=${Boolean(requestedSlotId)}` +
+        ` bodyFields=${JSON.stringify(Object.keys(req.body && typeof req.body === "object" ? req.body : {}))}` +
+        ` changedFields=${JSON.stringify(listSettingsChangedKeys(existing, input))}` +
+        ` storedToolSwitchesBefore=${JSON.stringify(getSnapchatToolSwitchState(existing.snapchatTools))}` +
+        ` acceptedToolSwitches=${JSON.stringify(getSnapchatToolSwitchState(input.snapchatTools))}` +
+        ` trustScoreAssignment=${assignment.scoreId ? "active" : "manual"}`,
+      );
       logger.info(`[TOGGLE-DBG] POST slot settings serial=${serial} slotIdx=${slotIdx} enabled=${input.enabled} snapchatTools=${JSON.stringify(snapchatToolStates)} (all slots after save: ${JSON.stringify(Object.entries({ ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input }).map(([k,v]: [string,any]) => ({ slot: k, enabled: v?.enabled })))})`);
       cfg[serial] = {
         ...cfg[serial],
         slotAutomation: { ...cfg[serial]?.slotAutomation, [stableKey]: input },
       };
       saveInstanceConfigs(cfg);
+      let diskVerification: "match" | "mismatch" | "unavailable" = "unavailable";
+      let diskToolSwitches: Record<string, boolean | null> = {};
+      try {
+        const persistedConfig = JSON.parse(fs.readFileSync(configFilePath(), "utf8"));
+        const persistedSlotSettings =
+          persistedConfig?.[serial]?.slotAutomation?.[stableKey]
+          ?? persistedConfig?.[serial]?.slotAutomation?.[String(slotIdx)];
+        diskToolSwitches = getSnapchatToolSwitchState(persistedSlotSettings?.snapchatTools);
+        diskVerification = JSON.stringify(persistedSlotSettings) === JSON.stringify(input)
+          ? "match"
+          : "mismatch";
+      } catch (verifyError: any) {
+        logger.warn(
+          `[SETTINGS-DIAG] disk-readback-failed debugId=${debugRequestId}` +
+          ` serial=${serial} slotIdx=${slotIdx}` +
+          ` errorName=${verifyError?.name ?? "Error"}` +
+          ` error=${String(verifyError?.message ?? verifyError ?? "unknown error").slice(0, 180)}`,
+        );
+      }
+      logger.info(
+        `[SETTINGS-DIAG] save-write-complete debugId=${debugRequestId}` +
+        ` serial=${serial} slotIdx=${slotIdx}` +
+        ` diskVerification=${diskVerification}` +
+        ` diskToolSwitches=${JSON.stringify(diskToolSwitches)}` +
+        ` changedFields=${JSON.stringify(listSettingsChangedKeys(existing, input))}`,
+      );
       // Mirror the folder path into the dedicated file whenever it arrives
       // non-empty.  The explicit /folder-path endpoint does this too, but the
       // autosave (which fires every 500 ms after any settings change) hits
@@ -4146,8 +4235,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           input.snapchatTools.uploadVideo.directoryPath,
         );
       }
-      res.json({ ok: true });
-    } catch (e: any) { res.status(400).json({ error: e?.message ?? "Failed to save slot automation settings" }); }
+      res.json({ ok: true, diagnostics: { debugRequestId, diskVerification } });
+    } catch (e: any) {
+      logger.error(
+        `[SETTINGS-DIAG] save-failed debugId=${debugRequestId}` +
+        ` serial=${p(req, "serial")}` +
+        ` slotIdx=${req.params.slotIdx}` +
+        ` errorName=${e?.name ?? "Error"}` +
+        ` error=${String(e?.message ?? e ?? "unknown error").slice(0, 180)}`,
+      );
+      res.status(400).json({ error: e?.message ?? "Failed to save slot automation settings" });
+    }
   });
 
   // ── Trust Score template Human Session Tool settings ───────────────────────
