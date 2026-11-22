@@ -2,7 +2,7 @@ import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { center, dump, shortResourceId } from "../runtime";
 
-type ContactMark = { key: string; top: number };
+type ContactMark = { key: string; dividerTop: number };
 
 const scrollGainByDevice = new Map<string, number>();
 
@@ -26,7 +26,12 @@ function findFriendsRows(nodes: UiNode[]): UiNode[] {
     .sort((a, b) => a.bounds[1] - b.bounds[1]);
 }
 
-function contactMarks(nodes: UiNode[], rows: UiNode[]): ContactMark[] {
+function contactMarks(
+  nodes: UiNode[],
+  rows: UiNode[],
+  dividerYs: number[],
+  expectedPitch: number,
+): ContactMark[] {
   return rows.flatMap(row => {
     const label = nodes.find(node =>
       shortResourceId(node) === "result-title" &&
@@ -36,7 +41,17 @@ function contactMarks(nodes: UiNode[], rows: UiNode[]): ContactMark[] {
       node.bounds[3] <= row.bounds[3],
     );
     const key = (label?.text || label?.desc || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
-    return key ? [{ key, top: row.bounds[1] }] : [];
+    if (!key) return [];
+    const rowCenter = (row.bounds[1] + row.bounds[3]) / 2;
+    const dividerTop = dividerYs.filter(y => y <= rowCenter).at(-1);
+    const dividerBottom = dividerYs.find(y => y > rowCenter);
+    if (
+      dividerTop === undefined ||
+      dividerBottom === undefined ||
+      dividerBottom - dividerTop < expectedPitch * 0.7 ||
+      dividerBottom - dividerTop > expectedPitch * 1.3
+    ) return [];
+    return [{ key, dividerTop }];
   });
 }
 
@@ -49,15 +64,88 @@ function median(values: number[]): number | null {
     : sorted[middle];
 }
 
-function middleContactDividerDistance(rows: UiNode[]): number | null {
+// Node spacing is only a search-window sanity check. It is never used as the
+// swipe target; target distance comes from the screenshot's divider pixels.
+function estimateRowPitchForSearch(rows: UiNode[]): number | null {
+  if (rows.length < 2) return null;
+  return median(rows.slice(1).map((row, index) => row.bounds[1] - rows[index].bounds[1]));
+}
+
+function findHorizontalDividerYs(
+  screen: { width: number; height: number; channels: number; pixels: Buffer },
+  rows: UiNode[],
+): number[] {
+  if (rows.length < 2 || screen.channels < 3) return [];
+  const x1 = Math.max(0, Math.round(screen.width * 0.04), Math.min(...rows.map(row => row.bounds[0])) + 6);
+  const x2 = Math.min(screen.width - 1, Math.round(screen.width * 0.96), Math.max(...rows.map(row => row.bounds[2])) - 6);
+  const rowPitch = estimateRowPitchForSearch(rows);
+  if (x2 <= x1 || !rowPitch) return [];
+
+  const scanTop = Math.max(0, Math.floor(rows[0].bounds[1] - rowPitch * 0.3));
+  const scanBottom = Math.min(screen.height - 1, Math.ceil(rows[rows.length - 1].bounds[3] + rowPitch * 0.3));
+  const samplesPerRow = Math.ceil((x2 - x1) / 2);
+  const minimumNeutralPixels = Math.ceil(samplesPerRow * 0.45);
+  const rawYs: number[] = [];
+
+  for (let y = scanTop; y <= scanBottom; y++) {
+    let neutralGrayPixels = 0;
+    for (let x = x1; x <= x2; x += 2) {
+      const index = (y * screen.width + x) * screen.channels;
+      const r = screen.pixels[index];
+      const g = screen.pixels[index + 1];
+      const b = screen.pixels[index + 2];
+      const luminance = (r + g + b) / 3;
+      if (
+        Math.max(r, g, b) - Math.min(r, g, b) <= 16 &&
+        luminance >= 120 &&
+        luminance <= 248
+      ) neutralGrayPixels++;
+    }
+    if (neutralGrayPixels >= minimumNeutralPixels) rawYs.push(y);
+  }
+
+  const runs: number[][] = [];
+  for (const y of rawYs) {
+    const run = runs[runs.length - 1];
+    if (!run || y - run[run.length - 1] > 2) runs.push([y]);
+    else run.push(y);
+  }
+  return runs
+    .filter(run => run.length <= 5)
+    .map(run => Math.round(run.reduce((sum, y) => sum + y, 0) / run.length));
+}
+
+function measureMiddleContactDivider(
+  rows: UiNode[],
+  screen: { width: number; height: number; channels: number; pixels: Buffer },
+): { distance: number; upperY: number; lowerY: number; dividerYs: number[] } | null {
   if (rows.length < 3) return null;
-  // UIAutomator does not expose the grey divider as a separate node. For each
-  // interior contact, its cell top/bottom are the divider edges; ignore the
-  // first and last rows because their edges may be clipped by the app viewport.
+  // Use UI bounds only to identify the list and choose an interior contact;
+  // the distance itself must come from the screenshot's actual grey lines.
+  const dividerYs = findHorizontalDividerYs(screen, rows);
+  if (dividerYs.length < 2) return null;
+  const rowPitch = estimateRowPitchForSearch(rows);
+  if (!rowPitch) return null;
   const middleRows = rows.slice(1, -1);
-  return median(middleRows
-    .map(row => row.bounds[3] - row.bounds[1])
-    .filter(distance => distance > 0));
+
+  for (const row of [...middleRows].sort((a, b) =>
+    Math.abs((a.bounds[1] + a.bounds[3]) / 2 - screen.height / 2) -
+    Math.abs((b.bounds[1] + b.bounds[3]) / 2 - screen.height / 2),
+  )) {
+    const centerY = (row.bounds[1] + row.bounds[3]) / 2;
+    const upperY = dividerYs.filter(y => y <= centerY).at(-1);
+    const lowerY = dividerYs.find(y => y > centerY);
+    if (upperY === undefined || lowerY === undefined) continue;
+    const distance = lowerY - upperY;
+    if (
+      distance < rowPitch * 0.7 ||
+      distance > rowPitch * 1.3 ||
+      upperY < row.bounds[1] - rowPitch * 0.3 ||
+      lowerY > row.bounds[3] + rowPitch * 0.3
+    ) continue;
+    return { distance, upperY, lowerY, dividerYs };
+  }
+  return null;
 }
 
 function measuredContentShift(before: ContactMark[], after: ContactMark[], screenHeight: number): number | null {
@@ -66,9 +154,9 @@ function measuredContentShift(before: ContactMark[], after: ContactMark[], scree
     const matches = after.filter(candidate => candidate.key === mark.key);
     if (matches.length === 0) continue;
     const nearest = matches.reduce((best, candidate) =>
-      Math.abs(candidate.top - mark.top) < Math.abs(best.top - mark.top) ? candidate : best,
+      Math.abs(candidate.dividerTop - mark.dividerTop) < Math.abs(best.dividerTop - mark.dividerTop) ? candidate : best,
     );
-    const delta = mark.top - nearest.top;
+    const delta = mark.dividerTop - nearest.dividerTop;
     if (Math.abs(delta) <= screenHeight * 0.45) deltas.push(delta);
   }
   return median(deltas);
@@ -122,9 +210,25 @@ export async function scrollAddFriendsListOneSlot(
     row.bounds[1] > Math.max(listTop, safeTop) &&
     row.bounds[3] < safeBottom,
   );
-  const targetPitch = middleContactDividerDistance(middleRows);
-  if (!title || !targetPitch || targetPitch <= 0 || !Number.isFinite(screenHeight) || screenHeight <= 0) {
-    context.onLog(`Add Friends: cannot measure the middle-row divider spacing after ${actionLabel} ${friendName}; no guessed swipe was sent.`);
+  if (!title || middleRows.length < 3 || !Number.isFinite(screenHeight) || screenHeight <= 0) {
+    context.onLog(`Add Friends: cannot identify a fully visible middle contact after ${actionLabel} ${friendName}; no guessed swipe was sent.`);
+    return false;
+  }
+  const initialScreen = await android.captureScreenPixels(context.serial);
+  if (!initialScreen || initialScreen.width !== screenWidth || initialScreen.height !== screenHeight) {
+    context.onLog(
+      `Add Friends: live screenshot pixels are unavailable or do not match ${screenWidth}×${screenHeight}; ` +
+      `cannot measure the grey dividers after ${actionLabel} ${friendName}.`,
+    );
+    return false;
+  }
+  const measuredDivider = measureMiddleContactDivider(middleRows, initialScreen);
+  const targetPitch = measuredDivider?.distance ?? null;
+  if (!measuredDivider || !targetPitch || targetPitch <= 0) {
+    context.onLog(
+      `Add Friends: could not detect the upper and lower grey divider pixels around a middle contact ` +
+      `after ${actionLabel} ${friendName}; no guessed swipe was sent.`,
+    );
     return false;
   }
 
@@ -132,18 +236,19 @@ export async function scrollAddFriendsListOneSlot(
   const maxGesture = Math.max(12, Math.floor(targetPitch * 0.48));
   let currentNodes = nodes;
   let currentRows = initialRows;
+  let currentDividerYs = measuredDivider.dividerYs;
   let totalContentShift = 0;
   let gain = scrollGainByDevice.get(context.serial);
   let noProgressSteps = 0;
-  const initialMarks = contactMarks(currentNodes, currentRows);
+  const initialMarks = contactMarks(currentNodes, currentRows, currentDividerYs, targetPitch);
   if (initialMarks.length < 2) {
-    context.onLog(`Add Friends: cannot measure the list movement after ${actionLabel} ${friendName}; contact labels are not exposed.`);
+    context.onLog(`Add Friends: detected grey dividers but could not associate them with contact labels after ${actionLabel} ${friendName}.`);
     return false;
   }
 
   context.onLog(
-    `Add Friends: middle contacts show ${targetPitch.toFixed(1)}px between row dividers ` +
-    `(measured from ${initialRows.length} live rows); calibrating actual scroll movement on this device.`,
+    `Add Friends: screenshot measured ${targetPitch.toFixed(1)}px between the grey lines around a middle contact ` +
+    `(y=${measuredDivider.upperY} to ${measuredDivider.lowerY}); measuring each scroll's actual movement.`,
   );
 
   for (let step = 1; step <= 8; step++) {
@@ -198,9 +303,15 @@ export async function scrollAddFriendsListOneSlot(
     await context.sleep(220, "exact");
     const after = await dump(context.serial);
     const afterRows = findFriendsRows(after.nodes);
+    const afterScreen = await android.captureScreenPixels(context.serial);
+    if (!afterScreen || afterScreen.width !== screenWidth || afterScreen.height !== screenHeight) {
+      context.onLog(`Add Friends: screenshot pixels were unavailable after swipe ${step}; actual divider movement cannot be measured.`);
+      return false;
+    }
+    const afterDividerYs = findHorizontalDividerYs(afterScreen, afterRows);
     const actualShift = measuredContentShift(
-      contactMarks(currentNodes, currentRows),
-      contactMarks(after.nodes, afterRows),
+      contactMarks(currentNodes, currentRows, currentDividerYs, targetPitch),
+      contactMarks(after.nodes, afterRows, afterDividerYs, targetPitch),
       screenHeight,
     );
     if (actualShift === null) {
@@ -216,6 +327,7 @@ export async function scrollAddFriendsListOneSlot(
       scrollGainByDevice.delete(context.serial);
       currentNodes = after.nodes;
       currentRows = afterRows;
+      currentDividerYs = afterDividerYs;
       continue;
     }
     noProgressSteps = 0;
@@ -231,6 +343,7 @@ export async function scrollAddFriendsListOneSlot(
     totalContentShift += actualShift;
     currentNodes = after.nodes;
     currentRows = afterRows;
+    currentDividerYs = afterDividerYs;
     context.onLog(
       `Add Friends: swipe ${step} finger path ${gestureDistance}px moved the contact list ` +
       `${actualShift.toFixed(1)}px in blank lane x=${swipeX}; cumulative ${totalContentShift.toFixed(1)}/${targetPitch.toFixed(1)}px, ` +
