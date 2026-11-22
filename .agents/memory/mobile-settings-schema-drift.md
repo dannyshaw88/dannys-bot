@@ -52,8 +52,10 @@ Account-slot hydration follows the same fail-closed rule: reject failed or malfo
 
 **How to apply:** Check the HTTP status and slot payload before updating state; only enable autosave after a valid response, including an explicitly empty list.
 
-For a hidden, disabled HST slot, hydrate only the master `enabled` flag. Preserve its current nested settings and serialize autosaves per slot; an older save response must not mark a newer snapshot as saved. Before dispatching each Snapchat tool in a cycle, re-read that slot's persisted tool switch and skip if it is off or cannot be verified.
+For a hidden, disabled HST slot, hydrate only the master `enabled` flag. Preserve its current nested settings and serialize autosaves per slot; an older save response must not mark a newer snapshot as saved.
 
-**Why:** Replacing a hidden slot with defaults could race a pending autosave and overwrite every saved tool setting. Separately, the Snapchat runner originally captured enabled tools once at cycle start, so an off switch could not stop a later, not-yet-started tool in that cycle.
+Snapchat tool switches need an immediate per-tool save and dirty-state protection during hydration. A refresh that starts after a local edit must preserve that unsaved Snapchat-tools snapshot, not only edits made after the refresh started. Before dispatching each Snapchat tool in a cycle, re-read that slot's persisted switch and skip if it is off or cannot be verified.
 
-**How to apply:** Keep background hidden-slot hydration lightweight without mutating nested settings; coalesce and order writes by slot identity, and check the latest persisted enabled value immediately before each Snapchat tool starts. A tool already running is not interrupted by this dispatch check.
+**Why:** Defaulting a hidden slot can overwrite all nested settings. Separately, autosave is debounced, so a hydration request started in that interval could replace a just-toggled tool with the older server value; the dispatcher also used to snapshot enabled tools only once per cycle.
+
+**How to apply:** Keep background hidden-slot hydration lightweight without mutating nested settings; save individual Snapchat switches immediately, preserve dirty values across overlapping reads, serialize writes by slot identity, and verify the current saved switch immediately before dispatch. A tool already running is not interrupted.

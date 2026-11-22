@@ -4035,7 +4035,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const input = automationSchema.parse({ ...base, ...body });
       // Ignore legacy false values from old UI/settings payloads.
       input.makePostLocalFolderEnabled = true;
-      logger.info(`[TOGGLE-DBG] POST slot settings serial=${serial} slotIdx=${slotIdx} enabled=${input.enabled} (all slots after save: ${JSON.stringify(Object.entries({ ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input }).map(([k,v]: [string,any]) => ({ slot: k, enabled: v?.enabled })))})`);
+      const snapchatToolStates = Object.fromEntries(
+        Object.entries(input.snapchatTools)
+          .filter(([, toolSettings]) => Boolean(toolSettings) && typeof toolSettings === "object")
+          .map(([toolKey, toolSettings]) => [toolKey, (toolSettings as { enabled?: boolean }).enabled]),
+      );
+      logger.info(`[TOGGLE-DBG] POST slot settings serial=${serial} slotIdx=${slotIdx} enabled=${input.enabled} snapchatTools=${JSON.stringify(snapchatToolStates)} (all slots after save: ${JSON.stringify(Object.entries({ ...cfg[serial]?.slotAutomation, [String(slotIdx)]: input }).map(([k,v]: [string,any]) => ({ slot: k, enabled: v?.enabled })))})`);
       cfg[serial] = {
         ...cfg[serial],
         slotAutomation: { ...cfg[serial]?.slotAutomation, [stableKey]: input },

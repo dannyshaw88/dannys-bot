@@ -4900,6 +4900,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     hydrationIdentityRef.current = hydrationIdentity;
     const hydrationEditRevision = enabledEditRevisionRef.current;
     const hydrationSettingsEditRevision = settingsEditRevisionRef.current;
+    const snapchatToolsDirtyAtHydrationStart =
+      !identityChanged &&
+      JSON.stringify(settingsRef.current.snapchatTools) !== lastSavedSnapchatToolsRef.current;
     if (identityChanged) {
       hydratedRef.current = false;
       setHydrated(false);
@@ -4969,9 +4972,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const settingsWereEditedDuringFetch =
         settingsEditRevisionRef.current !== hydrationSettingsEditRevision;
       // A copy refresh can finish after the slot editor is already open.
-      // Keep any user-edited snapshot and let autosave write it over the
-      // fetched copy instead of making the controls appear to revert/freeze.
-      setSettings(settingsWereEditedDuringFetch ? settingsRef.current : merged);
+      // Keep edits made either before or during this read. The revision check
+      // alone misses a dirty value that was changed just before navigation
+      // started a new hydration request.
+      const preserveLocalSettings =
+        settingsWereEditedDuringFetch || snapchatToolsDirtyAtHydrationStart;
+      setSettings(preserveLocalSettings ? { ...settingsRef.current } : merged);
       setHydrated(true);
       hydratedRef.current = true;
       setSaveError(null);
@@ -5158,9 +5164,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const enqueueSlotSettingsSave = useCallback((
     toSave: AutomationSettingsData,
     reportErrors = true,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     const serial = phone?.serial;
-    if (!serial) return Promise.resolve();
+    if (!serial) return Promise.resolve(false);
     const settingsEditRevision = settingsEditRevisionRef.current;
     const enabledEditRevision = enabledEditRevisionRef.current;
     const toSaveStr = JSON.stringify(toSave);
@@ -5180,7 +5186,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const request = settingsSaveQueueRef.current.catch(() => undefined).then(async () => {
       // Coalesce queued snapshots and never let an older response declare
       // itself current after a newer edit or explicit master-toggle change.
-      if (requestSequence !== settingsSaveSequenceRef.current.get(saveUrl) || !hydratedRef.current) return;
+      if (requestSequence !== settingsSaveSequenceRef.current.get(saveUrl) || !hydratedRef.current) return false;
       try {
         const response = await fetch(saveUrl, {
           method: "POST",
@@ -5197,7 +5203,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           ) {
             setSaveError(body?.error ?? `Server rejected the settings (${response.status})`);
           }
-          return;
+          return false;
         }
         const snapshotIsCurrent =
           requestSequence === settingsSaveSequenceRef.current.get(saveUrl) &&
@@ -5210,6 +5216,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           lastSavedSnapchatToolsRef.current = snapchatToolsSnapshot;
           setSaveError(null);
         }
+        return true;
       } catch (error: any) {
         if (
           reportErrors &&
@@ -5218,9 +5225,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         ) {
           setSaveError(error?.message ?? "Couldn't reach the server");
         }
+        return false;
       }
     });
-    settingsSaveQueueRef.current = request;
+    settingsSaveQueueRef.current = request.then(() => undefined);
     return request;
   }, [phone?.serial, slotIdx, slotId]);
 
@@ -6030,11 +6038,54 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     },
     [],
   );
+  const updateSnapchatToolFromPanel = useCallback((
+    tool: Exclude<keyof AutomationSettingsData["snapchatTools"], "shuffleToolOrder">,
+    patch: Record<string, unknown>,
+  ) => {
+    const current = settingsRef.current;
+    const next: AutomationSettingsData = {
+      ...current,
+      snapchatTools: {
+        ...current.snapchatTools,
+        [tool]: {
+          ...AUTOMATION_DEFAULTS.snapchatTools[tool],
+          ...current.snapchatTools[tool],
+          ...patch,
+        },
+      },
+    };
+    settingsEditRevisionRef.current += 1;
+    settingsRef.current = next;
+    setSettings(next);
+
+    if (typeof patch.enabled === "boolean") {
+      const detail = {
+        serial: phone?.serial ?? null,
+        slotId: slotId ?? null,
+        slotIdx: slotIdx ?? null,
+        tool,
+        enabled: patch.enabled,
+      };
+      writeUiSpeedLog("snapchat-tool-toggle-requested", detail);
+      void enqueueSlotSettingsSave(next).then(persisted => {
+        writeUiSpeedLog("snapchat-tool-toggle-save-result", { ...detail, persisted });
+      });
+    }
+  }, [phone?.serial, slotIdx, slotId, enqueueSlotSettingsSave]);
 
   // Expose the union: client fetch in-flight OR server confirmed active.
   // This keeps the mirror live immediately on remount without waiting for
   // runCycle() to start its own fetch.
-  return { settings, setSettings: setSettingsFromPanel, setEnabledByUser, loading, saveError, running: running || serverCycleRunning, nextRunAt };
+  return {
+    settings,
+    setSettings: setSettingsFromPanel,
+    setEnabledByUser,
+    onSnapchatToolUpdate: updateSnapchatToolFromPanel,
+    loading,
+    saveError,
+    running: running || serverCycleRunning,
+    nextRunAt,
+  };
 }
 
 // ── Per-device collision preventer ────────────────────────────────────────────
@@ -6910,6 +6961,7 @@ function CopySettingsDialog({
 
 export function AutomationSettingsPanel({
   phone, settings: baseSettings, setSettings: setSettingsExternal, setEnabledByUser, loading: loadingExternal, saveError, running, nextRunAt,
+  onSnapchatToolUpdate,
   slotIdx, slotUsername, slotUsernames, slotPlatform, snapchatTrustScoreLabel, onCopied, showCopyDialog, setShowCopyDialog,
   templateLockedFields, trustScoreAssigned, trustScoreLabel, onOpenBrowserProfile, onOpenGestures, settingsScrollRef, sharedScrollTopRef, isActive, personality,
 }: {
@@ -6917,6 +6969,10 @@ export function AutomationSettingsPanel({
   settings: AutomationSettingsData;
   setSettings: React.Dispatch<React.SetStateAction<AutomationSettingsData>>;
   setEnabledByUser: (enabled: boolean) => void;
+  onSnapchatToolUpdate?: (
+    tool: Exclude<keyof AutomationSettingsData["snapchatTools"], "shuffleToolOrder">,
+    patch: Record<string, unknown>,
+  ) => void;
   loading: boolean;
   saveError: string | null;
   running: boolean;
@@ -6955,17 +7011,23 @@ export function AutomationSettingsPanel({
   const updateSnapchatTool = (
     tool: Exclude<keyof AutomationSettingsData["snapchatTools"], "shuffleToolOrder">,
     patch: Record<string, unknown>,
-  ) => setSettings(s => ({
-    ...s,
-    snapchatTools: {
-      ...s.snapchatTools,
-      [tool]: {
-        ...AUTOMATION_DEFAULTS.snapchatTools[tool],
-        ...s.snapchatTools[tool],
-        ...patch,
+  ) => {
+    if (onSnapchatToolUpdate) {
+      onSnapchatToolUpdate(tool, patch);
+      return;
+    }
+    setSettings(s => ({
+      ...s,
+      snapchatTools: {
+        ...s.snapchatTools,
+        [tool]: {
+          ...AUTOMATION_DEFAULTS.snapchatTools[tool],
+          ...s.snapchatTools[tool],
+          ...patch,
+        },
       },
-    },
-  }));
+    }));
+  };
   const isTrustScoreTemplateEditor = templateLockedFields !== undefined;
   const personalityInputClass = (field: keyof AutomationSettingsData) => {
     const adjusted = personality && Number(baseSettings[field]) !== Number(settings[field]);
