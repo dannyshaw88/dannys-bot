@@ -4605,7 +4605,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   const lastSavedRef = useRef<string>(JSON.stringify(AUTOMATION_DEFAULTS));
   const lastSavedSnapchatToolsRef = useRef<string>(JSON.stringify(AUTOMATION_DEFAULTS.snapchatTools));
   const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const settingsSaveSequenceRef = useRef(0);
+  const settingsSaveSequenceRef = useRef(new Map<string, number>());
   const markOnlyEnabledAsSaved = (enabled: boolean) => {
     try {
       const saved = JSON.parse(lastSavedRef.current);
@@ -4893,7 +4893,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     // account's enabled=false (or other settings) cannot be written into
     // the account that moved into this position.
     const hydrationIdentity = `${serial}:${slotIdx ?? 0}:${slotId ?? ""}`;
-    const identityChanged = hydrationIdentityRef.current !== hydrationIdentity;
+    const previousHydrationIdentity = hydrationIdentityRef.current;
+    const identityChanged = previousHydrationIdentity !== hydrationIdentity;
+    const reusedForDifferentIdentity =
+      previousHydrationIdentity !== null && identityChanged;
     hydrationIdentityRef.current = hydrationIdentity;
     const hydrationEditRevision = enabledEditRevisionRef.current;
     const hydrationSettingsEditRevision = settingsEditRevisionRef.current;
@@ -4994,7 +4997,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           // runtime and slot-list toggle accurate. The full TrustScore-resolved
           // settings object is large and is only needed by an enabled runtime
           // or the visible editor.
-          if (!d.enabled && !isActive) {
+          if (!d.enabled && !isActive && !reusedForDifferentIdentity) {
             // Hidden, disabled slots only need their master state. Preserve
             // the last full settings snapshot in memory: replacing it with
             // AUTOMATION_DEFAULTS here can race a pending save and overwrite
@@ -5158,7 +5161,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   ): Promise<void> => {
     const serial = phone?.serial;
     if (!serial) return Promise.resolve();
-    const requestSequence = ++settingsSaveSequenceRef.current;
     const settingsEditRevision = settingsEditRevisionRef.current;
     const enabledEditRevision = enabledEditRevisionRef.current;
     const toSaveStr = JSON.stringify(toSave);
@@ -5167,6 +5169,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const saveUrl = slotIdx !== undefined
       ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotIdentityQuery}`
       : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
+    const requestSequence = (settingsSaveSequenceRef.current.get(saveUrl) ?? 0) + 1;
+    settingsSaveSequenceRef.current.set(saveUrl, requestSequence);
+    const saveIdentity = `${serial}:${slotIdx ?? 0}:${slotId ?? ""}`;
     const { enabled: _enabled, ...settingsWithoutToggle } = toSave;
     const payload = slotIdx !== undefined
       ? JSON.stringify(settingsWithoutToggle)
@@ -5175,7 +5180,7 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     const request = settingsSaveQueueRef.current.catch(() => undefined).then(async () => {
       // Coalesce queued snapshots and never let an older response declare
       // itself current after a newer edit or explicit master-toggle change.
-      if (requestSequence !== settingsSaveSequenceRef.current || !hydratedRef.current) return;
+      if (requestSequence !== settingsSaveSequenceRef.current.get(saveUrl) || !hydratedRef.current) return;
       try {
         const response = await fetch(saveUrl, {
           method: "POST",
@@ -5185,13 +5190,18 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
         });
         const body = await response.json().catch(() => null);
         if (!response.ok || !body?.ok) {
-          if (reportErrors && requestSequence === settingsSaveSequenceRef.current) {
+          if (
+            reportErrors &&
+            requestSequence === settingsSaveSequenceRef.current.get(saveUrl) &&
+            hydrationIdentityRef.current === saveIdentity
+          ) {
             setSaveError(body?.error ?? `Server rejected the settings (${response.status})`);
           }
           return;
         }
         const snapshotIsCurrent =
-          requestSequence === settingsSaveSequenceRef.current &&
+          requestSequence === settingsSaveSequenceRef.current.get(saveUrl) &&
+          hydrationIdentityRef.current === saveIdentity &&
           settingsEditRevisionRef.current === settingsEditRevision &&
           enabledEditRevisionRef.current === enabledEditRevision &&
           JSON.stringify(settingsRef.current) === toSaveStr;
@@ -5201,7 +5211,11 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           setSaveError(null);
         }
       } catch (error: any) {
-        if (reportErrors && requestSequence === settingsSaveSequenceRef.current) {
+        if (
+          reportErrors &&
+          requestSequence === settingsSaveSequenceRef.current.get(saveUrl) &&
+          hydrationIdentityRef.current === saveIdentity
+        ) {
           setSaveError(error?.message ?? "Couldn't reach the server");
         }
       }
@@ -5215,9 +5229,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // request per keystroke. No manual "Save" step required.
   useEffect(() => {
     if (!phone || !hydratedRef.current) return;
-    const serial = phone.serial;
-     const toSave = settings;
-     const toSaveStr = JSON.stringify(toSave);
+    const toSave = settings;
+    const toSaveStr = JSON.stringify(toSave);
     if (toSaveStr === lastSavedRef.current) return; // nothing actually changed
     const snapchatToolsSnapshot = JSON.stringify(toSave.snapchatTools);
     const snapchatToolsChanged = snapchatToolsSnapshot !== lastSavedSnapchatToolsRef.current;
@@ -5236,18 +5249,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   useEffect(() => {
     return () => {
       if (!phone || !hydratedRef.current) return;
-      const serial = phone.serial;
       const toSave = settingsRef.current;
       const toSaveStr = JSON.stringify(toSave);
       if (toSaveStr === lastSavedRef.current) return;
-      const slotIdentityQuery = slotId ? `?slotId=${encodeURIComponent(slotId)}` : "";
-      const saveUrl = slotIdx !== undefined
-        ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotIdentityQuery}`
-        : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
-      const { enabled: _enabled, ...settingsWithoutToggle } = toSave;
-      const payload = slotIdx !== undefined
-        ? JSON.stringify(settingsWithoutToggle)
-        : toSaveStr;
       void enqueueSlotSettingsSave(toSave, false);
     };
   }, [phone?.serial, slotIdx, slotId, enqueueSlotSettingsSave]);

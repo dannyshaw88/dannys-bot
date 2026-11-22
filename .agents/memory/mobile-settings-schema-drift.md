@@ -51,3 +51,9 @@ Account-slot hydration follows the same fail-closed rule: reject failed or malfo
 **Why:** The account panel previously swallowed GET errors, then marked itself hydrated; a later autosave could overwrite saved accounts with blank slots. It also treated a valid empty array as missing data and displayed padded defaults.
 
 **How to apply:** Check the HTTP status and slot payload before updating state; only enable autosave after a valid response, including an explicitly empty list.
+
+For a hidden, disabled HST slot, hydrate only the master `enabled` flag. Preserve its current nested settings and serialize autosaves per slot; an older save response must not mark a newer snapshot as saved. Before dispatching each Snapchat tool in a cycle, re-read that slot's persisted tool switch and skip if it is off or cannot be verified.
+
+**Why:** Replacing a hidden slot with defaults could race a pending autosave and overwrite every saved tool setting. Separately, the Snapchat runner originally captured enabled tools once at cycle start, so an off switch could not stop a later, not-yet-started tool in that cycle.
+
+**How to apply:** Keep background hidden-slot hydration lightweight without mutating nested settings; coalesce and order writes by slot identity, and check the latest persisted enabled value immediately before each Snapchat tool starts. A tool already running is not interrupted by this dispatch check.
