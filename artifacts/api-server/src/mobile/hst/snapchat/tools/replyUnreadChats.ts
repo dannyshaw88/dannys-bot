@@ -278,11 +278,13 @@ function unreadChatRows(
     const hasMixedSnapAndChatMarker =
       /\b(?:\d+\s+)?snaps?\s+and\s+chats?\b/i.test(rowLabel);
     const hasRepliedToChatMarker = /\breplied to your chats?\b/i.test(rowLabel);
+    const hasRepliedToStoryMarker = /\breplied to your stor(?:y|ies)\b/i.test(rowLabel);
     const isNewMediaConversation = replyToEverything && hasMedia && hasNewMediaMarker;
     if (
       !hasNewChatMarker &&
       !hasMixedSnapAndChatMarker &&
       !hasRepliedToChatMarker &&
+      !hasRepliedToStoryMarker &&
       !isNewMediaConversation
     ) return [];
     if (displayName && isMyAiChat(displayName)) {
@@ -291,7 +293,7 @@ function unreadChatRows(
     }
     const canOpenMediaAsConversation = Boolean(
       chatActionNode &&
-      (hasChats || (replyToEverything && (isNewMediaConversation || hasNewChatMarker || hasRepliedToChatMarker))),
+      (hasChats || hasRepliedToStoryMarker || (replyToEverything && (isNewMediaConversation || hasNewChatMarker || hasRepliedToChatMarker))),
     );
     if (hasMedia && !canOpenMediaAsConversation) {
       if (displayName) {
