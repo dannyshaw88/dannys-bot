@@ -205,6 +205,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   let delaySatisfiedSinceLastAdd = false;
   const attemptedFriends = new Set<string>();
   const recoveryAttempts = new Map<string, number>();
+  let refreshedAfterDismiss: { nodes: UiNode[] } | null = null;
   const skipAdded = context.tools.addFriends.skipAdded === true;
   const dismissNonEnglish = context.tools.addFriends.dismissNonEnglish === true;
   const avoidUsersContaining = context.tools.addFriends.avoidUsersContainingEnabled === true;
@@ -344,32 +345,51 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       }
       return !context.isAborted();
     }
-    context.onLog(`Add Friends: ${friendName} matched ${matchDescription}; dismissing it with the row Hide control.`);
+    context.onLog(`Add Friends: ${friendName} matched ${matchDescription}; targeting its row Hide control.`);
     if (context.isAborted()) return false;
-    const liveRowY = center(selectedFriend.candidate).y;
+    const liveHideCenter = center(dismiss);
     const calibration = android.loadNavigationCalibrationMap(context.serial);
-    const hasDismissXCalibration = !!calibration?.points.snapchatFriendSuggestionDismissX;
+    const calibratedX = calibration?.points.snapchatFriendSuggestionDismissX?.x;
+    const calibrationMatchesScreen =
+      calibration?.screen.w === screenWidth &&
+      calibration?.screen.h === screenHeight;
+    const calibratedXMatchesLiveHide =
+      calibrationMatchesScreen &&
+      Number.isFinite(calibratedX) &&
+      calibratedX! >= dismiss.bounds[0] &&
+      calibratedX! < dismiss.bounds[2] &&
+      calibratedX! >= selectedFriend.candidate.bounds[2] + 2;
     try {
-      if (hasDismissXCalibration) {
+      if (calibratedXMatchesLiveHide) {
+        context.onLog(
+          `Add Friends: saved X ${calibratedX} is inside the live Hide node ` +
+          `[${dismiss.bounds[0]},${dismiss.bounds[2]}] and clear of Add ending at ${selectedFriend.candidate.bounds[2]}; ` +
+          `using the Hide node's center Y ${liveHideCenter.y}.`,
+        );
         await android.tapCalibratedNavigationControlAtY(
           context.serial,
           "snapchatFriendSuggestionDismissX",
-          liveRowY,
+          liveHideCenter.y,
           message => context.onLog(`Add Friends: ${message}`),
           `Snapchat: dismiss matched suggestion ${friendName} at its live row`,
         );
       } else {
-        const liveNodeCenterX = center(dismiss).x;
+        const reason = !calibrationMatchesScreen
+          ? "the saved X is missing or was captured at a different screen size"
+          : Number.isFinite(calibratedX)
+            ? `saved X ${calibratedX} is outside the live Hide node or too close to the Add control`
+            : "no valid calibrated X is available";
         context.onLog(
-          `Add Friends: no calibrated dismiss X for this device; using live Hide-node center ` +
-          `(${liveNodeCenterX},${liveRowY}).`,
+          `Add Friends: ${reason}; tapping the live Hide-node center ` +
+          `(${liveHideCenter.x},${liveHideCenter.y}) instead. ` +
+          `Add ends at ${selectedFriend.candidate.bounds[2]}; Hide spans X ${dismiss.bounds[0]}–${dismiss.bounds[2]}.`,
         );
         await android.tap(
           context.serial,
-          liveNodeCenterX,
-          liveRowY,
+          liveHideCenter.x,
+          liveHideCenter.y,
           "manual",
-          `Snapchat: dismiss matched suggestion ${friendName} at its live row`,
+          `Snapchat: dismiss matched suggestion ${friendName} at its live Hide node`,
           "automation",
         );
       }
@@ -382,12 +402,30 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     }
     await context.sleep(350, "exact");
     if (context.isAborted()) return false;
-    context.onLog(`Add Friends: dismissed ${friendName} (${matchDescription}); using Snapchat's refreshed list position without an extra scroll.`);
+    const afterTap = await dump(context.serial);
+    refreshedAfterDismiss = afterTap;
+    const sameNameStillVisible = afterTap.nodes.some(node =>
+      shortResourceId(node) === "result-title" &&
+      normalizeFriendDisplayName(node.text.trim() || node.desc.trim()) === selectedFriend.friendKey,
+    );
+    const sameNameStillAddable = findAddCandidates(afterTap.nodes).candidates
+      .some(candidate => candidate.friendKey === selectedFriend.friendKey);
+    if (afterTap.nodes.length === 0) {
+      context.onLog(`Add Friends: Hide tap sent for ${friendName}, but the refreshed screen had no readable UI nodes, so dismissal could not be confirmed.`);
+    } else if (sameNameStillVisible) {
+      context.onLog(
+        `Add Friends: Hide tap did not remove ${friendName} from the visible list` +
+        `${sameNameStillAddable ? "; its Add button is still present" : "; the row remains but its Add button is no longer present"}.`,
+      );
+    } else {
+      context.onLog(`Add Friends: ${friendName} is no longer visible in the refreshed suggestions after the Hide tap.`);
+    }
     return !context.isAborted();
   };
 
   while (added < requested && !context.isAborted()) {
-    let state = await dump(context.serial);
+    let state = refreshedAfterDismiss ?? await dump(context.serial);
+    refreshedAfterDismiss = null;
     const cooldownResult = await handleFriendRequestLimit(context, "Add Friends", state.nodes);
     if (cooldownResult) {
       logAction(context, `${added} of ${requested} friends added; paused by Snapchat's friend-request limit`);
