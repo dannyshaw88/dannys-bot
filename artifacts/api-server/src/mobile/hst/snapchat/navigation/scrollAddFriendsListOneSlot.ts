@@ -96,10 +96,10 @@ function blankRowLaneX(nodes: UiNode[], row: UiNode, screenWidth: number): numbe
       min: Math.max(lastContentX + 4, inset + 4),
       max: Math.min(row.bounds[2] - 4, screenWidth - inset - 4),
     },
-  ].filter(lane => lane.max - lane.min >= 8);
-  if (lanes.length === 0) return null;
-  const widest = lanes.sort((a, b) => (b.max - b.min) - (a.max - a.min))[0];
-  return Math.round((widest.min + widest.max) / 2);
+  ];
+  const safeLane = lanes.find(lane => lane.max - lane.min >= 8);
+  if (!safeLane) return null;
+  return Math.round((safeLane.min + safeLane.max) / 2);
 }
 
 export async function scrollAddFriendsListOneSlot(
@@ -190,6 +190,10 @@ export async function scrollAddFriendsListOneSlot(
       return false;
     }
 
+    context.onLog(
+      `Add Friends: swipe ${step} in blank row margin x=${swipeX}, y=${startY}→${endY}; ` +
+      `target divider distance ${targetPitch.toFixed(1)}px.`,
+    );
     await android.swipe(context.serial, swipeX, startY, swipeX, endY, 650, false);
     await context.sleep(220, "exact");
     const after = await dump(context.serial);

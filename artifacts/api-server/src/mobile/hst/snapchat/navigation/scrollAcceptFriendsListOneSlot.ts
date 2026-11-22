@@ -74,9 +74,38 @@ function measuredContentShift(before: ContactMark[], after: ContactMark[], scree
   return median(deltas);
 }
 
+function blankRowLaneX(nodes: UiNode[], row: UiNode, screenWidth: number): number | null {
+  const children = nodes.filter(node =>
+    node !== row &&
+    node.bounds[0] >= row.bounds[0] &&
+    node.bounds[1] >= row.bounds[1] &&
+    node.bounds[2] <= row.bounds[2] &&
+    node.bounds[3] <= row.bounds[3],
+  );
+  if (children.length === 0 || screenWidth <= 0) return null;
+
+  const firstContentX = Math.min(...children.map(node => node.bounds[0]));
+  const lastContentX = Math.max(...children.map(node => node.bounds[2]));
+  const inset = Math.round(screenWidth * 0.04);
+  const lanes = [
+    {
+      min: Math.max(row.bounds[0] + 4, inset + 4),
+      max: Math.min(firstContentX - 4, screenWidth - inset - 4),
+    },
+    {
+      min: Math.max(lastContentX + 4, inset + 4),
+      max: Math.min(row.bounds[2] - 4, screenWidth - inset - 4),
+    },
+  ];
+  const safeLane = lanes.find(lane => lane.max - lane.min >= 8);
+  if (!safeLane) return null;
+  return Math.round((safeLane.min + safeLane.max) / 2);
+}
+
 export async function scrollAcceptFriendsListOneSlot(
   context: SnapchatContext,
   nodes: UiNode[],
+  screenWidth: number,
   screenHeight: number,
   friendName: string,
 ): Promise<boolean> {
@@ -142,6 +171,11 @@ export async function scrollAcceptFriendsListOneSlot(
     }
 
     const anchor = center(rowForAnchor);
+    const swipeX = blankRowLaneX(currentNodes, rowForAnchor, screenWidth);
+    if (swipeX === null) {
+      context.onLog("Accept Friends: no blank horizontal lane is exposed beside the request; refusing to swipe across a user.");
+      return false;
+    }
     const fingerDelta = -contentDirection * gestureDistance;
     const startY = Math.round(anchor.y - fingerDelta / 2);
     const endY = startY + fingerDelta;
@@ -155,7 +189,11 @@ export async function scrollAcceptFriendsListOneSlot(
       return false;
     }
 
-    await android.swipe(context.serial, anchor.x, startY, anchor.x, endY, 650, false);
+    context.onLog(
+      `Accept Friends: swipe ${step} in blank row margin x=${swipeX}, y=${startY}→${endY}; ` +
+      `target divider distance ${targetPitch.toFixed(1)}px.`,
+    );
+    await android.swipe(context.serial, swipeX, startY, swipeX, endY, 650, false);
     await context.sleep(220, "exact");
     const after = await dump(context.serial);
     const afterRows = addedMeRows(after.nodes);
@@ -194,7 +232,7 @@ export async function scrollAcceptFriendsListOneSlot(
     currentRows = afterRows;
     context.onLog(
       `Accept Friends: swipe ${step} finger path ${gestureDistance}px moved the contact list ` +
-      `${actualShift.toFixed(1)}px; cumulative ${totalContentShift.toFixed(1)}/${targetPitch.toFixed(1)}px, ` +
+      `${actualShift.toFixed(1)}px in blank lane x=${swipeX}; cumulative ${totalContentShift.toFixed(1)}/${targetPitch.toFixed(1)}px, ` +
       `remaining ${(targetPitch - totalContentShift).toFixed(1)}px; measured device ratio ${gain?.toFixed(2) ?? "unavailable"}.`,
     );
   }

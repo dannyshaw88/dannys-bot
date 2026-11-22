@@ -216,6 +216,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
         const scrolled = await scrollAcceptFriendsListOneSlot(
           context,
           state.nodes,
+          screenWidth,
           screenHeight,
           currentAcceptance.name,
         );
@@ -239,6 +240,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
       const scrolled = await scrollAcceptFriendsListOneSlot(
         context,
         state.nodes,
+        screenWidth,
         screenHeight,
         currentAcceptance.name,
       );

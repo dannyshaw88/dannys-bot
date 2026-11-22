@@ -151,7 +151,7 @@
 - [Uncapped quantity maxima](uncapped-quantity-maxima.md) — count/amount maxima stay uncapped while numeric settings fields remain fixed at 3 characters wide
 - [Snapchat idle recovery ordering](snapchat-idle-recovery-ordering.md) — reopen Snapchat from cycle finalization after the stalled tool unwinds, before releasing the device lease
 - [Snapchat notification permission prompt](snapchat-notification-permission.md) — tap the visible Don't allow before account/banner navigation; do not add a dedicated post-tap dismissal check
-- [Snapchat Add Friends confirmation](snapchat-add-friends-confirmation.md) — measure middle-contact divider height and correct swipes using per-device content movement
+- [Snapchat Add Friends confirmation](snapchat-add-friends-confirmation.md) — measure middle dividers and scroll in a verified blank lane with per-device movement feedback
 - [Snapchat incoming-call dismissal](snapchat-incoming-call-dismissal.md) — piggyback detection on existing UI reads; tap only the live Not Now control
 - [Snapchat module isolation](snapchat-tool-isolation.md) — keep tools isolated; Upload a Snap crops before Send To and falls back to Friends Only if Public is missing
 - [Per-device remote input latency](device-remote-input-latency.md) — fast physical touches with slow ADB-injected inputs point to the device/transport path, not the typing profile
