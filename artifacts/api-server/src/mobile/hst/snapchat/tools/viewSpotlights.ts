@@ -6,7 +6,19 @@ import { dump, logAction, nodeLabel, randomCount, randomPercent, randomSeconds }
 
 export async function runViewSpotlights(context: SnapchatContext): Promise<void> {
   const settings = context.tools.viewStories;
-  if (!settings.enabled) return;
+  const isStillEnabled = async () => {
+    if (!settings.enabled) return false;
+    if (!context.getToolEnabled) return true;
+    try {
+      return await context.getToolEnabled("viewStories") === true;
+    } catch {
+      return false;
+    }
+  };
+  if (!await isStillEnabled()) {
+    context.onLog("View Spotlights skipped: its setting is disabled or could not be verified.");
+    return;
+  }
   const requested = randomCount(Math.max(1, settings.min), Math.max(1, settings.max));
   logAction(context, `View ${requested} Spotlights`);
   if (!await openSpotlight(context)) {
@@ -17,11 +29,25 @@ export async function runViewSpotlights(context: SnapchatContext): Promise<void>
   let swiped = 0;
   let viewed = 0;
   let stopReason = "";
+  let disabledDuringRun = false;
+  const stopForDisabledSetting = () => {
+    disabledDuringRun = true;
+    stopReason = "setting switched off";
+    context.onLog("View Spotlights stopped: its setting was switched off.");
+  };
   for (let index = 0; index < requested && !context.isAborted(); index++) {
+    if (!await isStillEnabled()) {
+      stopForDisabledSetting();
+      break;
+    }
     const state = await dump(context.serial);
     if (!isSpotlightSurface(state.xml, state.nodes)) {
       stopReason = "Spotlight screen was unavailable";
       context.onLog("View Spotlights stopped: Spotlight was no longer the active screen.");
+      break;
+    }
+    if (!await isStillEnabled()) {
+      stopForDisabledSetting();
       break;
     }
     viewed++;
@@ -38,6 +64,10 @@ export async function runViewSpotlights(context: SnapchatContext): Promise<void>
       } else if (favorite.selected || /\b(unlike|remove favorite)\b/i.test(nodeLabel(favorite))) {
         context.onLog("View Spotlights: current Spotlight media is already liked; leaving it unchanged.");
       } else if (!context.isAborted()) {
+        if (!await isStillEnabled()) {
+          stopForDisabledSetting();
+          break;
+        }
         const x = Math.round((favorite.bounds[0] + favorite.bounds[2]) / 2);
         const y = Math.round(favorite.bounds[1] + (favorite.bounds[3] - favorite.bounds[1]) * 0.37);
         await android.tap(context.serial, x, y, "bot", "Snapchat: like current Spotlight media", "automation");
@@ -51,8 +81,19 @@ export async function runViewSpotlights(context: SnapchatContext): Promise<void>
 
     const seconds = randomSeconds(settings.watchSecondsMin, settings.watchSecondsMax);
     context.onLog(`View Spotlights: waiting ${seconds}s before the next Spotlight swipe.`);
-    await context.sleep(seconds * 1000);
-    if (context.isAborted()) break;
+    const watchUntil = Date.now() + seconds * 1000;
+    while (!context.isAborted() && Date.now() < watchUntil) {
+      await context.sleep(Math.min(1000, watchUntil - Date.now()));
+      if (!await isStillEnabled()) {
+        stopForDisabledSetting();
+        break;
+      }
+    }
+    if (context.isAborted() || disabledDuringRun) break;
+    if (!await isStillEnabled()) {
+      stopForDisabledSetting();
+      break;
+    }
     if (!await swipeByDeviceGesture(context)) {
       stopReason = "next Spotlight could not be opened";
       break;
@@ -65,8 +106,12 @@ export async function runViewSpotlights(context: SnapchatContext): Promise<void>
     }
     swiped++;
   }
-  context.onLog(`View Spotlights: completed ${swiped}/${requested} Spotlight swipe(s).`);
-  const result = viewed === requested
+  context.onLog(disabledDuringRun
+    ? `View Spotlights: stopped after its setting was switched off (${swiped}/${requested} swipe(s)).`
+    : `View Spotlights: completed ${swiped}/${requested} Spotlight swipe(s).`);
+  const result = disabledDuringRun
+    ? `${viewed} Spotlights done; setting switched off`
+    : viewed === requested
     ? `${viewed} Spotlights done`
     : `${viewed} of ${requested} Spotlights done${stopReason ? `; ${stopReason}` : context.isAborted() ? "; cycle stopped" : ""}`;
   logAction(context, result);

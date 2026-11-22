@@ -153,7 +153,7 @@
 - [Snapchat notification permission prompt](snapchat-notification-permission.md) — tap the visible Don't allow before account/banner navigation; do not add a dedicated post-tap dismissal check
 - [Snapchat Add Friends confirmation](snapchat-add-friends-confirmation.md) — one screenshot, one middle-divider measurement, one exact-distance swipe in a blank lane
 - [Snapchat incoming-call dismissal](snapchat-incoming-call-dismissal.md) — piggyback detection on existing UI reads; tap only the live Not Now control
-- [Snapchat module isolation](snapchat-tool-isolation.md) — keep tools isolated; Upload a Snap crops before Send To and falls back to Friends Only if Public is missing
+- [Snapchat module isolation](snapchat-tool-isolation.md) — keep tools isolated and recheck their live toggle during loops; Upload a Snap crops before Send To
 - [Per-device remote input latency](device-remote-input-latency.md) — fast physical touches with slow ADB-injected inputs point to the device/transport path, not the typing profile
 - [Never open Snapchat My AI](snapchat-my-ai-exclusion.md) — exclude the exact My AI row during unread-chat discovery and recheck immediately before tapping
 - [Snapchat tools from an open chat](snapchat-tools-open-chat.md) — dismiss the keyboard, exit the verified chat, then confirm Camera before Add/Accept Friends

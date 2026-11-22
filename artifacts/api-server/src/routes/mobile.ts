@@ -7921,6 +7921,14 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           const snapchatTools = automationSchema.shape.snapchatTools.parse(
             effectiveSettings.snapchatTools ?? {},
           );
+           const snapchatEnabledSummary = Object.fromEntries(
+             Object.entries(snapchatTools)
+               .filter(([, tool]) => tool && typeof tool === "object" && "enabled" in tool)
+               .map(([key, tool]) => [key, (tool as { enabled?: boolean }).enabled === true]),
+           );
+           logger.info(
+             `[snapchat-cycle] settings serial=${serial} slotId=${slotId ?? "unknown"} slotIdx=${incomingSlotIdx} enabled=${JSON.stringify(snapchatEnabledSummary)}`,
+           );
           try {
             await runSnapchatTools({
               serial,
@@ -7943,8 +7951,19 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   const latestTools = automationSchema.shape.snapchatTools.parse(
                     latestSavedSettings?.snapchatTools ?? {},
                   );
-                  return latestTools[toolKey].enabled === true;
-                } catch {
+                   const enabled = latestTools[toolKey].enabled === true;
+                   if (toolKey === "viewStories" && !enabled) {
+                     logger.info(
+                       `[snapchat-tool] View Spotlights disabled during cycle serial=${serial} slotId=${slotId ?? "unknown"} slotIdx=${latestSlotIdx}`,
+                     );
+                   }
+                   return enabled;
+                 } catch (error) {
+                   if (toolKey === "viewStories") {
+                     logger.warn(
+                       `[snapchat-tool] could not verify View Spotlights setting serial=${serial} slotId=${slotId ?? "unknown"}: ${error instanceof Error ? error.message : String(error)}`,
+                     );
+                   }
                   return null;
                 }
               },

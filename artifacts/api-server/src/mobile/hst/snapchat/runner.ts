@@ -83,7 +83,10 @@ async function runSnapchatToolsInContext(context: SnapchatContext): Promise<void
   }
 
   const orderedTools = toolList.filter(tool => {
-    if (!tool.settings.enabled) return false;
+    if (!tool.settings.enabled) {
+      context.onLog(`Snapchat: ${tool.name} skipped because its saved setting is disabled.`);
+      return false;
+    }
     if (
       initialFriendCooldownUntil &&
       (tool.name === "Add Friends" || tool.name === "Accept Friends")

@@ -227,10 +227,14 @@ function formatPinoChunk(chunk) {
       if (obj && typeof obj.level === 'number') {
         const level = PINO_LEVELS[obj.level] || String(obj.level);
         const msg   = obj.msg ?? '';
+        // Keep renderer diagnostics in the Windows text log. The renderer
+        // sends the actual event in the uiSpeed field; dropping it leaves
+        // only the generic "UI-SPEED" label and hides setting-save failures.
+        const uiSpeed = typeof obj.uiSpeed === 'string' ? ' ' + obj.uiSpeed : '';
         const extra = obj.err
           ? ' ' + (obj.err.stack || obj.err.message || JSON.stringify(obj.err))
           : '';
-        return '[' + ts() + '] ' + level + ' ' + msg + extra;
+        return '[' + ts() + '] ' + level + ' ' + msg + uiSpeed + extra;
       }
     } catch {}
     return '[' + ts() + '] ' + trimmed;
