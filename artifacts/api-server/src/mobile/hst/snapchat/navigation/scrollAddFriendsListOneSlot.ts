@@ -2,8 +2,6 @@ import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { center, dump, shortResourceId } from "../runtime";
 
-type ContactMark = { key: string; dividerTop: number };
-
 const scrollGainByDevice = new Map<string, number>();
 
 function findFriendsRows(nodes: UiNode[]): UiNode[] {
@@ -24,35 +22,6 @@ function findFriendsRows(nodes: UiNode[]): UiNode[] {
       node.bounds[3] > node.bounds[1],
     )
     .sort((a, b) => a.bounds[1] - b.bounds[1]);
-}
-
-function contactMarks(
-  nodes: UiNode[],
-  rows: UiNode[],
-  dividerYs: number[],
-  expectedPitch: number,
-): ContactMark[] {
-  return rows.flatMap(row => {
-    const label = nodes.find(node =>
-      shortResourceId(node) === "result-title" &&
-      node.bounds[0] >= row.bounds[0] &&
-      node.bounds[1] >= row.bounds[1] &&
-      node.bounds[2] <= row.bounds[2] &&
-      node.bounds[3] <= row.bounds[3],
-    );
-    const key = (label?.text || label?.desc || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
-    if (!key) return [];
-    const rowCenter = (row.bounds[1] + row.bounds[3]) / 2;
-    const dividerTop = dividerYs.filter(y => y <= rowCenter).at(-1);
-    const dividerBottom = dividerYs.find(y => y > rowCenter);
-    if (
-      dividerTop === undefined ||
-      dividerBottom === undefined ||
-      dividerBottom - dividerTop < expectedPitch * 0.7 ||
-      dividerBottom - dividerTop > expectedPitch * 1.3
-    ) return [];
-    return [{ key, dividerTop }];
-  });
 }
 
 function median(values: number[]): number | null {
