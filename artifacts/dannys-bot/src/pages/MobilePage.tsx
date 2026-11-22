@@ -3264,9 +3264,8 @@ function NavigationCalibrationDialog({
         <div className="rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 py-2.5">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-200">DEVICE-SPECIFIC CONTROLS</p>
           <p className="mt-1 text-[11px] leading-4 text-amber-100/80">
-            These controls use this physical device&apos;s saved map. Friend Suggestion Dismiss X stores its horizontal coordinate;
-            Add Friends uses it only when it falls inside the live Hide control and clear of Add, with Y from that Hide node.
-            Otherwise, it uses the live Hide-node center. Other fixed controls use both saved coordinates.
+            These controls use this physical device&apos;s saved map. Friend Suggestion Dismiss X stores only its horizontal coordinate;
+            Add Friends supplies the current row&apos;s vertical position. Other fixed controls use both saved coordinates.
           </p>
         </div>
 
@@ -3283,7 +3282,7 @@ function NavigationCalibrationDialog({
               <li>For each prompt, put the named control on screen before starting capture.</li>
               <li>Press Capture, then tap the matching control on the physical phone.</li>
               <li>Instagram Settings Back means the in-app arrow, not Android system Back.</li>
-              <li>Friend Suggestion Dismiss X is used only when it matches the live Hide control; otherwise Add Friends taps that node&apos;s center.</li>
+              <li>Friend Suggestion Dismiss X is an X-only helper; the live Add Friends row supplies Y.</li>
             </ol>
             <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300">
               {map ? <>Saved: <span className="font-semibold text-green-400">{mappedCount}</span> / {NAVIGATION_CONTROLS.length} controls</> : <span className="font-semibold text-red-300">No valid saved map loaded</span>}
