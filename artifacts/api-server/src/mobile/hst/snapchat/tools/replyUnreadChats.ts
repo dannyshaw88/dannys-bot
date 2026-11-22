@@ -208,7 +208,10 @@ function formatKeyboardFailureDiagnostic(
     failure.x !== undefined && failure.y !== undefined ? `point=(${failure.x},${failure.y})` : "",
     failure.error ? `error=${failure.error}` : "",
   ].filter(Boolean);
-  return `keyboard layer transition failed (${details.join("; ")})`;
+  const failureLabel = failure.phase === "preflight"
+    ? "keyboard calibration preflight failed"
+    : "keyboard layer transition failed";
+  return `${failureLabel} (${details.join("; ")})`;
 }
 
 async function tapUnreadChatNameArea(

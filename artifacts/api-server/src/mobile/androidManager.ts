@@ -16217,8 +16217,8 @@ export async function typeViaCalibrationMap(
   serial: string,
   text: string,
   map: KeyCalibrationMap,
-  onLog?: (msg: string) => void,
-  typingProfile: TypingSpeedProfile,
+  onLog: ((msg: string) => void) | undefined,
+  typingProfile: TypingSpeedProfile | undefined,
   options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean; measureTapTimings?: boolean },
 ): Promise<{
   ok: boolean;
