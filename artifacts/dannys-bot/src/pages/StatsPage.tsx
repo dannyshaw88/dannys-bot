@@ -234,6 +234,7 @@ const MOBILE_PIE_METRIC_DEFS = MOBILE_METRIC_DEFS.filter(metric => metric.key !=
 const SNAPCHAT_METRIC_DEFS = SNAPCHAT_FARM_STAT_LABELS
   .filter(metric => metric.key !== "session_tool")
   .map(metric => ({ ...metric, pieColor: "#6366f1" }));
+const SNAPCHAT_ACTION_HISTORY_DEFS = SNAPCHAT_METRIC_DEFS.filter(metric => metric.key !== "cycles");
 const SNAPCHAT_PIE_METRIC_DEFS = SNAPCHAT_METRIC_DEFS.filter(metric => metric.key !== "cycles");
 
 interface FarmPhone {
@@ -826,6 +827,7 @@ export function StatsPage() {
   const { data: mobileSlotStats, isLoading: isMobileSlotStatsLoading } = useQuery<{
     daily: Record<string, number>;
     lifetime: Record<string, number>;
+    history: Array<{ date: string; counts: Record<string, number> }>;
   }>({
     queryKey: selectedProfile
        ? [`/api/mobile/slot-stats?username=${encodeURIComponent(statsUsername.trim())}`]
@@ -1124,6 +1126,64 @@ export function StatsPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                {accountPlatform === "snapchat" && (
+                  <Card className="desktop-card border-none shadow-sm">
+                    <CardHeader className="border-b border-border/50 bg-muted/5 pb-3">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-primary" />
+                        Daily Action History
+                      </CardTitle>
+                      <p className="text-[11px] text-muted-foreground">
+                        Recorded totals for each UTC date. Dates without recorded actions are not listed.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="pt-3">
+                      {(mobileSlotStats?.history ?? []).length === 0 ? (
+                        <div className="py-8 text-center text-xs text-muted-foreground">
+                          No daily action history has been recorded for this slot.
+                        </div>
+                      ) : (
+                        <div className="max-h-[420px] overflow-auto rounded-md border border-border/50">
+                          <table className="min-w-max w-full text-xs">
+                            <thead className="sticky top-0 z-10 bg-background">
+                              <tr className="border-b border-border/60 text-muted-foreground">
+                                <th className="px-3 py-2 text-left font-semibold">Date (UTC)</th>
+                                <th className="px-3 py-2 text-right font-semibold">Cycles</th>
+                                <th className="px-3 py-2 text-right font-semibold">Total actions</th>
+                                {SNAPCHAT_ACTION_HISTORY_DEFS.map(metric => (
+                                  <th key={metric.key} className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+                                    {metric.label}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(mobileSlotStats?.history ?? []).map(day => {
+                                const actionTotal = SNAPCHAT_ACTION_HISTORY_DEFS.reduce(
+                                  (sum, metric) => sum + (day.counts[metric.key] ?? 0),
+                                  0,
+                                );
+                                return (
+                                  <tr key={day.date} className="border-b border-border/40 last:border-0 hover:bg-muted/30">
+                                    <td className="px-3 py-2 font-medium whitespace-nowrap">{day.date}</td>
+                                    <td className="px-3 py-2 text-right tabular-nums">{(day.counts.cycles ?? 0).toLocaleString()}</td>
+                                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{actionTotal.toLocaleString()}</td>
+                                    {SNAPCHAT_ACTION_HISTORY_DEFS.map(metric => (
+                                      <td key={metric.key} className="px-3 py-2 text-right tabular-nums">
+                                        {(day.counts[metric.key] ?? 0).toLocaleString()}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Account health & system data points are Instagram profile metrics. */}
                 {accountPlatform === "instagram" && <Card className="desktop-card border-none shadow-sm">

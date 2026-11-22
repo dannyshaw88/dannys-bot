@@ -55,7 +55,11 @@ export interface IStorage {
   getLifetimeStatsByProfile(): Promise<Record<number, number>>;
   incrementStat(profileId: number, toolType: string): Promise<void>;
   incrementMobileStats(username: string, metrics: { likes: number; follows: number; stories: number; reels: number; dms: number; feedShares: number; saves?: number; cycles: number; reelScrolls?: number; feedScrolls?: number; exploreScrolls?: number; snapchatAddFriends?: number; snapchatAcceptFriends?: number; snapchatReplies?: number; snapchatUploads?: number; snapchatSpotlights?: number; snapchatSpotlightLikes?: number; snapchatSnaps?: number }): Promise<void>;
-  getMobileSlotStats(username: string): Promise<{ daily: Record<string, number>; lifetime: Record<string, number> }>;
+  getMobileSlotStats(username: string): Promise<{
+    daily: Record<string, number>;
+    lifetime: Record<string, number>;
+    history: Array<{ date: string; counts: Record<string, number> }>;
+  }>;
   getDailyAbdStats(): Promise<Record<number, number>>;
 
   // Sources
@@ -737,19 +741,30 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getMobileSlotStats(username: string): Promise<{ daily: Record<string, number>; lifetime: Record<string, number> }> {
+  async getMobileSlotStats(username: string): Promise<{
+    daily: Record<string, number>;
+    lifetime: Record<string, number>;
+    history: Array<{ date: string; counts: Record<string, number> }>;
+  }> {
     const today = new Date().toISOString().split('T')[0];
     const normalizedUsername = username.toLowerCase();
     // profileId = 0 is the mobile sentinel; filter by username prefix in JS
     const rows = await db.select().from(stats).where(eq(stats.profileId, 0));
     const daily: Record<string, number> = {};
     const lifetime: Record<string, number> = {};
+    const historyByDate = new Map<string, Record<string, number>>();
     for (const row of rows) {
       const separator = row.toolType.indexOf(":", 4);
       if (separator < 0 || row.toolType.slice(4, separator).toLowerCase() !== normalizedUsername) continue;
       const key = row.toolType.slice(separator + 1);
       if (row.date === today) daily[key] = (daily[key] ?? 0) + row.count;
-      else if (row.date === 'lifetime') lifetime[key] = (lifetime[key] ?? 0) + row.count;
+      if (row.date === 'lifetime') {
+        lifetime[key] = (lifetime[key] ?? 0) + row.count;
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(row.date)) {
+        const dayCounts = historyByDate.get(row.date) ?? {};
+        dayCounts[key] = (dayCounts[key] ?? 0) + row.count;
+        historyByDate.set(row.date, dayCounts);
+      }
     }
     // Older mobile cycles persisted completed Reels under `reels` but did not
     // populate the Farm table's `reel_scrolls` key. Preserve that history in
@@ -760,7 +775,15 @@ export class DatabaseStorage implements IStorage {
     if (lifetime.reel_scrolls === undefined && lifetime.reels !== undefined) {
       lifetime.reel_scrolls = lifetime.reels;
     }
-    return { daily, lifetime };
+    const history = [...historyByDate.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([date, counts]) => {
+        if (counts.reel_scrolls === undefined && counts.reels !== undefined) {
+          counts.reel_scrolls = counts.reels;
+        }
+        return { date, counts };
+      });
+    return { daily, lifetime, history };
   }
 
   async getDailyAbdStats(): Promise<Record<number, number>> {
