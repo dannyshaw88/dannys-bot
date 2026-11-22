@@ -918,22 +918,90 @@ function configFilePath(): string {
 const INSTANCE_CONFIG_CACHE_TTL_MS = 250;
 let instanceConfigCache: InstanceConfigMap | null = null;
 let instanceConfigCacheAt = 0;
+let instanceConfigReadError: Error | null = null;
+let instanceConfigStorePathLogged = false;
 function loadInstanceConfigs(): InstanceConfigMap {
   const now = Date.now();
   if (instanceConfigCache && now - instanceConfigCacheAt < INSTANCE_CONFIG_CACHE_TTL_MS) {
     return instanceConfigCache;
   }
+  const filePath = configFilePath();
   try {
-    const raw = fs.readFileSync(configFilePath(), "utf8");
-    instanceConfigCache = JSON.parse(raw) as InstanceConfigMap;
-  } catch {
-    instanceConfigCache = {};
+    const raw = fs.readFileSync(filePath, "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Expected a JSON object at the top level");
+    }
+    instanceConfigCache = parsed as InstanceConfigMap;
+    instanceConfigReadError = null;
+    if (!instanceConfigStorePathLogged) {
+      const stat = fs.statSync(filePath);
+      logger.info(`[mobile-settings-store] loaded path=${filePath} bytes=${stat.size} mtime=${stat.mtime.toISOString()}`);
+      instanceConfigStorePathLogged = true;
+    }
+  } catch (error: any) {
+    if (error?.code === "ENOENT") {
+      try {
+        if (!fs.statSync(path.dirname(filePath)).isDirectory()) {
+          throw new Error("settings directory is not available");
+        }
+        if (instanceConfigCache === null && instanceConfigReadError === null) {
+          // A missing file is valid only on a first run. Do not reinterpret a
+          // file that disappeared after being loaded as an empty settings set.
+          instanceConfigCache = {};
+          instanceConfigReadError = null;
+          if (!instanceConfigStorePathLogged) {
+            logger.warn(`[mobile-settings-store] no existing settings file at ${filePath}; starting with empty config`);
+            instanceConfigStorePathLogged = true;
+          }
+        } else {
+          throw new Error("settings file disappeared after it was previously loaded");
+        }
+      } catch (missingFileError: any) {
+        instanceConfigReadError = new Error(
+          `Refusing to replace saved device settings at ${filePath}: ${missingFileError?.message ?? "file unavailable"}`,
+        );
+        logger.error(`[mobile-settings-store] ${instanceConfigReadError.message}`);
+        if (instanceConfigCache === null) throw instanceConfigReadError;
+      }
+    } else {
+      instanceConfigReadError = new Error(
+        `Could not read saved device settings at ${filePath}: ${error?.message ?? String(error)}`,
+      );
+      logger.error(`[mobile-settings-store] ${instanceConfigReadError.message}`);
+      if (instanceConfigCache === null) throw instanceConfigReadError;
+    }
   }
   instanceConfigCacheAt = now;
-  return instanceConfigCache;
+  return instanceConfigCache!;
 }
 function saveInstanceConfigs(cfg: InstanceConfigMap): void {
-  fs.writeFileSync(configFilePath(), JSON.stringify(cfg, null, 2));
+  if (instanceConfigReadError) {
+    throw new Error(`Refusing to overwrite device settings after a failed read: ${instanceConfigReadError.message}`);
+  }
+  const filePath = configFilePath();
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const contents = JSON.stringify(cfg, null, 2);
+  let fd: number | null = null;
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fd = fs.openSync(tempPath, "wx");
+    fs.writeFileSync(fd, contents, "utf8");
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = null;
+    // The temp file is in the same directory so a close/update cannot leave a
+    // half-written JSON file in place of the last complete settings snapshot.
+    fs.renameSync(tempPath, filePath);
+  } catch (error) {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch {}
+    }
+    try { fs.unlinkSync(tempPath); } catch {}
+    throw error;
+  }
+  instanceConfigReadError = null;
+  instanceConfigStorePathLogged = true;
   // Keep all same-process callers on the just-persisted object while allowing
   // a short window for the duplicate API workflow to observe external saves.
   instanceConfigCache = cfg;

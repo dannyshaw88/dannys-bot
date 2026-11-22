@@ -59,3 +59,9 @@ Snapchat tool switches need an immediate per-tool save and dirty-state protectio
 **Why:** Defaulting a hidden slot can overwrite all nested settings. Separately, autosave is debounced, so a hydration request started in that interval could replace a just-toggled tool with the older server value; the dispatcher also used to snapshot enabled tools only once per cycle.
 
 **How to apply:** Keep background hidden-slot hydration lightweight without mutating nested settings; save individual Snapchat switches immediately, preserve dirty values across overlapping reads, serialize writes by slot identity, and verify the current saved switch immediately before dispatch. A tool already running is not interrupted.
+
+The on-disk device-settings file must also fail closed: only a genuinely missing file on first run means “empty settings.” Parse/read failures must preserve the last known-good snapshot and block writes; persist new snapshots through a same-directory temporary file and atomic rename.
+
+**Why:** Treating every read error as `{}` makes all devices appear reset and lets the next save overwrite the entire settings file. Directly truncating the live file also risks leaving invalid JSON if the process is interrupted during an update or shutdown.
+
+**How to apply:** Keep this safeguard at the shared file-store boundary so all device/account settings get the same protection, and log the resolved path plus read/write failures without logging setting values.
