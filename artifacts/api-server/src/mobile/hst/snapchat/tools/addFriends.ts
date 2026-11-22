@@ -212,7 +212,12 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     : "";
   const getScrollPathPixels = () => {
     const value = context.getAddFriendsScrollPath?.() ?? 125;
-    return Number.isInteger(value) && value >= 1 && value <= 999 ? value : 125;
+    return Number.isFinite(value) &&
+      value >= 1 &&
+      value <= 999.9 &&
+      Math.abs(value * 10 - Math.round(value * 10)) < 1e-6
+      ? value
+      : 125;
   };
   const avoidTerms = avoidUsersContaining
     ? avoidWordsText

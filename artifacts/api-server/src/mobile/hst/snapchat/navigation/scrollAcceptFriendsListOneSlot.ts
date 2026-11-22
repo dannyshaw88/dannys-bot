@@ -42,7 +42,10 @@ export async function scrollAcceptFriendsListOneSlot(
     return false;
   }
 
-  const scrollDistance = Number.isInteger(scrollPathPixels) && scrollPathPixels >= 1 && scrollPathPixels <= 999
+  const scrollDistance = Number.isFinite(scrollPathPixels) &&
+    scrollPathPixels >= 1 &&
+    scrollPathPixels <= 999.9 &&
+    Math.abs(scrollPathPixels * 10 - Math.round(scrollPathPixels * 10)) < 1e-6
     ? scrollPathPixels
     : 125;
   const x = center(gestureRow).x;
@@ -51,14 +54,16 @@ export async function scrollAcceptFriendsListOneSlot(
     Math.max(listTop + rowHeight + 8, gestureRow.bounds[3] - 8),
   );
   const endY = startY - scrollDistance;
+  const dispatchedDistance = Math.round(startY) - Math.round(endY);
   if (endY < listTop + 6) {
     context.onLog(`Accept Friends: not enough visible Added Me list space for a safe short scroll after ${friendName}.`);
     return false;
   }
 
   context.onLog(
-    `Accept Friends: scrolling the Added Me list up exactly ${scrollDistance} pixels after an acceptance attempt for ${friendName} ` +
-    `(from ${x},${startY} to ${x},${endY}); staying above Android's bottom navigation.`,
+    `Accept Friends: requested ${scrollDistance} px on the Added Me list after an acceptance attempt for ${friendName} ` +
+    `but Android's whole-pixel coordinates move ${dispatchedDistance} px ` +
+    `(from ${x},${Math.round(startY)} to ${x},${Math.round(endY)}); staying above Android's bottom navigation.`,
   );
   await android.swipe(context.serial, x, startY, x, endY, 240, false);
   await context.sleep(250, "exact");

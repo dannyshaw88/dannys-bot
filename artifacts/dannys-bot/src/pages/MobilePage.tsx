@@ -6598,9 +6598,10 @@ function CopySettingsDialog({
           const payload = await response.json() as { scrollPath?: unknown };
           if (
             typeof payload.scrollPath !== "number" ||
-            !Number.isInteger(payload.scrollPath) ||
+            !Number.isFinite(payload.scrollPath) ||
             payload.scrollPath < 1 ||
-            payload.scrollPath > 999
+            payload.scrollPath > 999.9 ||
+            Math.abs(payload.scrollPath * 10 - Math.round(payload.scrollPath * 10)) >= 1e-6
           ) throw new Error("Source Scroll Path is invalid.");
           sourceScrollPaths[toolKey] = payload.scrollPath;
         } catch {

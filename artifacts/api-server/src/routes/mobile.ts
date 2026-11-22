@@ -820,6 +820,16 @@ type DeviceSettings = {
   snapchatAddFriendsScrollPath?: number;
   snapchatAcceptFriendsScrollPath?: number;
 };
+const isValidDeviceScrollPath = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isFinite(value) &&
+  value >= 1 &&
+  value <= 999.9 &&
+  Math.abs(value * 10 - Math.round(value * 10)) < 1e-6;
+const deviceScrollPathSchema = z.number()
+  .min(1)
+  .max(999.9)
+  .refine(value => isValidDeviceScrollPath(value), "Scroll Path must use at most one decimal place.");
 type DevicePrefs = {
   dismissDirection?: "auto" | "left" | "up" | "custom";
   appCloseGestureMacro?: {
@@ -5364,8 +5374,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
          googlePlayPassword: z.string().optional(),
          selectedSimSlot: z.number().int().optional(),
          simPhoneNumbers: z.record(z.string(), z.string()).optional(),
-         snapchatAddFriendsScrollPath: z.number().int().min(1).max(999).optional(),
-         snapchatAcceptFriendsScrollPath: z.number().int().min(1).max(999).optional(),
+          snapchatAddFriendsScrollPath: deviceScrollPathSchema.optional(),
+          snapchatAcceptFriendsScrollPath: deviceScrollPathSchema.optional(),
        }).parse(req.body) as DeviceSettings;
       const cfg = loadInstanceConfigs();
        cfg[serial] = {
@@ -5382,8 +5392,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/mobile/devices/:serial/add-friends-scroll-path", (req: Request, res: Response) => {
     const serial = p(req, "serial");
     const saved = loadInstanceConfigs()[serial]?.deviceSettings?.snapchatAddFriendsScrollPath;
-    const scrollPath = Number.isInteger(saved) && Number(saved) >= 1 && Number(saved) <= 999
-      ? Number(saved)
+    const scrollPath = isValidDeviceScrollPath(saved)
+      ? saved
       : 125;
     res.json({ scrollPath });
   });
@@ -5391,7 +5401,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const serial = p(req, "serial");
       const { scrollPath } = z.object({
-        scrollPath: z.number().int().min(1).max(999),
+        scrollPath: deviceScrollPathSchema,
       }).parse(req.body);
       const cfg = loadInstanceConfigs();
       cfg[serial] = {
@@ -5410,8 +5420,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.get("/api/mobile/devices/:serial/accept-friends-scroll-path", (req: Request, res: Response) => {
     const serial = p(req, "serial");
     const saved = loadInstanceConfigs()[serial]?.deviceSettings?.snapchatAcceptFriendsScrollPath;
-    const scrollPath = Number.isInteger(saved) && Number(saved) >= 1 && Number(saved) <= 999
-      ? Number(saved)
+    const scrollPath = isValidDeviceScrollPath(saved)
+      ? saved
       : 125;
     res.json({ scrollPath });
   });
@@ -5419,7 +5429,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const serial = p(req, "serial");
       const { scrollPath } = z.object({
-        scrollPath: z.number().int().min(1).max(999),
+        scrollPath: deviceScrollPathSchema,
       }).parse(req.body);
       const cfg = loadInstanceConfigs();
       cfg[serial] = {
@@ -7990,8 +8000,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               getAddFriendsScrollPath: () => {
                 try {
                   const saved = loadInstanceConfigs()[serial]?.deviceSettings?.snapchatAddFriendsScrollPath;
-                  return Number.isInteger(saved) && Number(saved) >= 1 && Number(saved) <= 999
-                    ? Number(saved)
+                  return isValidDeviceScrollPath(saved)
+                    ? saved
                     : 125;
                 } catch {
                   return 125;
@@ -8000,8 +8010,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               getAcceptFriendsScrollPath: () => {
                 try {
                   const saved = loadInstanceConfigs()[serial]?.deviceSettings?.snapchatAcceptFriendsScrollPath;
-                  return Number.isInteger(saved) && Number(saved) >= 1 && Number(saved) <= 999
-                    ? Number(saved)
+                  return isValidDeviceScrollPath(saved)
+                    ? saved
                     : 125;
                 } catch {
                   return 125;

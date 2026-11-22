@@ -108,7 +108,12 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
   if (!context.tools.acceptFriends.enabled || requested === 0) return false;
   const getScrollPathPixels = () => {
     const value = context.getAcceptFriendsScrollPath?.() ?? 125;
-    return Number.isInteger(value) && value >= 1 && value <= 999 ? value : 125;
+    return Number.isFinite(value) &&
+      value >= 1 &&
+      value <= 999.9 &&
+      Math.abs(value * 10 - Math.round(value * 10)) < 1e-6
+      ? value
+      : 125;
   };
   logAction(context, `Accept up to ${requested} friend requests`);
   if (!await openAddFriendsForAccepts(context)) {

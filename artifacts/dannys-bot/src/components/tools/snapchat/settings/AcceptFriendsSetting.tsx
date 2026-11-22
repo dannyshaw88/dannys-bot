@@ -12,7 +12,15 @@ type AcceptFriendsSettingProps = {
 
 const ACCEPT_FRIENDS_SCROLL_PATH_EVENT = "device-accept-friends-scroll-path-change";
 const isValidAcceptFriendsScrollPath = (value: string) =>
-  /^\d{1,3}$/.test(value) && Number(value) >= 1 && Number(value) <= 999;
+  /^\d{1,3}(?:\.\d)?$/.test(value) && Number(value) >= 1 && Number(value) <= 999.9;
+const normalizeAcceptFriendsScrollPathInput = (rawValue: string) => {
+  const cleaned = rawValue.replace(/[^\d.]/g, "");
+  const dot = cleaned.indexOf(".");
+  const whole = (dot < 0 ? cleaned : cleaned.slice(0, dot)).slice(0, 3);
+  if (dot < 0) return whole;
+  const fraction = cleaned.slice(dot + 1).replace(/\./g, "").slice(0, 1);
+  return `${whole}.${fraction}`;
+};
 
 export function AcceptFriendsSetting({ value, loading, phoneSerial, onUpdate }: AcceptFriendsSettingProps) {
   const [scrollPath, setScrollPath] = useState("125");
@@ -78,7 +86,7 @@ export function AcceptFriendsSetting({ value, loading, phoneSerial, onUpdate }: 
       })
       .then(result => {
         const loadedValue = result.scrollPath;
-        if (!Number.isInteger(loadedValue) || Number(loadedValue) < 1 || Number(loadedValue) > 999) {
+        if (typeof loadedValue !== "number" || !isValidAcceptFriendsScrollPath(String(loadedValue))) {
           throw new Error("The device returned an invalid Scroll Path.");
         }
         if (!active) return;
@@ -126,7 +134,7 @@ export function AcceptFriendsSetting({ value, loading, phoneSerial, onUpdate }: 
   }, [phoneSerial]);
 
   const updateScrollPath = (rawValue: string) => {
-    const nextValue = rawValue.replace(/\D/g, "").slice(0, 3);
+    const nextValue = normalizeAcceptFriendsScrollPathInput(rawValue);
     setScrollPath(nextValue);
     currentScrollPathRef.current = nextValue;
     scrollPathEditRevisionRef.current += 1;
@@ -195,15 +203,15 @@ export function AcceptFriendsSetting({ value, loading, phoneSerial, onUpdate }: 
             id={`accept-friends-scroll-path-${phoneSerial ?? "device"}`}
               data-testid={`input-accept-friends-scroll-path-${phoneSerial ?? "device"}`}
             type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={3}
+            inputMode="decimal"
+            pattern="[0-9]{1,3}([.][0-9])?"
+            maxLength={5}
             value={scrollPath}
             onChange={event => updateScrollPath(event.target.value)}
             onBlur={flushScrollPathSave}
             disabled={!phoneSerial || !scrollPathLoaded}
             aria-label="Device-specific Accept Friends scroll path in pixels"
-            className="h-7 w-12 rounded-md border border-input bg-background px-1 text-center text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-7 w-16 rounded-md border border-input bg-background px-1 text-center text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           />
           <span className="text-xs text-muted-foreground">px · device-specific</span>
           {scrollPathError && <span role="alert" className="text-xs text-destructive">{scrollPathError}</span>}
