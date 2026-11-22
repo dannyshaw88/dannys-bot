@@ -1,5 +1,7 @@
 import type { SnapchatToolSettings } from "../settings/snapchat";
 
+export type SnapchatRunnableToolKey = Exclude<keyof SnapchatToolSettings, "shuffleToolOrder">;
+
 export type DeviceSwipeGesture = {
   x1: number;
   y1: number;
@@ -58,6 +60,7 @@ export type SnapchatContext = {
     },
   ) => Promise<string | null>;
   tools: SnapchatToolSettings;
+  getToolEnabled?: (tool: SnapchatRunnableToolKey) => boolean | null | Promise<boolean | null>;
   onLog: (message: string) => void;
   getFriendRequestCooldownUntil?: () => Promise<number | null>;
   onFriendRequestCooldown?: (until: number, toolName: "Add Friends" | "Accept Friends") => Promise<void>;

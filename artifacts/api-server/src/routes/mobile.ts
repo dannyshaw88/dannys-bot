@@ -7926,6 +7926,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
               pickLocalFolderImage,
               pickLocalFolderVideo,
               tools: snapchatTools,
+              getToolEnabled: toolKey => {
+                try {
+                  const latestConfig = loadInstanceConfigs();
+                  const latestSlots = latestConfig[serial]?.account?.slots ?? [];
+                  const latestSlotIdx = latestSlots.findIndex(slot => slot?.slotId?.trim() === slotId);
+                  if (latestSlotIdx < 0) return null;
+                  const latestSavedSettings =
+                    latestConfig[serial]?.slotAutomation?.[slotAutomationKey(serial, latestSlotIdx, slotId)]
+                    ?? latestConfig[serial]?.slotAutomation?.[String(latestSlotIdx)];
+                  const latestTools = automationSchema.shape.snapchatTools.parse(
+                    latestSavedSettings?.snapchatTools ?? {},
+                  );
+                  return latestTools[toolKey].enabled === true;
+                } catch {
+                  return null;
+                }
+              },
               onLog: tLog,
               getFriendRequestCooldownUntil: async () => {
                 const settings = await storage.getGlobalSettings();

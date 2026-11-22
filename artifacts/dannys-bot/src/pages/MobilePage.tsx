@@ -4604,6 +4604,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
   // mirrors what was just loaded) and only save on real user edits.
   const lastSavedRef = useRef<string>(JSON.stringify(AUTOMATION_DEFAULTS));
   const lastSavedSnapchatToolsRef = useRef<string>(JSON.stringify(AUTOMATION_DEFAULTS.snapchatTools));
+  const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const settingsSaveSequenceRef = useRef(0);
   const markOnlyEnabledAsSaved = (enabled: boolean) => {
     try {
       const saved = JSON.parse(lastSavedRef.current);
@@ -4993,7 +4995,17 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
           // settings object is large and is only needed by an enabled runtime
           // or the visible editor.
           if (!d.enabled && !isActive) {
-            applyHydratedSettings({ enabled: false });
+            // Hidden, disabled slots only need their master state. Preserve
+            // the last full settings snapshot in memory: replacing it with
+            // AUTOMATION_DEFAULTS here can race a pending save and overwrite
+            // every saved tool setting when the slot is reopened.
+            if (enabledEditRevisionRef.current === hydrationEditRevision) {
+              markOnlyEnabledAsSaved(false);
+              setSettings(previous => ({ ...previous, enabled: false }));
+            }
+            setHydrated(true);
+            hydratedRef.current = true;
+            setSaveError(null);
             return;
           }
           loadStage = "slot-settings";
@@ -5140,6 +5152,64 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
     }
   }, [phone?.serial]);
 
+  const enqueueSlotSettingsSave = useCallback((
+    toSave: AutomationSettingsData,
+    reportErrors = true,
+  ): Promise<void> => {
+    const serial = phone?.serial;
+    if (!serial) return Promise.resolve();
+    const requestSequence = ++settingsSaveSequenceRef.current;
+    const settingsEditRevision = settingsEditRevisionRef.current;
+    const enabledEditRevision = enabledEditRevisionRef.current;
+    const toSaveStr = JSON.stringify(toSave);
+    const snapchatToolsSnapshot = JSON.stringify(toSave.snapchatTools);
+    const slotIdentityQuery = slotId ? `?slotId=${encodeURIComponent(slotId)}` : "";
+    const saveUrl = slotIdx !== undefined
+      ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotIdentityQuery}`
+      : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
+    const { enabled: _enabled, ...settingsWithoutToggle } = toSave;
+    const payload = slotIdx !== undefined
+      ? JSON.stringify(settingsWithoutToggle)
+      : toSaveStr;
+
+    const request = settingsSaveQueueRef.current.catch(() => undefined).then(async () => {
+      // Coalesce queued snapshots and never let an older response declare
+      // itself current after a newer edit or explicit master-toggle change.
+      if (requestSequence !== settingsSaveSequenceRef.current || !hydratedRef.current) return;
+      try {
+        const response = await fetch(saveUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: payload,
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok || !body?.ok) {
+          if (reportErrors && requestSequence === settingsSaveSequenceRef.current) {
+            setSaveError(body?.error ?? `Server rejected the settings (${response.status})`);
+          }
+          return;
+        }
+        const snapshotIsCurrent =
+          requestSequence === settingsSaveSequenceRef.current &&
+          settingsEditRevisionRef.current === settingsEditRevision &&
+          enabledEditRevisionRef.current === enabledEditRevision &&
+          JSON.stringify(settingsRef.current) === toSaveStr;
+        if (snapshotIsCurrent) {
+          lastSavedRef.current = toSaveStr;
+          lastSavedSnapchatToolsRef.current = snapchatToolsSnapshot;
+          setSaveError(null);
+        }
+      } catch (error: any) {
+        if (reportErrors && requestSequence === settingsSaveSequenceRef.current) {
+          setSaveError(error?.message ?? "Couldn't reach the server");
+        }
+      }
+    });
+    settingsSaveQueueRef.current = request;
+    return request;
+  }, [phone?.serial, slotIdx, slotId]);
+
   // Save on the fly: every settings change (including the master toggle)
   // is persisted automatically, debounced so rapid typing doesn't fire a
   // request per keystroke. No manual "Save" step required.
@@ -5155,34 +5225,10 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       // A request that was already debounced when a refresh failed must not
       // write its stale snapshot after the failure has closed the save gate.
       if (!hydratedRef.current) return;
-      const slotIdentityQuery = slotId ? `?slotId=${encodeURIComponent(slotId)}` : "";
-      const saveUrl = slotIdx !== undefined
-        ? `/api/mobile/devices/${encodeURIComponent(serial)}/slots/${slotIdx}/automation-settings${slotIdentityQuery}`
-        : `/api/mobile/devices/${encodeURIComponent(serial)}/automation-settings`;
-       // The master toggle has its own revisioned endpoint. Omitting it from
-       // full-settings autosave prevents a stale settings edit from restoring
-       // an older enabled value after a navigation or API restart.
-       const { enabled: _enabled, ...settingsWithoutToggle } = toSave;
-       const payload = slotIdx !== undefined && serial
-         ? JSON.stringify(settingsWithoutToggle)
-         : toSaveStr;
-       fetch(saveUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-         keepalive: true,
-          body: payload,
-      })
-        .then(async r => {
-          const body = await r.json().catch(() => null);
-          if (!r.ok || !body?.ok) { setSaveError(body?.error ?? `Server rejected the settings (${r.status})`); return; }
-          lastSavedRef.current = toSaveStr;
-          lastSavedSnapchatToolsRef.current = snapchatToolsSnapshot;
-          setSaveError(null);
-        })
-        .catch((e: any) => setSaveError(e?.message ?? "Couldn't reach the server"));
+      void enqueueSlotSettingsSave(toSave);
     }, snapchatToolsChanged ? 100 : 500);
     return () => clearTimeout(t);
-  }, [settings, phone?.serial, slotIdx, slotId]);
+  }, [settings, phone?.serial, slotIdx, slotId, enqueueSlotSettingsSave]);
 
   // Flush a pending slot-settings autosave when navigating away. Without this
   // cleanup, leaving the HST page inside the 500 ms debounce window discards
@@ -5202,14 +5248,9 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       const payload = slotIdx !== undefined
         ? JSON.stringify(settingsWithoutToggle)
         : toSaveStr;
-      void fetch(saveUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: payload,
-      });
+      void enqueueSlotSettingsSave(toSave, false);
     };
-  }, [phone?.serial, slotIdx, slotId]);
+  }, [phone?.serial, slotIdx, slotId, enqueueSlotSettingsSave]);
 
   // While the master toggle is on, repeatedly run the full automation
   // cycle (power on → open Instagram → scroll/like with the configured

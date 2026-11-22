@@ -1,4 +1,4 @@
-import type { SnapchatContext } from "./context";
+import type { SnapchatContext, SnapchatRunnableToolKey } from "./context";
 import { closeAddFriendsPanel } from "./navigation/closeAddFriendsPanel";
 import { ensureSnapchatAccount } from "./navigation/ensureSnapchatAccount";
 import { dismissSnapchatStartupPopup } from "./navigation/dismissNotificationPermission";
@@ -13,6 +13,7 @@ import { runViewSpotlights } from "./tools/viewSpotlights";
 import { withSnapchatContext } from "./runtime";
 
 type SnapchatToolEntry = {
+  key: SnapchatRunnableToolKey;
   name: string;
   settings: {
     enabled: boolean;
@@ -62,13 +63,13 @@ async function runSnapchatToolsInContext(context: SnapchatContext): Promise<void
   }
 
   const toolList: SnapchatToolEntry[] = [
-    { name: "Upload a Snap", settings: context.tools.uploadSnap, run: () => runUploadSnap(context) },
-    { name: "Upload a Video", settings: context.tools.uploadVideo, run: () => runUploadVideo(context) },
-    { name: "Add Friends", settings: context.tools.addFriends, run: () => runAddFriends(context) },
-    { name: "Accept Friends", settings: context.tools.acceptFriends, run: () => runAcceptFriends(context) },
-    { name: "Reply to Unread Chats", settings: context.tools.replyUnreadChats, run: () => runReplyUnreadChats(context) },
-    { name: "View Spotlights", settings: context.tools.viewStories, run: () => runViewSpotlights(context) },
-    { name: "View Snaps", settings: context.tools.viewSnaps, run: () => runViewSnaps(context) },
+    { key: "uploadSnap", name: "Upload a Snap", settings: context.tools.uploadSnap, run: () => runUploadSnap(context) },
+    { key: "uploadVideo", name: "Upload a Video", settings: context.tools.uploadVideo, run: () => runUploadVideo(context) },
+    { key: "addFriends", name: "Add Friends", settings: context.tools.addFriends, run: () => runAddFriends(context) },
+    { key: "acceptFriends", name: "Accept Friends", settings: context.tools.acceptFriends, run: () => runAcceptFriends(context) },
+    { key: "replyUnreadChats", name: "Reply to Unread Chats", settings: context.tools.replyUnreadChats, run: () => runReplyUnreadChats(context) },
+    { key: "viewStories", name: "View Spotlights", settings: context.tools.viewStories, run: () => runViewSpotlights(context) },
+    { key: "viewSnaps", name: "View Snaps", settings: context.tools.viewSnaps, run: () => runViewSnaps(context) },
   ];
 
   let friendRequestCooldownTriggered = false;
@@ -112,6 +113,20 @@ async function runSnapchatToolsInContext(context: SnapchatContext): Promise<void
   for (let index = 0; index < orderedTools.length; index++) {
     const tool = orderedTools[index];
     if (context.isAborted()) return;
+    if (context.getToolEnabled) {
+      let latestEnabled: boolean | null = null;
+      try {
+        latestEnabled = await context.getToolEnabled(tool.key);
+      } catch {
+        latestEnabled = null;
+      }
+      if (latestEnabled !== true) {
+        context.onLog(latestEnabled === false
+          ? `Snapchat: ${tool.name} skipped because its setting was switched off before dispatch.`
+          : `Snapchat: ${tool.name} skipped because its current setting could not be verified.`);
+        continue;
+      }
+    }
     if (tool.name === "Add Friends" || tool.name === "Accept Friends") {
       if (friendRequestCooldownTriggered) {
         context.onLog(`Snapchat: ${tool.name} skipped because the 3-hour friend-request cooldown was triggered this cycle.`);
