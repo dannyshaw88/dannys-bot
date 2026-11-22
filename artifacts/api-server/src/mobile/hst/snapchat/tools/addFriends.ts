@@ -234,15 +234,14 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   };
   const skipAndScroll = async (
     state: { nodes: UiNode[] },
-    selectedFriend: { friendName: string; friendKey: string; row: UiNode },
+    selectedFriend: { friendName: string; friendKey: string },
   ) => {
-    const { friendName, friendKey, row } = selectedFriend;
+    const { friendName, friendKey } = selectedFriend;
     attemptedFriends.add(friendKey);
     context.onLog(`Add Friends: skipping ${friendName}; it is already on the farm list or is currently being added.`);
     if (!await scrollAddFriendsListOneSlot(
       context,
       state.nodes,
-      row,
       screenHeight,
       friendName,
       "skipping a recently added name",
@@ -324,7 +323,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       if (!await scrollAddFriendsListOneSlot(
         context,
         state.nodes,
-        row,
         screenHeight,
         friendName,
         "skipping an avoided suggestion",
@@ -501,7 +499,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     if (!await scrollAddFriendsListOneSlot(
       context,
       afterTap.nodes,
-      selected.row,
       screenHeight,
       friendName,
       "adding",

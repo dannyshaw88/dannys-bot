@@ -132,7 +132,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
           node.bounds[1] >= row.bounds[1] && node.bounds[3] <= row.bounds[3],
         );
         const displayName = name?.text.trim() || name?.desc.trim() || "";
-        return row && displayName ? [{ button, name: displayName, row }] : [];
+        return row && displayName ? [{ button, name: displayName }] : [];
       });
   const acceptanceKey = normalizeFriendDisplayName;
 
@@ -186,7 +186,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
 
   let accepted = 0;
   let noMoreAvailable = false;
-  let pendingAcceptance: { name: string; row: UiNode } | null = null;
+  let pendingAcceptance: { name: string } | null = null;
   const attemptedAcceptances = new Set<string>();
   while (accepted < requested && !context.isAborted()) {
     if (pendingAcceptance) {
@@ -216,7 +216,6 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
         const scrolled = await scrollAcceptFriendsListOneSlot(
           context,
           state.nodes,
-          stillPending.row,
           screenHeight,
           currentAcceptance.name,
         );
@@ -240,7 +239,6 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
       const scrolled = await scrollAcceptFriendsListOneSlot(
         context,
         state.nodes,
-        currentAcceptance.row,
         screenHeight,
         currentAcceptance.name,
       );
@@ -273,7 +271,7 @@ export async function runAcceptFriends(context: SnapchatContext): Promise<boolea
       logAction(context, `${accepted} of ${requested} friend requests accepted; paused by Snapchat's friend-request limit`);
       return cooldownAfterTap;
     }
-    pendingAcceptance = { name: candidate.name, row: candidate.row };
+    pendingAcceptance = { name: candidate.name };
   }
   context.onLog(`Accept Friends: accepted ${accepted}/${requested} visible incoming requests.`);
   const result = accepted === requested
