@@ -267,19 +267,23 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     avoidTerms.find(term => selectedFriend.identityText.some(value => value.includes(term)));
   const dismissAvoidedSuggestion = async (
     state: { nodes: UiNode[] },
-    selectedFriend: { friendName: string; friendKey: string; row: UiNode },
+    selectedFriend: { friendName: string; friendKey: string; row: UiNode; candidate: UiNode },
     matchedTerm: string,
   ): Promise<boolean> => {
     const { friendName, row } = selectedFriend;
     attemptedFriends.add(selectedFriend.friendKey);
     const rowBounds = row.bounds;
+    const addButtonCenterY = center(selectedFriend.candidate).y;
+    const addButtonHeight = selectedFriend.candidate.bounds[3] - selectedFriend.candidate.bounds[1];
+    const sameRowTolerance = Math.max(8, Math.round(addButtonHeight * 0.25));
     const dismiss = state.nodes.find(node =>
       shortResourceId(node) === "friend-cell-dismiss" &&
       /^(hide|dismiss)$/i.test(node.desc.trim() || node.text.trim()) &&
       node.bounds[0] >= rowBounds[0] &&
       node.bounds[1] >= rowBounds[1] &&
       node.bounds[2] <= rowBounds[2] &&
-      node.bounds[3] <= rowBounds[3],
+      node.bounds[3] <= rowBounds[3] &&
+      Math.abs(center(node).y - addButtonCenterY) <= sameRowTolerance,
     );
     if (!dismiss) {
       context.onLog(`Add Friends: ${friendName} matched the avoid list (“${matchedTerm}”), but its row Hide control was not exposed; it will not be added.`);
