@@ -199,7 +199,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     logAction(context, "0 friends added; could not open the friend list");
     return false;
   }
-  const { h: screenHeight } = await android.getScreenSizeAsync(context.serial);
+  const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let added = 0;
   let noMoreAvailable = false;
   let delaySatisfiedSinceLastAdd = false;
@@ -242,6 +242,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     if (!await scrollAddFriendsListOneSlot(
       context,
       state.nodes,
+      screenWidth,
       screenHeight,
       friendName,
       "skipping a recently added name",
@@ -323,6 +324,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       if (!await scrollAddFriendsListOneSlot(
         context,
         state.nodes,
+        screenWidth,
         screenHeight,
         friendName,
         "skipping an avoided suggestion",
@@ -499,6 +501,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     if (!await scrollAddFriendsListOneSlot(
       context,
       afterTap.nodes,
+      screenWidth,
       screenHeight,
       friendName,
       "adding",
