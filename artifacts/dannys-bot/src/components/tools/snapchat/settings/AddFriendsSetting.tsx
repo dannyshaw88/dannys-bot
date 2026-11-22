@@ -64,9 +64,9 @@ export function AddFriendsSetting({ value, loading, onUpdate }: AddFriendsSettin
         </>
       }
       childrenBelow={
-        <div className="space-y-2">
-          <div className="flex flex-nowrap items-center gap-4 overflow-x-auto">
-            <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+        <div>
+          <div className="flex w-full flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap">
+            <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={value.skipAdded}
@@ -78,7 +78,7 @@ export function AddFriendsSetting({ value, loading, onUpdate }: AddFriendsSettin
               Skip Added
             </label>
             <label
-              className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"
+              className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none"
               title="Dismiss if the name or username contains letters outside A–Z. Symbols and emoji alone are ignored."
             >
               <input
@@ -91,9 +91,7 @@ export function AddFriendsSetting({ value, loading, onUpdate }: AddFriendsSettin
               />
               Dismiss Non-English
             </label>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+            <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={value.avoidUsersContainingEnabled}
@@ -118,18 +116,18 @@ export function AddFriendsSetting({ value, loading, onUpdate }: AddFriendsSettin
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={loading || !value.enabled}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-border px-1.5 text-[9px] text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {fileName ? <FileText className="h-3.5 w-3.5" /> : <Upload className="h-3.5 w-3.5" />}
+              {fileName ? <FileText className="h-3 w-3" /> : <Upload className="h-3 w-3" />}
               {fileName || "Upload text file"}
             </button>
             {fileName && (
-              <span className="text-xs text-muted-foreground">
+              <span className="max-w-[90px] shrink-0 truncate text-[9px] text-muted-foreground" title={fileName}>
                 {termCount.toLocaleString()} words
               </span>
             )}
-            {fileError && <span role="alert" className="text-xs text-destructive">{fileError}</span>}
           </div>
+          {fileError && <span role="alert" className="mt-1 block text-xs text-destructive">{fileError}</span>}
         </div>
       }
     />
