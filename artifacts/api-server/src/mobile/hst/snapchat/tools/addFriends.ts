@@ -327,9 +327,43 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       return !context.isAborted();
     }
     context.onLog(`Add Friends: ${friendName} matched the avoid list (“${matchedTerm}”); dismissing it with the row Hide control.`);
-    if (!await tapNode(context, dismiss, `dismiss avoided suggestion ${friendName} with its row Hide control`, 350, true)) {
+    if (context.isAborted()) return false;
+    const liveRowY = center(selectedFriend.candidate).y;
+    const calibration = android.loadNavigationCalibrationMap(context.serial);
+    const hasDismissXCalibration = !!calibration?.points.snapchatFriendSuggestionDismissX;
+    try {
+      if (hasDismissXCalibration) {
+        await android.tapCalibratedNavigationControlAtY(
+          context.serial,
+          "snapchatFriendSuggestionDismissX",
+          liveRowY,
+          message => context.onLog(`Add Friends: ${message}`),
+          `Snapchat: dismiss avoided suggestion ${friendName} at its live row`,
+        );
+      } else {
+        const liveNodeCenterX = center(dismiss).x;
+        context.onLog(
+          `Add Friends: no calibrated dismiss X for this device; using live Hide-node center ` +
+          `(${liveNodeCenterX},${liveRowY}).`,
+        );
+        await android.tap(
+          context.serial,
+          liveNodeCenterX,
+          liveRowY,
+          "manual",
+          `Snapchat: dismiss avoided suggestion ${friendName} at its live row`,
+          "automation",
+        );
+      }
+    } catch (error) {
+      context.onLog(
+        `Add Friends stopped: the calibrated dismiss X could not be used safely` +
+        `${error instanceof Error ? ` (${error.message})` : ""}.`,
+      );
       return false;
     }
+    await context.sleep(350, "exact");
+    if (context.isAborted()) return false;
     context.onLog(`Add Friends: dismissed ${friendName}; using Snapchat's refreshed list position without an extra scroll.`);
     return !context.isAborted();
   };

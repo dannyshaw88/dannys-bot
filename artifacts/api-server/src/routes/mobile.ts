@@ -12363,6 +12363,12 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
     try {
       const serial = p(req, "serial");
       const { control } = z.object({ control: z.enum(android.NAVIGATION_CONTROL_IDS) }).parse(req.body);
+      if (control === "snapchatFriendSuggestionDismissX") {
+        return void res.status(422).json({
+          ok: false,
+          error: "This calibration is X-only; Add Friends supplies the live row Y, so test it on a live suggestion row.",
+        });
+      }
       const point = await android.tapCalibratedNavigationControl(serial, control, message => {
         req.log.info({ serial, message }, "[navigation-calibration]");
       });

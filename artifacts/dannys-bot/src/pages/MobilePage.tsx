@@ -3045,7 +3045,7 @@ function CalibrationDialog({
 }
 
 type NavigationControlId =
-  | "snapchatClickPaperclip" | "snapchatClickText"
+  | "snapchatClickPaperclip" | "snapchatClickText" | "snapchatFriendSuggestionDismissX"
   | "home" | "reels" | "directMessages" | "search" | "profile"
   | "createPost" | "makePostCropToFit" | "makePostFilters" | "makePostMostRightFilter" | "makePostFinishFilterSelection"
   | "makePostFirstNext" | "makePostSecondNext" | "makePostShare" | "userSearch" | "notifications" | "settingsBack" | "whatsappFirstMediaGallery";
@@ -3056,6 +3056,7 @@ type NavigationControl = {
   app: NavigationApp;
   label: string;
   instruction: string;
+  axis?: "x";
 };
 type NavigationMap = {
   version: 1;
@@ -3068,6 +3069,7 @@ const NAVIGATION_APP_ORDER: NavigationApp[] = ["Snapchat", "Instagram", "WhatsAp
 const NAVIGATION_CONTROLS: NavigationControl[] = [
   { id: "snapchatClickPaperclip", app: "Snapchat", label: "Click Paperclip", instruction: "Open Snapchat's video Snap editor, tap the down chevron to expose the paperclip, then capture and tap the paperclip on the physical phone." },
   { id: "snapchatClickText", app: "Snapchat", label: "Click Text", instruction: "Open Snapchat's video Snap editor with the top-right T visible, then capture and tap the T on the physical phone." },
+  { id: "snapchatFriendSuggestionDismissX", app: "Snapchat", label: "Friend Suggestion Dismiss X", instruction: "Open Add Friends with a gray X visible. Capture the center of that X. Only its horizontal X coordinate is saved; Add Friends uses each live row's center Y.", axis: "x" },
   { id: "home", app: "Instagram", label: "Home", instruction: "Show the Instagram home feed, then tap the Home tab on the physical phone." },
   { id: "reels", app: "Instagram", label: "Reels", instruction: "Show Instagram's bottom navigation, then tap the Reels tab on the physical phone." },
   { id: "directMessages", app: "Instagram", label: "Direct Messages", instruction: "Show the Instagram home header, then tap the Direct Messages icon on the physical phone." },
@@ -3178,7 +3180,11 @@ function NavigationCalibrationDialog({
         setMessage(`Display changed from ${map.screen.w}×${map.screen.h} to ${capturedScreen.w}×${capturedScreen.h}; old points were discarded`);
       }
       await savePoints(nextPoints);
-      setMessage(`✓ ${control.label} captured at (${body.x}, ${body.y}) and saved${discardedForResize ? " (previous-size points discarded)" : ""}`);
+      setMessage(
+        control.axis === "x"
+          ? `✓ ${control.label} captured at X=${body.x}; Add Friends uses each live row's Y${discardedForResize ? " (previous-size points discarded)" : ""}`
+          : `✓ ${control.label} captured at (${body.x}, ${body.y}) and saved${discardedForResize ? " (previous-size points discarded)" : ""}`,
+      );
       onLog?.(`[navigation-calibration] '${control.label}' → (${body.x}, ${body.y})`);
       if (mode === "wizard") setTimeout(() => setStep(value => value + 1), 500);
     } catch (error: any) {
@@ -3258,8 +3264,8 @@ function NavigationCalibrationDialog({
         <div className="rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 py-2.5">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-200">DEVICE-SPECIFIC CONTROLS</p>
           <p className="mt-1 text-[11px] leading-4 text-amber-100/80">
-            These fixed controls are tapped only from this physical device&apos;s saved map.
-            Missing, stale, or invalid points stop automation; no image, accessibility, or coordinate fallback is used.
+            These controls use this physical device&apos;s saved map. Friend Suggestion Dismiss X stores only its horizontal coordinate;
+            Add Friends supplies the current row&apos;s vertical position. Other fixed controls use both saved coordinates.
           </p>
         </div>
 
@@ -3276,6 +3282,7 @@ function NavigationCalibrationDialog({
               <li>For each prompt, put the named control on screen before starting capture.</li>
               <li>Press Capture, then tap the matching control on the physical phone.</li>
               <li>Instagram Settings Back means the in-app arrow, not Android system Back.</li>
+              <li>Friend Suggestion Dismiss X is an X-only helper; the live Add Friends row supplies Y.</li>
             </ol>
             <div className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300">
               {map ? <>Saved: <span className="font-semibold text-green-400">{mappedCount}</span> / {NAVIGATION_CONTROLS.length} controls</> : <span className="font-semibold text-red-300">No valid saved map loaded</span>}
@@ -3363,11 +3370,15 @@ function NavigationCalibrationDialog({
                         <div className="flex items-center gap-2">
                           <span className={`text-[10px] font-bold ${point ? "text-green-400" : "text-red-400"}`}>{point ? "✓" : "✗"}</span>
                           <span className="min-w-0 flex-1 text-xs text-slate-200">{control.label}</span>
-                          {point && <span className="font-mono text-[10px] text-slate-500">({point.x}, {point.y})</span>}
+                          {point && (
+                            <span className="font-mono text-[10px] text-slate-500">
+                              {control.axis === "x" ? `X=${point.x} · live row Y` : `(${point.x}, ${point.y})`}
+                            </span>
+                          )}
                           <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-slate-300 hover:bg-slate-700" data-testid={`capture-mirror-control-${control.id}`} onClick={() => void capture(control)} disabled={!!capturing || !!testing}>
                             {isCapturing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Re-tap"}
                           </Button>
-                          {point && (
+                          {point && control.axis !== "x" && (
                               <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-cyan-300 hover:bg-cyan-950/50" data-testid={`position-mirror-control-${control.id}`} onClick={() => onCalibrationPosition?.({ ...point, label: control.label, screen: map?.screen })} disabled={!!capturing || !!testing}>
                               Position
                             </Button>
@@ -3377,9 +3388,13 @@ function NavigationCalibrationDialog({
                               Clear
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-amber-300 hover:bg-amber-950/50" data-testid={`test-mirror-control-${control.id}`} onClick={() => void test(control.id)} disabled={!point || !!capturing || !!testing}>
-                            {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
-                          </Button>
+                          {control.axis === "x" ? (
+                            <span className="text-[9px] text-slate-500">tested on live row</span>
+                          ) : (
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-amber-300 hover:bg-amber-950/50" data-testid={`test-mirror-control-${control.id}`} onClick={() => void test(control.id)} disabled={!point || !!capturing || !!testing}>
+                              {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );

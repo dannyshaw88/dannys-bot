@@ -15293,6 +15293,7 @@ function _calibrationPath(serial: string): string {
 export const NAVIGATION_CONTROL_IDS = [
   "snapchatClickPaperclip",
   "snapchatClickText",
+  "snapchatFriendSuggestionDismissX",
   "home",
   "reels",
   "directMessages",
@@ -15441,6 +15442,37 @@ export async function tapCalibratedNavigationControl(
     "automation",
   );
   return { x, y };
+}
+
+/**
+ * Tap a Snapchat Add Friends row using a per-device calibrated horizontal
+ * coordinate and the current row's live vertical position. The captured Y is
+ * intentionally ignored because each suggestion appears at a different row.
+ */
+export async function tapCalibratedNavigationControlAtY(
+  serial: string,
+  control: "snapchatFriendSuggestionDismissX",
+  y: number,
+  onLog?: (msg: string) => void,
+  reason?: string,
+): Promise<NavigationPoint> {
+  const point = getCalibratedNavigationControl(serial, control);
+  const x = Math.round(point.x);
+  const { w, h } = getScreenSize(serial);
+  if (!Number.isFinite(y) || y < 0 || y >= h) {
+    throw new Error(`Live row Y ${y} is outside the ${w}x${h} display`);
+  }
+  const liveY = Math.round(y);
+  onLog?.(`[cal-navigation] tapping ${control} at calibrated X ${x} and live row Y ${liveY} on ${w}x${h}`);
+  await tap(
+    serial,
+    x,
+    liveY,
+    "manual",
+    reason ?? `Calibrated navigation: tap ${control} at the live row Y`,
+    "automation",
+  );
+  return { x, y: liveY };
 }
 
 /** Resolve a fixed control without dispatching input (used for long-press). */
