@@ -184,6 +184,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [sendDmScheduleEnabled, setSendDmScheduleEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.scheduleEnabled", false);
   const [sendDmIntervalMin, setSendDmIntervalMin] = usePersistentBrowserSetting("aura.googleChrome.sendDms.intervalMin", "");
   const [sendDmIntervalMax, setSendDmIntervalMax] = usePersistentBrowserSetting("aura.googleChrome.sendDms.intervalMax", "");
+  const [sendDmAmountEnabled, setSendDmAmountEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.amountEnabled", false);
+  const [sendDmAmountMin, setSendDmAmountMin] = usePersistentBrowserSetting("aura.googleChrome.sendDms.amountMin", "");
+  const [sendDmAmountMax, setSendDmAmountMax] = usePersistentBrowserSetting("aura.googleChrome.sendDms.amountMax", "");
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiElapsed, setAiElapsed] = useState(0);
@@ -1311,6 +1314,38 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                                 placeholder="Y"
                               />
                               <span className="text-sm text-muted-foreground whitespace-nowrap">max minutes</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id="browser-dm-amount-enabled"
+                                checked={sendDmAmountEnabled}
+                                onCheckedChange={(checked) => setSendDmAmountEnabled(checked === true)}
+                              />
+                              <label htmlFor="browser-dm-amount-enabled" className="text-sm whitespace-nowrap">
+                                Amount to message
+                              </label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={sendDmAmountMin}
+                                onChange={(event) => setSendDmAmountMin(event.target.value)}
+                                disabled={!sendDmAmountEnabled}
+                                className="w-20"
+                                aria-label="Minimum messages per run"
+                                placeholder="X"
+                              />
+                              <span className="text-sm text-muted-foreground whitespace-nowrap">min and</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={sendDmAmountMax}
+                                onChange={(event) => setSendDmAmountMax(event.target.value)}
+                                disabled={!sendDmAmountEnabled}
+                                className="w-20"
+                                aria-label="Maximum messages per run"
+                                placeholder="Y"
+                              />
+                              <span className="text-sm text-muted-foreground whitespace-nowrap">max</span>
                             </div>
                             <div className="flex items-center gap-3">
                               <Checkbox
