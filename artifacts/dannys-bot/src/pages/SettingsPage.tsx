@@ -1,7 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { TrustScoresTabContent, BulkImportTabContent } from "@/pages/ToolsPage";
-import ImagesPage from "@/pages/ImagesPage";
-import { FarmAccountsExportPanel } from "@/components/FarmAccountsExportPanel";
+import { lazy, Suspense, useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -12,12 +10,36 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, Activity, Globe, MessageCircle, Ghost } from "lucide-react";
-import { LunaTestPage } from "@/pages/LunaTestPage";
-import { GhostBrowserTabContent } from "@/pages/CreateGhostPage";
-import { GoogleChromeTabContent } from "@/pages/GoogleChromePage";
 import type { GlobalSettings } from "@shared/schema";
-import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
+
+const TrustScoresTabContent = lazy(() =>
+  import("@/pages/ToolsPage").then((module) => ({ default: module.TrustScoresTabContent })),
+);
+const BulkImportTabContent = lazy(() =>
+  import("@/pages/ToolsPage").then((module) => ({ default: module.BulkImportTabContent })),
+);
+const ImagesPage = lazy(() => import("@/pages/ImagesPage"));
+const FarmAccountsExportPanel = lazy(() =>
+  import("@/components/FarmAccountsExportPanel").then((module) => ({ default: module.FarmAccountsExportPanel })),
+);
+const LunaTestPage = lazy(() =>
+  import("@/pages/LunaTestPage").then((module) => ({ default: module.LunaTestPage })),
+);
+const GhostBrowserTabContent = lazy(() =>
+  import("@/pages/CreateGhostPage").then((module) => ({ default: module.GhostBrowserTabContent })),
+);
+const GoogleChromeTabContent = lazy(() =>
+  import("@/pages/GoogleChromePage").then((module) => ({ default: module.GoogleChromeTabContent })),
+);
+
+function SettingsTabLoading() {
+  return (
+    <div className="flex items-center justify-center py-10 text-sm text-muted-foreground" role="status">
+      Loading settings…
+    </div>
+  );
+}
 
 type BackupEntry = { id: string; date: string; size: number };
 const eAPI = () => (window as any).electronAPI;
@@ -645,25 +667,43 @@ export function SettingsPage() {
       )}
 
       {settingsTab === "trust scores" && (
-        <div>
-          <TrustScoresTabContent />
-        </div>
+        <Suspense fallback={<SettingsTabLoading />}>
+          <div><TrustScoresTabContent /></div>
+        </Suspense>
       )}
 
       {settingsTab === "fix images" && (
-        <ImagesPage embedded />
+        <Suspense fallback={<SettingsTabLoading />}>
+          <ImagesPage embedded />
+        </Suspense>
       )}
 
       {settingsTab === "import/export" && (
         <div className="space-y-4">
-          <BulkImportTabContent />
-          <FarmAccountsExportPanel />
+          <Suspense fallback={<SettingsTabLoading />}>
+            <BulkImportTabContent />
+          </Suspense>
+          <Suspense fallback={<SettingsTabLoading />}>
+            <FarmAccountsExportPanel />
+          </Suspense>
         </div>
       )}
 
-      {settingsTab === "prompt test" && <LunaTestPage embedded />}
-      {settingsTab === "ghost browser" && <GhostBrowserTabContent />}
-      {settingsTab === "google chrome" && <GoogleChromeTabContent />}
+      {settingsTab === "prompt test" && (
+        <Suspense fallback={<SettingsTabLoading />}>
+          <LunaTestPage embedded />
+        </Suspense>
+      )}
+      {settingsTab === "ghost browser" && (
+        <Suspense fallback={<SettingsTabLoading />}>
+          <GhostBrowserTabContent />
+        </Suspense>
+      )}
+      {settingsTab === "google chrome" && (
+        <Suspense fallback={<SettingsTabLoading />}>
+          <GoogleChromeTabContent />
+        </Suspense>
+      )}
 
       <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import/export", "prompt test", "ghost browser", "google chrome"].includes(settingsTab) ? "hidden" : ""}`}>
 
