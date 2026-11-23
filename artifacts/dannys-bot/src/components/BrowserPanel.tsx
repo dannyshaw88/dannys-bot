@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ChevronLeft, ChevronRight, RefreshCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, Plus, ShieldAlert, Sparkles, Download,
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, ShieldAlert, Sparkles, Download, Settings, Send, Inbox,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -144,6 +144,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [waitingFirstFrame, setWaitingFirstFrame] = useState(true);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [fileChooserPending, setFileChooserPending] = useState(false);
+  const [showBrowserSettings, setShowBrowserSettings] = useState(false);
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiElapsed, setAiElapsed] = useState(0);
@@ -845,14 +846,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
 
       {/* Toolbar */}
       {!noToolbar && <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-background shrink-0">
-        <button
-          onClick={() => { send({ type: "newTab" }); setTimeout(() => send({ type: "navigate", url: "https://www.google.com/" }), 300); }}
-          disabled={!connected}
-          className="flex items-center justify-center h-10 w-10 rounded-md hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-          title="Open new tab (Google)"
-        >
-          <Plus className="w-5 h-5" />
-        </button>
         <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => send({ type: "back" })}    disabled={!connected} title="Back">
           <ChevronLeft className="w-5 h-5" />
         </Button>
@@ -868,6 +861,19 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           disabled={!connected} title="Home">
           <Home className="w-6 h-6" />
         </Button>
+        {genericBrowser && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-12 w-12 shrink-0"
+            onClick={() => setShowBrowserSettings(true)}
+            disabled={!connected}
+            title="Browser settings"
+            aria-label="Browser settings"
+          >
+            <Settings className="w-6 h-6" />
+          </Button>
+        )}
 
         <form onSubmit={onAddressSubmit} className="flex-1 min-w-0">
           <div className="relative">
@@ -1147,6 +1153,62 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                     <Trash2 className="w-3.5 h-3.5" /> Clear &amp; Reset
                   </Button>
                 </div>
+              </div>
+            )}
+
+            {genericBrowser && showBrowserSettings && (
+              <div
+                className="absolute inset-0 z-30 flex items-center justify-center bg-black/35 p-4"
+                onMouseDown={(event) => {
+                  if (event.target === event.currentTarget) setShowBrowserSettings(false);
+                }}
+              >
+                <section
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="browser-settings-title"
+                  className="w-[65%] h-[75%] min-w-[320px] min-h-[240px] rounded-xl border border-border bg-background shadow-2xl flex flex-col overflow-hidden"
+                >
+                  <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-muted-foreground" />
+                      <h2 id="browser-settings-title" className="text-sm font-semibold">Browser settings</h2>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setShowBrowserSettings(false)}
+                      title="Close browser settings"
+                      aria-label="Close browser settings"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </header>
+                  <div className="flex flex-1 min-h-0">
+                    <nav aria-label="Browser settings sections" className="w-44 shrink-0 border-r border-border flex flex-col justify-center gap-2 p-3">
+                      {[
+                        { title: "Send DMs", Icon: Send },
+                        { title: "Check DMs", Icon: Inbox },
+                        { title: "Unassigned", Icon: Sparkles },
+                        { title: "Unassigned", Icon: MonitorPlay },
+                        { title: "Unassigned", Icon: Download },
+                      ].map(({ title, Icon }, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          aria-label={title}
+                          title={title}
+                          className="h-10 w-full rounded-md flex items-center gap-3 px-3 text-left text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        >
+                          <Icon className="w-5 h-5 shrink-0" />
+                          <span className="truncate">{title}</span>
+                        </button>
+                      ))}
+                    </nav>
+                    <div className="flex-1 min-w-0" />
+                  </div>
+                </section>
               </div>
             )}
 
