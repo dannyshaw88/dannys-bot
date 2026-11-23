@@ -5313,6 +5313,8 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       slotIdPresent: Boolean(slotId),
       source,
       requestSequence,
+      payloadBytes: new TextEncoder().encode(payload).byteLength,
+      keepalive: false,
       hydrated: hydratedRef.current,
       changedFields,
       toolSwitches: snapchatToolSwitchState(toSave.snapchatTools),
@@ -5345,7 +5347,6 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
             "Content-Type": "application/json",
             "X-Settings-Debug-Id": debugRequestId,
           },
-          keepalive: true,
           body: payload,
         });
         const body = await response.json().catch(() => null);
