@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronLeft, ChevronRight, RefreshCw, Home, Globe, Shield,
-  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, ShieldAlert, Sparkles, Download, Settings, Send, Inbox,
+  Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, ShieldAlert, Sparkles, Download, Settings, Send, Inbox, Play, Square,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -151,11 +151,19 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [sendDmUrl, setSendDmUrl] = useState("");
   const [sendDmMessageEnabled, setSendDmMessageEnabled] = useState(false);
   const [sendDmMessage, setSendDmMessage] = useState("");
+  const sendDmMessageSets = useMemo(
+    () => sendDmMessage.split("!!").map((message) => message.trim()).filter(Boolean),
+    [sendDmMessage],
+  );
   const [skipAlreadyMessaged, setSkipAlreadyMessaged] = useState(false);
+  const [continueWhereLeftOff, setContinueWhereLeftOff] = useState(false);
   const [sendDmGirlsOnly, setSendDmGirlsOnly] = useState(false);
   const [sendDmStopLimitsEnabled, setSendDmStopLimitsEnabled] = useState(false);
   const [sendDmStopMinutes, setSendDmStopMinutes] = useState("");
   const [sendDmMaxUsers, setSendDmMaxUsers] = useState("");
+  const [sendDmScheduleEnabled, setSendDmScheduleEnabled] = useState(false);
+  const [sendDmIntervalMin, setSendDmIntervalMin] = useState("");
+  const [sendDmIntervalMax, setSendDmIntervalMax] = useState("");
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiElapsed, setAiElapsed] = useState(0);
@@ -873,20 +881,42 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           <Home className="w-6 h-6" />
         </Button>
         {genericBrowser && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-12 w-12 shrink-0"
-            onClick={() => {
-              setActiveBrowserSettingsSection("send-dms");
-              setShowBrowserSettings(true);
-            }}
-            disabled={!connected}
-            title="Browser settings"
-            aria-label="Browser settings"
-          >
-            <Settings className="w-6 h-6" />
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-12 w-12 shrink-0"
+              onClick={() => {
+                setActiveBrowserSettingsSection("send-dms");
+                setShowBrowserSettings(true);
+              }}
+              disabled={!connected}
+              title="Browser settings"
+              aria-label="Browser settings"
+            >
+              <Settings className="w-6 h-6" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-12 w-12 shrink-0 text-green-600"
+              disabled
+              title="Go — Facebook browser runner not connected"
+              aria-label="Go"
+            >
+              <Play className="w-6 h-6" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-12 w-12 shrink-0 text-red-600"
+              disabled
+              title="Stop — Facebook browser runner not connected"
+              aria-label="Stop"
+            >
+              <Square className="w-5 h-5" />
+            </Button>
+          </>
         )}
 
         <form onSubmit={onAddressSubmit} className="flex-1 min-w-0">
@@ -1232,6 +1262,38 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                           <div className="space-y-4">
                             <div className="flex items-center gap-3">
                               <Checkbox
+                                id="browser-dm-schedule-enabled"
+                                checked={sendDmScheduleEnabled}
+                                onCheckedChange={(checked) => setSendDmScheduleEnabled(checked === true)}
+                              />
+                              <label htmlFor="browser-dm-schedule-enabled" className="text-sm whitespace-nowrap">
+                                Run every
+                              </label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={sendDmIntervalMin}
+                                onChange={(event) => setSendDmIntervalMin(event.target.value)}
+                                disabled={!sendDmScheduleEnabled}
+                                className="w-20"
+                                aria-label="Minimum minutes between runs"
+                                placeholder="X"
+                              />
+                              <span className="text-sm text-muted-foreground whitespace-nowrap">min and</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={sendDmIntervalMax}
+                                onChange={(event) => setSendDmIntervalMax(event.target.value)}
+                                disabled={!sendDmScheduleEnabled}
+                                className="w-20"
+                                aria-label="Maximum minutes between runs"
+                                placeholder="Y"
+                              />
+                              <span className="text-sm text-muted-foreground whitespace-nowrap">max minutes</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Checkbox
                                 id="browser-dm-url-enabled"
                                 checked={sendDmUrlEnabled}
                                 onCheckedChange={(checked) => setSendDmUrlEnabled(checked === true)}
@@ -1248,23 +1310,28 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                                 className="min-w-0 flex-1"
                               />
                             </div>
-                            <div className="flex items-center gap-3">
-                              <Checkbox
-                                id="browser-dm-message-enabled"
-                                checked={sendDmMessageEnabled}
-                                onCheckedChange={(checked) => setSendDmMessageEnabled(checked === true)}
-                              />
-                              <label htmlFor="browser-dm-message-enabled" className="text-sm whitespace-nowrap">
-                                Message to DM
-                              </label>
-                              <Input
-                                type="text"
-                                value={sendDmMessage}
-                                onChange={(event) => setSendDmMessage(event.target.value)}
-                                placeholder="Enter message"
-                                disabled={!sendDmMessageEnabled}
-                                className="min-w-0 flex-1"
-                              />
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-3">
+                                <Checkbox
+                                  id="browser-dm-message-enabled"
+                                  checked={sendDmMessageEnabled}
+                                  onCheckedChange={(checked) => setSendDmMessageEnabled(checked === true)}
+                                />
+                                <label htmlFor="browser-dm-message-enabled" className="text-sm whitespace-nowrap">
+                                  Message to DM
+                                </label>
+                                <Input
+                                  type="text"
+                                  value={sendDmMessage}
+                                  onChange={(event) => setSendDmMessage(event.target.value)}
+                                  placeholder="Message 1!!Message 2"
+                                  disabled={!sendDmMessageEnabled}
+                                  className="min-w-0 flex-1"
+                                />
+                              </div>
+                              <div className="flex justify-between gap-3 pl-7 text-[11px] text-muted-foreground">
+                                <span>{sendDmMessageSets.length} message {sendDmMessageSets.length === 1 ? "set" : "sets"}</span>
+                              </div>
                             </div>
                             <div className="flex items-center gap-3">
                               <Checkbox
@@ -1274,6 +1341,16 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                               />
                               <label htmlFor="browser-dm-skip-messaged" className="text-sm">
                                 Skip already messaged users
+                              </label>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id="browser-dm-continue"
+                                checked={continueWhereLeftOff}
+                                onCheckedChange={(checked) => setContinueWhereLeftOff(checked === true)}
+                              />
+                              <label htmlFor="browser-dm-continue" className="text-sm">
+                                Continue where I left off
                               </label>
                             </div>
                             <div className="flex items-center gap-3">
