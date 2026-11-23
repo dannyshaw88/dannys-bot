@@ -1234,7 +1234,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="browser-settings-title"
-                  className="w-[65%] h-[75%] min-w-[320px] min-h-[240px] rounded-xl border border-border bg-background shadow-2xl flex flex-col overflow-hidden"
+                  className="w-[65%] h-[85%] min-w-[320px] min-h-[240px] rounded-xl border border-border bg-background shadow-2xl flex flex-col overflow-hidden"
                 >
                   <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 shrink-0">
                     <div className="flex items-center gap-2">
