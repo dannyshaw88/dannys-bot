@@ -22,6 +22,8 @@ import { userAgents as UA_POOL } from "../shared/userAgents";
 // server (which drives a real BrowserWindow) instead of using Puppeteer/CDP.
 const IS_ELECTRON_EB = !!process.env.EB_IPC_PORT;
 const EB_IPC_BASE    = `http://127.0.0.1:${process.env.EB_IPC_PORT ?? "0"}`;
+// Reserved general-purpose browser ID; Phone Farm browser IDs are 1,000,000–9,999,999.
+export const GOOGLE_CHROME_BROWSER_PROFILE_ID = 10_000_000;
 
 async function ebIpc(method: string, urlPath: string, body?: unknown): Promise<any> {
   const ctrl  = new AbortController();
@@ -3006,7 +3008,9 @@ export async function getOrCreateSession(
     // Synthetic device browsers are general-purpose Chrome instances, not
     // Instagram profile sessions. Do not run the account-cookie migration,
     // DB token assertions, or Instagram cookie pre-seeding on this path.
-    session.pendingInitUrl = "about:blank";
+    session.pendingInitUrl = profileId === GOOGLE_CHROME_BROWSER_PROFILE_ID
+      ? "https://www.google.com/"
+      : "about:blank";
     logLaunchPhase("skipped Instagram cookie/session bootstrap for synthetic device browser");
   } else {
   // ── Purge stale Chrome-profile cookies BEFORE loading our saved state ────────

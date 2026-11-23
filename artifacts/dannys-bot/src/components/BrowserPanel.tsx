@@ -45,6 +45,8 @@ interface BrowserPanelProps {
   browserHeight?: number;
   /** Hide the isolation banner and address-bar toolbar (use when embedding inside a phone frame). */
   noToolbar?: boolean;
+  /** Use a general-purpose local browser rather than an account-linked browser. */
+  genericBrowser?: boolean;
   /** Proxy host for this profile — used by the IP login rate limit warning. */
   proxyHost?: string | null;
   /** Proxy port for this profile — used together with proxyHost for the rate limit key. */
@@ -83,7 +85,7 @@ function nowTs() {
 // Detect Electron native EB mode (window.electronAPI exposed by preload)
 const IS_ELECTRON = typeof (window as any).electronAPI !== "undefined";
 
-export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl, forceStream, onMessage, browserWidth, browserHeight, noToolbar, proxyHost, proxyPort }: BrowserPanelProps) {
+export function BrowserPanel({ profileId, userAgent, username, embedded, streamUrl, inputUrl, forceStream, onMessage, browserWidth, browserHeight, noToolbar, genericBrowser, proxyHost, proxyPort }: BrowserPanelProps) {
   const bW = browserWidth ?? BROWSER_W;
   const bH = browserHeight ?? BROWSER_H;
   const bWRef = useRef(bW);
@@ -832,7 +834,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       {/* Isolation banner */}
       {!noToolbar && <div className="flex items-center gap-2 px-4 py-2 bg-background border-b border-border/60 text-xs shrink-0">
         <Shield className="w-3.5 h-3.5 text-primary shrink-0" />
-        <span className="text-muted-foreground truncate">Isolated session</span>
+        <span className="text-muted-foreground truncate">
+          {genericBrowser ? "Google Chrome · no proxy" : "Isolated session"}
+        </span>
         <span className={`ml-auto flex items-center gap-1.5 font-medium shrink-0 ${statusColor}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
           {statusLabel}
@@ -880,7 +884,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           </div>
         </form>
 
-        <Button
+        {!genericBrowser && <Button
           variant="outline"
           size="sm"
           className={`h-8 px-3 text-xs gap-1.5 shrink-0 font-semibold transition-colors ${
@@ -903,12 +907,12 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           {loginState === "running" ? "Logging In" :
            loginState === "ok"      ? "Logged In" :
                                       "Login"}
-        </Button>
+        </Button>}
 
-        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
+        {!genericBrowser && <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
           onClick={clearSession} title="Clear session">
           <Trash2 className="w-3.5 h-3.5" /> Clear
-        </Button>
+        </Button>}
         {IS_ELECTRON && !forceStream && (
           <Button
             variant="outline"
@@ -925,7 +929,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
 
 
       {/* ── Debug strip (always visible when forceStream / device browser) ── */}
-      {forceStream && !IS_ELECTRON && (
+      {forceStream && !IS_ELECTRON && !genericBrowser && (
         <div
           className="shrink-0 border-b border-border bg-slate-950 text-[10px] font-mono cursor-pointer select-none"
           onClick={() => setDbgExpanded(prev => !prev)}

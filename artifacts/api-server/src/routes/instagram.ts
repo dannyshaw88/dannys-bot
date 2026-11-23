@@ -101,6 +101,7 @@ import {
   countryToIgLocale,
   localeToAcceptLanguage,
   patchApiUALocale,
+  GOOGLE_CHROME_BROWSER_PROFILE_ID,
   type ProxyConfig,
 } from "../instagram/browserSession";
 import { tlsRequest, CHROME120_JA3, OKHTTP4_JA3 } from "../instagram/tlsTransport";
@@ -4622,7 +4623,9 @@ export async function registerInstagramRoutes(
     // credentials are stored in global settings keyed by the synthetic profileId.
     if (profileId >= 1_000_000) {
       const allSettings = await storage.getGlobalSettings().catch(() => ({} as Record<string, string>));
-      const proxyRaw = allSettings[`device_browser_proxy_${profileId}`] ?? null;
+      const proxyRaw = profileId === GOOGLE_CHROME_BROWSER_PROFILE_ID
+        ? null
+        : allSettings[`device_browser_proxy_${profileId}`] ?? null;
       const proxyCfg = proxyRaw && proxyRaw !== "null" ? JSON.parse(proxyRaw) : null;
 
       // useLocalIp: browser launches with no proxy (uses the PC's own IP).

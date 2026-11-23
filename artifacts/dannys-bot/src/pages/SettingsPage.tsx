@@ -14,6 +14,7 @@ import { Link, useLocation } from "wouter";
 import { Users, Ban, Shield, ShieldAlert, CheckCircle2, XCircle, Loader2, RefreshCw, Database, KeyRound, Timer, FileText, AlertCircle, ScrollText, HardDrive, FolderOpen, RotateCcw, Trash2, Palette, Moon, Sun, BookOpen, ChevronRight, Phone, Power, Terminal, Download, Pencil, X, Crown, LogOut, UserCircle, Camera, Upload, Plus, Settings, Activity, Globe, MessageCircle, Ghost } from "lucide-react";
 import { LunaTestPage } from "@/pages/LunaTestPage";
 import { GhostBrowserTabContent } from "@/pages/CreateGhostPage";
+import { GoogleChromeTabContent } from "@/pages/GoogleChromePage";
 import type { GlobalSettings } from "@shared/schema";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme, THEME_COLORS } from "@/hooks/use-theme";
@@ -34,6 +35,7 @@ const SETTINGS_TABS = [
   { label: "Prompt Test", icon: MessageCircle },
   { label: "Data", icon: HardDrive },
   { label: "Ghost Browser", icon: Ghost },
+  { label: "Google Chrome", icon: Globe },
 ] as const;
 
 // ─── Jarvee parser helpers ───────────────────────────────────────────────────
@@ -662,8 +664,9 @@ export function SettingsPage() {
 
       {settingsTab === "prompt test" && <LunaTestPage embedded />}
       {settingsTab === "ghost browser" && <GhostBrowserTabContent />}
+      {settingsTab === "google chrome" && <GoogleChromeTabContent />}
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import/export", "prompt test", "ghost browser"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import/export", "prompt test", "ghost browser", "google chrome"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button
