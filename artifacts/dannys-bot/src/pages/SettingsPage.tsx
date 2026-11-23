@@ -620,9 +620,8 @@ export function SettingsPage() {
 
   return (
     <AppLayout>
-      <div className="mb-8">
+      <div className="mb-4">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Global Settings</h1>
-        <p className="text-muted-foreground mt-1">Configure application-wide preferences.</p>
       </div>
 
       <div className="flex items-center gap-0 mb-6 border-b border-border/60 flex-wrap">
