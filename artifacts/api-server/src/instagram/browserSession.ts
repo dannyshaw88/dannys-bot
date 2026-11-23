@@ -4623,6 +4623,17 @@ export async function browserClick(profileId: number, x: number, y: number) {
   // Fire raw mouse events first (gives visual hover/active feedback in the screenshot)
   await s.page.mouse.click(x, y);
 
+  // The standalone Google Chrome browser must receive exactly one click. Its
+  // Facebook controls can toggle open/closed, so replaying the click as
+  // synthetic DOM events immediately after the real mouse click can close a
+  // chat panel that the first click just opened. Keep the legacy synthetic
+  // fallback for account/device browser sessions that still need it.
+  if (profileId === GOOGLE_CHROME_BROWSER_PROFILE_ID) {
+    log(`[click:${profileId}] (${x},${y}) → dispatched one native browser click`, "browser");
+    kickFrame(profileId).catch(() => {});
+    return;
+  }
+
   // Also dispatch a programmatic click via elementFromPoint.
   // Instagram's SPA and cookie consent banners often attach synthetic event listeners
   // that don't respond to raw mouse events alone. We also pierce shadow roots because
