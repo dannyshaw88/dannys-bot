@@ -175,6 +175,7 @@ const SNAPCHAT_FARM_STAT_LABELS: typeof FARM_STAT_LABELS = [
   { key: "snapchat_add_friends", label: "Add Friends", icon: <UserPlus className="w-3 h-3" />, color: "text-blue-500" },
   { key: "snapchat_accept_friends", label: "Accept Friends", icon: <UserPlus className="w-3 h-3" />, color: "text-green-500" },
   { key: "snapchat_replies", label: "Chat Replies", icon: <Mail className="w-3 h-3" />, color: "text-violet-500" },
+  { key: "snapchat_links_sent", label: "Links Sent", icon: <Send className="w-3 h-3" />, color: "text-fuchsia-500" },
   { key: "snapchat_uploads", label: "Snaps Uploaded", icon: <ImagePlus className="w-3 h-3" />, color: "text-yellow-500" },
   { key: "snapchat_spotlights", label: "Spotlights", icon: <Eye className="w-3 h-3" />, color: "text-purple-500", showEye: true },
   { key: "snapchat_spotlight_likes", label: "Spotlight Likes", icon: <Heart className="w-3 h-3" />, color: "text-rose-500" },
@@ -205,6 +206,7 @@ const SNAPCHAT_FARM_DEFAULT_COL_WIDTHS: Record<string, number> = {
   snapchat_add_friends: 110,
   snapchat_accept_friends: 125,
   snapchat_replies: 100,
+  snapchat_links_sent: 95,
   snapchat_uploads: 115,
   snapchat_spotlights: 100,
   snapchat_spotlight_likes: 120,
@@ -235,7 +237,11 @@ const SNAPCHAT_METRIC_DEFS = SNAPCHAT_FARM_STAT_LABELS
   .filter(metric => metric.key !== "session_tool")
   .map(metric => ({ ...metric, pieColor: "#6366f1" }));
 const SNAPCHAT_ACTION_HISTORY_DEFS = SNAPCHAT_METRIC_DEFS.filter(metric => metric.key !== "cycles");
-const SNAPCHAT_PIE_METRIC_DEFS = SNAPCHAT_METRIC_DEFS.filter(metric => metric.key !== "cycles");
+// Links Sent is a subset of Chat Replies, so keep it out of action grand
+// totals and distribution pies to avoid counting a linked reply twice.
+const SNAPCHAT_PIE_METRIC_DEFS = SNAPCHAT_METRIC_DEFS.filter(
+  metric => metric.key !== "cycles" && metric.key !== "snapchat_links_sent",
+);
 
 interface FarmPhone {
   serial: string;
@@ -869,12 +875,16 @@ export function StatsPage() {
     mobileSlotStats?.[period]?.[key] ?? 0;
 
   const totalToday = useMemo(() =>
-    activeMobileMetricDefs.reduce((sum, m) => sum + getMobileStat(m.key, "daily"), 0),
+    activeMobileMetricDefs.reduce((sum, m) =>
+      sum + (accountPlatform === "snapchat" && m.key === "snapchat_links_sent" ? 0 : getMobileStat(m.key, "daily")),
+    0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [mobileSlotStats, accountPlatform]);
 
   const totalLifetime = useMemo(() =>
-    activeMobileMetricDefs.reduce((sum, m) => sum + getMobileStat(m.key, "lifetime"), 0),
+    activeMobileMetricDefs.reduce((sum, m) =>
+      sum + (accountPlatform === "snapchat" && m.key === "snapchat_links_sent" ? 0 : getMobileStat(m.key, "lifetime")),
+    0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [mobileSlotStats, accountPlatform]);
 
@@ -1161,7 +1171,9 @@ export function StatsPage() {
                             <tbody>
                               {(mobileSlotStats?.history ?? []).map(day => {
                                 const actionTotal = SNAPCHAT_ACTION_HISTORY_DEFS.reduce(
-                                  (sum, metric) => sum + (day.counts[metric.key] ?? 0),
+                                  (sum, metric) => sum + (
+                                    metric.key === "snapchat_links_sent" ? 0 : (day.counts[metric.key] ?? 0)
+                                  ),
                                   0,
                                 );
                                 return (
@@ -1318,6 +1330,10 @@ function PhoneFarmTab({ platform }: { platform: "instagram" | "snapchat" }) {
     SNAPCHAT_FARM_STAT_LABELS.map(s => s.key),
     (stored, defaults) => {
       const filtered = [...new Set(stored.filter(k => defaults.includes(k)))];
+      if (!filtered.includes("snapchat_links_sent")) {
+        const repliesIndex = filtered.indexOf("snapchat_replies");
+        filtered.splice(repliesIndex >= 0 ? repliesIndex + 1 : filtered.length, 0, "snapchat_links_sent");
+      }
       return [...filtered, ...defaults.filter(k => !filtered.includes(k))];
     },
   );

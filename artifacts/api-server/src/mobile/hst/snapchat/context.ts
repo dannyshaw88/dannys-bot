@@ -71,6 +71,7 @@ export type SnapchatContext = {
       | "snapchat_add_friends"
       | "snapchat_accept_friends"
       | "snapchat_replies"
+      | "snapchat_links_sent"
       | "snapchat_uploads"
       | "snapchat_spotlights"
       | "snapchat_spotlight_likes"

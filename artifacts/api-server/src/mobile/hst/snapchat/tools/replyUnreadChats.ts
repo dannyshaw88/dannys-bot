@@ -39,6 +39,8 @@ const isEmptyComposerValue = (value: string) => {
   return !normalized || normalized === "send a chat" || normalized === "send chat";
 };
 const isMyAiChat = (name: string) => normalizedText(name) === "my ai";
+const countLinksInText = (value: string) =>
+  value.match(/\b(?:https?:\/\/|www\.)[^\s<>"']+|\b(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z]{2,}(?:\/[^\s<>"']*)?/giu)?.length ?? 0;
 function normalizePromptPhrase(value: string): string {
   return value
     .normalize("NFKC")
@@ -1034,6 +1036,11 @@ async function runReplyUnreadChatsAttempt(
     }
     replied++;
     context.onMetric?.("snapchat_replies");
+    const linksSent = countLinksInText(enteredReply);
+    if (linksSent > 0) {
+      context.onMetric?.("snapchat_links_sent", linksSent);
+      context.onLog(`Reply to Unread Chats: confirmed ${linksSent} link${linksSent === 1 ? "" : "s"} sent in ${row.displayName}'s reply.`);
+    }
     const exitedToChatSurface = await exitSnapchatConversation(context).catch(() => false);
     if (!exitedToChatSurface) {
       context.onLog("Reply to Unread Chats stopped: could not return to Snapchat after sending the reply.");

@@ -7692,6 +7692,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       snapchatAddFriends: 0,
       snapchatAcceptFriends: 0,
       snapchatReplies: 0,
+      snapchatLinksSent: 0,
       snapchatUploads: 0,
       snapchatSpotlights: 0,
       snapchatSpotlightLikes: 0,
@@ -7733,6 +7734,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const addFriends = snapchatMetricCounts.snapchatAddFriends;
       const acceptedFriends = snapchatMetricCounts.snapchatAcceptFriends;
       const replies = snapchatMetricCounts.snapchatReplies;
+      const linksSent = snapchatMetricCounts.snapchatLinksSent;
       const uploads = snapchatMetricCounts.snapchatUploads;
       const spotlights = snapchatMetricCounts.snapchatSpotlights;
       const spotlightLikes = snapchatMetricCounts.snapchatSpotlightLikes;
@@ -7740,6 +7742,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       if (addFriends) parts.push(`${addFriends} friend${addFriends === 1 ? "" : "s"} added`);
       if (acceptedFriends) parts.push(`${acceptedFriends} friend request${acceptedFriends === 1 ? "" : "s"} accepted`);
       if (replies) parts.push(`${replies} repl${replies === 1 ? "y" : "ies"} sent`);
+      if (linksSent) parts.push(`${linksSent} link${linksSent === 1 ? "" : "s"} sent`);
       if (uploads) parts.push(`${uploads} Snap${uploads === 1 ? "" : "s"} uploaded`);
       if (spotlights) parts.push(`${spotlights} Spotlight${spotlights === 1 ? "" : "s"} viewed`);
       if (spotlightLikes) parts.push(`${spotlightLikes} Spotlight like${spotlightLikes === 1 ? "" : "s"}`);
@@ -8184,6 +8187,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   snapchat_add_friends: "snapchatAddFriends",
                   snapchat_accept_friends: "snapchatAcceptFriends",
                   snapchat_replies: "snapchatReplies",
+                  snapchat_links_sent: "snapchatLinksSent",
                   snapchat_uploads: "snapchatUploads",
                   snapchat_spotlights: "snapchatSpotlights",
                   snapchat_spotlight_likes: "snapchatSpotlightLikes",
