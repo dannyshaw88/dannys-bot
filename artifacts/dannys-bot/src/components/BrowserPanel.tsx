@@ -12,6 +12,30 @@ import {
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { recordLoginEvent } from "@/lib/ipLoginTracker";
 
+function usePersistentBrowserSetting<T extends string | boolean>(key: string, initialValue: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved === null) return initialValue;
+      const parsed: unknown = JSON.parse(saved);
+      return typeof parsed === typeof initialValue ? parsed as T : initialValue;
+    } catch (error) {
+      console.warn(`[BrowserPanel] Could not load saved setting "${key}"`, error);
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.warn(`[BrowserPanel] Could not save setting "${key}"`, error);
+    }
+  }, [key, value]);
+
+  return [value, setValue] as const;
+}
+
 function cleanLoginError(msg: string): string {
   const m = (msg ?? "").toLowerCase();
   if (m.includes("incorrect") || m.includes("wrong password") || m.includes("bad_password")) return "Incorrect password";
@@ -147,23 +171,19 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [fileChooserPending, setFileChooserPending] = useState(false);
   const [showBrowserSettings, setShowBrowserSettings] = useState(false);
   const [activeBrowserSettingsSection, setActiveBrowserSettingsSection] = useState<string | null>("send-dms");
-  const [sendDmUrlEnabled, setSendDmUrlEnabled] = useState(false);
-  const [sendDmUrl, setSendDmUrl] = useState("");
-  const [sendDmMessageEnabled, setSendDmMessageEnabled] = useState(false);
-  const [sendDmMessage, setSendDmMessage] = useState("");
-  const sendDmMessageSets = useMemo(
-    () => sendDmMessage.split("!!").map((message) => message.trim()).filter(Boolean),
-    [sendDmMessage],
-  );
-  const [skipAlreadyMessaged, setSkipAlreadyMessaged] = useState(false);
-  const [continueWhereLeftOff, setContinueWhereLeftOff] = useState(false);
-  const [sendDmGirlsOnly, setSendDmGirlsOnly] = useState(false);
-  const [sendDmStopLimitsEnabled, setSendDmStopLimitsEnabled] = useState(false);
-  const [sendDmStopMinutes, setSendDmStopMinutes] = useState("");
-  const [sendDmMaxUsers, setSendDmMaxUsers] = useState("");
-  const [sendDmScheduleEnabled, setSendDmScheduleEnabled] = useState(false);
-  const [sendDmIntervalMin, setSendDmIntervalMin] = useState("");
-  const [sendDmIntervalMax, setSendDmIntervalMax] = useState("");
+  const [sendDmUrlEnabled, setSendDmUrlEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.urlEnabled", false);
+  const [sendDmUrl, setSendDmUrl] = usePersistentBrowserSetting("aura.googleChrome.sendDms.url", "");
+  const [sendDmMessageEnabled, setSendDmMessageEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.messageEnabled", false);
+  const [sendDmMessage, setSendDmMessage] = usePersistentBrowserSetting("aura.googleChrome.sendDms.message", "");
+  const [skipAlreadyMessaged, setSkipAlreadyMessaged] = usePersistentBrowserSetting("aura.googleChrome.sendDms.skipAlreadyMessaged", false);
+  const [continueWhereLeftOff, setContinueWhereLeftOff] = usePersistentBrowserSetting("aura.googleChrome.sendDms.continueWhereLeftOff", false);
+  const [sendDmGirlsOnly, setSendDmGirlsOnly] = usePersistentBrowserSetting("aura.googleChrome.sendDms.girlsOnly", false);
+  const [sendDmStopLimitsEnabled, setSendDmStopLimitsEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.stopLimitsEnabled", false);
+  const [sendDmStopMinutes, setSendDmStopMinutes] = usePersistentBrowserSetting("aura.googleChrome.sendDms.stopMinutes", "");
+  const [sendDmMaxUsers, setSendDmMaxUsers] = usePersistentBrowserSetting("aura.googleChrome.sendDms.maxUsers", "");
+  const [sendDmScheduleEnabled, setSendDmScheduleEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.scheduleEnabled", false);
+  const [sendDmIntervalMin, setSendDmIntervalMin] = usePersistentBrowserSetting("aura.googleChrome.sendDms.intervalMin", "");
+  const [sendDmIntervalMax, setSendDmIntervalMax] = usePersistentBrowserSetting("aura.googleChrome.sendDms.intervalMax", "");
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiElapsed, setAiElapsed] = useState(0);
@@ -897,24 +917,24 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               <Settings className="w-6 h-6" />
             </Button>
             <Button
-              variant="ghost"
+              variant="default"
               size="icon"
-              className="h-12 w-12 shrink-0 text-green-600"
+              className="h-12 w-12 shrink-0 rounded-md bg-green-600 text-white hover:bg-green-700 hover:text-white disabled:bg-green-600"
               disabled
               title="Go — Facebook browser runner not connected"
               aria-label="Go"
             >
-              <Play className="w-6 h-6" />
+              <Play className="w-6 h-6" fill="currentColor" />
             </Button>
             <Button
-              variant="ghost"
+              variant="default"
               size="icon"
-              className="h-12 w-12 shrink-0 text-red-600"
+              className="h-12 w-12 shrink-0 rounded-md bg-red-600 text-white hover:bg-red-700 hover:text-white disabled:bg-red-600"
               disabled
               title="Stop — Facebook browser runner not connected"
               aria-label="Stop"
             >
-              <Square className="w-5 h-5" />
+              <Square className="w-5 h-5" fill="currentColor" />
             </Button>
           </>
         )}
@@ -1310,28 +1330,23 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                                 className="min-w-0 flex-1"
                               />
                             </div>
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-3">
-                                <Checkbox
-                                  id="browser-dm-message-enabled"
-                                  checked={sendDmMessageEnabled}
-                                  onCheckedChange={(checked) => setSendDmMessageEnabled(checked === true)}
-                                />
-                                <label htmlFor="browser-dm-message-enabled" className="text-sm whitespace-nowrap">
-                                  Message to DM
-                                </label>
-                                <Input
-                                  type="text"
-                                  value={sendDmMessage}
-                                  onChange={(event) => setSendDmMessage(event.target.value)}
-                                  placeholder="Message 1!!Message 2"
-                                  disabled={!sendDmMessageEnabled}
-                                  className="min-w-0 flex-1"
-                                />
-                              </div>
-                              <div className="flex justify-between gap-3 pl-7 text-[11px] text-muted-foreground">
-                                <span>{sendDmMessageSets.length} message {sendDmMessageSets.length === 1 ? "set" : "sets"}</span>
-                              </div>
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id="browser-dm-message-enabled"
+                                checked={sendDmMessageEnabled}
+                                onCheckedChange={(checked) => setSendDmMessageEnabled(checked === true)}
+                              />
+                              <label htmlFor="browser-dm-message-enabled" className="text-sm whitespace-nowrap">
+                                Message to DM
+                              </label>
+                              <Input
+                                type="text"
+                                value={sendDmMessage}
+                                onChange={(event) => setSendDmMessage(event.target.value)}
+                                placeholder="Message 1!!Message 2"
+                                disabled={!sendDmMessageEnabled}
+                                className="min-w-0 flex-1"
+                              />
                             </div>
                             <div className="flex items-center gap-3">
                               <Checkbox
