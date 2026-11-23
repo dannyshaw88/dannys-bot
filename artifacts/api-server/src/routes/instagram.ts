@@ -49,6 +49,7 @@ import {
   attachWS,
   detachWS,
   browserNavigate,
+  browserStop,
   browserClick,
   browserMouseMove,
   browserScroll,
@@ -4763,6 +4764,7 @@ export async function registerInstagramRoutes(
       const msg = req.body as any;
       switch (msg.type) {
         case "navigate":   await browserNavigate(profileId, msg.url); break;
+        case "stop":       await browserStop(profileId); break;
         case "click":      await browserClick(profileId, msg.x, msg.y); break;
         case "mousemove":  await browserMouseMove(profileId, msg.x, msg.y); break;
         case "scroll":     await browserScroll(profileId, msg.x, msg.y, msg.deltaX, msg.deltaY); break;

@@ -4587,6 +4587,16 @@ export async function browserNavigate(profileId: number, url: string) {
   }
 }
 
+export async function browserStop(profileId: number) {
+  const s = sessions.get(profileId);
+  if (!s) return;
+  try {
+    s.navProtectedUntil = 0;
+    await s.page.evaluate(() => window.stop());
+  } catch {}
+  wsWrite(s.ws, { type: "loading", loading: false });
+}
+
 // kickFrame is a no-op now that CDP screencast handles all frame delivery.
 // Chrome's compositor automatically sends a new frame after any DOM change
 // triggered by a click, so there's no need to request one explicitly.

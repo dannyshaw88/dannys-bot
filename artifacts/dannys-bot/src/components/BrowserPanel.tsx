@@ -171,6 +171,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [fileChooserPending, setFileChooserPending] = useState(false);
   const [showBrowserSettings, setShowBrowserSettings] = useState(false);
   const [activeBrowserSettingsSection, setActiveBrowserSettingsSection] = useState<string | null>("send-dms");
+  const [sendDmToolActive, setSendDmToolActive] = useState(false);
   const [sendDmUrlEnabled, setSendDmUrlEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.urlEnabled", false);
   const [sendDmUrl, setSendDmUrl] = usePersistentBrowserSetting("aura.googleChrome.sendDms.url", "");
   const [sendDmMessageEnabled, setSendDmMessageEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.messageEnabled", false);
@@ -806,6 +807,22 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     send({ type: "navigate", url });
   };
 
+  const startSendDmTool = () => {
+    const configuredUrl = sendDmUrlEnabled ? sendDmUrl.trim() : addressBar.trim();
+    if (!configuredUrl) return;
+    const url = /^https?:\/\//i.test(configuredUrl) ? configuredUrl : `https://${configuredUrl}`;
+    setAddressBar(url);
+    setSendDmToolActive(true);
+    setIsLoading(true);
+    send({ type: "navigate", url });
+  };
+
+  const stopSendDmTool = () => {
+    setSendDmToolActive(false);
+    setIsLoading(false);
+    send({ type: "stop" });
+  };
+
   const clearSession = async () => {
     try {
       if (IS_ELECTRON) {
@@ -922,20 +939,22 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             <Button
               variant="ghost"
               size="icon"
-              className="h-12 w-12 shrink-0 text-green-600 hover:text-green-700"
-              disabled
-              title="Go — Facebook browser runner not connected"
+              className={`h-12 w-12 shrink-0 text-green-600 hover:text-green-700 transition-opacity ${sendDmToolActive ? "opacity-35" : "opacity-100"}`}
+              onClick={startSendDmTool}
+              title="Go — open the configured Facebook page"
               aria-label="Go"
+              aria-pressed={sendDmToolActive}
             >
               <Play className="w-6 h-6" fill="currentColor" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-12 w-12 shrink-0 text-red-600 hover:text-red-700"
-              disabled
-              title="Stop — Facebook browser runner not connected"
+              className={`h-12 w-12 shrink-0 text-red-600 hover:text-red-700 transition-opacity ${sendDmToolActive ? "opacity-100" : "opacity-35"}`}
+              onClick={stopSendDmTool}
+              title="Stop — cancel the current page load"
               aria-label="Stop"
+              aria-pressed={!sendDmToolActive}
             >
               <Square className="w-5 h-5" fill="currentColor" />
             </Button>

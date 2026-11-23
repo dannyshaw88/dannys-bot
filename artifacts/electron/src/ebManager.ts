@@ -7999,6 +7999,9 @@ export function startEbIpcServer(
           case "navigate":
             if (url) wc.loadURL(url).catch(() => {});
             break;
+          case "stop":
+            wc.stop();
+            break;
           case "reload":
             wc.reloadIgnoringCache();
             break;
