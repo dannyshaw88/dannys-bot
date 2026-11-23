@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronLeft, ChevronRight, RefreshCw, Home, Globe, Shield,
   Trash2, Loader2, WifiOff, LogIn, CheckCircle2, AlertCircle, MonitorPlay, X, Upload, Phone, Mail, KeyRound, ShieldAlert, Sparkles, Download, Settings, Send, Inbox,
@@ -145,6 +146,16 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [fileChooserPending, setFileChooserPending] = useState(false);
   const [showBrowserSettings, setShowBrowserSettings] = useState(false);
+  const [activeBrowserSettingsSection, setActiveBrowserSettingsSection] = useState<string | null>("send-dms");
+  const [sendDmUrlEnabled, setSendDmUrlEnabled] = useState(false);
+  const [sendDmUrl, setSendDmUrl] = useState("");
+  const [sendDmMessageEnabled, setSendDmMessageEnabled] = useState(false);
+  const [sendDmMessage, setSendDmMessage] = useState("");
+  const [skipAlreadyMessaged, setSkipAlreadyMessaged] = useState(false);
+  const [sendDmGirlsOnly, setSendDmGirlsOnly] = useState(false);
+  const [sendDmStopLimitsEnabled, setSendDmStopLimitsEnabled] = useState(false);
+  const [sendDmStopMinutes, setSendDmStopMinutes] = useState("");
+  const [sendDmMaxUsers, setSendDmMaxUsers] = useState("");
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiElapsed, setAiElapsed] = useState(0);
@@ -866,7 +877,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             variant="ghost"
             size="icon"
             className="h-12 w-12 shrink-0"
-            onClick={() => setShowBrowserSettings(true)}
+            onClick={() => {
+              setActiveBrowserSettingsSection("send-dms");
+              setShowBrowserSettings(true);
+            }}
             disabled={!connected}
             title="Browser settings"
             aria-label="Browser settings"
@@ -1188,25 +1202,124 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                   <div className="flex flex-1 min-h-0">
                     <nav aria-label="Browser settings sections" className="w-44 shrink-0 border-r border-border flex flex-col gap-2 p-3">
                       {[
-                        { title: "Send DMs", Icon: Send },
-                        { title: "Check DMs", Icon: Inbox },
-                        { title: "Unassigned", Icon: Sparkles },
-                        { title: "Unassigned", Icon: MonitorPlay },
-                        { title: "Unassigned", Icon: Download },
-                      ].map(({ title, Icon }, index) => (
+                        { id: "send-dms", title: "Send DMs", Icon: Send },
+                        { id: "check-dms", title: "Check DMs", Icon: Inbox },
+                        { id: "unassigned-1", title: "Unassigned", Icon: Sparkles },
+                        { id: "unassigned-2", title: "Unassigned", Icon: MonitorPlay },
+                        { id: "unassigned-3", title: "Unassigned", Icon: Download },
+                      ].map(({ id, title, Icon }) => (
                         <button
-                          key={index}
+                          key={id}
                           type="button"
                           aria-label={title}
                           title={title}
-                          className="h-10 w-full rounded-md flex items-center gap-3 px-3 text-left text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          onClick={() => setActiveBrowserSettingsSection(id)}
+                          className={`h-10 w-full rounded-md flex items-center gap-3 px-3 text-left text-sm transition-colors ${
+                            activeBrowserSettingsSection === id
+                              ? "bg-muted text-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          }`}
                         >
                           <Icon className="w-5 h-5 shrink-0" />
                           <span className="truncate">{title}</span>
                         </button>
                       ))}
                     </nav>
-                    <div className="flex-1 min-w-0" />
+                    <div className="flex-1 min-w-0 overflow-auto p-5">
+                      {activeBrowserSettingsSection === "send-dms" && (
+                        <div className="space-y-4">
+                          <h3 className="text-sm font-semibold">Send DMs</h3>
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id="browser-dm-url-enabled"
+                                checked={sendDmUrlEnabled}
+                                onCheckedChange={(checked) => setSendDmUrlEnabled(checked === true)}
+                              />
+                              <label htmlFor="browser-dm-url-enabled" className="text-sm whitespace-nowrap">
+                                Page to scroll and DM with a URL
+                              </label>
+                              <Input
+                                type="url"
+                                value={sendDmUrl}
+                                onChange={(event) => setSendDmUrl(event.target.value)}
+                                placeholder="https://example.com"
+                                disabled={!sendDmUrlEnabled}
+                                className="min-w-0 flex-1"
+                              />
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id="browser-dm-message-enabled"
+                                checked={sendDmMessageEnabled}
+                                onCheckedChange={(checked) => setSendDmMessageEnabled(checked === true)}
+                              />
+                              <label htmlFor="browser-dm-message-enabled" className="text-sm whitespace-nowrap">
+                                Message to DM
+                              </label>
+                              <Input
+                                type="text"
+                                value={sendDmMessage}
+                                onChange={(event) => setSendDmMessage(event.target.value)}
+                                placeholder="Enter message"
+                                disabled={!sendDmMessageEnabled}
+                                className="min-w-0 flex-1"
+                              />
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id="browser-dm-skip-messaged"
+                                checked={skipAlreadyMessaged}
+                                onCheckedChange={(checked) => setSkipAlreadyMessaged(checked === true)}
+                              />
+                              <label htmlFor="browser-dm-skip-messaged" className="text-sm">
+                                Skip already messaged users
+                              </label>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id="browser-dm-girls-only"
+                                checked={sendDmGirlsOnly}
+                                onCheckedChange={(checked) => setSendDmGirlsOnly(checked === true)}
+                              />
+                              <label htmlFor="browser-dm-girls-only" className="text-sm">
+                                Girls Only
+                              </label>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id="browser-dm-stop-limits"
+                                checked={sendDmStopLimitsEnabled}
+                                onCheckedChange={(checked) => setSendDmStopLimitsEnabled(checked === true)}
+                              />
+                              <label htmlFor="browser-dm-stop-limits" className="text-sm whitespace-nowrap">
+                                Stop after
+                              </label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={sendDmStopMinutes}
+                                onChange={(event) => setSendDmStopMinutes(event.target.value)}
+                                disabled={!sendDmStopLimitsEnabled}
+                                className="w-20"
+                                aria-label="Stop after minutes"
+                              />
+                              <span className="text-sm text-muted-foreground">min or</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={sendDmMaxUsers}
+                                onChange={(event) => setSendDmMaxUsers(event.target.value)}
+                                disabled={!sendDmStopLimitsEnabled}
+                                className="w-20"
+                                aria-label="Maximum users"
+                              />
+                              <span className="text-sm text-muted-foreground">max users</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </section>
               </div>
