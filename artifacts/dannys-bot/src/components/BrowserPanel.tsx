@@ -267,6 +267,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   }, [loginLog]);
 
   // ── Input sender: POST to /api/browser/:id/input ─────────────────────────
+  const mouseMoveQueueRef = useRef<{ inFlight: boolean; latest: object | null }>({
+    inFlight: false,
+    latest: null,
+  });
   const send = useCallback((msg: object) => {
     // Electron mode: commands always go to the native window — no WS required.
     // Puppeteer mode: require an active WebSocket connection.
@@ -274,11 +278,34 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     const url = (IS_ELECTRON && !forceStream)
       ? `/api/profiles/${profileId}/eb-input`
       : (inputUrl ?? `/api/browser/${profileId}/input`);
-    fetch(url, {
+    const post = (payload: object) => fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(msg),
-    }).catch(() => {});
+      body: JSON.stringify(payload),
+    });
+
+    if ((msg as { type?: string }).type === "mousemove") {
+      const queue = mouseMoveQueueRef.current;
+      queue.latest = msg;
+      if (queue.inFlight) return;
+      queue.inFlight = true;
+      const flushLatestMove = async () => {
+        while (queue.latest) {
+          const latest = queue.latest;
+          queue.latest = null;
+          try { await post(latest); } catch {}
+        }
+        queue.inFlight = false;
+        if (queue.latest) {
+          queue.inFlight = true;
+          void flushLatestMove();
+        }
+      };
+      void flushLatestMove();
+      return;
+    }
+
+    post(msg).catch(() => {});
   }, [profileId, inputUrl, forceStream]);
 
   // ── Non-passive wheel listener (throttled) ───────────────────────────────
@@ -545,9 +572,19 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             break;
           case "already-connected":
             // Server rejected this WS because the session already has an open
-            // connection from another connect() call.  There is nothing to
-            // reconnect to — bail so we don't keep hammering the server.
+            // connection from another view. There is nothing to reconnect to —
+            // stop the loading overlay and explain the conflict instead of
+            // leaving the user with a permanent "Starting browser…" spinner.
             wsGenRef.current++;
+            hasReceivedFirstFrameRef.current = true;
+            if (firstFrameFallbackRef.current) {
+              clearTimeout(firstFrameFallbackRef.current);
+              firstFrameFallbackRef.current = null;
+            }
+            setWaitingFirstFrame(false);
+            setIsLoading(false);
+            setErrorMsg("This browser is already open in another view. Close the other view, then retry.");
+            setStatusSafe("error");
             break;
         }
         setDbgLastMsg(msg.type ?? "unknown");
@@ -1188,7 +1225,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             {status === "error" && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 z-10">
                 <WifiOff className="w-10 h-10 text-red-400" />
-                <p className="text-sm font-medium text-foreground">Browser failed to start</p>
+                <p className="text-sm font-medium text-foreground">
+                  {errorMsg?.includes("already open") ? "Browser already open in another view" : "Browser failed to start"}
+                </p>
+                {errorMsg && <p className="max-w-sm text-center text-xs text-muted-foreground">{errorMsg}</p>}
                 <Button onClick={connect} variant="outline" size="sm">Retry</Button>
               </div>
             )}

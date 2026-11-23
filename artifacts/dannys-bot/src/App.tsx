@@ -2,34 +2,33 @@ import { Switch, Route, Redirect } from "wouter";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { useState, useEffect, Component, type ReactNode, type ErrorInfo } from "react";
+import { lazy, Suspense, useState, useEffect, Component, type ReactNode, type ErrorInfo } from "react";
 import { startHstLoop, routeHstToggle } from "@/lib/hstRunner";
 
-import { Dashboard } from "@/pages/Dashboard";
-import { StatsPage } from "@/pages/StatsPage";
-import { ProfilesPage } from "@/pages/ProfilesPage";
-import { ProfileDetailsPage } from "@/pages/ProfileDetailsPage";
-import { ProxiesPage } from "@/pages/ProxiesPage";
-import { SettingsPage } from "@/pages/SettingsPage";
-import { StandaloneBrowserPage } from "@/pages/StandaloneBrowserPage";
-import { ReadmePage } from "@/pages/ReadmePage";
-import { BulkImportPage } from "@/pages/BulkImportPage";
-import { MobilePage } from "@/pages/MobilePage";
-import { MobileDevicesPage } from "@/pages/MobileDevicesPage";
-import { TrustScoresPage } from "@/pages/TrustScoresPage";
-import { TrustScoreDetailPage } from "@/pages/TrustScoreDetailPage";
-import { ToolsPage } from "@/pages/ToolsPage";
-import { EbAuditPage } from "@/pages/EbAuditPage";
-import JarveeBinaryViewerPage from "@/pages/JarveeBinaryViewerPage";
+const Dashboard = lazy(() => import("@/pages/Dashboard").then((module) => ({ default: module.Dashboard })));
+const StatsPage = lazy(() => import("@/pages/StatsPage").then((module) => ({ default: module.StatsPage })));
+const ProfilesPage = lazy(() => import("@/pages/ProfilesPage").then((module) => ({ default: module.ProfilesPage })));
+const ProfileDetailsPage = lazy(() => import("@/pages/ProfileDetailsPage").then((module) => ({ default: module.ProfileDetailsPage })));
+const ProxiesPage = lazy(() => import("@/pages/ProxiesPage").then((module) => ({ default: module.ProxiesPage })));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const StandaloneBrowserPage = lazy(() => import("@/pages/StandaloneBrowserPage").then((module) => ({ default: module.StandaloneBrowserPage })));
+const ReadmePage = lazy(() => import("@/pages/ReadmePage").then((module) => ({ default: module.ReadmePage })));
+const MobilePage = lazy(() => import("@/pages/MobilePage").then((module) => ({ default: module.MobilePage })));
+const MobileDevicesPage = lazy(() => import("@/pages/MobileDevicesPage").then((module) => ({ default: module.MobileDevicesPage })));
+const TrustScoresPage = lazy(() => import("@/pages/TrustScoresPage").then((module) => ({ default: module.TrustScoresPage })));
+const TrustScoreDetailPage = lazy(() => import("@/pages/TrustScoreDetailPage").then((module) => ({ default: module.TrustScoreDetailPage })));
+const ToolsPage = lazy(() => import("@/pages/ToolsPage").then((module) => ({ default: module.ToolsPage })));
+const EbAuditPage = lazy(() => import("@/pages/EbAuditPage").then((module) => ({ default: module.EbAuditPage })));
+const JarveeBinaryViewerPage = lazy(() => import("@/pages/JarveeBinaryViewerPage"));
 import { BrowserWindowsProvider, useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { SidebarSlotProvider } from "@/contexts/SidebarSlotContext";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistoryContext";
 import { SelectedProfilesProvider } from "@/contexts/SelectedProfilesContext";
 import { DeviceLogProvider } from "@/contexts/DeviceLogContext";
 import { JarveeImportSessionProvider } from "@/contexts/JarveeImportSessionContext";
-import { BrowserWindow } from "@/components/BrowserWindow";
 import { BrowserTaskbar } from "@/components/BrowserTaskbar";
-import { AuraFarmingBot } from "@/components/EquinoxBot";
+const BrowserWindow = lazy(() => import("@/components/BrowserWindow").then((module) => ({ default: module.BrowserWindow })));
+const AuraFarmingBot = lazy(() => import("@/components/EquinoxBot").then((module) => ({ default: module.AuraFarmingBot })));
 import { queryClient } from "@/lib/queryClient";
 import { useStatusEvents } from "@/hooks/use-profiles";
 import { Loader2 } from "lucide-react";
@@ -105,35 +104,43 @@ const SAVED_LOGIN_KEY = "equinox:savedLogin";
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/">
-        <Redirect to="/dashboard" />
-      </Route>
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/profiles" component={ProfilesPage} />
-      <Route path="/stats/images"><Redirect to="/settings?tab=fix%20images" /></Route>
-      <Route path="/stats" component={StatsPage} />
-      <Route path="/profiles/:id" component={ProfileDetailsPage} />
-      <Route path="/proxies" component={ProxiesPage} />
-      <Route path="/settings" component={SettingsPage} />
-      <Route path="/luna-test"><Redirect to="/settings?tab=prompt%20test" /></Route>
-      <Route path="/prompt-test"><Redirect to="/settings?tab=prompt%20test" /></Route>
-      <Route path="/create-ghost"><Redirect to="/settings?tab=ghost%20browser" /></Route>
-      <Route path="/settings/jarvee-binary" component={JarveeBinaryViewerPage} />
-      <Route path="/settings/jarvee-binary-viewer" component={JarveeBinaryViewerPage} />
-      <Route path="/browser/:id" component={StandaloneBrowserPage} />
-      <Route path="/bulk-import"><Redirect to="/settings" /></Route>
-      <Route path="/mobile" component={MobileDevicesPage} />
-      <Route path="/mobile/farm/:serial" component={MobilePage} />
-      <Route path="/mobile/farm" component={MobilePage} />
-      <Route path="/trust-scores" component={TrustScoresPage} />
-      <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />
-      <Route path="/tools" component={ToolsPage} />
-      <Route path="/eb-audit" component={EbAuditPage} />
-      <Route path="/ban-analytics"><Redirect to="/tools" /></Route>
-      <Route path="/readme" component={ReadmePage} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense
+      fallback={
+        <div className="fixed inset-0 flex items-center justify-center bg-background">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <Switch>
+        <Route path="/">
+          <Redirect to="/dashboard" />
+        </Route>
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/profiles" component={ProfilesPage} />
+        <Route path="/stats/images"><Redirect to="/settings?tab=fix%20images" /></Route>
+        <Route path="/stats" component={StatsPage} />
+        <Route path="/profiles/:id" component={ProfileDetailsPage} />
+        <Route path="/proxies" component={ProxiesPage} />
+        <Route path="/settings" component={SettingsPage} />
+        <Route path="/luna-test"><Redirect to="/settings?tab=prompt%20test" /></Route>
+        <Route path="/prompt-test"><Redirect to="/settings?tab=prompt%20test" /></Route>
+        <Route path="/create-ghost"><Redirect to="/settings?tab=ghost%20browser" /></Route>
+        <Route path="/settings/jarvee-binary" component={JarveeBinaryViewerPage} />
+        <Route path="/settings/jarvee-binary-viewer" component={JarveeBinaryViewerPage} />
+        <Route path="/browser/:id" component={StandaloneBrowserPage} />
+        <Route path="/bulk-import"><Redirect to="/settings" /></Route>
+        <Route path="/mobile" component={MobileDevicesPage} />
+        <Route path="/mobile/farm/:serial" component={MobilePage} />
+        <Route path="/mobile/farm" component={MobilePage} />
+        <Route path="/trust-scores" component={TrustScoresPage} />
+        <Route path="/trust-scores/:trustScoreId" component={TrustScoreDetailPage} />
+        <Route path="/tools" component={ToolsPage} />
+        <Route path="/eb-audit" component={EbAuditPage} />
+        <Route path="/ban-analytics"><Redirect to="/tools" /></Route>
+        <Route path="/readme" component={ReadmePage} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 
@@ -141,7 +148,9 @@ function BrowserLayer() {
   const { windows } = useBrowserWindows();
   return (
     <>
-      {windows.map(w => <BrowserWindow key={w.profileId} window={w} />)}
+      <Suspense fallback={null}>
+        {windows.map(w => <BrowserWindow key={w.profileId} window={w} />)}
+      </Suspense>
       <BrowserTaskbar />
     </>
   );
@@ -413,7 +422,7 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
     return <LoginSplash />;
   }
 
-  return <>{children}<AuraFarmingBot /></>;
+  return <>{children}<Suspense fallback={null}><AuraFarmingBot /></Suspense></>;
 }
 
 function App() {
