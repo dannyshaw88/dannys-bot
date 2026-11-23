@@ -1186,7 +1186,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                     </Button>
                   </header>
                   <div className="flex flex-1 min-h-0">
-                    <nav aria-label="Browser settings sections" className="w-44 shrink-0 border-r border-border flex flex-col justify-center gap-2 p-3">
+                    <nav aria-label="Browser settings sections" className="w-44 shrink-0 border-r border-border flex flex-col gap-2 p-3">
                       {[
                         { title: "Send DMs", Icon: Send },
                         { title: "Check DMs", Icon: Inbox },
