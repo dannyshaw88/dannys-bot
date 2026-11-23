@@ -917,9 +917,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               <Settings className="w-6 h-6" />
             </Button>
             <Button
-              variant="default"
+              variant="ghost"
               size="icon"
-              className="h-12 w-12 shrink-0 rounded-md bg-green-600 text-white hover:bg-green-700 hover:text-white disabled:bg-green-600"
+              className="h-12 w-12 shrink-0 text-green-600 hover:text-green-700"
               disabled
               title="Go — Facebook browser runner not connected"
               aria-label="Go"
@@ -927,9 +927,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               <Play className="w-6 h-6" fill="currentColor" />
             </Button>
             <Button
-              variant="default"
+              variant="ghost"
               size="icon"
-              className="h-12 w-12 shrink-0 rounded-md bg-red-600 text-white hover:bg-red-700 hover:text-white disabled:bg-red-600"
+              className="h-12 w-12 shrink-0 text-red-600 hover:text-red-700"
               disabled
               title="Stop — Facebook browser runner not connected"
               aria-label="Stop"
