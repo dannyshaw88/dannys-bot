@@ -5,6 +5,8 @@ description: Identify Snapchat's incoming Snap/typing banner rather than ordinar
 
 ## Avoid Users Containing dismissals
 
+Never long-press a suggestion. Tiny vertical swipes can be interpreted as contact holds; treat near-aligned rows as aligned, require meaningful travel and a sufficiently wide verified blank lane for scrolling, and log the dispatched coordinates.
+
 When Add Friends' “Avoid Users Containing” filter matches a suggestion, tap the `friend-cell-dismiss` Hide control inside that exact friend row. After Add or Skip, use a fresh UI dump and screenshot to measure the live target card's grey-divider-to-grey-divider height, swipe that distance, then verify and correct the next contact's position using observed movement. Dismiss is different: Snapchat removes the named row and can replace it with a feedback notice, so do not try to measure dividers around the vanished contact or mistake the next named row for that card. Record the dismissed row's top before tapping Hide; after the action, align the first remaining named contact to that top using its fresh UI row position, then verify actual travel and use up to three bounded movement-scaled corrections if needed.
 
 **Why:** The user clarified the supplied UI trees are structural examples, not evidence from a run. The real failure is insufficient content travel: Android can move the list fewer pixels than the finger swipe. Per-contact measurement must be followed by checking actual row movement and scaling any correction to that movement, not treating extra wait time as the fix.
