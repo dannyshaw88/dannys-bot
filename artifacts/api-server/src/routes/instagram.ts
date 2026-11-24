@@ -62,6 +62,8 @@ import {
   browserForward,
   browserReload,
   browserSetFiles,
+  runGoogleChromeDm,
+  stopGoogleChromeDmRun,
   browserNewTab,
   browserSwitchTab,
   browserCloseTab,
@@ -4784,6 +4786,56 @@ export async function registerInstagramRoutes(
     } catch (err: any) {
       res.status(500).json({ error: err?.message });
     }
+  });
+
+  app.post("/api/browser/:profileId/send-dms/run", async (req, res): Promise<void> => {
+    const profileId = Number(req.params.profileId);
+    if (profileId !== GOOGLE_CHROME_BROWSER_PROFILE_ID) {
+      res.status(404).json({ ok: false, error: "Send DMs is only available in the standalone Google Chrome browser" });
+      return;
+    }
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const message = typeof body.message === "string" ? body.message : "";
+      const url = typeof body.url === "string" ? body.url : "";
+      const numberOrUndefined = (value: unknown) => {
+        if (value === null || value === undefined || value === "") return undefined;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? Math.max(0, parsed) : undefined;
+      };
+      const result = await runGoogleChromeDm(profileId, {
+        url,
+        message,
+        amount: numberOrUndefined(body.amount),
+        maxUsers: numberOrUndefined(body.maxUsers),
+        stopAfterMinutes: numberOrUndefined(body.stopAfterMinutes),
+        skipAlreadyMessaged: body.skipAlreadyMessaged === true,
+        alreadyMessagedUrls: Array.isArray(body.alreadyMessagedUrls)
+          ? body.alreadyMessagedUrls.filter((value): value is string => typeof value === "string").slice(-5000)
+          : [],
+        excludedNameTokens: Array.isArray(body.excludedNameTokens)
+          ? body.excludedNameTokens.filter((value): value is string => typeof value === "string").slice(0, 500)
+          : [],
+        startIndex: numberOrUndefined(body.startIndex),
+      });
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      const message = err?.message ?? "Send DMs run failed";
+      const status = /already active|open the Google Chrome browser|valid URL|HTTP or HTTPS|enter a message|only available/i.test(message)
+        ? 400
+        : 500;
+      res.status(status).json({ ok: false, error: message });
+    }
+  });
+
+  app.post("/api/browser/:profileId/send-dms/stop", (req, res): void => {
+    const profileId = Number(req.params.profileId);
+    if (profileId !== GOOGLE_CHROME_BROWSER_PROFILE_ID) {
+      res.status(404).json({ ok: false, error: "Send DMs is only available in the standalone Google Chrome browser" });
+      return;
+    }
+    const stopped = stopGoogleChromeDmRun(profileId);
+    res.json({ ok: true, stopped });
   });
 
   // Signup browser input — routes mouse/keyboard/nav commands to the signup Puppeteer page

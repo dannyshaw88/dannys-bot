@@ -32,6 +32,10 @@ const COMMON_MALE_NAMES = new Set(
   ].map((name) => name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase()),
 );
 
+export function getCommonMaleNameTokens(): string[] {
+  return [...COMMON_MALE_NAMES];
+}
+
 /** Normalize punctuation, emoji, and diacritics into exact name-word tokens. */
 export function getBrowserDmNameTokens(displayName: string): string[] {
   return (

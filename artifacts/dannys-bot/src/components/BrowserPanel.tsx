@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { recordLoginEvent } from "@/lib/ipLoginTracker";
+import { getCommonMaleNameTokens } from "@/lib/browserDmNameFilter";
 
 function usePersistentBrowserSetting<T extends string | boolean>(key: string, initialValue: T) {
   const [value, setValue] = useState<T>(() => {
@@ -172,22 +173,29 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [showBrowserSettings, setShowBrowserSettings] = useState(false);
   const [activeBrowserSettingsSection, setActiveBrowserSettingsSection] = useState<string | null>("send-dms");
   const [sendDmToolActive, setSendDmToolActive] = useState(false);
-  const [sendDmUrlEnabled, setSendDmUrlEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.urlEnabled", false);
-  const [sendDmUrl, setSendDmUrl] = usePersistentBrowserSetting("aura.googleChrome.sendDms.url", "");
-  const [sendDmMessageEnabled, setSendDmMessageEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.messageEnabled", false);
-  const [sendDmMessage, setSendDmMessage] = usePersistentBrowserSetting("aura.googleChrome.sendDms.message", "");
-  const [skipAlreadyMessaged, setSkipAlreadyMessaged] = usePersistentBrowserSetting("aura.googleChrome.sendDms.skipAlreadyMessaged", false);
-  const [continueWhereLeftOff, setContinueWhereLeftOff] = usePersistentBrowserSetting("aura.googleChrome.sendDms.continueWhereLeftOff", false);
-  const [sendDmGirlsOnly, setSendDmGirlsOnly] = usePersistentBrowserSetting("aura.googleChrome.sendDms.girlsOnly", false);
-  const [sendDmStopLimitsEnabled, setSendDmStopLimitsEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.stopLimitsEnabled", false);
-  const [sendDmStopMinutes, setSendDmStopMinutes] = usePersistentBrowserSetting("aura.googleChrome.sendDms.stopMinutes", "");
-  const [sendDmMaxUsers, setSendDmMaxUsers] = usePersistentBrowserSetting("aura.googleChrome.sendDms.maxUsers", "");
-  const [sendDmScheduleEnabled, setSendDmScheduleEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.scheduleEnabled", false);
-  const [sendDmIntervalMin, setSendDmIntervalMin] = usePersistentBrowserSetting("aura.googleChrome.sendDms.intervalMin", "");
-  const [sendDmIntervalMax, setSendDmIntervalMax] = usePersistentBrowserSetting("aura.googleChrome.sendDms.intervalMax", "");
-  const [sendDmAmountEnabled, setSendDmAmountEnabled] = usePersistentBrowserSetting("aura.googleChrome.sendDms.amountEnabled", false);
-  const [sendDmAmountMin, setSendDmAmountMin] = usePersistentBrowserSetting("aura.googleChrome.sendDms.amountMin", "");
-  const [sendDmAmountMax, setSendDmAmountMax] = usePersistentBrowserSetting("aura.googleChrome.sendDms.amountMax", "");
+  const [sendDmUrlEnabled, setSendDmUrlEnabled] = usePersistentBrowserSetting<boolean>("aura.googleChrome.sendDms.urlEnabled", false);
+  const [sendDmUrl, setSendDmUrl] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.url", "");
+  const [sendDmMessageEnabled, setSendDmMessageEnabled] = usePersistentBrowserSetting<boolean>("aura.googleChrome.sendDms.messageEnabled", false);
+  const [sendDmMessage, setSendDmMessage] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.message", "");
+  const [skipAlreadyMessaged, setSkipAlreadyMessaged] = usePersistentBrowserSetting<boolean>("aura.googleChrome.sendDms.skipAlreadyMessaged", false);
+  const [continueWhereLeftOff, setContinueWhereLeftOff] = usePersistentBrowserSetting<boolean>("aura.googleChrome.sendDms.continueWhereLeftOff", false);
+  const [sendDmGirlsOnly, setSendDmGirlsOnly] = usePersistentBrowserSetting<boolean>("aura.googleChrome.sendDms.girlsOnly", false);
+  const [sendDmStopLimitsEnabled, setSendDmStopLimitsEnabled] = usePersistentBrowserSetting<boolean>("aura.googleChrome.sendDms.stopLimitsEnabled", false);
+  const [sendDmStopMinutes, setSendDmStopMinutes] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.stopMinutes", "");
+  const [sendDmMaxUsers, setSendDmMaxUsers] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.maxUsers", "");
+  const [sendDmScheduleEnabled, setSendDmScheduleEnabled] = usePersistentBrowserSetting<boolean>("aura.googleChrome.sendDms.scheduleEnabled", false);
+  const [sendDmIntervalMin, setSendDmIntervalMin] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.intervalMin", "");
+  const [sendDmIntervalMax, setSendDmIntervalMax] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.intervalMax", "");
+  const [sendDmAmountEnabled, setSendDmAmountEnabled] = usePersistentBrowserSetting<boolean>("aura.googleChrome.sendDms.amountEnabled", false);
+  const [sendDmAmountMin, setSendDmAmountMin] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.amountMin", "");
+  const [sendDmAmountMax, setSendDmAmountMax] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.amountMax", "");
+  const [sendDmProgress, setSendDmProgress] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.progress", "");
+  const [sendDmNextRunAt, setSendDmNextRunAt] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.nextRunAt", "");
+  const [sendDmRunStatus, setSendDmRunStatus] = useState("");
+  const sendDmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sendDmRunLockRef = useRef(false);
+  const sendDmUserStoppedRef = useRef(false);
+  const runSendDmRef = useRef<() => Promise<void>>(async () => {});
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiElapsed, setAiElapsed] = useState(0);
@@ -475,6 +483,10 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         switch (msg.type) {
           case "loading":
             setIsLoading(msg.loading);
+            break;
+          case "googleChromeDmStatus":
+            setSendDmRunStatus(msg.message ?? "");
+            appendLog(msg.message ?? "Send DMs update", msg.kind ?? "step");
             break;
           case "urlChange":
             if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) setAddressBar(msg.url);
@@ -844,21 +856,183 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     send({ type: "navigate", url });
   };
 
-  const startSendDmTool = () => {
-    const configuredUrl = sendDmUrlEnabled ? sendDmUrl.trim() : addressBar.trim();
-    if (!configuredUrl) return;
-    const url = /^https?:\/\//i.test(configuredUrl) ? configuredUrl : `https://${configuredUrl}`;
-    setAddressBar(url);
-    setSendDmToolActive(true);
-    setIsLoading(true);
-    send({ type: "navigate", url });
+  const scheduleNextSendDmRun = (minMinutes: number, maxMinutes: number) => {
+    if (sendDmTimerRef.current) clearTimeout(sendDmTimerRef.current);
+    const delay = (minMinutes + Math.random() * Math.max(0, maxMinutes - minMinutes)) * 60_000;
+    const dueAt = Date.now() + delay;
+    setSendDmNextRunAt(String(dueAt));
+    setSendDmRunStatus(`Next run ${new Date(dueAt).toLocaleString()}`);
+    sendDmTimerRef.current = setTimeout(() => {
+      sendDmTimerRef.current = null;
+      setSendDmNextRunAt("");
+      void runSendDmRef.current();
+    }, delay);
   };
 
+  const startSendDmTool = async () => {
+    if (sendDmRunLockRef.current) return;
+    if (!connected) {
+      setSendDmRunStatus("Open the browser connection before starting.");
+      return;
+    }
+    const configuredUrl = sendDmUrlEnabled ? sendDmUrl.trim() : addressBar.trim();
+    if (!configuredUrl) {
+      setSendDmRunStatus(sendDmUrlEnabled ? "Add a page URL in Browser settings." : "Enter a page URL first.");
+      return;
+    }
+    const url = /^https?:\/\//i.test(configuredUrl) ? configuredUrl : `https://${configuredUrl}`;
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) throw new Error("unsupported protocol");
+    } catch {
+      setSendDmRunStatus("Enter a valid web URL in Browser settings.");
+      return;
+    }
+    if (!sendDmMessageEnabled || !sendDmMessage.trim()) {
+      setSendDmRunStatus("Turn on Message to DM and enter a message in Browser settings.");
+      return;
+    }
+
+    const parsePositive = (value: string) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    };
+    const amountMin = parsePositive(sendDmAmountMin);
+    const amountMax = parsePositive(sendDmAmountMax);
+    if (sendDmAmountEnabled && (amountMin === null || amountMax === null || amountMax < amountMin)) {
+      setSendDmRunStatus("Set a valid minimum and maximum amount in Browser settings.");
+      return;
+    }
+    const intervalMin = parsePositive(sendDmIntervalMin);
+    const intervalMax = parsePositive(sendDmIntervalMax);
+    if (sendDmScheduleEnabled && (intervalMin === null || intervalMax === null || intervalMax < intervalMin)) {
+      setSendDmRunStatus("Set a valid minimum and maximum interval in Browser settings.");
+      return;
+    }
+
+    const messageOptions = sendDmMessage.split("!!").map(value => value.trim()).filter(Boolean);
+    if (!messageOptions.length) {
+      setSendDmRunStatus("Enter a non-empty message in Browser settings.");
+      return;
+    }
+    const message = messageOptions[Math.floor(Math.random() * messageOptions.length)];
+    const amount = sendDmAmountEnabled && amountMin !== null && amountMax !== null
+      ? Math.floor(amountMin + Math.random() * (amountMax - amountMin + 1))
+      : undefined;
+    let savedProgress: { url?: string; cursor?: number; messagedUrls?: string[] } = {};
+    try {
+      savedProgress = JSON.parse(sendDmProgress || "{}");
+    } catch {
+      savedProgress = {};
+    }
+    const sameTarget = savedProgress.url === parsedUrl.href;
+    const alreadyMessagedUrls = Array.isArray(savedProgress.messagedUrls)
+      ? savedProgress.messagedUrls.filter(value => typeof value === "string").slice(-5000)
+      : [];
+    const startIndex = continueWhereLeftOff && sameTarget && !skipAlreadyMessaged
+      ? Math.max(0, Math.floor(Number(savedProgress.cursor) || 0))
+      : 0;
+    const stopAfterMinutes = sendDmStopLimitsEnabled ? parsePositive(sendDmStopMinutes) ?? undefined : undefined;
+    const maxUsers = sendDmStopLimitsEnabled ? parsePositive(sendDmMaxUsers) ?? undefined : undefined;
+
+    if (sendDmTimerRef.current) {
+      clearTimeout(sendDmTimerRef.current);
+      sendDmTimerRef.current = null;
+    }
+    setSendDmNextRunAt("");
+    sendDmUserStoppedRef.current = false;
+    sendDmRunLockRef.current = true;
+    setSendDmToolActive(true);
+    setAddressBar(parsedUrl.href);
+    setIsLoading(true);
+    setSendDmRunStatus("Opening configured page and counting eligible users…");
+    appendLog(`Send DMs: opening ${parsedUrl.href}`, "step");
+    try {
+      const response = await fetch(`/api/browser/${profileId}/send-dms/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: parsedUrl.href,
+          message,
+          amount,
+          maxUsers,
+          stopAfterMinutes,
+          skipAlreadyMessaged,
+          alreadyMessagedUrls,
+          startIndex,
+          excludedNameTokens: sendDmGirlsOnly ? getCommonMaleNameTokens() : [],
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.ok !== true) {
+        throw new Error(data.error ?? `Send DMs failed (${response.status})`);
+      }
+      const newMessagedUrls = Array.isArray(data.sentUrls)
+        ? data.sentUrls.filter((value: unknown): value is string => typeof value === "string")
+        : [];
+      const progress = {
+        url: parsedUrl.href,
+        cursor: Number.isFinite(data.nextIndex) ? Math.max(0, data.nextIndex) : 0,
+        messagedUrls: [...new Set([...alreadyMessagedUrls, ...newMessagedUrls])].slice(-5000),
+      };
+      setSendDmProgress(JSON.stringify(progress));
+      const summary = `Finished: ${data.sent ?? 0} sent; ${data.failed ?? 0} failed; ${data.skipped ?? 0} skipped.`;
+      setSendDmRunStatus(summary);
+      appendLog(`Send DMs: ${summary}`, data.failed ? "fail" : "ok");
+    } catch (error: any) {
+      const messageText = error?.message ?? "Send DMs run failed";
+      setSendDmRunStatus(messageText);
+      appendLog(`Send DMs: ${messageText}`, "fail");
+    } finally {
+      setIsLoading(false);
+      sendDmRunLockRef.current = false;
+      if (sendDmUserStoppedRef.current) {
+        setSendDmToolActive(false);
+      } else if (sendDmScheduleEnabled && intervalMin !== null && intervalMax !== null) {
+        scheduleNextSendDmRun(intervalMin, intervalMax);
+      } else {
+        setSendDmToolActive(false);
+      }
+    }
+  };
+  runSendDmRef.current = startSendDmTool;
+
   const stopSendDmTool = () => {
+    sendDmUserStoppedRef.current = true;
     setSendDmToolActive(false);
     setIsLoading(false);
+    setSendDmRunStatus("Stopping Send DMs…");
+    if (sendDmTimerRef.current) {
+      clearTimeout(sendDmTimerRef.current);
+      sendDmTimerRef.current = null;
+    }
+    setSendDmNextRunAt("");
+    fetch(`/api/browser/${profileId}/send-dms/stop`, { method: "POST" }).catch(() => {});
     send({ type: "stop" });
   };
+
+  useEffect(() => {
+    if (!genericBrowser) return;
+    if (!sendDmScheduleEnabled) {
+      if (sendDmTimerRef.current) {
+        clearTimeout(sendDmTimerRef.current);
+        sendDmTimerRef.current = null;
+      }
+      if (sendDmNextRunAt) setSendDmNextRunAt("");
+      return;
+    }
+    if (status !== "connected" || !sendDmNextRunAt) return;
+    const dueAt = Number(sendDmNextRunAt);
+    if (!Number.isFinite(dueAt)) return;
+    if (sendDmTimerRef.current) clearTimeout(sendDmTimerRef.current);
+    const delay = Math.max(0, dueAt - Date.now());
+    sendDmTimerRef.current = setTimeout(() => {
+      sendDmTimerRef.current = null;
+      setSendDmNextRunAt("");
+      void runSendDmRef.current();
+    }, delay);
+  }, [genericBrowser, status, sendDmScheduleEnabled, sendDmNextRunAt]);
 
   const clearSession = async () => {
     try {
@@ -978,8 +1152,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               size="icon"
               className={`h-12 w-12 shrink-0 text-green-600 hover:text-green-700 transition-opacity ${sendDmToolActive ? "opacity-35" : "opacity-100"}`}
               onClick={startSendDmTool}
-              title="Go — open the configured Facebook page"
-              aria-label="Go"
+              title="Play — run configured Send DMs"
+              aria-label="Play Send DMs"
               aria-pressed={sendDmToolActive}
             >
               <Play className="w-6 h-6" fill="currentColor" />
@@ -989,13 +1163,23 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               size="icon"
               className={`h-12 w-12 shrink-0 text-red-600 hover:text-red-700 transition-opacity ${sendDmToolActive ? "opacity-100" : "opacity-35"}`}
               onClick={stopSendDmTool}
-              title="Stop — cancel the current page load"
-              aria-label="Stop"
+              title="Stop — cancel this run and its next scheduled run"
+              aria-label="Stop Send DMs"
               aria-pressed={!sendDmToolActive}
             >
               <Square className="w-5 h-5" fill="currentColor" />
             </Button>
           </>
+        )}
+        {genericBrowser && sendDmRunStatus && (
+          <span
+            className="max-w-[180px] truncate text-[11px] text-muted-foreground"
+            role="status"
+            aria-live="polite"
+            title={sendDmRunStatus}
+          >
+            {sendDmRunStatus}
+          </span>
         )}
 
         <form onSubmit={onAddressSubmit} className="flex-1 min-w-0">

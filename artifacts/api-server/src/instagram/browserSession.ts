@@ -4941,6 +4941,358 @@ async function browserApiThrottle(profileId: number): Promise<void> {
   } catch { /* non-fatal — proceed without delay if profile lookup fails */ }
 }
 
+type GoogleChromeDmOptions = {
+  url: string;
+  message: string;
+  amount?: number;
+  maxUsers?: number;
+  stopAfterMinutes?: number;
+  skipAlreadyMessaged?: boolean;
+  alreadyMessagedUrls?: string[];
+  excludedNameTokens?: string[];
+  startIndex?: number;
+};
+
+type GoogleChromeDmResult = {
+  totalEligible: number;
+  attempted: number;
+  sent: number;
+  skipped: number;
+  failed: number;
+  attemptedUrls: string[];
+  sentUrls: string[];
+  nextIndex: number;
+  stopped: boolean;
+};
+
+const activeGoogleChromeDmRuns = new Map<number, { stopped: boolean }>();
+
+export function stopGoogleChromeDmRun(profileId: number): boolean {
+  const run = activeGoogleChromeDmRuns.get(profileId);
+  if (!run) return false;
+  run.stopped = true;
+  return true;
+}
+
+/**
+ * Run the standalone Chrome Send DMs action against visible Facebook profile
+ * cards on the configured page. Each message requires a visible profile card,
+ * a Message control in that card, and a visible message composer before input
+ * is sent; ambiguous pages are skipped rather than guessed.
+ */
+export async function runGoogleChromeDm(
+  profileId: number,
+  options: GoogleChromeDmOptions,
+): Promise<GoogleChromeDmResult> {
+  if (profileId !== GOOGLE_CHROME_BROWSER_PROFILE_ID) {
+    throw new Error("Send DMs is only available in the standalone Google Chrome browser");
+  }
+  if (activeGoogleChromeDmRuns.has(profileId)) {
+    throw new Error("A Send DMs run is already active");
+  }
+
+  const session = sessions.get(profileId);
+  if (!session) throw new Error("Open the Google Chrome browser before starting Send DMs");
+
+  let targetUrl: URL;
+  try {
+    targetUrl = new URL(options.url);
+  } catch {
+    throw new Error("Enter a valid URL in Browser settings");
+  }
+  if (!["http:", "https:"].includes(targetUrl.protocol)) {
+    throw new Error("The configured page must use HTTP or HTTPS");
+  }
+  if (!options.message?.trim()) {
+    throw new Error("Turn on Message to DM and enter a message before starting");
+  }
+
+  const run = { stopped: false };
+  activeGoogleChromeDmRuns.set(profileId, run);
+  const emit = (message: string, kind: "step" | "ok" | "fail" = "step") => {
+    wsWrite(session.ws, { type: "googleChromeDmStatus", message, kind });
+    log(`[googleChromeDm:${profileId}] ${message}`, "browser");
+  };
+  const result: GoogleChromeDmResult = {
+    totalEligible: 0, attempted: 0, sent: 0, skipped: 0, failed: 0,
+    attemptedUrls: [], sentUrls: [], nextIndex: Math.max(0, Math.floor(options.startIndex ?? 0)),
+    stopped: false,
+  };
+
+  const cleanUrl = (value: string) => {
+    try {
+      const url = new URL(value);
+      url.hash = "";
+      return url.href;
+    } catch {
+      return value;
+    }
+  };
+  const alreadyMessaged = new Set(
+    (options.alreadyMessagedUrls ?? []).map(cleanUrl),
+  );
+  const excludedNameTokens = new Set(
+    (options.excludedNameTokens ?? []).map(value =>
+      value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase(),
+    ),
+  );
+  const shouldExcludeName = (name: string) => excludedNameTokens.size > 0
+    && (name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().match(/\p{L}+/gu) ?? [])
+      .some(token => excludedNameTokens.has(token));
+  const allowedCandidates = (candidates: Array<{ url: string; name: string }>) => candidates.filter(candidate =>
+    !shouldExcludeName(candidate.name)
+      && !(options.skipAlreadyMessaged && alreadyMessaged.has(cleanUrl(candidate.url))),
+  );
+  const startedAt = Date.now();
+  const stopAt = Number.isFinite(options.stopAfterMinutes) && (options.stopAfterMinutes ?? 0) > 0
+    ? startedAt + (options.stopAfterMinutes as number) * 60_000
+    : Number.POSITIVE_INFINITY;
+  const userLimit = Number.isFinite(options.maxUsers) && (options.maxUsers ?? 0) > 0
+    ? Math.floor(options.maxUsers as number)
+    : Number.POSITIVE_INFINITY;
+  const amount = Number.isFinite(options.amount) && (options.amount ?? 0) > 0
+    ? Math.floor(options.amount as number)
+    : Number.POSITIVE_INFINITY;
+
+  const isStopped = () => run.stopped || Date.now() >= stopAt;
+  try {
+    emit(`Opening configured page: ${targetUrl.href}`);
+    session.navProtectedUntil = Date.now() + 35_000;
+    await session.page.goto(targetUrl.href, { waitUntil: "domcontentloaded", timeout: 25_000 });
+    await new Promise(resolve => setTimeout(resolve, 1200));
+
+    const collectEligibleProfiles = async () => session.page.evaluate(() => {
+      const doc = (globalThis as any).document;
+      const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
+      const visibleCheck = (element: any) => {
+        const rect = element.getBoundingClientRect();
+        const style = getStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+      };
+      const excludedPaths = new Set([
+        "about", "friends", "groups", "events", "marketplace", "watch", "stories",
+        "reels", "messages", "search", "pages", "home", "login", "help", "photo",
+        "posts", "privacy", "settings", "notifications", "gaming", "memories",
+      ]);
+      const normalize = (value: string) => {
+        try {
+          const url = new URL(value, doc.location.href);
+          url.hash = "";
+          return url.href;
+        } catch {
+          return "";
+        }
+      };
+      const candidates = new Map<string, { url: string; name: string }>();
+      for (const anchor of Array.from(doc.querySelectorAll("a[href]")) as any[]) {
+        if (!visibleCheck(anchor)) continue;
+        const url = normalize(anchor.href);
+        if (!url) continue;
+        const parsed = new URL(url);
+        if (!/(^|\.)facebook\.com$/i.test(parsed.hostname)) continue;
+        const path = parsed.pathname.replace(/^\/+|\/+$/g, "");
+        const lowerPath = path.toLowerCase();
+        const isProfile = /^profile\.php$/i.test(lowerPath)
+          ? Boolean(parsed.searchParams.get("id"))
+          : Boolean(path && !path.includes("/") && !excludedPaths.has(lowerPath))
+            || /^people\/[^/]+\/\d+/i.test(path);
+        if (!isProfile) continue;
+
+        const name = (anchor.getAttribute("aria-label") || anchor.innerText || anchor.textContent || "")
+          .replace(/\s+/g, " ").trim();
+        if (!name || name.length > 120 || /^(facebook|profile|view profile)$/i.test(name)) continue;
+
+        let card: any = anchor;
+        let hasMessageButton = false;
+        for (let depth = 0; card && depth < 7; depth++, card = card.parentElement) {
+          const controls = Array.from(card.querySelectorAll("button,[role='button']")) as any[];
+          if (controls.some(control => {
+            if (!visibleCheck(control)) return false;
+            const label = `${control.getAttribute("aria-label") ?? ""} ${control.getAttribute("title") ?? ""} ${control.innerText ?? ""}`
+              .replace(/\s+/g, " ").trim();
+            return /^message(?:\s|$)/i.test(label);
+          })) {
+            hasMessageButton = true;
+            break;
+          }
+        }
+        if (hasMessageButton && !candidates.has(url)) candidates.set(url, { url, name });
+      }
+      return [...candidates.values()];
+    });
+
+    let candidates: Array<{ url: string; name: string }> = [];
+    let previousHeight = -1;
+    for (let scan = 0; scan < 20; scan++) {
+      if (isStopped()) break;
+      candidates = await collectEligibleProfiles();
+      const allowed = allowedCandidates(candidates);
+      const needed = Math.min(amount, userLimit);
+      if (allowed.length >= needed) break;
+      const height = await session.page.evaluate(() => (globalThis as any).document.documentElement.scrollHeight);
+      if (height === previousHeight) break;
+      previousHeight = height;
+      await session.page.evaluate(() => {
+        const win = (globalThis as any).window;
+        win.scrollBy(0, Math.max(500, win.innerHeight * 0.8));
+      });
+      await new Promise(resolve => setTimeout(resolve, 700));
+    }
+    candidates = await collectEligibleProfiles();
+    const filtered = allowedCandidates(candidates);
+    result.skipped = candidates.length - filtered.length;
+    result.totalEligible = filtered.length;
+    const startIndex = filtered.length > 0 ? result.nextIndex % filtered.length : 0;
+    const selected = filtered.slice(startIndex, startIndex + Math.min(amount, userLimit));
+    emit(`Found ${filtered.length} eligible user${filtered.length === 1 ? "" : "s"}; attempting up to ${selected.length}.`);
+
+    for (const candidate of selected) {
+      if (isStopped()) {
+        result.stopped = true;
+        break;
+      }
+      if (result.attempted >= userLimit) break;
+      if (Date.now() >= stopAt) {
+        result.stopped = true;
+        break;
+      }
+
+      const opened = await session.page.evaluate((target: string) => {
+        const doc = (globalThis as any).document;
+        const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
+        const visibleCheck = (element: any) => {
+          const rect = element.getBoundingClientRect();
+          const style = getStyle(element);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+        };
+        const normalize = (value: string) => {
+          try {
+            const url = new URL(value, doc.location.href);
+            url.hash = "";
+            return url.href;
+          } catch {
+            return "";
+          }
+        };
+        const anchor = (Array.from(doc.querySelectorAll("a[href]")) as any[])
+          .find(element => visibleCheck(element) && normalize(element.href) === target);
+        if (!anchor) return false;
+        let card: any = anchor;
+        for (let depth = 0; card && depth < 7; depth++, card = card.parentElement) {
+          const controls = Array.from(card.querySelectorAll("button,[role='button']")) as any[];
+          const messageButton = controls.find(control => {
+            if (!visibleCheck(control)) return false;
+            const label = `${control.getAttribute("aria-label") ?? ""} ${control.getAttribute("title") ?? ""} ${control.innerText ?? ""}`
+              .replace(/\s+/g, " ").trim();
+            return /^message(?:\s|$)/i.test(label);
+          });
+          if (messageButton) {
+            messageButton.click();
+            return true;
+          }
+        }
+        return false;
+      }, candidate.url);
+
+      result.attempted++;
+      result.attemptedUrls.push(cleanUrl(candidate.url));
+      result.nextIndex = startIndex + result.attempted;
+      if (!opened) {
+        result.failed++;
+        emit(`Skipped ${candidate.name}: its Message control was no longer available.`);
+        continue;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 900));
+      const composerHandle = await session.page.evaluateHandle(() => {
+        const doc = (globalThis as any).document;
+        const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
+        const isVisibleElement = (element: any) => {
+          const rect = element.getBoundingClientRect();
+          const style = getStyle(element);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+        };
+        const dialogs = (Array.from(doc.querySelectorAll("[role='dialog']")) as any[])
+          .filter(isVisibleElement);
+        const containers = dialogs.length ? dialogs : [doc.body];
+        const selectors = [
+          "[contenteditable='true'][role='textbox']",
+          "[contenteditable='true'][data-lexical-editor='true']",
+          "textarea",
+        ];
+        const found = containers.flatMap(container =>
+          selectors.flatMap(selector => Array.from(container.querySelectorAll(selector)) as any[]),
+        ).filter(element => {
+          if (!isVisibleElement(element)) return false;
+          const label = `${element.getAttribute("aria-label") ?? ""} ${element.getAttribute("placeholder") ?? ""} ${element.getAttribute("data-placeholder") ?? ""}`
+            .toLowerCase();
+          return !label || /message|reply|text/i.test(label);
+        });
+        return found[found.length - 1] ?? null;
+      });
+      const composer = composerHandle.asElement();
+      if (!composer) {
+        result.failed++;
+        emit(`Could not confirm a message composer for ${candidate.name}; no text was entered.`);
+        continue;
+      }
+
+      try {
+        await composer.click();
+        await composer.type(options.message.trim(), { delay: 12 });
+        await new Promise(resolve => setTimeout(resolve, 250));
+        const sendButton = await session.page.evaluateHandle(() => {
+          const doc = (globalThis as any).document;
+          const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
+          const isVisibleElement = (element: any) => {
+            const rect = element.getBoundingClientRect();
+            const style = getStyle(element);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+          };
+          const buttons = (Array.from(doc.querySelectorAll("button,[role='button']")) as any[])
+            .filter(isVisibleElement);
+          return buttons.find(button => {
+            const label = `${button.getAttribute("aria-label") ?? ""} ${button.getAttribute("title") ?? ""} ${button.innerText ?? ""}`
+              .replace(/\s+/g, " ").trim();
+            return /^send(?:\s|$)/i.test(label);
+          }) ?? null;
+        });
+        const sendElement = sendButton.asElement();
+        if (sendElement) {
+          await sendElement.click();
+        } else {
+          await composer.press("Enter");
+        }
+        await new Promise(resolve => setTimeout(resolve, 900));
+        const isEmpty = await composer.evaluate((element: any) =>
+          !(element.innerText || element.value || "").trim(),
+        ).catch(() => false);
+        if (isEmpty) {
+          result.sent++;
+          result.sentUrls.push(cleanUrl(candidate.url));
+          emit(`Message sent to ${candidate.name}.`, "ok");
+        } else {
+          result.failed++;
+          emit(`Message attempt for ${candidate.name} was not confirmed; stopping this run to avoid duplicate sends.`, "fail");
+          break;
+        }
+      } catch (error: any) {
+        result.failed++;
+        emit(`Message attempt failed for ${candidate.name}: ${error?.message ?? "browser interaction failed"}`, "fail");
+      }
+    }
+
+    if (isStopped()) result.stopped = true;
+    emit(
+      `Run finished: ${result.sent} sent, ${result.failed} failed, ${result.skipped} skipped out of ${result.attempted} attempts.`,
+      result.failed ? "fail" : "ok",
+    );
+    return result;
+  } finally {
+    activeGoogleChromeDmRuns.delete(profileId);
+  }
+}
+
 // ── Send a DM through the live browser session ────────────────────────────────
 // Uses page.evaluate + fetch() so all cookies/CSRF are included automatically.
 // This bypasses mobile-API restrictions (4415001) by sending from within the
