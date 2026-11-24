@@ -856,7 +856,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     const delay = (minMinutes + Math.random() * Math.max(0, maxMinutes - minMinutes)) * 60_000;
     const dueAt = Date.now() + delay;
     setSendDmNextRunAt(String(dueAt));
-    setSendDmRunStatus(`Next run ${new Date(dueAt).toLocaleString()}`);
     sendDmTimerRef.current = setTimeout(() => {
       sendDmTimerRef.current = null;
       setSendDmNextRunAt("");
@@ -867,12 +866,12 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const startSendDmTool = async () => {
     if (sendDmRunLockRef.current) return;
     if (!connected) {
-      setSendDmRunStatus("Open the browser connection before starting.");
+      appendLog("Send DMs: open the browser connection before starting.", "fail");
       return;
     }
     const configuredUrl = sendDmUrlEnabled ? sendDmUrl.trim() : addressBar.trim();
     if (!configuredUrl) {
-      setSendDmRunStatus(sendDmUrlEnabled ? "Add a page URL in Browser settings." : "Enter a page URL first.");
+      appendLog(sendDmUrlEnabled ? "Send DMs: add a page URL in Browser settings." : "Send DMs: enter a page URL first.", "fail");
       return;
     }
     const url = /^https?:\/\//i.test(configuredUrl) ? configuredUrl : `https://${configuredUrl}`;
@@ -881,11 +880,11 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       parsedUrl = new URL(url);
       if (!["http:", "https:"].includes(parsedUrl.protocol)) throw new Error("unsupported protocol");
     } catch {
-      setSendDmRunStatus("Enter a valid web URL in Browser settings.");
+      appendLog("Send DMs: enter a valid web URL in Browser settings.", "fail");
       return;
     }
     if (!sendDmMessageEnabled || !sendDmMessage.trim()) {
-      setSendDmRunStatus("Turn on Message to DM and enter a message in Browser settings.");
+      appendLog("Send DMs: turn on Message and enter a message in Browser settings.", "fail");
       return;
     }
 

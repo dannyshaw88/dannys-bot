@@ -5055,11 +5055,37 @@ export async function runGoogleChromeDm(
     : Number.POSITIVE_INFINITY;
 
   const isStopped = () => run.stopped || Date.now() >= stopAt;
+  const profileKey = (value: string) => {
+    try {
+      const url = new URL(value);
+      if (!/(^|\.)facebook\.com$/i.test(url.hostname)) return "";
+      if (url.pathname.replace(/\/+$/, "").toLowerCase() === "/profile.php") {
+        const id = url.searchParams.get("id");
+        return id ? `id:${id}` : "";
+      }
+      const peopleMatch = url.pathname.match(/^\/people\/[^/]+\/(\d+)\/?$/i);
+      return peopleMatch ? `id:${peopleMatch[1]}` : "";
+    } catch {
+      return "";
+    }
+  };
   try {
     emit(`Opening configured page: ${targetUrl.href}`);
     session.navProtectedUntil = Date.now() + 35_000;
     await session.page.goto(targetUrl.href, { waitUntil: "domcontentloaded", timeout: 25_000 });
-    await new Promise(resolve => setTimeout(resolve, 1200));
+    await session.page.waitForFunction(() => {
+      const doc = (globalThis as any).document;
+      const main = doc.querySelector("main,[role='main']");
+      if (!main) return false;
+      const heading = Array.from(main.querySelectorAll("h1,h2,h3,h4,[role='heading']") as any[])
+        .find(element => /^followers$/i.test((element.innerText || element.textContent || "").trim()));
+      if (!heading) return false;
+      let section: any = heading;
+      for (let depth = 0; section && depth < 8; depth++, section = section.parentElement) {
+        if (section.querySelector("a[href*='profile.php?id='],a[href*='/people/']")) return true;
+      }
+      return false;
+    }, { timeout: 10_000, polling: 200 }).catch(() => null);
 
     const collectEligibleProfiles = async () => session.page.evaluate(() => {
       const doc = (globalThis as any).document;
@@ -5069,76 +5095,77 @@ export async function runGoogleChromeDm(
         const style = getStyle(element);
         return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
       };
-      const excludedPaths = new Set([
-        "about", "friends", "groups", "events", "marketplace", "watch", "stories",
-        "reels", "messages", "search", "pages", "home", "login", "help", "photo",
-        "posts", "privacy", "settings", "notifications", "gaming", "memories",
-      ]);
-      const normalize = (value: string) => {
+      const identity = (value: string) => {
         try {
-          const url = new URL(value, doc.location.href);
-          url.hash = "";
-          return url.href;
+          const parsed = new URL(value, doc.location.href);
+          if (!/(^|\.)facebook\.com$/i.test(parsed.hostname)) return null;
+          if (parsed.pathname.replace(/\/+$/, "").toLowerCase() === "/profile.php") {
+            const id = parsed.searchParams.get("id");
+            if (!id) return null;
+            return { key: `id:${id}`, url: `${parsed.origin}/profile.php?id=${encodeURIComponent(id)}` };
+          }
+          const peopleMatch = parsed.pathname.match(/^\/people\/([^/]+)\/(\d+)\/?$/i);
+          if (peopleMatch) {
+            return { key: `id:${peopleMatch[2]}`, url: `${parsed.origin}/people/${peopleMatch[1]}/${peopleMatch[2]}` };
+          }
+          return null;
         } catch {
-          return "";
+          return null;
         }
       };
+      const main = doc.querySelector("main,[role='main']");
+      if (!main) return [];
+      const heading = Array.from(main.querySelectorAll("h1,h2,h3,h4,[role='heading']") as any[])
+        .find(element => /^followers$/i.test((element.innerText || element.textContent || "").trim()));
+      if (!heading) return [];
+
+      let section: any = heading;
+      for (let depth = 0; section && depth < 8; depth++, section = section.parentElement) {
+        if (Array.from(section.querySelectorAll("a[href]") as any[]).some(anchor =>
+          visibleCheck(anchor) && identity(anchor.href),
+        )) break;
+      }
+      if (!section) return [];
+
+      const genericLabels = /^(sign up|log in|login|follow|message|view profile|profile|facebook)$/i;
       const candidates = new Map<string, { url: string; name: string }>();
-      for (const anchor of Array.from(doc.querySelectorAll("a[href]")) as any[]) {
+      for (const anchor of Array.from(section.querySelectorAll("a[href]")) as any[]) {
         if (!visibleCheck(anchor)) continue;
-        const url = normalize(anchor.href);
-        if (!url) continue;
-        const parsed = new URL(url);
-        if (!/(^|\.)facebook\.com$/i.test(parsed.hostname)) continue;
-        const path = parsed.pathname.replace(/^\/+|\/+$/g, "");
-        const lowerPath = path.toLowerCase();
-        const isProfile = /^profile\.php$/i.test(lowerPath)
-          ? Boolean(parsed.searchParams.get("id"))
-          : Boolean(path && !path.includes("/") && !excludedPaths.has(lowerPath))
-            || /^people\/[^/]+\/\d+/i.test(path);
-        if (!isProfile) continue;
-
-        const name = (anchor.getAttribute("aria-label") || anchor.innerText || anchor.textContent || "")
+        const person = identity(anchor.href);
+        if (!person) continue;
+        const rawName = (anchor.innerText || anchor.textContent || anchor.getAttribute("aria-label") || "")
           .replace(/\s+/g, " ").trim();
-        if (!name || name.length > 120 || /^(facebook|profile|view profile)$/i.test(name)) continue;
-
-        let card: any = anchor;
-        let hasMessageButton = false;
-        for (let depth = 0; card && depth < 7; depth++, card = card.parentElement) {
-          const controls = Array.from(card.querySelectorAll("button,[role='button']")) as any[];
-          if (controls.some(control => {
-            if (!visibleCheck(control)) return false;
-            const label = `${control.getAttribute("aria-label") ?? ""} ${control.getAttribute("title") ?? ""} ${control.innerText ?? ""}`
-              .replace(/\s+/g, " ").trim();
-            return /^message(?:\s|$)/i.test(label);
-          })) {
-            hasMessageButton = true;
-            break;
-          }
+        const name = rawName.replace(/^(?:profile picture of|profile picture for)\s+/i, "")
+          .replace(/\s+(?:'s)?\s*profile$/i, "").trim();
+        if (!name || name.length > 100 || genericLabels.test(name)) continue;
+        const existing = candidates.get(person.key);
+        if (!existing || existing.name.length < name.length) {
+          candidates.set(person.key, { url: person.url, name });
         }
-        if (hasMessageButton && !candidates.has(url)) candidates.set(url, { url, name });
       }
       return [...candidates.values()];
     });
 
-    let candidates: Array<{ url: string; name: string }> = [];
+    let candidates = await collectEligibleProfiles();
     let previousHeight = -1;
-    for (let scan = 0; scan < 20; scan++) {
+    const needed = Math.min(amount, userLimit);
+    for (let scan = 0; scan < 10; scan++) {
       if (isStopped()) break;
-      candidates = await collectEligibleProfiles();
       const allowed = allowedCandidates(candidates);
-      const needed = Math.min(amount, userLimit);
       if (allowed.length >= needed) break;
-      const height = await session.page.evaluate(() => (globalThis as any).document.documentElement.scrollHeight);
+      const height = await session.page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        return doc.scrollingElement?.scrollHeight ?? doc.documentElement.scrollHeight;
+      });
       if (height === previousHeight) break;
       previousHeight = height;
       await session.page.evaluate(() => {
         const win = (globalThis as any).window;
-        win.scrollBy(0, Math.max(500, win.innerHeight * 0.8));
+        win.scrollTo(0, (globalThis as any).document.documentElement.scrollHeight);
       });
-      await new Promise(resolve => setTimeout(resolve, 700));
+      await new Promise(resolve => setTimeout(resolve, 250));
+      candidates = await collectEligibleProfiles();
     }
-    candidates = await collectEligibleProfiles();
     const filtered = allowedCandidates(candidates);
     result.skipped = candidates.length - filtered.length;
     result.totalEligible = filtered.length;
@@ -5157,128 +5184,220 @@ export async function runGoogleChromeDm(
         break;
       }
 
-      const opened = await session.page.evaluate((target: string) => {
-        const doc = (globalThis as any).document;
-        const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
-        const visibleCheck = (element: any) => {
-          const rect = element.getBoundingClientRect();
-          const style = getStyle(element);
-          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-        };
-        const normalize = (value: string) => {
-          try {
-            const url = new URL(value, doc.location.href);
-            url.hash = "";
-            return url.href;
-          } catch {
-            return "";
-          }
-        };
-        const anchor = (Array.from(doc.querySelectorAll("a[href]")) as any[])
-          .find(element => visibleCheck(element) && normalize(element.href) === target);
-        if (!anchor) return false;
-        let card: any = anchor;
-        for (let depth = 0; card && depth < 7; depth++, card = card.parentElement) {
-          const controls = Array.from(card.querySelectorAll("button,[role='button']")) as any[];
-          const messageButton = controls.find(control => {
-            if (!visibleCheck(control)) return false;
-            const label = `${control.getAttribute("aria-label") ?? ""} ${control.getAttribute("title") ?? ""} ${control.innerText ?? ""}`
-              .replace(/\s+/g, " ").trim();
-            return /^message(?:\s|$)/i.test(label);
-          });
-          if (messageButton) {
-            messageButton.click();
-            return true;
-          }
-        }
-        return false;
-      }, candidate.url);
-
       result.attempted++;
       result.attemptedUrls.push(cleanUrl(candidate.url));
       result.nextIndex = startIndex + result.attempted;
-      if (!opened) {
+
+      const expectedProfileKey = profileKey(candidate.url);
+      if (!expectedProfileKey) {
         result.failed++;
-        emit(`Skipped ${candidate.name}: its Message control was no longer available.`);
+        emit("Skipped a candidate without a verified Facebook user profile.");
         continue;
       }
 
-      await new Promise(resolve => setTimeout(resolve, 900));
-      const composerHandle = await session.page.evaluateHandle(() => {
+      try {
+        await session.page.goto(candidate.url, { waitUntil: "domcontentloaded", timeout: 20_000 });
+      } catch {
+        result.failed++;
+        emit("Could not open a verified user profile; no message was entered.");
+        continue;
+      }
+      if (isStopped()) {
+        result.stopped = true;
+        break;
+      }
+      if (profileKey(session.page.url()) !== expectedProfileKey) {
+        result.failed++;
+        emit("The opened profile did not match the selected user; no message was entered.");
+        continue;
+      }
+
+      const profileReady = await session.page.waitForFunction((expectedName: string) => {
         const doc = (globalThis as any).document;
         const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
-        const isVisibleElement = (element: any) => {
+        const visible = (element: any) => {
           const rect = element.getBoundingClientRect();
           const style = getStyle(element);
           return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
         };
-        const dialogs = (Array.from(doc.querySelectorAll("[role='dialog']")) as any[])
-          .filter(isVisibleElement);
-        const containers = dialogs.length ? dialogs : [doc.body];
-        const selectors = [
-          "[contenteditable='true'][role='textbox']",
-          "[contenteditable='true'][data-lexical-editor='true']",
-          "textarea",
-        ];
-        const found = containers.flatMap(container =>
-          selectors.flatMap(selector => Array.from(container.querySelectorAll(selector)) as any[]),
-        ).filter(element => {
-          if (!isVisibleElement(element)) return false;
-          const label = `${element.getAttribute("aria-label") ?? ""} ${element.getAttribute("placeholder") ?? ""} ${element.getAttribute("data-placeholder") ?? ""}`
-            .toLowerCase();
-          return !label || /message|reply|text/i.test(label);
-        });
-        return found[found.length - 1] ?? null;
-      });
+        const normalize = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
+        const main = doc.querySelector("main,[role='main']");
+        if (!main) return false;
+        if (!normalize(main.innerText || "").includes(normalize(expectedName))) return false;
+        const messageButtons = (Array.from(main.querySelectorAll("button,[role='button']")) as any[])
+          .filter(button => {
+            if (!visible(button)) return false;
+            const labels = [button.getAttribute("aria-label"), button.getAttribute("title"), button.innerText]
+              .filter(Boolean).map((label: string) => label.replace(/\s+/g, " ").trim());
+            return labels.some(label => /^message$/i.test(label));
+          });
+        return messageButtons.length === 1;
+      }, { timeout: 8_000, polling: 200 }, candidate.name).catch(() => null);
+      if (isStopped()) {
+        result.stopped = true;
+        break;
+      }
+      if (!profileReady) {
+        result.failed++;
+        emit("The selected user's profile did not finish rendering; no message was entered.");
+        continue;
+      }
+      await profileReady.dispose();
+
+      const messageButtonHandle = await session.page.evaluateHandle((expectedName: string) => {
+        const doc = (globalThis as any).document;
+        const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
+        const visible = (element: any) => {
+          const rect = element.getBoundingClientRect();
+          const style = getStyle(element);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+        };
+        const normalize = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
+        const main = doc.querySelector("main,[role='main']");
+        if (!main) return null;
+        if (!normalize(main.innerText || "").includes(normalize(expectedName))) return null;
+        const buttons = (Array.from(main.querySelectorAll("button,[role='button']")) as any[])
+          .filter(button => {
+            if (!visible(button)) return false;
+            const labels = [button.getAttribute("aria-label"), button.getAttribute("title"), button.innerText]
+              .filter(Boolean).map((label: string) => label.replace(/\s+/g, " ").trim());
+            return labels.some(label => /^message$/i.test(label));
+          });
+        return buttons.length === 1 ? buttons[0] : null;
+      }, candidate.name);
+      const messageButton = messageButtonHandle.asElement();
+      if (!messageButton) {
+        await messageButtonHandle.dispose();
+        result.failed++;
+        emit("No unambiguous Message button was found on the selected user's profile.");
+        continue;
+      }
+      await messageButton.click();
+      await messageButtonHandle.dispose();
+      if (isStopped()) {
+        result.stopped = true;
+        break;
+      }
+
+      let composerHandle: any;
+      try {
+        composerHandle = await session.page.waitForFunction((expectedName: string) => {
+          const doc = (globalThis as any).document;
+          const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
+          const visible = (element: any) => {
+            const rect = element.getBoundingClientRect();
+            const style = getStyle(element);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+          };
+          const normalize = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
+          const expected = normalize(expectedName);
+          return Array.from(doc.querySelectorAll("[contenteditable='true'][role='textbox'],textarea") as any[])
+            .find(element => {
+              if (!visible(element)) return false;
+              const label = `${element.getAttribute("aria-label") ?? ""} ${element.getAttribute("placeholder") ?? ""} ${element.getAttribute("data-placeholder") ?? ""}`.trim();
+              const recipient = label.match(/^write to\s+(.+)$/i)?.[1];
+              return !!recipient && normalize(recipient) === expected;
+            }) ?? false;
+        }, { timeout: 15_000, polling: 200 }, candidate.name);
+      } catch {
+        result.failed++;
+        emit("The selected user's message field did not finish rendering; no text was entered.");
+        continue;
+      }
+      if (isStopped()) {
+        result.stopped = true;
+        await composerHandle.dispose();
+        break;
+      }
       const composer = composerHandle.asElement();
       if (!composer) {
+        await composerHandle.dispose();
         result.failed++;
-        emit(`Could not confirm a message composer for ${candidate.name}; no text was entered.`);
+        emit("The selected user's message field could not be confirmed; no text was entered.");
         continue;
       }
 
       try {
         await composer.click();
-        await composer.type(options.message.trim(), { delay: 12 });
-        await new Promise(resolve => setTimeout(resolve, 250));
-        const sendButton = await session.page.evaluateHandle(() => {
+        await composer.type(options.message.trim(), { delay: 0 });
+        const typedText = await composer.evaluate((element: any) =>
+          String(element.innerText || element.textContent || element.value || "").replace(/\u200b/g, "").replace(/\r\n/g, "\n").trim(),
+        );
+        if (typedText !== options.message.trim()) {
+          result.failed++;
+          emit("Typed text did not match the configured message; it was not sent.");
+          break;
+        }
+
+        const sendButtonHandle = await composer.evaluateHandle((element: any) => {
+          const getStyle = (globalThis as any).getComputedStyle as (node: any) => any;
+          const visible = (node: any) => {
+            const rect = node.getBoundingClientRect();
+            const style = getStyle(node);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+          };
+          let container: any = element;
+          for (let depth = 0; container && depth < 12; depth++, container = container.parentElement) {
+            const buttons = (Array.from(container.querySelectorAll("button,[role='button']")) as any[])
+              .filter(button => {
+                if (!visible(button)) return false;
+                const labels = [button.getAttribute("aria-label"), button.getAttribute("title"), button.innerText]
+                  .filter(Boolean).map((label: string) => label.replace(/\s+/g, " ").trim());
+                return labels.some(label => /^send$/i.test(label))
+                  && button.getAttribute("aria-disabled") !== "true"
+                  && !button.disabled;
+              });
+            if (buttons.length === 1) return buttons[0];
+            if (buttons.length > 1) return null;
+          }
+          return null;
+        });
+        const sendElement = sendButtonHandle.asElement();
+        if (!sendElement) {
+          await sendButtonHandle.dispose();
+          result.failed++;
+          emit("No unambiguous Send button was found in the selected user's conversation.");
+          break;
+        }
+        await sendElement.click();
+        await sendButtonHandle.dispose();
+
+        const confirmationHandle = await session.page.waitForFunction((expectedName: string) => {
           const doc = (globalThis as any).document;
           const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
-          const isVisibleElement = (element: any) => {
+          const visible = (element: any) => {
             const rect = element.getBoundingClientRect();
             const style = getStyle(element);
             return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
           };
-          const buttons = (Array.from(doc.querySelectorAll("button,[role='button']")) as any[])
-            .filter(isVisibleElement);
-          return buttons.find(button => {
-            const label = `${button.getAttribute("aria-label") ?? ""} ${button.getAttribute("title") ?? ""} ${button.innerText ?? ""}`
-              .replace(/\s+/g, " ").trim();
-            return /^send(?:\s|$)/i.test(label);
-          }) ?? null;
-        });
-        const sendElement = sendButton.asElement();
-        if (sendElement) {
-          await sendElement.click();
-        } else {
-          await composer.press("Enter");
-        }
-        await new Promise(resolve => setTimeout(resolve, 900));
-        const isEmpty = await composer.evaluate((element: any) =>
-          !(element.innerText || element.value || "").trim(),
-        ).catch(() => false);
-        if (isEmpty) {
+          const normalizeName = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
+          const composer = Array.from(doc.querySelectorAll("[contenteditable='true'][role='textbox'],textarea") as any[])
+            .find(element => {
+              if (!visible(element)) return false;
+              const label = `${element.getAttribute("aria-label") ?? ""} ${element.getAttribute("placeholder") ?? ""} ${element.getAttribute("data-placeholder") ?? ""}`.trim();
+              const recipient = label.match(/^write to\s+(.+)$/i)?.[1];
+              return !!recipient && normalizeName(recipient) === normalizeName(expectedName);
+            });
+          return !!composer && !(composer.innerText || composer.textContent || composer.value || "").trim();
+        }, { timeout: 8_000, polling: 200 }, candidate.name).catch(() => null);
+        const confirmed = confirmationHandle
+          ? await confirmationHandle.jsonValue().then((value: unknown) => value === true).catch(() => false)
+          : false;
+        if (confirmationHandle) await confirmationHandle.dispose().catch(() => {});
+        if (confirmed) {
           result.sent++;
           result.sentUrls.push(cleanUrl(candidate.url));
           emit(`Message sent to ${candidate.name}.`, "ok");
         } else {
           result.failed++;
-          emit(`Message attempt for ${candidate.name} was not confirmed; stopping this run to avoid duplicate sends.`, "fail");
+          emit("Message send was not confirmed; stopping to avoid a duplicate attempt.");
           break;
         }
       } catch (error: any) {
         result.failed++;
-        emit(`Message attempt failed for ${candidate.name}: ${error?.message ?? "browser interaction failed"}`, "fail");
+        emit(`Message attempt failed: ${error?.message ?? "browser interaction failed"}`);
+      } finally {
+        await composerHandle.dispose().catch(() => {});
       }
     }
 
