@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -90,3 +90,71 @@ router.post("/debug/add-friends-scroll-replay", async (req, res) => {
 });
 
 export default router;
+
+// Unlike the helper-regression endpoint above, this streams the production
+// runAddFriends entrypoint with Android/storage replaced at the build boundary.
+router.post("/debug/add-friends-tool-replay", async (req, res) => {
+  if (process.env.NODE_ENV === "production") return res.status(404).json({ error: "Not found" });
+  const body = req.body ?? {};
+  if (typeof body.uiXml !== "string" || Buffer.byteLength(body.uiXml) > MAX_XML_BYTES ||
+      typeof body.friendName !== "string" || !body.friendName.trim() ||
+      !["add", "skip", "dismiss"].includes(body.action)) {
+    return res.status(400).json({ error: "Import a screen and choose Add, Skip, or Dismiss." });
+  }
+  if (!Number.isInteger(body.screenWidth) || body.screenWidth < 100 || body.screenWidth > 5000 ||
+      !Number.isInteger(body.screenHeight) || body.screenHeight < 100 || body.screenHeight > 10000 ||
+      (body.movementScale !== undefined && (
+        typeof body.movementScale !== "number" || body.movementScale < 0.1 || body.movementScale > 2
+      ))) {
+    return res.status(400).json({ error: "The imported screen dimensions or movement scale are invalid." });
+  }
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "add-friends-tool-input-"));
+  try {
+    const inputPath = path.join(directory, "input.json");
+    await fs.writeFile(inputPath, JSON.stringify({
+      uiXml: body.uiXml, screenWidth: body.screenWidth, screenHeight: body.screenHeight,
+      friendName: body.friendName.trim().slice(0, 160), action: body.action, movementScale: body.movementScale,
+    }));
+    const child = spawn(process.execPath, [path.join(apiRoot, "scripts/runAddFriendsToolReplay.mjs"), inputPath], {
+      cwd: apiRoot, stdio: ["ignore", "pipe", "pipe"],
+    });
+    res.setHeader("Content-Type", "application/x-ndjson");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    let stderr = "";
+    let bytes = 0;
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; child.kill(); }, 45_000);
+    const disconnect = () => { if (!child.exitCode && !child.killed) child.kill(); };
+    res.on("close", disconnect);
+    child.stdout.on("data", chunk => {
+      bytes += chunk.length;
+      if (bytes > 12 * 1024 * 1024) child.kill();
+      else if (!res.destroyed) res.write(chunk);
+    });
+    child.stderr.on("data", chunk => { stderr = (stderr + String(chunk)).slice(-2000); });
+    await new Promise<void>(resolve => {
+      child.on("error", error => {
+        if (!res.destroyed) res.write(JSON.stringify({ type: "error", message: error.message }) + "\n");
+        resolve();
+      });
+      child.on("close", code => {
+        if (code !== 0 && !res.destroyed) {
+          res.write(JSON.stringify({ type: "error", message: timedOut ? "Live tool replay exceeded 45 seconds." :
+            bytes > 12 * 1024 * 1024 ? "Replay output exceeded its safety budget." : stderr || "The live tool replay stopped; see the preceding event." }) + "\n");
+        }
+        resolve();
+      });
+    });
+    clearTimeout(timeout);
+    res.off("close", disconnect);
+    res.end();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not start the tool replay.";
+    if (res.headersSent) res.end(JSON.stringify({ type: "error", message }) + "\n");
+    else res.status(500).json({ error: message });
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

@@ -380,6 +380,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       )) {
         context.onLog("Add Friends: could not scroll past the matched suggestion; continuing with currently visible candidates.");
       }
+      await context.onAddFriendsStepComplete?.({ action: "skip", friendName });
       return !context.isAborted();
     }
     context.onLog(`Add Friends: action for ${friendName} is Dismiss; matched ${matchDescription}.`);
@@ -452,6 +453,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         `continuing with currently visible candidates.`,
       );
     }
+    await context.onAddFriendsStepComplete?.({ action: "dismiss", friendName });
     return !context.isAborted();
   };
 
@@ -630,6 +632,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     )) {
       context.onLog("Add Friends: could not scroll after this Add; continuing with currently visible candidates.");
     }
+    await context.onAddFriendsStepComplete?.({ action: "add", friendName });
   }
   context.onLog(`Add Friends: processed ${added}/${requested} live friend-row Add tap(s).`);
   const result = added === requested

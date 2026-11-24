@@ -66,6 +66,11 @@ export type SnapchatContext = {
   onFriendRequestCooldown?: (until: number, toolName: "Add Friends" | "Accept Friends") => Promise<void>;
   onAccountNotFound?: (username: string) => Promise<void>;
   onProgress: () => void;
+  /** Replay boundary only: runs after the real action and its post-action navigation. */
+  onAddFriendsStepComplete?: (step: {
+    action: "add" | "skip" | "dismiss";
+    friendName: string;
+  }) => Promise<void>;
   onMetric?: (
     key:
       | "snapchat_add_friends"

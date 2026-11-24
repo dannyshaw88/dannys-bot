@@ -5,11 +5,11 @@ description: Import Inspect dumps into a simple phone preview that exercises Add
 
 ## Add Friends screen test
 
-The Settings replay is an import-driven phone simulator: load or paste an Inspect dump, render a basic Snapchat screen in contact order, and click Add, Skip, or Dismiss to run the same positioning and one-card scroll helpers against fake device input. Keep it direct and interactive; a screenshot, separate diagnostic form, or hard-coded scenario is not a substitute.
+The Settings replay must execute the actual current Add Friends tool, not a separate simulation of its decisions or a helper-only preview. Load or paste an Inspect dump, render a basic Snapchat screen, and run one real tool action plus its post-action handling. Recompile the current source on each run so code changes can be tested immediately.
 
 **Why:** The user wants to test code changes inside Replit against imported device examples instead of waiting for repeated Windows Electron builds.
 
-**How to apply:** Preserve contact names and each row's reported height while rebuilding invalid off-screen y=0 positions into a visible list. After each simulated action, show the updated screen and scroll log, and allow another action or reset to the imported state.
+**How to apply:** Replace only device input/output and storage boundaries; keep the tool entrypoint, filters, taps, reads, measurement, and scrolling code real. Stream the resulting device inputs and screen states automatically. Do not precompute a successful result, force the next contact's position, or require a second preview-only button to apply a completed scroll. Keep replay history isolated from the farm-wide list. Preserve contact names and each row's reported height, and allow another real step or reset.
 
 ### Preserve real card states in replay
 

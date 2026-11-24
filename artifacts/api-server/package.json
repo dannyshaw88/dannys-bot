@@ -8,6 +8,7 @@
     "build": "node ./build.mjs",
     "test:add-friends-scroll": "node scripts/replayAddFriendsScroll.mjs",
     "test:add-friends-replay": "node scripts/testAddFriendsReplayScene.mjs",
+    "test:add-friends-tool-replay": "node scripts/testAddFriendsToolReplay.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
