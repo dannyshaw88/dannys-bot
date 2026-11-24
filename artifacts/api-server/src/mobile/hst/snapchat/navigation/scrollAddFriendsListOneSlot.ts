@@ -1,6 +1,6 @@
 import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
-import { center, shortResourceId } from "../runtime";
+import { center, dump, shortResourceId } from "../runtime";
 
 function findFriendsRows(nodes: UiNode[]): UiNode[] {
   const titleIndex = nodes.findIndex(node =>
@@ -135,6 +135,20 @@ function blankRowLaneX(nodes: UiNode[], row: UiNode, screenWidth: number): numbe
   return Math.round((safeLane.min + safeLane.max) / 2);
 }
 
+function closestNamedRow(
+  nodes: UiNode[],
+  rows: UiNode[],
+  name: string,
+  referenceY: number,
+): UiNode | undefined {
+  const normalizedName = normalizeContactName(name);
+  return rows
+    .filter(row => normalizeContactName(contactNameInRow(nodes, row)) === normalizedName)
+    .sort((a, b) =>
+      Math.abs(center(a).y - referenceY) - Math.abs(center(b).y - referenceY),
+    )[0];
+}
+
 export async function scrollAddFriendsListOneSlot(
   context: SnapchatContext,
   nodes: UiNode[],
@@ -180,6 +194,10 @@ export async function scrollAddFriendsListOneSlot(
     return false;
   }
   const targetNameStillVisible = matchingRows.includes(targetRow);
+  const targetRowIndex = initialRows.indexOf(targetRow);
+  const expectedNextRow = initialRows[targetRowIndex + 1];
+  const expectedNextName = expectedNextRow ? contactNameInRow(nodes, expectedNextRow) : "";
+  const expectedNextTop = visibleRows[0].bounds[1];
   if (!targetNameStillVisible) {
     context.onLog(
       `Add Friends: ${friendName}'s card changed or disappeared after ${actionLabel}; ` +
@@ -231,6 +249,104 @@ export async function scrollAddFriendsListOneSlot(
     `using exactly ${targetDistance}px for one swipe.`,
   );
   await android.swipe(context.serial, swipeX, startY, swipeX, endY, 650, false);
-  await context.sleep(220, "exact");
+  await context.sleep(750, "exact");
+  if (context.isAborted()) return false;
+
+  if (!expectedNextName) {
+    context.onLog(
+      `Add Friends: the next contact after ${friendName} has no readable name; ` +
+      `the measured swipe was sent, but its top alignment could not be checked.`,
+    );
+    return true;
+  }
+
+  const afterSwipeState = await dump(context.serial);
+  const afterSwipeNodes = afterSwipeState.nodes;
+  const nextRowAfterSwipe = closestNamedRow(
+    afterSwipeNodes,
+    findFriendsRows(afterSwipeNodes),
+    expectedNextName,
+    expectedNextRow.bounds[1],
+  );
+  if (!nextRowAfterSwipe) {
+    context.onLog(
+      `Add Friends: the measured swipe was sent, but ${expectedNextName} was not in the settled list dump; ` +
+      `no guessed correction was sent.`,
+    );
+    return true;
+  }
+
+  const alignmentError = nextRowAfterSwipe.bounds[1] - expectedNextTop;
+  if (Math.abs(alignmentError) <= 8) {
+    context.onLog(
+      `Add Friends: ${expectedNextName} is at the top contact position ` +
+      `(y=${nextRowAfterSwipe.bounds[1]}, expected y=${expectedNextTop}).`,
+    );
+    return true;
+  }
+
+  const maxSafeCorrection = Math.max(targetDistance * 3, Math.round(screenHeight * 0.25));
+  if (Math.abs(alignmentError) > maxSafeCorrection) {
+    context.onLog(
+      `Add Friends: ${expectedNextName} landed at y=${nextRowAfterSwipe.bounds[1]} instead of y=${expectedNextTop}; ` +
+      `the ${Math.abs(alignmentError)}px mismatch exceeds the ${maxSafeCorrection}px correction limit, so no correction was sent.`,
+    );
+    return true;
+  }
+
+  const correctionX = blankRowLaneX(afterSwipeNodes, nextRowAfterSwipe, screenWidth);
+  const correctionAnchorY = center(nextRowAfterSwipe).y;
+  const correctionStartY = Math.round(correctionAnchorY + alignmentError / 2);
+  const correctionEndY = Math.round(correctionAnchorY - alignmentError / 2);
+  if (
+    correctionX === null ||
+    correctionStartY < Math.max(listTop + 6, safeTop) ||
+    correctionEndY < Math.max(listTop + 6, safeTop) ||
+    correctionStartY > safeBottom ||
+    correctionEndY > safeBottom
+  ) {
+    context.onLog(
+      `Add Friends: ${expectedNextName} landed at y=${nextRowAfterSwipe.bounds[1]} instead of y=${expectedNextTop}; ` +
+      `no safe correction lane was available.`,
+    );
+    return true;
+  }
+
+  context.onLog(
+    `Add Friends: ${expectedNextName} landed at y=${nextRowAfterSwipe.bounds[1]} instead of y=${expectedNextTop}; ` +
+    `correcting the ${Math.abs(alignmentError)}px residual once.`,
+  );
+  await android.swipe(
+    context.serial,
+    correctionX,
+    correctionStartY,
+    correctionX,
+    correctionEndY,
+    450,
+    false,
+  );
+  await context.sleep(750, "exact");
+  if (context.isAborted()) return false;
+  const afterCorrectionState = await dump(context.serial);
+  const afterCorrectionNodes = afterCorrectionState.nodes;
+  const alignedNextRow = closestNamedRow(
+    afterCorrectionNodes,
+    findFriendsRows(afterCorrectionNodes),
+    expectedNextName,
+    expectedNextTop,
+  );
+  if (alignedNextRow) {
+    const finalError = alignedNextRow.bounds[1] - expectedNextTop;
+    context.onLog(
+      Math.abs(finalError) <= 8
+        ? `Add Friends: alignment verified after one correction; ${expectedNextName} is at y=${alignedNextRow.bounds[1]}.`
+        : `Add Friends: after one correction, ${expectedNextName} is still at y=${alignedNextRow.bounds[1]} ` +
+          `(target y=${expectedNextTop}; residual ${finalError}px).`,
+    );
+  } else {
+    context.onLog(
+      `Add Friends: ${expectedNextName} was not in the final list dump after the single correction.`,
+    );
+  }
   return true;
 }
