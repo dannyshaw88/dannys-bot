@@ -285,19 +285,26 @@ export async function scrollAddFriendsListOneSlot(
     return true;
   }
 
+  const measuredContentMovement = expectedNextRow.bounds[1] - nextRowAfterSwipe.bounds[1];
+  const movementRatio = measuredContentMovement > 8
+    ? measuredContentMovement / targetDistance
+    : 0.5;
+  const correctionDistance = Math.round(Math.abs(alignmentError) / movementRatio);
   const maxSafeCorrection = Math.max(targetDistance * 3, Math.round(screenHeight * 0.25));
-  if (Math.abs(alignmentError) > maxSafeCorrection) {
+  if (correctionDistance > maxSafeCorrection) {
     context.onLog(
       `Add Friends: ${expectedNextName} landed at y=${nextRowAfterSwipe.bounds[1]} instead of y=${expectedNextTop}; ` +
-      `the ${Math.abs(alignmentError)}px mismatch exceeds the ${maxSafeCorrection}px correction limit, so no correction was sent.`,
+      `measured content movement was ${measuredContentMovement}px for a ${targetDistance}px swipe; ` +
+      `the required ${correctionDistance}px correction exceeds the ${maxSafeCorrection}px limit.`,
     );
     return true;
   }
 
   const correctionX = blankRowLaneX(afterSwipeNodes, nextRowAfterSwipe, screenWidth);
   const correctionAnchorY = center(nextRowAfterSwipe).y;
-  const correctionStartY = Math.round(correctionAnchorY + alignmentError / 2);
-  const correctionEndY = Math.round(correctionAnchorY - alignmentError / 2);
+  const correctionFingerDelta = -Math.sign(alignmentError) * correctionDistance;
+  const correctionStartY = Math.round(correctionAnchorY - correctionFingerDelta / 2);
+  const correctionEndY = Math.round(correctionAnchorY + correctionFingerDelta / 2);
   if (
     correctionX === null ||
     correctionStartY < Math.max(listTop + 6, safeTop) ||
@@ -314,7 +321,8 @@ export async function scrollAddFriendsListOneSlot(
 
   context.onLog(
     `Add Friends: ${expectedNextName} landed at y=${nextRowAfterSwipe.bounds[1]} instead of y=${expectedNextTop}; ` +
-    `correcting the ${Math.abs(alignmentError)}px residual once.`,
+    `the ${targetDistance}px first swipe moved content ${measuredContentMovement}px; ` +
+    `compensating with a ${correctionDistance}px correction swipe.`,
   );
   await android.swipe(
     context.serial,
