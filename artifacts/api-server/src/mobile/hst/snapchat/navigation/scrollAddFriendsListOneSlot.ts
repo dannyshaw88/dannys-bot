@@ -1,6 +1,31 @@
 import * as android from "../../../androidManager";
-import type { SnapchatContext, UiNode } from "../context";
+import type { SnapchatContext, UiNode, UiState } from "../context";
 import { center, dump, shortResourceId } from "../runtime";
+
+export type AddFriendsScrollReplayIO = {
+  captureScreenPixels: (serial: string) => Promise<{
+    width: number;
+    height: number;
+    channels: number;
+    pixels: Buffer;
+  } | null>;
+  dump: (serial: string) => Promise<UiState>;
+  swipe: (
+    serial: string,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    durationMs?: number,
+    applyLegacyJitter?: boolean,
+  ) => Promise<void>;
+};
+
+const realReplayIO: AddFriendsScrollReplayIO = {
+  captureScreenPixels: android.captureScreenPixels,
+  dump,
+  swipe: android.swipe,
+};
 
 function findFriendsRows(nodes: UiNode[]): UiNode[] {
   const titleIndex = nodes.findIndex(node =>
@@ -264,6 +289,7 @@ export async function scrollAddFriendsListOneSlot(
   actionLabel = "adding",
   previousCenterY?: number,
   previousRowHeight?: number,
+  replayIO: AddFriendsScrollReplayIO = realReplayIO,
 ): Promise<boolean> {
   let activeNodes = nodes;
   let initialRows = findFriendsRows(activeNodes);
@@ -288,7 +314,7 @@ export async function scrollAddFriendsListOneSlot(
   for (let refresh = 0; refresh < 3 && (!title || visibleRows.length === 0); refresh++) {
     if (context.isAborted()) return false;
     await context.sleep(350, "exact");
-    activeNodes = (await dump(context.serial)).nodes;
+    activeNodes = (await replayIO.dump(context.serial)).nodes;
     initialRows = findFriendsRows(activeNodes);
     title = activeNodes.find(node =>
       shortResourceId(node) === "section-title" &&
@@ -317,7 +343,7 @@ export async function scrollAddFriendsListOneSlot(
       `sending a per-contact fallback scroll of ${gesture.distance}px at x=${fallbackX}.`,
     );
     if (context.isAborted()) return false;
-    await android.swipe(context.serial, fallbackX, gesture.startY, fallbackX, gesture.endY, 300, false);
+    await replayIO.swipe(context.serial, fallbackX, gesture.startY, fallbackX, gesture.endY, 300, false);
     await context.sleep(750, "exact");
     return true;
   }
@@ -346,7 +372,7 @@ export async function scrollAddFriendsListOneSlot(
       `measuring the live card now occupying its previous position.`,
     );
   }
-  const screenshot = await android.captureScreenPixels(context.serial);
+  const screenshot = await replayIO.captureScreenPixels(context.serial);
   const hasMatchingScreenshot = screenshot &&
     screenshot.width === screenWidth &&
     screenshot.height === screenHeight;
@@ -420,11 +446,11 @@ export async function scrollAddFriendsListOneSlot(
     : `Add Friends: after ${actionLabel} ${friendName}, using this contact's live row height ` +
       `(${Math.max(0, liveRowHeight)}px) as the per-contact scroll distance; sending a ${gesture.distance}px swipe.`,
   );
-  await android.swipe(context.serial, swipeX, startY, swipeX, endY, 300, false);
+  await replayIO.swipe(context.serial, swipeX, startY, swipeX, endY, 300, false);
   await context.sleep(750, "exact");
   if (context.isAborted()) return false;
 
-  let afterSwipeNodes = (await dump(context.serial)).nodes;
+  let afterSwipeNodes = (await replayIO.dump(context.serial)).nodes;
   let afterSwipeRows = findFriendsRows(afterSwipeNodes);
   let nextRowAfterSwipe = (expectedNextName ? closestNamedRow(
     afterSwipeNodes,
@@ -443,7 +469,7 @@ export async function scrollAddFriendsListOneSlot(
       `Add Friends: the swipe was sent; waiting for the next contact row to settle before alignment.`,
     );
     await context.sleep(500, "exact");
-    afterSwipeNodes = (await dump(context.serial)).nodes;
+    afterSwipeNodes = (await replayIO.dump(context.serial)).nodes;
     afterSwipeRows = findFriendsRows(afterSwipeNodes);
     nextRowAfterSwipe = (expectedNextName ? closestNamedRow(
       afterSwipeNodes,
@@ -518,7 +544,7 @@ export async function scrollAddFriendsListOneSlot(
       `Add Friends: the previous ${previousGestureDistance}px swipe moved content ${measuredContentMovement}px; ` +
       `sending correction ${attempt} of 3 for ${correctionGesture.distance}px to move ${currentNextName} to the top.`,
     );
-    await android.swipe(
+    await replayIO.swipe(
       context.serial,
       correctionX,
       correctionStartY,
@@ -529,7 +555,7 @@ export async function scrollAddFriendsListOneSlot(
     );
     await context.sleep(750, "exact");
     if (context.isAborted()) return false;
-    const afterCorrectionState = await dump(context.serial);
+    const afterCorrectionState = await replayIO.dump(context.serial);
     const afterCorrectionNodes = afterCorrectionState.nodes;
     const correctedRows = findFriendsRows(afterCorrectionNodes);
     const alignedNextRow = (expectedNextName ? closestNamedRow(
@@ -569,6 +595,7 @@ export async function alignFirstAddFriendsContactToTop(
   expectedTop: number,
   actionLabel: string,
   previousRowHeight?: number,
+  replayIO: AddFriendsScrollReplayIO = realReplayIO,
 ): Promise<boolean> {
   const title = nodes.find(node =>
     shortResourceId(node) === "section-title" &&
@@ -607,7 +634,7 @@ export async function alignFirstAddFriendsContactToTop(
       `sending a fallback scroll using the prior contact's ${fallbackHeight}px row height at x=${fallbackX}.`,
     );
     if (context.isAborted()) return false;
-    await android.swipe(context.serial, fallbackX, gesture.startY, fallbackX, gesture.endY, 300, false);
+    await replayIO.swipe(context.serial, fallbackX, gesture.startY, fallbackX, gesture.endY, 300, false);
     await context.sleep(750, "exact");
     return true;
   }
@@ -670,12 +697,12 @@ export async function alignFirstAddFriendsContactToTop(
       `${gesture.distance}px in blank lane x=${swipeX}, y=${startY}→${endY}; ` +
       `row top=${currentRow.bounds[1]}, target=${expectedTop}.`,
     );
-    await android.swipe(context.serial, swipeX, startY, swipeX, endY, 300, false);
+    await replayIO.swipe(context.serial, swipeX, startY, swipeX, endY, 300, false);
     previousTop = currentRow.bounds[1];
     previousGestureDistance = distance;
     await context.sleep(750, "exact");
     if (context.isAborted()) return false;
-    const afterSwipeState = await dump(context.serial);
+    const afterSwipeState = await replayIO.dump(context.serial);
     currentNodes = afterSwipeState.nodes;
     const refreshedRows = findFriendsRows(currentNodes);
     const refreshedRow = closestNamedRow(
@@ -689,7 +716,7 @@ export async function alignFirstAddFriendsContactToTop(
         `Add Friends: alignment swipe sent; waiting for the visible contact row to settle.`,
       );
       await context.sleep(500, "exact");
-      currentNodes = (await dump(context.serial)).nodes;
+      currentNodes = (await replayIO.dump(context.serial)).nodes;
       currentRow = getFirstVisibleNamedRow(currentNodes);
       if (!currentRow) return true;
       continue;
