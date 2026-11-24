@@ -236,28 +236,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       return null;
     }
   };
-  const skipAndScroll = async (selectedFriend: { friendName: string; friendKey: string; row: UiNode }) => {
-    const { friendName, friendKey } = selectedFriend;
-    attemptedFriends.add(friendKey);
-    context.onLog(`Add Friends: action for ${friendName} is Skip; it is already on the farm list or is currently being added.`);
-    const liveState = await dump(context.serial);
-    if (context.isAborted()) return;
-    if (liveState.nodes.length === 0) {
-      context.onLog(`Add Friends: could not refresh ${friendName}'s card after choosing Skip; no stale measurement or guessed swipe was used.`);
-      return;
-    }
-    if (!await scrollAddFriendsListOneSlot(
-      context,
-      liveState.nodes,
-      screenWidth,
-      screenHeight,
-      friendName,
-      "skipping a recently added name",
-      center(selectedFriend.row).y,
-    )) {
-      context.onLog("Add Friends: could not scroll past that name; continuing with currently visible candidates.");
-    }
-  };
   const findAddCandidates = (nodes: UiNode[]) => {
     const addButtons = nodes.filter(node =>
       shortResourceId(node) === "scu_search_action_button" &&
@@ -321,6 +299,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     state: { nodes: UiNode[] },
     selectedFriend: { friendName: string; friendKey: string; row: UiNode; candidate: UiNode },
     matchDescription: string,
+    requireDismissControl = false,
   ): Promise<boolean> => {
     const { friendName, row } = selectedFriend;
     attemptedFriends.add(selectedFriend.friendKey);
@@ -340,6 +319,13 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       Math.abs(center(node).y - addButtonCenterY) <= sameRowTolerance,
     );
     if (!dismiss) {
+      if (requireDismissControl) {
+        context.onLog(
+          `Add Friends stopped: ${friendName} is on the farm-wide list, but its live Hide control was not exposed; ` +
+          `the contact was not added or scrolled past.`,
+        );
+        return false;
+      }
       context.onLog(
         `Add Friends: action for ${friendName} is Skip because its row Hide control was not exposed; ` +
         `it matched ${matchDescription}.`,
@@ -403,6 +389,18 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     if (context.isAborted()) return false;
     const afterDismiss = await dump(context.serial);
     if (context.isAborted()) return false;
+    if (
+      requireDismissControl &&
+      findAddCandidates(afterDismiss.nodes).candidates.some(candidate =>
+        candidate.friendKey === selectedFriend.friendKey,
+      )
+    ) {
+      context.onLog(
+        `Add Friends stopped: Snapchat still exposes ${friendName}'s Add row after tapping Hide; ` +
+        `refusing to scroll past or send an Add request.`,
+      );
+      return false;
+    }
     context.onLog(
       `Add Friends: dismissed ${friendName} (${matchDescription}); aligning the first remaining contact ` +
       `to the dismissed contact's former top position.`,
@@ -460,7 +458,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       return false;
     }
     if (alreadyAddedBeforeWait) {
-      await skipAndScroll(selected);
+      if (!await dismissSuggestion(state, selected, "found on the farm-wide list", true)) break;
       continue;
     }
     if (added > 0 && !delaySatisfiedSinceLastAdd) {
@@ -501,7 +499,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         return false;
       }
       if (alreadyAddedAfterWait) {
-        await skipAndScroll(selected);
+        if (!await dismissSuggestion(state, selected, "found on the farm-wide list", true)) break;
         continue;
       }
     }
@@ -519,7 +517,12 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         return false;
       }
       if (reservationKey === null) {
-        await skipAndScroll(selected);
+        if (!await dismissSuggestion(
+          state,
+          selected,
+          "found on the farm-wide list or already reserved",
+          true,
+        )) break;
         continue;
       }
     }
