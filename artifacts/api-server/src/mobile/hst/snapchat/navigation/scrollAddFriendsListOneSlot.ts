@@ -276,85 +276,87 @@ export async function scrollAddFriendsListOneSlot(
     return true;
   }
 
-  const alignmentError = nextRowAfterSwipe.bounds[1] - expectedNextTop;
-  if (Math.abs(alignmentError) <= 8) {
-    context.onLog(
-      `Add Friends: ${expectedNextName} is at the top contact position ` +
-      `(y=${nextRowAfterSwipe.bounds[1]}, expected y=${expectedNextTop}).`,
-    );
-    return true;
-  }
-
-  const measuredContentMovement = expectedNextRow.bounds[1] - nextRowAfterSwipe.bounds[1];
-  const movementRatio = measuredContentMovement > 8
-    ? measuredContentMovement / targetDistance
-    : 0.5;
-  const correctionDistance = Math.round(Math.abs(alignmentError) / movementRatio);
+  let currentNodes = afterSwipeNodes;
+  let currentNextRow = nextRowAfterSwipe;
+  let previousNextTop = expectedNextRow.bounds[1];
+  let previousGestureDistance = targetDistance;
   const maxSafeCorrection = Math.max(targetDistance * 3, Math.round(screenHeight * 0.25));
-  if (correctionDistance > maxSafeCorrection) {
-    context.onLog(
-      `Add Friends: ${expectedNextName} landed at y=${nextRowAfterSwipe.bounds[1]} instead of y=${expectedNextTop}; ` +
-      `measured content movement was ${measuredContentMovement}px for a ${targetDistance}px swipe; ` +
-      `the required ${correctionDistance}px correction exceeds the ${maxSafeCorrection}px limit.`,
-    );
-    return true;
-  }
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const alignmentError = currentNextRow.bounds[1] - expectedNextTop;
+    if (Math.abs(alignmentError) <= 8) {
+      context.onLog(
+        `Add Friends: ${expectedNextName} reached the top contact position ` +
+        `(y=${currentNextRow.bounds[1]}, expected y=${expectedNextTop}) after ${attempt - 1} correction(s).`,
+      );
+      return true;
+    }
 
-  const correctionX = blankRowLaneX(afterSwipeNodes, nextRowAfterSwipe, screenWidth);
-  const correctionAnchorY = center(nextRowAfterSwipe).y;
-  const correctionFingerDelta = -Math.sign(alignmentError) * correctionDistance;
-  const correctionStartY = Math.round(correctionAnchorY - correctionFingerDelta / 2);
-  const correctionEndY = Math.round(correctionAnchorY + correctionFingerDelta / 2);
-  if (
-    correctionX === null ||
-    correctionStartY < Math.max(listTop + 6, safeTop) ||
-    correctionEndY < Math.max(listTop + 6, safeTop) ||
-    correctionStartY > safeBottom ||
-    correctionEndY > safeBottom
-  ) {
-    context.onLog(
-      `Add Friends: ${expectedNextName} landed at y=${nextRowAfterSwipe.bounds[1]} instead of y=${expectedNextTop}; ` +
-      `no safe correction lane was available.`,
-    );
-    return true;
-  }
+    const measuredContentMovement = previousNextTop - currentNextRow.bounds[1];
+    const movementRatio = Math.abs(measuredContentMovement) > 8
+      ? Math.abs(measuredContentMovement) / previousGestureDistance
+      : 0.5;
+    const requestedCorrectionDistance = Math.max(1, Math.round(Math.abs(alignmentError) / movementRatio));
+    const correctionDistance = Math.min(requestedCorrectionDistance, maxSafeCorrection);
+    const correctionX = blankRowLaneX(currentNodes, currentNextRow, screenWidth);
+    const correctionAnchorY = center(currentNextRow).y;
+    const correctionFingerDelta = -Math.sign(alignmentError) * correctionDistance;
+    const correctionStartY = Math.round(correctionAnchorY - correctionFingerDelta / 2);
+    const correctionEndY = Math.round(correctionAnchorY + correctionFingerDelta / 2);
+    if (
+      correctionX === null ||
+      correctionStartY < Math.max(listTop + 6, safeTop) ||
+      correctionEndY < Math.max(listTop + 6, safeTop) ||
+      correctionStartY > safeBottom ||
+      correctionEndY > safeBottom
+    ) {
+      context.onLog(
+        `Add Friends: ${expectedNextName} is still ${Math.abs(alignmentError)}px from the top position; ` +
+        `no safe correction lane or swipe path was available.`,
+      );
+      return true;
+    }
 
+    context.onLog(
+      `Add Friends: the previous ${previousGestureDistance}px swipe moved content ${measuredContentMovement}px; ` +
+      `sending correction ${attempt} of 3 for ${correctionDistance}px to move ${expectedNextName} to the top.`,
+    );
+    await android.swipe(
+      context.serial,
+      correctionX,
+      correctionStartY,
+      correctionX,
+      correctionEndY,
+      650,
+      false,
+    );
+    await context.sleep(750, "exact");
+    if (context.isAborted()) return false;
+    const afterCorrectionState = await dump(context.serial);
+    const afterCorrectionNodes = afterCorrectionState.nodes;
+    const alignedNextRow = closestNamedRow(
+      afterCorrectionNodes,
+      findFriendsRows(afterCorrectionNodes),
+      expectedNextName,
+      expectedNextTop,
+    );
+    if (!alignedNextRow) {
+      context.onLog(
+        `Add Friends: ${expectedNextName} was not in the list after correction ${attempt}; ` +
+        `no guessed swipe was sent.`,
+      );
+      return true;
+    }
+    previousNextTop = currentNextRow.bounds[1];
+    previousGestureDistance = correctionDistance;
+    currentNextRow = alignedNextRow;
+    currentNodes = afterCorrectionNodes;
+  }
+  const finalError = currentNextRow.bounds[1] - expectedNextTop;
   context.onLog(
-    `Add Friends: ${expectedNextName} landed at y=${nextRowAfterSwipe.bounds[1]} instead of y=${expectedNextTop}; ` +
-    `the ${targetDistance}px first swipe moved content ${measuredContentMovement}px; ` +
-    `compensating with a ${correctionDistance}px correction swipe.`,
+    Math.abs(finalError) <= 8
+      ? `Add Friends: ${expectedNextName} reached the top contact position.`
+      : `Add Friends: after three movement-scaled corrections, ${expectedNextName} is still at y=${currentNextRow.bounds[1]} ` +
+        `(target y=${expectedNextTop}; residual ${finalError}px).`,
   );
-  await android.swipe(
-    context.serial,
-    correctionX,
-    correctionStartY,
-    correctionX,
-    correctionEndY,
-    450,
-    false,
-  );
-  await context.sleep(750, "exact");
-  if (context.isAborted()) return false;
-  const afterCorrectionState = await dump(context.serial);
-  const afterCorrectionNodes = afterCorrectionState.nodes;
-  const alignedNextRow = closestNamedRow(
-    afterCorrectionNodes,
-    findFriendsRows(afterCorrectionNodes),
-    expectedNextName,
-    expectedNextTop,
-  );
-  if (alignedNextRow) {
-    const finalError = alignedNextRow.bounds[1] - expectedNextTop;
-    context.onLog(
-      Math.abs(finalError) <= 8
-        ? `Add Friends: alignment verified after one correction; ${expectedNextName} is at y=${alignedNextRow.bounds[1]}.`
-        : `Add Friends: after one correction, ${expectedNextName} is still at y=${alignedNextRow.bounds[1]} ` +
-          `(target y=${expectedNextTop}; residual ${finalError}px).`,
-    );
-  } else {
-    context.onLog(
-      `Add Friends: ${expectedNextName} was not in the final list dump after the single correction.`,
-    );
-  }
   return true;
 }
