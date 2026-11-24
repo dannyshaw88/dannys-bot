@@ -53,8 +53,8 @@ function findHorizontalDividerYs(
 
   const scanTop = Math.max(0, Math.floor(rows[0].bounds[1] - 12));
   const scanBottom = Math.min(screen.height - 1, Math.ceil(rows[rows.length - 1].bounds[3] + 12));
-  const samplesPerRow = Math.ceil((x2 - x1) / 2);
-  const minimumNeutralPixels = Math.ceil(samplesPerRow * 0.45);
+  const samplesPerRow = Math.floor((x2 - x1) / 2) + 1;
+  const minimumNeutralPixels = Math.max(12, Math.ceil(samplesPerRow * 0.28));
   const rawYs: number[] = [];
 
   for (let y = scanTop; y <= scanBottom; y++) {
@@ -66,9 +66,9 @@ function findHorizontalDividerYs(
       const b = screen.pixels[index + 2];
       const luminance = (r + g + b) / 3;
       if (
-        Math.max(r, g, b) - Math.min(r, g, b) <= 16 &&
-        luminance >= 120 &&
-        luminance <= 248
+        Math.max(r, g, b) - Math.min(r, g, b) <= 22 &&
+        luminance >= 40 &&
+        luminance <= 255
       ) neutralGrayPixels++;
     }
     if (neutralGrayPixels >= minimumNeutralPixels) rawYs.push(y);
@@ -89,8 +89,8 @@ function measureContactDivider(
   rows: UiNode[],
   screen: { width: number; height: number; channels: number; pixels: Buffer },
   row: UiNode,
+  dividerYs = findHorizontalDividerYs(screen, rows),
 ): { distance: number; upperY: number; lowerY: number; row: UiNode } | null {
-  const dividerYs = findHorizontalDividerYs(screen, rows);
   if (dividerYs.length < 2) return null;
   const centerY = (row.bounds[1] + row.bounds[3]) / 2;
   const upperY = dividerYs.filter(y => y <= centerY).at(-1);
@@ -107,20 +107,52 @@ function measureContactDivider(
   return { distance, upperY, lowerY, row };
 }
 
-function blankRowLaneX(
+function blankRowLane(
   nodes: UiNode[],
   row: UiNode,
   screenWidth: number,
   minimumLaneWidth = 8,
-): number | null {
-  const children = nodes.filter(node =>
-    node !== row &&
-    node.bounds[0] >= row.bounds[0] &&
-    node.bounds[1] >= row.bounds[1] &&
-    node.bounds[2] <= row.bounds[2] &&
-    node.bounds[3] <= row.bounds[3],
+): { x: number; leftWidth: number; rightWidth: number; fallback: boolean } {
+  const children = nodes.filter(node => {
+    const insideRow =
+      node !== row &&
+      node.bounds[0] >= row.bounds[0] &&
+      node.bounds[1] >= row.bounds[1] &&
+      node.bounds[2] <= row.bounds[2] &&
+      node.bounds[3] <= row.bounds[3];
+    if (!insideRow) return false;
+    const spansWholeRow =
+      node.bounds[0] <= row.bounds[0] + 4 &&
+      node.bounds[2] >= row.bounds[2] - 4;
+    const hasVisibleContent =
+      Boolean(node.text.trim() || node.desc.trim()) ||
+      /(?:TextView|EditText|ImageView|Button|SurfaceView|TextureView)/i.test(node.className) ||
+      /(?:avatar|friend-cell-dismiss|result-title|add-button|camera-button)/i.test(node.resourceId);
+    // UIAutomator may expose a full-row layout wrapper as clickable even though
+    // it has no visible content. Use the visible child nodes to verify the
+    // gutters; swiping the blank gutter is distinct from tapping that wrapper.
+    if (spansWholeRow && !hasVisibleContent) return false;
+    return true;
+  });
+  const edgePoint = (side: "left" | "right") => {
+    const inset = Math.max(2, Math.round(screenWidth * 0.02));
+    const point = side === "left" ? inset : screenWidth - inset;
+    return Math.max(row.bounds[0] + 2, Math.min(row.bounds[2] - 2, point));
+  };
+  const isBlocked = (x: number) => children.some(node =>
+    node.bounds[0] - 2 <= x && node.bounds[2] + 2 >= x,
   );
-  if (children.length === 0 || screenWidth <= 0) return null;
+  if (screenWidth <= 0) {
+    return { x: 0, leftWidth: 0, rightWidth: 0, fallback: true };
+  }
+  if (children.length === 0) {
+    return {
+      x: edgePoint("left"),
+      leftWidth: 0,
+      rightWidth: 0,
+      fallback: true,
+    };
+  }
 
   const firstContentX = Math.min(...children.map(node => node.bounds[0]));
   const lastContentX = Math.max(...children.map(node => node.bounds[2]));
@@ -135,9 +167,39 @@ function blankRowLaneX(
       max: Math.min(row.bounds[2] - 4, screenWidth - inset - 4),
     },
   ];
+  const leftWidth = Math.max(0, lanes[0].max - lanes[0].min);
+  const rightWidth = Math.max(0, lanes[1].max - lanes[1].min);
   const safeLane = lanes.find(lane => lane.max - lane.min >= minimumLaneWidth);
-  if (!safeLane) return null;
-  return Math.round((safeLane.min + safeLane.max) / 2);
+  if (!safeLane) {
+    const widestLane = [...lanes]
+      .filter(lane => lane.max > lane.min)
+      .sort((left, right) => (right.max - right.min) - (left.max - left.min))[0];
+    if (widestLane) {
+      return {
+        x: Math.round((widestLane.min + widestLane.max) / 2),
+        leftWidth,
+        rightWidth,
+        fallback: true,
+      };
+    }
+    const preferredSide = firstContentX - row.bounds[0] >= row.bounds[2] - lastContentX
+      ? "left"
+      : "right";
+    const preferredPoint = edgePoint(preferredSide);
+    const alternatePoint = edgePoint(preferredSide === "left" ? "right" : "left");
+    return {
+      x: !isBlocked(preferredPoint) ? preferredPoint : alternatePoint,
+      leftWidth,
+      rightWidth,
+      fallback: true,
+    };
+  }
+  return {
+    x: Math.round((safeLane.min + safeLane.max) / 2),
+    leftWidth,
+    rightWidth,
+    fallback: false,
+  };
 }
 
 function closestNamedRow(
@@ -212,41 +274,62 @@ export async function scrollAddFriendsListOneSlot(
     );
   }
   const screenshot = await android.captureScreenPixels(context.serial);
-  if (!screenshot || screenshot.width !== screenWidth || screenshot.height !== screenHeight) {
+  const hasMatchingScreenshot = screenshot &&
+    screenshot.width === screenWidth &&
+    screenshot.height === screenHeight;
+  const dividerYs = hasMatchingScreenshot
+    ? findHorizontalDividerYs(screenshot, initialRows)
+    : [];
+  const measurement = hasMatchingScreenshot
+    ? measureContactDivider(initialRows, screenshot, targetRow, dividerYs)
+    : null;
+  const liveRowHeight = targetRow.bounds[3] - targetRow.bounds[1];
+  const distanceBasis = measurement && measurement.distance > 0
+    ? "grey-divider"
+    : "live-row-bounds";
+  const measuredDistance = distanceBasis === "grey-divider"
+    ? measurement!.distance
+    : liveRowHeight;
+  if (!Number.isFinite(measuredDistance) || measuredDistance <= 0) {
     context.onLog(
-      `Add Friends: live screenshot pixels are unavailable or do not match ${screenWidth}×${screenHeight}; ` +
-      `cannot measure the grey dividers after ${actionLabel} ${friendName}.`,
+      `Add Friends: ${friendName}'s live card bounds were not usable after ${actionLabel}; ` +
+      `using the list's visible row height as the per-contact fallback.`,
     );
-    return false;
   }
-  const measurement = measureContactDivider(initialRows, screenshot, targetRow);
-  if (!measurement || measurement.distance <= 0) {
+  const targetDistance = Math.max(
+    minimumCorrectionTravel,
+    Math.round(Number.isFinite(measuredDistance) && measuredDistance > 0 ? measuredDistance : minimumCorrectionTravel),
+  );
+  if (distanceBasis !== "grey-divider") {
     context.onLog(
-      `Add Friends: could not detect the upper and lower grey divider pixels around ${friendName}'s current card ` +
-      `after ${actionLabel} ${friendName}; no guessed swipe was sent.`,
+      `Add Friends: after ${actionLabel} ${friendName}, divider measurement was unavailable ` +
+      `(candidates=${dividerYs.length}; card bounds=${targetRow.bounds.join(",")}; ` +
+      `screenshot=${hasMatchingScreenshot ? "matched" : "unavailable"}); ` +
+      `using this contact's live row height ${Math.max(0, liveRowHeight)}px, then scrolling ${targetDistance}px.`,
     );
-    return false;
-  }
-
-  const targetDistance = Math.round(measurement.distance);
-  if (targetDistance < minimumCorrectionTravel) {
+  } else if (targetDistance !== Math.round(measuredDistance)) {
     context.onLog(
-      `Add Friends: measured ${targetDistance}px after ${actionLabel} ${friendName}, below the minimum safe ` +
-      `${minimumCorrectionTravel}px scroll travel; no gesture was sent to avoid a contact hold.`,
+      `Add Friends: measured this contact's divider gap at ${Math.round(measuredDistance)}px; ` +
+      `using ${targetDistance}px to keep the vertical drag above Android's contact-hold threshold.`,
     );
-    return false;
   }
   const rowForAnchor = measurement.row;
-  const swipeX = blankRowLaneX(
+  const minimumLaneWidth = Math.max(24, Math.round(screenWidth * 0.025));
+  const swipeLane = blankRowLane(
     nodes,
     rowForAnchor,
     screenWidth,
-    Math.max(32, Math.round(screenWidth * 0.05)),
+    minimumLaneWidth,
   );
-  if (swipeX === null) {
-    context.onLog(`Add Friends: no blank horizontal lane is exposed beside the contact; refusing to swipe across a user.`);
+  if (swipeLane.x === null) {
+    context.onLog(
+      `Add Friends: no blank horizontal lane is exposed beside the contact ` +
+      `(row=${rowForAnchor.bounds.join(",")}, left=${swipeLane.leftWidth}px, ` +
+      `right=${swipeLane.rightWidth}px, minimum=${minimumLaneWidth}px); refusing to swipe across a user.`,
+    );
     return false;
   }
+  const swipeX = swipeLane.x;
   const anchorY = center(rowForAnchor).y;
   const fingerDelta = -targetDistance;
   const startY = Math.round(anchorY - fingerDelta / 2);
@@ -319,12 +402,13 @@ export async function scrollAddFriendsListOneSlot(
       Math.round(Math.abs(alignmentError) / movementRatio),
     );
     const correctionDistance = Math.min(requestedCorrectionDistance, maxSafeCorrection);
-    const correctionX = blankRowLaneX(
+    const correctionLane = blankRowLane(
       currentNodes,
       currentNextRow,
       screenWidth,
-      Math.max(32, Math.round(screenWidth * 0.05)),
+      minimumLaneWidth,
     );
+    const correctionX = correctionLane.x;
     const correctionAnchorY = center(currentNextRow).y;
     const correctionFingerDelta = -Math.sign(alignmentError) * correctionDistance;
     const correctionStartY = Math.round(correctionAnchorY - correctionFingerDelta / 2);
@@ -338,7 +422,8 @@ export async function scrollAddFriendsListOneSlot(
     ) {
       context.onLog(
         `Add Friends: ${expectedNextName} is still ${Math.abs(alignmentError)}px from the top position; ` +
-        `no safe correction lane or swipe path was available.`,
+        `no safe correction lane or swipe path was available ` +
+        `(left=${correctionLane.leftWidth}px, right=${correctionLane.rightWidth}px, minimum=${minimumLaneWidth}px).`,
       );
       return true;
     }
@@ -432,7 +517,7 @@ export async function alignFirstAddFriendsContactToTop(
   }
 
   const maxSafeDistance = Math.max(minimumSwipeTravel, Math.round(screenHeight * 0.25));
-  const minimumBlankLaneWidth = Math.max(32, Math.round(screenWidth * 0.05));
+  const minimumBlankLaneWidth = Math.max(24, Math.round(screenWidth * 0.025));
   for (let swipeNumber = 0; swipeNumber <= 3; swipeNumber++) {
     const alignmentError = currentRow.bounds[1] - expectedTop;
     if (Math.abs(alignmentError) <= alignmentTolerance) {
@@ -443,7 +528,8 @@ export async function alignFirstAddFriendsContactToTop(
       return true;
     }
 
-    const swipeX = blankRowLaneX(currentNodes, currentRow, screenWidth, minimumBlankLaneWidth);
+    const swipeLane = blankRowLane(currentNodes, currentRow, screenWidth, minimumBlankLaneWidth);
+    const swipeX = swipeLane.x;
     const measuredMovement = previousTop - currentRow.bounds[1];
     const movementRatio = Math.abs(measuredMovement) > 8
       ? Math.abs(measuredMovement) / previousGestureDistance
@@ -466,7 +552,9 @@ export async function alignFirstAddFriendsContactToTop(
     ) {
       context.onLog(
         `Add Friends: after ${actionLabel}, ${nextName} is ${Math.abs(alignmentError)}px from the top position, ` +
-        `but no sufficiently wide blank-lane swipe was available; no contact was touched.`,
+        `but no sufficiently wide blank-lane swipe was available ` +
+        `(left=${swipeLane.leftWidth}px, right=${swipeLane.rightWidth}px, minimum=${minimumBlankLaneWidth}px); ` +
+        `no contact was touched.`,
       );
       return false;
     }
