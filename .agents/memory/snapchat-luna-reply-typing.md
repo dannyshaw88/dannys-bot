@@ -22,11 +22,11 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 **How to apply:** Keep the original contact name as identity metadata, but pass only the extracted bubble text in the transcript and newest-message field. Decode XML entities in one pass so escaped literal entity text is not decoded a second time.
 
 ## Batched calibrated reply typing
-When `batchTaps` is enabled, batch consecutive calibrated key taps into bounded ADB shell commands. Split long drafts into ordered chunks, keep keyboard-layer controls separate, and preserve configured pauses.
+When `batchTaps` is enabled for Snapchat replies, cap each ADB command at 80 calibrated taps. Preserve tap order and configured pauses across chunks; chunk boundaries must not inject spaces or other key taps. Keep keyboard-layer controls separate.
 
-**Why:** A live Windows run rejected a 102-tap command with `spawn ENAMETOOLONG` in 8 ms before ADB ran, while shorter batches in the same run succeeded. This is a process-command-size failure, not evidence that the keyboard was missing or slow to appear.
+**Why:** A live Windows run rejected a 102-tap command with `spawn ENAMETOOLONG` before ADB ran. The user requested batches of about 80 characters/taps and prefers a possibly inaccurate partial message over abandoning the reply.
 
-**How to apply:** Bound batches by serialized command length, not only tap count; preserve tap order and pauses across chunks, and log each chunk's size. Keep batching limited to the Snapchat reply path until verified on a physical device. Measure device-input queue wait separately from ADB command time.
+**How to apply:** Keep batches at no more than 80 taps, preserve tap order and pauses, and do not insert spaces at boundaries. For Snapchat replies, do not add keyboard-layout or typed-text checks that stop the tool; log tap failures and continue toward Enter with whatever reached the composer. Keep other typing callers strict by default.
 
 **Debugging log:** For live Snapchat replies, show the full Luna draft before typing and log concise action outcomes; suppress per-character progress lines.
 
@@ -34,11 +34,11 @@ When `batchTaps` is enabled, batch consecutive calibrated key taps into bounded 
 
 **How to apply:** Keep detailed calibration diagnostics out of the Snapchat action log; retain actionable failures and the draft, typing, send, and completion results.
 
-**Snapchat contact identity:** Read and retain the contact name from the unread-list row before tapping that same name to open the conversation. Do not inspect or validate the conversation header; require the chat composer before drafting.
+**Snapchat contact identity:** Use a recognized unread-chat status label as the sole row-eligibility rule. A row marker or contact name may help choose the tap location, but neither is required; use the status label's bounds as the tap anchor when other row data is absent. Do not inspect or validate the conversation header.
 
-**Why:** The user says the header can be obscured by banners and should not gate replies. The name on the unread list is visible before opening and is the intended contact identity.
+**Why:** The user explicitly said a matching unread label must be opened and replied to, without additional row-marker or name-position criteria.
 
-**How to apply:** Capture the row name from one unread-list snapshot, then tap horizontally in the row's central text area at the name's vertical position, between the avatar and right-side action icon. Do not tap the avatar, action icon, or conversation header. Use the captured name for prompt context and reply history; after opening, check for a composer only.
+**How to apply:** Capture the name when present for prompt context and history, but never use missing name or row-marker data to reject an unread-label match. Tap within the row using available bounds, falling back to the unread label's position. Do not validate the conversation header.
 
 **Snapchat panel navigation:** Close the Add Friends panel with one Android Back press after Add Friends or Accept Friends finishes. Do not tap the down-chevron or run a banner-clear check for this navigation.
 
@@ -126,11 +126,11 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 
 **How to apply:** Compare the exact live `latestIncomingMessage`, transcript, and sent-reply history with the Prompt Test payload. Correct source-input mismatches instead of rejecting generated replies after the fact.
 
-**Incomplete calibrated typing:** Keep `skipMissingKeys` behavior that sends the remaining mapped characters; do not make the reply fail closed solely because some keyboard keys are unmapped.
+**Best-effort calibrated typing:** Keep `skipMissingKeys` behavior and continue through tap or layer errors. Do not verify Gboard's layout or compare the typed draft with Luna's intended text as a condition for sending; attempt Enter with whatever reached the composer.
 
-**Why:** The user explicitly chose to allow partial replies when a calibrated key is missing.
+**Why:** The user explicitly prefers an incorrect or partial message over abandoning the tool because of calibrated-key checks.
 
-**How to apply:** Preserve this behavior unless the user changes the decision. Continue to verify and record the actual text Snapchat sent.
+**How to apply:** Preserve this behavior for Snapchat replies. Post-send observations can determine the reported sent count, but typing errors must not stop the tool from attempting to send or moving on to another unread row.
 
 **Persona and multi-part replies:** Persona facts belong to each editable account-slot goal. Treat that goal's PERSONA section as authoritative, keep examples consistent with it, and answer every direct question in the newest message in order, even when the reply must exceed the usual short-reply limit. Mention Quick Add only when the contact asks where they were found or added.
 
@@ -138,11 +138,11 @@ Reply 4 should retain the user's exact wording: “It’s a new social platform 
 
 **How to apply:** Keep the persona, source-of-add rules, and reply wording in the editable prompt. When editing a slot prompt, align every example with that slot's PERSONA. Answer identity-only messages without mentioning Quick Add; answer a separate source question with “From Quick Add.” Avoid hardcoding slot-specific identity facts in shared generation code.
 
-**Unread list eligibility and Reply to everything:** For text chats, the sole eligibility signal is a recognized unread-chat status label. Do not add a required `ff_item` resource marker, a name-node position rule, or a text preview as additional eligibility criteria. Use row bounds and the name only to locate and safely identify the already-eligible chat; if those cannot be resolved, report the specific targeting failure instead of silently filtering it out. Keep `Reply to everything` off by default to exclude media-only rows; when enabled, include unread Snap/photo/video rows only when Snapchat exposes the far-right conversation action icon, and tap that icon without opening the media. Never tap a media-only row body. After opening a chat, require readable conversation text and an incoming contact message before generating or sending a reply. Skip `Delivered` rows because that indicates an outgoing message, not an incoming chat to answer.
+**Unread list eligibility and Reply to everything:** For text chats, the recognized unread-chat label is the sole eligibility signal. Do not require an `ff_item` resource marker, name node, name position, or preview. Use any available row data only to select the tap point; if absent, tap at the matched label's position. A matching chat label overrides the prior My AI name-based exclusion. `Reply to everything` remains the separate setting for media-only statuses. After opening, retain the existing conversation/message generation flow.
 
-**Why:** The user explicitly clarified that a recognized unread-chat label alone establishes text-chat eligibility; requiring additional row-marker and name-position criteria can silently omit a visible unread contact such as Adam Young. The user also wants an explicit setting to include unread media conversations while preserving the current behavior when it is off.
+**Why:** The user explicitly clarified that additional row-marker and name-position criteria silently omit contacts despite a recognized unread-chat label.
 
-**How to apply:** Keep the setting defaulted off for existing slots. Classify text-chat eligibility from the unread label, then resolve its containing row and tap target independently. Use live row data to distinguish media-only statuses. If media handling is enabled but the conversation icon is absent, do not guess or open the media; report that row as not opened. After opening, if there is no readable incoming message, exit and continue to the next row.
+**How to apply:** Classify text-chat eligibility only from the recognized unread label. Resolve a row tap target independently, but never silently filter a matching label because marker/name metadata is missing. Keep media-only behavior controlled by its setting.
 
 **Unread reply count:** Reply to Unread Chats has no fixed upper cap; its configured Max is only the upper end of the user's selected count range.
 

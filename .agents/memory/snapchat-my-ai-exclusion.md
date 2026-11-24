@@ -1,10 +1,10 @@
 ---
-name: Never open Snapchat My AI
-description: Keep My AI excluded from automated unread-chat selection and tapping.
+name: Snapchat unread label overrides name exclusions
+description: Apply the user's label-only rule to Snapchat unread-chat rows, including My AI when it carries a recognized chat label.
 ---
 
-Never open Snapchat's My AI conversation during Reply to Unread Chats. Exclude the exact normalized display name during row discovery and enforce the same guard at the final tap boundary.
+In Reply to Unread Chats, do not exclude a row solely because its display name is My AI when it carries a recognized unread-chat status label. The label is the eligibility rule.
 
-**Why:** The My AI row appeared in Unread but did not provide a normal chat composer, and opening it left Snapchat on an unverified screen.
+**Why:** The user explicitly clarified that a recognized unread-chat label must be opened and replied to without extra name-based exceptions.
 
-**How to apply:** Preserve both checks if unread-row parsing or chat navigation changes.
+**How to apply:** Keep My AI excluded only when it lacks a recognized unread-chat label. Do not reintroduce a My AI name gate after a matching label is found.

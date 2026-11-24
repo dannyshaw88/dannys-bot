@@ -38,7 +38,6 @@ const isEmptyComposerValue = (value: string) => {
   const normalized = normalizedText(value);
   return !normalized || normalized === "send a chat" || normalized === "send chat";
 };
-const isMyAiChat = (name: string) => normalizedText(name) === "my ai";
 const countLinksInText = (value: string) =>
   value.match(/\b(?:https?:\/\/|www\.)[^\s<>"']+|\b(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z]{2,}(?:\/[^\s<>"']*)?/giu)?.length ?? 0;
 function normalizePromptPhrase(value: string): string {
@@ -222,10 +221,6 @@ async function tapUnreadChatNameArea(
   screenWidth: number,
 ): Promise<boolean> {
   if (context.isAborted()) return false;
-  if (isMyAiChat(row.displayName)) {
-    context.onLog("Reply to Unread Chats: refusing to open Snapchat's My AI chat.");
-    return false;
-  }
   if (row.chatActionNode) {
     const { x, y } = center(row.chatActionNode);
     context.onLog(`Reply to Unread Chats: "${row.displayName}" has mixed media and chat activity; tapping its live chat-only icon bounds=[${row.chatActionNode.bounds.join(",")}] at (${x},${y}).`);
@@ -233,109 +228,147 @@ async function tapUnreadChatNameArea(
     await context.sleep(700);
     return !context.isAborted();
   }
-  const [rowLeft, rowTop, rowRight, rowBottom] = row.marker.bounds;
+  const [rowLeft, rowTop, rowRight, rowBottom] = row.marker?.bounds ?? [
+    0,
+    row.statusNode.bounds[1],
+    screenWidth,
+    row.statusNode.bounds[3],
+  ];
   const rowWidth = rowRight - rowLeft;
   const x = Math.round(rowWidth >= screenWidth * 0.6 ? rowLeft + rowWidth / 2 : screenWidth / 2);
-  const nameCenter = center(row.nameNode);
-  const y = Math.max(rowTop + 1, Math.min(rowBottom - 1, nameCenter.y));
-  context.onLog(`Reply to Unread Chats: tapping the live central row for "${row.displayName}" at (${x},${y}); row=[${row.marker.bounds.join(",")}], name=[${row.nameNode.bounds.join(",")}].`);
+  const tapAnchor = row.nameNode ?? row.statusNode;
+  const anchorCenter = center(tapAnchor);
+  const y = Math.max(rowTop + 1, Math.min(rowBottom - 1, anchorCenter.y));
+  context.onLog(`Reply to Unread Chats: tapping the live row for "${row.displayName}" from unread label "${row.statusLabel}" at (${x},${y}); row=${row.marker ? `[${row.marker.bounds.join(",")}]` : "status-label bounds"}, anchor=[${tapAnchor.bounds.join(",")}].`);
   await android.tap(context.serial, x, y, "bot", `Snapchat: open unread chat for ${row.displayName}`, "automation", { exact: true });
   await context.sleep(700);
   return !context.isAborted();
 }
 
+type UnreadChatStatus = "chat" | "mixed" | "story" | "media";
+
+function unreadChatStatus(value: string): UnreadChatStatus | undefined {
+  if (/\b(?:(?:\d+)\s+)?new chats?\b/i.test(value)) return "chat";
+  if (/\b(?:\d+\s+)?snaps?\s+and\s+chats?\b/i.test(value)) return "mixed";
+  if (/\breplied to your chats?\b/i.test(value)) return "chat";
+  if (/\breplied to your stor(?:y|ies)\b/i.test(value)) return "story";
+  if (/\b(?:new|unread)\b.*\b(?:snaps?|photos?|videos?)\b/i.test(value)) return "media";
+  return undefined;
+}
+
 function unreadChatRows(
   nodes: UiNode[],
   replyToEverything = false,
-  onSkippedRow?: (
-    displayName: string,
-    reason: "media-only" | "media-no-chat-icon" | "My AI",
-    preview: string[],
-  ) => void,
 ) {
-  return nodes.flatMap(marker => {
-    const markerLabel = `${marker.text} ${marker.desc}`.trim();
-    if (!/ff_item/i.test(shortResourceId(marker))) return [];
-    const rowHeight = marker.bounds[3] - marker.bounds[1];
-    const rowNodes = nodes.filter(node =>
-      node.bounds[0] >= marker.bounds[0] &&
-      node.bounds[1] >= marker.bounds[1] &&
-      node.bounds[2] <= marker.bounds[2] &&
-      node.bounds[3] <= marker.bounds[3],
-    );
-    const rowLabel = [markerLabel, ...rowNodes.map(nodeLabel)].join(" ");
-    const hasMedia = /\b(snaps?|photos?|videos?)\b/i.test(rowLabel);
-    const hasChats = /\bchats?\b/i.test(rowLabel);
-    const chatActionNode = rowNodes.find(node =>
-      /feed_chat_button/i.test(`${node.text} ${node.desc} ${node.resourceId}`) &&
-      node.bounds[0] >= marker.bounds[0] + rowHeight * 0.65,
-    );
-    const names = nodes.filter(node =>
-      node.text.trim() &&
-      node.bounds[1] >= marker.bounds[1] &&
-      node.bounds[3] <= marker.bounds[3] &&
-      node.bounds[1] < marker.bounds[1] + rowHeight * 0.48 &&
-      !/^(unread|received|sent|opened|new|camera|chat)$/i.test(node.text.trim()),
-    ).sort((a, b) => a.bounds[1] - b.bounds[1]);
-    const nameNode = names[0];
-    const displayName = nameNode?.text.trim();
+  const rowMarkers = nodes.filter(node => /ff_item/i.test(shortResourceId(node)));
+  const candidates = new Map<string, {
+    marker?: UiNode;
+    nameNode?: UiNode;
+    statusNode: UiNode;
+    statusLabel: string;
+    status: UnreadChatStatus;
+    displayName: string;
+    key: string;
+    chatActionNode?: UiNode;
+    preview: string[];
+  }>();
+
+  for (const statusNode of nodes) {
+    const statusLabel = [statusNode.text, statusNode.desc]
+      .map(value => value.trim())
+      .find(value => unreadChatStatus(value));
+    if (!statusLabel) continue;
+
+    const status = unreadChatStatus(statusLabel);
+    if (!status || (status === "media" && !replyToEverything)) continue;
+
+    const marker = rowMarkers
+      .filter(candidate =>
+        candidate.bounds[0] <= statusNode.bounds[0] &&
+        candidate.bounds[1] <= statusNode.bounds[1] &&
+        candidate.bounds[2] >= statusNode.bounds[2] &&
+        candidate.bounds[3] >= statusNode.bounds[3],
+      )
+      .sort((left, right) =>
+        (left.bounds[2] - left.bounds[0]) * (left.bounds[3] - left.bounds[1]) -
+        (right.bounds[2] - right.bounds[0]) * (right.bounds[3] - right.bounds[1]),
+      )[0];
+    const statusY = center(statusNode).y;
+    const rowNodes = marker
+      ? nodes.filter(node =>
+          node.bounds[0] >= marker.bounds[0] &&
+          node.bounds[1] >= marker.bounds[1] &&
+          node.bounds[2] <= marker.bounds[2] &&
+          node.bounds[3] <= marker.bounds[3],
+        )
+      : nodes.filter(node =>
+          Math.abs(center(node).y - statusY) <= 130 &&
+          Math.abs(center(node).x - center(statusNode).x) <= 520,
+        );
+    const nameCandidates = rowNodes
+      .filter(node => {
+        const text = node.text.trim();
+        return text &&
+          node !== statusNode &&
+          !unreadChatStatus(text) &&
+          !/^(unread|received|sent|opened|new|camera|chat)$/i.test(text);
+      })
+      .sort((left, right) => {
+        const leftY = center(left).y;
+        const rightY = center(right).y;
+        const leftIsAbove = leftY <= statusY;
+        const rightIsAbove = rightY <= statusY;
+        if (leftIsAbove !== rightIsAbove) return leftIsAbove ? -1 : 1;
+        return Math.abs(statusY - leftY) - Math.abs(statusY - rightY);
+      });
+    const nameNode = nameCandidates[0];
+    const displayName = nameNode?.text.trim() || statusLabel;
+    const key = nameNode
+      ? `name:${normalizedText(displayName)}`
+      : `status:${status}:${normalizedText(statusLabel)}:${Math.round(statusY / 80)}`;
+    const rowHeight = marker ? marker.bounds[3] - marker.bounds[1] : 0;
+    const chatActionNode = (status === "mixed" || status === "media") && marker
+      ? rowNodes.find(node =>
+          /feed_chat_button/i.test(`${node.text} ${node.desc} ${node.resourceId}`) &&
+          node.bounds[0] >= marker.bounds[0] + rowHeight * 0.65,
+        )
+      : undefined;
     const nameBottom = nameNode?.bounds[3];
-    const previewValues = rowNodes
+    const preview = rowNodes
       .filter(node =>
         nameBottom !== undefined &&
         node !== nameNode &&
+        node !== statusNode &&
         !node.clickable &&
         node.bounds[1] >= nameBottom,
       )
       .map(node => node.text.trim())
       .filter(Boolean);
-    const rowStatusLabels = [markerLabel, ...rowNodes
-      .filter(node => node !== nameNode)
-      .map(node => `${node.text} ${node.desc}`)];
-    const hasNewChatMarker = rowStatusLabels.some(value =>
-      /^(?:(?:\d+)\s+)?new chats?\b/i.test(value.trim()),
-    );
-    const hasNewMediaMarker =
-      /\b(?:new|unread)\b.*\b(?:snaps?|photos?|videos?)\b/i.test(rowStatusLabels.join(" "));
-    const hasMixedSnapAndChatMarker =
-      /\b(?:\d+\s+)?snaps?\s+and\s+chats?\b/i.test(rowLabel);
-    const hasRepliedToChatMarker = /\breplied to your chats?\b/i.test(rowLabel);
-    const hasRepliedToStoryMarker = /\breplied to your stor(?:y|ies)\b/i.test(rowLabel);
-    const isNewMediaConversation = replyToEverything && hasMedia && hasNewMediaMarker;
-    if (
-      !hasNewChatMarker &&
-      !hasMixedSnapAndChatMarker &&
-      !hasRepliedToChatMarker &&
-      !hasRepliedToStoryMarker &&
-      !isNewMediaConversation
-    ) return [];
-    if (displayName && isMyAiChat(displayName)) {
-      onSkippedRow?.(displayName, "My AI", previewValues);
-      return [];
+    const candidateKey = marker
+      ? `row:${marker.bounds.join(",")}`
+      : key;
+
+    if (!candidates.has(candidateKey)) {
+      candidates.set(candidateKey, {
+        marker,
+        nameNode,
+        statusNode,
+        statusLabel,
+        status,
+        displayName,
+        key,
+        chatActionNode,
+        preview,
+      });
     }
-    const canOpenMediaAsConversation = Boolean(
-      chatActionNode &&
-      (hasChats || hasRepliedToStoryMarker || (replyToEverything && (isNewMediaConversation || hasNewChatMarker || hasRepliedToChatMarker))),
-    );
-    if (hasMedia && !canOpenMediaAsConversation) {
-      if (displayName) {
-        onSkippedRow?.(
-          displayName,
-          isNewMediaConversation ? "media-no-chat-icon" : "media-only",
-          previewValues,
-        );
-      }
-      return [];
-    }
-    return nameNode && displayName
-      ? [{ marker, nameNode, displayName, chatActionNode: canOpenMediaAsConversation ? chatActionNode : undefined, preview: previewValues }]
-      : [];
-  });
+  }
+
+  return [...candidates.values()];
 }
 
 async function openUnreadChatFromLiveList(
   context: SnapchatContext,
-  displayName: string,
+  targetRow: ReturnType<typeof unreadChatRows>[number],
   screenWidth: number,
   screenHeight: number,
   replyToEverything: boolean,
@@ -357,14 +390,19 @@ async function openUnreadChatFromLiveList(
       }
 
       const liveRow = unreadChatRows(state.nodes, replyToEverything).find(row =>
-        normalizedText(row.displayName) === normalizedText(displayName),
+        row.key === targetRow.key ||
+        (
+          row.status === targetRow.status &&
+          normalizedText(row.statusLabel) === normalizedText(targetRow.statusLabel) &&
+          Math.abs(center(row.statusNode).y - center(targetRow.statusNode).y) <= 140
+        ),
       );
       if (!liveRow) {
         return { state, tapped, stillOnChatList: true, targetStillVisible: false };
       }
 
       if (attempt > 1) {
-        context.onLog(`Reply to Unread Chats: "${displayName}" is still in the live Unread list after the first tap; retrying once with refreshed row bounds.`);
+        context.onLog(`Reply to Unread Chats: "${targetRow.displayName}" is still in the live Unread list after the first tap; retrying once with refreshed row bounds.`);
       }
       if (!await tapUnreadChatNameArea(context, liveRow, screenWidth)) {
         return { state, tapped, stillOnChatList: true, targetStillVisible: true };
@@ -380,7 +418,12 @@ async function openUnreadChatFromLiveList(
       }
 
       const targetStillVisible = unreadChatRows(state.nodes, replyToEverything).some(row =>
-        normalizedText(row.displayName) === normalizedText(displayName),
+        row.key === targetRow.key ||
+        (
+          row.status === targetRow.status &&
+          normalizedText(row.statusLabel) === normalizedText(targetRow.statusLabel) &&
+          Math.abs(center(row.statusNode).y - center(targetRow.statusNode).y) <= 140
+        ),
       );
       if (!targetStillVisible || attempt === 2) {
         return { state, tapped, stillOnChatList: true, targetStillVisible };
@@ -586,14 +629,7 @@ async function runReplyUnreadChatsAttempt(
   let replied = 0;
   let noMoreEligible = false;
   const visited = new Set<string>();
-  const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, replyToEverything, (displayName, reason, preview) => {
-    const explanations: Record<typeof reason, string> = {
-      "media-only": "the row contains only Snap/photo/video activity, and Reply to everything is off.",
-      "media-no-chat-icon": "the unread media row has no visible conversation icon to open without viewing the media.",
-      "My AI": "it is Snapchat's My AI conversation, which is intentionally excluded.",
-    };
-    recordNotReplied(displayName, "unread-list", explanations[reason], preview);
-  });
+  const readUnreadRows = (nodes: UiNode[]) => unreadChatRows(nodes, replyToEverything);
   try {
   while (replied < requested && !context.isAborted()) {
     let rows = readUnreadRows(list.nodes);
@@ -617,14 +653,14 @@ async function runReplyUnreadChatsAttempt(
       list = recovery.state;
       rows = readUnreadRows(list.nodes);
     }
-    context.onLog(`Reply to Unread Chats: found ${rows.length} eligible conversation row(s) in the Unread list.`);
-    const row = rows.find(item => !visited.has(normalizedText(item.displayName)));
+    context.onLog(`Reply to Unread Chats: found ${rows.length} conversation row(s) from recognized unread labels.`);
+    const row = rows.find(item => !visited.has(item.key));
     if (!row) {
       noMoreEligible = true;
-      context.onLog("Reply to Unread Chats: no eligible conversation row remains in Snapchat's Unread list.");
+      context.onLog("Reply to Unread Chats: no recognized unread-chat label remains in the list.");
       break;
     }
-    const identity = normalizedText(row.displayName);
+    const identity = row.key;
     if (visited.has(identity)) break;
     visited.add(identity);
     activeContact = {
@@ -632,10 +668,10 @@ async function runReplyUnreadChatsAttempt(
       stage: "opening-chat",
       capturedMessages: row.preview,
     };
-    context.onLog(`Reply to Unread Chats: noted unread contact name "${row.displayName}" from the list.`);
+    context.onLog(`Reply to Unread Chats: matched unread label "${row.statusLabel}" for "${row.displayName}".`);
     const openResult = await openUnreadChatFromLiveList(
       context,
-      row.displayName,
+      row,
       screenWidth,
       screenHeight,
       replyToEverything,
@@ -905,8 +941,7 @@ async function runReplyUnreadChatsAttempt(
     }
     let sendState: UiState | undefined;
     let enteredReply = "";
-    const initialComposerText = verifiedComposer.text.trim();
-    if (!isEmptyComposerValue(initialComposerText)) {
+    if (!isEmptyComposerValue(verifiedComposer.text.trim())) {
       recordNotReplied(
         row.displayName,
         "before-typing",
@@ -918,8 +953,9 @@ async function runReplyUnreadChatsAttempt(
     }
     if (activeContact) activeContact.stage = "typing-reply";
     context.onLog("Reply to Unread Chats: typing Luna's draft into the composer focused by opening the chat.");
+    let typed: Awaited<ReturnType<typeof android.typeViaSavedCalibrationMap>> | undefined;
     try {
-      const typed = await android.typeViaSavedCalibrationMap(
+      typed = await android.typeViaSavedCalibrationMap(
         context.serial,
         reply,
         context.effectiveTypingProfile(context.serial),
@@ -932,59 +968,38 @@ async function runReplyUnreadChatsAttempt(
           onProgress: context.onProgress,
           batchTaps: true,
           measureTapTimings: true,
+          bestEffortTyping: true,
         },
       );
       if (!typed.available) {
-        recordNotReplied(
-          row.displayName,
-          "typing-reply",
-          `the device has no saved keyboard calibration map${typed.missing.length ? `; missing keys: ${typed.missing.join(", ")}` : ""}.`,
-          transcript,
+        context.onLog(
+          `Reply to Unread Chats: no saved keyboard calibration map is available` +
+          `${typed.missing.length ? `; missing keys: ${typed.missing.join(", ")}` : ""}; continuing to Enter.`,
         );
-        await exitSnapchatConversation(context).catch(() => false);
-        break;
       }
       if (typed.fatal) {
         const diagnostic = formatKeyboardFailureDiagnostic(typed.failure);
-        recordNotReplied(
-          row.displayName,
-          "typing-reply",
-          `the calibrated keyboard failed; ${diagnostic}; the partial draft was not sent.`,
-          transcript,
-        );
-        await exitSnapchatConversation(context).catch(() => false);
-        break;
+        context.onLog(`Reply to Unread Chats: calibrated typing reported ${diagnostic}; continuing with the current draft.`);
       }
       if (typed.missing.length) {
         context.onLog(
-          `Reply to Unread Chats: skipped unmapped key(s) ${[...new Set(typed.missing)].join(", ")}; continuing with the remaining calibrated keys.`,
+          `Reply to Unread Chats: some calibrated key(s) were unavailable (${[...new Set(typed.missing)].join(", ")}); continuing.`,
         );
-      }
-      sendState = await dump(context.serial);
-      const composerAfterTyping = findChatComposer(sendState.nodes, screenHeight);
-      enteredReply = composerAfterTyping?.text.trim() ?? "";
-      if (isEmptyComposerValue(enteredReply) || enteredReply === initialComposerText) {
-        recordNotReplied(
-          row.displayName,
-          "typing-reply",
-          "no new reply text appeared in the composer after typing.",
-          transcript,
-        );
-        await exitSnapchatConversation(context).catch(() => false);
-        break;
       }
     } catch (error) {
-      recordNotReplied(
-        row.displayName,
-        "typing-reply",
-        `calibrated keyboard typing failed; the reply was not sent${error instanceof Error ? ` (${error.message})` : ""}.`,
-        transcript,
+      context.onLog(
+        `Reply to Unread Chats: calibrated typing errored` +
+        `${error instanceof Error ? ` (${error.message})` : ""}; continuing with whatever reached the composer.`,
       );
-      await exitSnapchatConversation(context).catch(() => false);
-      break;
+    }
+    sendState = await dump(context.serial);
+    const composerAfterTyping = findChatComposer(sendState.nodes, screenHeight);
+    enteredReply = composerAfterTyping?.text.trim() ?? "";
+    if (isEmptyComposerValue(enteredReply)) {
+      context.onLog("Reply to Unread Chats: no readable draft is available; still attempting Enter as requested.");
     }
     if (activeContact) activeContact.stage = "sending-reply";
-    context.onLog("Reply to Unread Chats: draft verified in the composer; sending.");
+    context.onLog("Reply to Unread Chats: sending the text currently in the composer.");
     try {
       await android.keyevent(context.serial, 66);
     } catch (error) {
@@ -995,7 +1010,9 @@ async function runReplyUnreadChatsAttempt(
         transcript,
       );
       await exitSnapchatConversation(context).catch(() => false);
-      break;
+      activeContact = null;
+      list = await dump(context.serial);
+      continue;
     }
     const sentState = await dump(context.serial);
     const afterConversation = visibleConversation(sentState.nodes, composer.bounds[1], row.displayName)
@@ -1076,7 +1093,7 @@ async function runReplyUnreadChatsAttempt(
       ? `the selected run target of ${requested} replies was reached before this contact was processed.`
       : "the run stopped before this unread contact could be processed.";
   for (const row of readUnreadRows(list.nodes)) {
-    if (visited.has(normalizedText(row.displayName))) continue;
+    if (visited.has(row.key)) continue;
     recordNotReplied(row.displayName, "run-ended", remainingReason, row.preview);
   }
   context.onLog(`Reply to Unread Chats: confirmed ${replied}/${requested} GPT-6 Luna replies.`);

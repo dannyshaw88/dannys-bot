@@ -156,7 +156,7 @@
 - [Snapchat incoming-call dismissal](snapchat-incoming-call-dismissal.md) — piggyback detection on existing UI reads; tap only the live Not Now control
 - [Snapchat module isolation](snapchat-tool-isolation.md) — keep tools isolated and recheck their live toggle during loops; Upload a Snap crops before Send To
 - [Per-device remote input latency](device-remote-input-latency.md) — fast physical touches with slow ADB-injected inputs point to the device/transport path, not the typing profile
-- [Never open Snapchat My AI](snapchat-my-ai-exclusion.md) — exclude the exact My AI row during unread-chat discovery and recheck immediately before tapping
+- [Snapchat unread label precedence](snapchat-my-ai-exclusion.md) — a recognized unread-chat label takes precedence over the former My AI name-based exclusion
 - [Snapchat tools from an open chat](snapchat-tools-open-chat.md) — dismiss the keyboard, exit the verified chat, then confirm Camera before Add/Accept Friends
 - [Farm device proxy routing](farm-device-proxy-routing.md) — prefer laptop broadband plus a per-device proxy exit; device Wi-Fi plus assigned proxy is the fallback
 - [Snapchat ad-experience popup](snapchat-ad-experience-popup.md) — check only when Reply to Unread Chats cannot find/open chats, then choose Smaller In-Feed Ads and retry once

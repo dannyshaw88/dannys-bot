@@ -5028,6 +5028,8 @@ async function runInputShell(serial: string, args: string[], label: string, tapI
 }
 
 type CalibratedTapBatchItem = { x: number; y: number; pauseMs: number; key: string };
+// One item is one calibrated key tap; chunk boundaries add no key events or spaces.
+const MAX_CALIBRATED_TAPS_PER_BATCH = 80;
 
 async function runCalibratedTapBatch(
   serial: string,
@@ -15526,7 +15528,7 @@ export async function typeViaSavedCalibrationMap(
   text: string,
   typingProfile: TypingSpeedProfile | undefined,
   onLog?: (msg: string) => void,
-  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean; measureTapTimings?: boolean },
+  options?: { disableHumanErrors?: boolean; debugLabel?: string; skipMissingKeys?: boolean; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean; measureTapTimings?: boolean; bestEffortTyping?: boolean },
 ): Promise<{ ok: boolean; available: boolean; missing: string[]; fatal?: boolean; failure?: CalibratedKeyboardFailure }> {
   const map = loadKeyCalibrationMap(serial);
   const mapPath = _calibrationPath(serial);
@@ -15556,8 +15558,8 @@ export async function typeViaSavedCalibrationMap(
   }
 
   // By default, preflight every key before the first tap so strict callers
-  // cannot leave a partial string. Snapchat replies can opt into per-character
-  // skipping and continue with the calibrated keys that are available.
+  // cannot leave a partial string. Snapchat replies can opt into skipping
+  // missing keys and best-effort continuation through tap/layer failures.
   const moreSymbolChars = new Set([
     "~", "`", "|", "•", "√", "π", "÷", "×", "§", "∆", "£", "€", "¥",
     "^", "°", "{", "}", "[", "]", "\\", "<", ">",
@@ -15600,7 +15602,7 @@ export async function typeViaSavedCalibrationMap(
       `(serial=${serial}, mappedKeys=${Object.keys(map).length}` +
       `${options?.skipMissingKeys ? "; unmapped characters will be skipped" : ""})`,
     );
-    if (options?.skipMissingKeys && missingLayerControl) {
+    if (options?.skipMissingKeys && missingLayerControl && !options?.bestEffortTyping) {
       const failure: CalibratedKeyboardFailure = {
         code: "missing-calibration-coordinate",
         control: missingLayerControl,
@@ -15622,6 +15624,7 @@ export async function typeViaSavedCalibrationMap(
     onProgress: options?.onProgress,
     batchTaps: options?.batchTaps,
     measureTapTimings: options?.measureTapTimings,
+    bestEffortTyping: options?.bestEffortTyping,
   });
   return { ...result, available: true };
 }
@@ -16219,7 +16222,7 @@ export async function typeViaCalibrationMap(
   map: KeyCalibrationMap,
   onLog: ((msg: string) => void) | undefined,
   typingProfile: TypingSpeedProfile | undefined,
-  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean; measureTapTimings?: boolean },
+  options?: { disableHumanErrors?: boolean; shiftEnterNewlines?: boolean; debugLabel?: string; compactLogs?: boolean; onProgress?: () => void; batchTaps?: boolean; measureTapTimings?: boolean; bestEffortTyping?: boolean },
 ): Promise<{
   ok: boolean;
   missing: string[];
@@ -16251,24 +16254,47 @@ export async function typeViaCalibrationMap(
   let lastTapFailure: Omit<CalibratedKeyboardFailure, "phase" | "fromLayer" | "targetLayer" | "transitionStep"> | undefined;
   let fatalFailure: CalibratedKeyboardFailure | undefined;
   const flushPendingTaps = async () => {
-    if (pendingTaps.length === 0) return;
-    const batch = pendingTaps.splice(0, pendingTaps.length);
-    const timings = await runCalibratedTapBatch(serial, batch, options?.measureTapTimings);
-    for (const _tap of batch) options?.onProgress?.();
-    if (options?.batchTaps) {
-      onLog?.(
-        `[${options?.debugLabel ?? "cal-keyboard"}] sent ${batch.length} calibrated key tap(s) ` +
-        `in ${timings.totalMs}ms (ADB ${timings.adbMs}ms, queued ${timings.gateWaitMs}ms, ` +
-        `configured pauses ${timings.configuredPauseMs}ms)`,
-      );
-      if (options?.measureTapTimings) {
-        const timingDetails = timings.tapTimings
-          .map(({ key, elapsedMs }) => `${JSON.stringify(key)}:${elapsedMs}ms`)
-          .join(", ");
+    while (pendingTaps.length > 0) {
+      const batch = pendingTaps.splice(0, MAX_CALIBRATED_TAPS_PER_BATCH);
+      try {
+        const timings = await runCalibratedTapBatch(serial, batch, options?.measureTapTimings);
+        for (const _tap of batch) options?.onProgress?.();
+        if (options?.batchTaps) {
+          onLog?.(
+            `[${options?.debugLabel ?? "cal-keyboard"}] sent ${batch.length} calibrated key tap(s) ` +
+            `in ${timings.totalMs}ms (ADB ${timings.adbMs}ms, queued ${timings.gateWaitMs}ms, ` +
+            `configured pauses ${timings.configuredPauseMs}ms)`,
+          );
+          if (options?.measureTapTimings) {
+            const timingDetails = timings.tapTimings
+              .map(({ key, elapsedMs }) => `${JSON.stringify(key)}:${elapsedMs}ms`)
+              .join(", ");
+            onLog?.(
+              `[${options.debugLabel ?? "cal-keyboard"}] per-tap ADB timings ` +
+              `(${timings.tapTimings.length}/${batch.length} captured, 10ms resolution): ` +
+              `[${timingDetails}]`,
+            );
+          }
+        }
+      } catch (error) {
+        if (!options?.bestEffortTyping) throw error;
+        const detail = String((error as Error)?.message ?? error).replace(/\s+/g, " ").slice(0, 240);
+        if (
+          batch.length > 1 &&
+          /\bENAMETOOLONG\b|argument list too long/i.test(detail)
+        ) {
+          const midpoint = Math.ceil(batch.length / 2);
+          pendingTaps.unshift(...batch.slice(midpoint));
+          pendingTaps.unshift(...batch.slice(0, midpoint));
+          onLog?.(
+            `[${options?.debugLabel ?? "cal-keyboard"}] ADB command was too long; ` +
+            `retrying the same ${batch.length} taps as ${midpoint} and ${batch.length - midpoint}`,
+          );
+          continue;
+        }
         onLog?.(
-          `[${options.debugLabel ?? "cal-keyboard"}] per-tap ADB timings ` +
-          `(${timings.tapTimings.length}/${batch.length} captured, 10ms resolution): ` +
-          `[${timingDetails}]`,
+          `[${options?.debugLabel ?? "cal-keyboard"}] ADB key batch failed (${batch.length} tap(s)); ` +
+          `continuing with the next batch without verifying typed text: ${JSON.stringify(detail)}`,
         );
       }
     }
@@ -16352,6 +16378,7 @@ export async function typeViaCalibrationMap(
     const layerControl = label === "abc" || label === "symbols" || label === "moreSymbols";
     if (options?.batchTaps && !layerControl) {
       pendingTaps.push({ x: dispatched.x, y: dispatched.y, pauseMs: pause, key: description });
+      if (pendingTaps.length >= MAX_CALIBRATED_TAPS_PER_BATCH) await flushPendingTaps();
       return true;
     }
     try {
@@ -16484,7 +16511,7 @@ export async function typeViaCalibrationMap(
     targetLayer: CalibratedKeyboardLayer,
     transitionStep: string,
     expectedControl: string,
-  ): false => {
+  ): boolean => {
     const tapFailure = lastTapFailure ?? {
       code: "unknown-tap-failure" as const,
       control: expectedControl,
@@ -16496,6 +16523,17 @@ export async function typeViaCalibrationMap(
       targetLayer,
       transitionStep,
     };
+    if (options?.bestEffortTyping) {
+      layer = targetLayer;
+      _calKeyboardLayer.set(serial, layer);
+      onLog?.(
+        `[${options?.debugLabel ?? "cal-keyboard"}] keyboard layer tap failed; continuing without a layout check ` +
+        `from=${currentFailure.fromLayer} target=${targetLayer} step=${transitionStep} control=${currentFailure.control} ` +
+        `cause=${currentFailure.code}` +
+        (currentFailure.error ? ` error=${JSON.stringify(currentFailure.error)}` : ""),
+      );
+      return true;
+    }
     fatalFailure ??= currentFailure;
     onLog?.(
       `[${options?.debugLabel ?? "cal-keyboard"}] fatal keyboard layer transition ` +
