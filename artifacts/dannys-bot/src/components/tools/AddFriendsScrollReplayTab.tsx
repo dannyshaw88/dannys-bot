@@ -12,6 +12,8 @@ type ReplayResult = {
   expectedNext: string;
   expectedTop: number;
   actualTop: number;
+  preActionAlignment?: boolean;
+  simulatedMovementScale?: number;
   swipes: Array<{ x1: number; y1: number; x2: number; y2: number; durationMs: number }>;
   logs: string[];
 };
@@ -61,21 +63,69 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function diagnoseCycleLog(value: string): string[] {
+  if (!value.trim()) return [];
+  const findings: string[] = [];
+  const cards = [...value.matchAll(
+    /after adding ([^\r\n,]+), divider measurement was unavailable[^\r\n]*card bounds=(-?\d+),(-?\d+),(-?\d+),(-?\d+)[^\r\n]*/gi,
+  )];
+  const card = cards.at(-1);
+  const final = value.match(
+    /after three movement-scaled corrections,[^\r\n]+ at y=(-?\d+) \(target y=(-?\d+); residual (-?\d+)px\)/i,
+  );
+  if (card && final) {
+    const cardTop = Number(card[2]);
+    const intendedTop = Number(final[2]);
+    const gap = cardTop - intendedTop;
+    if (Math.abs(gap) > 80) {
+      findings.push(
+        `The post-action card was at y=${cardTop}, but the routine aimed the next contact at y=${intendedTop} ` +
+        `(${Math.abs(gap)}px apart). The chosen contact had not first been brought to the top before its action.`,
+      );
+    }
+  }
+  const movementPattern =
+    /the previous (\d+)px swipe moved content (-?\d+)px; sending correction \d+ of 3 for (\d+)px to move ([^\r\n]+?) to the top\./gi;
+  const targetName = final?.[0].match(/corrections, (.+?) is still at y=/i)?.[1]?.trim();
+  const movements = [...value.matchAll(movementPattern)].filter(movement =>
+    !targetName || movement[4].trim() === targetName,
+  );
+  if (movements.length) {
+    findings.push("Observed correction sequence (swipe distance → measured list movement):");
+    for (const movement of movements) {
+      findings.push(`• ${movement[1]}px → ${movement[2]}px; next correction was ${movement[3]}px.`);
+    }
+    if (movements.some(movement => Number(movement[2]) < 0)) {
+      findings.push(
+        "A negative measured movement means the contact moved back down the screen during a correction; " +
+        "that reversal is why the list appeared to scroll backwards.",
+      );
+    }
+  }
+  if (findings.length === 0) {
+    findings.push("No Add Friends row-position or correction-movement sequence was found in this log.");
+  }
+  return findings;
+}
+
 export function AddFriendsScrollReplayTab() {
   const imageRef = useRef<HTMLImageElement>(null);
   const [screenshot, setScreenshot] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [uiXml, setUiXml] = useState("");
+  const [cycleLog, setCycleLog] = useState("");
   const [crop, setCrop] = useState<CropRect | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [screenWidth, setScreenWidth] = useState("720");
   const [screenHeight, setScreenHeight] = useState("1600");
   const [friendName, setFriendName] = useState("");
+  const [alignBeforeAction, setAlignBeforeAction] = useState(true);
   const [previousCenterY, setPreviousCenterY] = useState("");
   const [rowHeight, setRowHeight] = useState("");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ReplayResult | null>(null);
+  const cycleLogDiagnosis = diagnoseCycleLog(cycleLog);
 
   useEffect(() => {
     if (!screenshot) {
@@ -101,6 +151,16 @@ export function AddFriendsScrollReplayTab() {
       return;
     }
     setUiXml(await file.text());
+    setError("");
+  };
+
+  const loadCycleLog = async (file?: File) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setError("The cycle log must be under 2 MB.");
+      return;
+    }
+    setCycleLog(await file.text());
     setError("");
   };
 
@@ -150,17 +210,17 @@ export function AddFriendsScrollReplayTab() {
     };
   };
 
-  const runReplay = async () => {
-    if (!screenshot || !uiXml.trim()) {
+  const runReplay = async (regressionFixture = false) => {
+    if (!regressionFixture && (!screenshot || !uiXml.trim())) {
       setError("Choose a screenshot and its matching UIAutomator XML dump.");
       return;
     }
-    const normalizedUiXml = normalizeUiDump(uiXml);
-    if (screenshot.size > 20 * 1024 * 1024) {
+    const normalizedUiXml = regressionFixture ? "" : normalizeUiDump(uiXml);
+    if (!regressionFixture && screenshot && screenshot.size > 20 * 1024 * 1024) {
       setError("The screenshot must be under 20 MB.");
       return;
     }
-    if (crop && (crop.width < 30 || crop.height < 60)) {
+    if (!regressionFixture && crop && (crop.width < 30 || crop.height < 60)) {
       setError("Drag a larger crop around the phone display, or choose the full image.");
       return;
     }
@@ -168,26 +228,29 @@ export function AddFriendsScrollReplayTab() {
     setError("");
     setResult(null);
     try {
-      const imageBase64 = await readAsDataUrl(screenshot);
+      const imageBase64 = regressionFixture ? undefined : await readAsDataUrl(screenshot!);
       const response = await fetch("/api/debug/add-friends-scroll-replay", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64,
-          uiXml: normalizedUiXml,
-          screenWidth: Number(screenWidth),
-          screenHeight: Number(screenHeight),
-          crop: crop ? {
-            left: Math.floor(crop.left),
-            top: Math.floor(crop.top),
-            width: Math.max(1, Math.floor(crop.width)),
-            height: Math.max(1, Math.floor(crop.height)),
-          } : null,
-          friendName: friendName.trim() || undefined,
-          previousCenterY: previousCenterY ? Number(previousCenterY) : undefined,
-          rowHeight: rowHeight ? Number(rowHeight) : undefined,
-        }),
+        body: JSON.stringify(regressionFixture
+          ? { regressionFixture: true }
+          : {
+            imageBase64,
+            uiXml: normalizedUiXml,
+            screenWidth: Number(screenWidth),
+            screenHeight: Number(screenHeight),
+            alignBeforeAction,
+            crop: crop ? {
+              left: Math.floor(crop.left),
+              top: Math.floor(crop.top),
+              width: Math.max(1, Math.floor(crop.width)),
+              height: Math.max(1, Math.floor(crop.height)),
+            } : null,
+            friendName: friendName.trim() || undefined,
+            previousCenterY: previousCenterY ? Number(previousCenterY) : undefined,
+            rowHeight: rowHeight ? Number(rowHeight) : undefined,
+          }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Replay failed.");
@@ -239,6 +302,17 @@ export function AddFriendsScrollReplayTab() {
                 onChange={event => void loadUiDump(event.target.files?.[0])}
               />
               <p className="text-xs text-muted-foreground">Phone Farm → Inspect → Dump All downloads the tree text.</p>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="scroll-replay-log">Phone Farm run log (optional)</Label>
+              <Input
+                id="scroll-replay-log"
+                data-testid="input-scroll-replay-log"
+                type="file"
+                accept=".txt,.log,text/plain"
+                onChange={event => void loadCycleLog(event.target.files?.[0])}
+              />
+              <p className="text-xs text-muted-foreground">The log analysis shows measured row positions and direction reversals.</p>
             </div>
           </div>
 
@@ -301,6 +375,26 @@ export function AddFriendsScrollReplayTab() {
               spellCheck={false}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="scroll-replay-log-text">Run log contents</Label>
+            <textarea
+              id="scroll-replay-log-text"
+              data-testid="textarea-scroll-replay-log"
+              value={cycleLog}
+              onChange={event => setCycleLog(event.target.value)}
+              placeholder="Upload or paste the run log around the Add Friends actions"
+              className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              spellCheck={false}
+            />
+          </div>
+          {cycleLog.trim() && (
+            <div data-testid="status-scroll-replay-log-diagnosis" className="space-y-1 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+              <p className="font-semibold">Run-log finding</p>
+              {cycleLogDiagnosis.map((finding, index) => (
+                <p key={index} className="text-muted-foreground">{finding}</p>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="desktop-card space-y-4 p-5">
@@ -315,9 +409,18 @@ export function AddFriendsScrollReplayTab() {
               <Input id="scroll-replay-height" data-testid="input-scroll-replay-height" type="number" min="100" value={screenHeight} onChange={event => setScreenHeight(event.target.value)} />
             </div>
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="scroll-replay-friend">Contact handled before this screenshot (optional)</Label>
-              <Input id="scroll-replay-friend" data-testid="input-scroll-replay-friend" value={friendName} onChange={event => setFriendName(event.target.value)} placeholder="e.g. the contact just added" />
+              <Label htmlFor="scroll-replay-friend">Contact selected for this replay (optional)</Label>
+              <Input id="scroll-replay-friend" data-testid="input-scroll-replay-friend" value={friendName} onChange={event => setFriendName(event.target.value)} placeholder="e.g. the contact whose Add row is shown" />
             </div>
+            <label className="col-span-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                data-testid="checkbox-scroll-replay-align-first"
+                checked={alignBeforeAction}
+                onChange={event => setAlignBeforeAction(event.target.checked)}
+              />
+              Bring the selected contact to the top before the action
+            </label>
             <details className="col-span-2 rounded-md border border-border p-3">
               <summary className="cursor-pointer text-sm font-medium">Position overrides</summary>
               <div className="mt-3 grid grid-cols-2 gap-3">
@@ -343,6 +446,16 @@ export function AddFriendsScrollReplayTab() {
             {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
             {running ? "Running replay…" : "Run scroll replay"}
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            data-testid="button-run-add-friends-regression"
+            className="w-full"
+            onClick={() => void runReplay(true)}
+            disabled={running}
+          >
+            Run logged 4th-add regression
+          </Button>
 
           {error && (
             <div role="alert" data-testid="status-scroll-replay-error" className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -363,6 +476,8 @@ export function AddFriendsScrollReplayTab() {
                 <span className="text-muted-foreground">Simulated top</span><span>{result.actualTop}px</span>
                 <span className="text-muted-foreground">Swipes sent</span><span>{result.swipes.length}</span>
                 <span className="text-muted-foreground">Input mode</span><span>{result.mode}</span>
+                <span className="text-muted-foreground">Aligned before action</span><span>{result.preActionAlignment ? "Yes" : "No"}</span>
+                <span className="text-muted-foreground">Simulated list response</span><span>{result.simulatedMovementScale ?? 1}× finger travel</span>
               </div>
               {result.swipes.map((swipe, index) => (
                 <div key={`${swipe.x1}-${swipe.y1}-${index}`} data-testid={`row-scroll-replay-swipe-${index}`} className="rounded bg-background/80 p-2 font-mono text-xs">
@@ -382,8 +497,8 @@ export function AddFriendsScrollReplayTab() {
             <div className="mb-1 flex items-center gap-2 font-medium text-foreground">
               <ImageUp className="h-4 w-4" /> What this replay verifies
             </div>
-            It runs the real scroll calculations and records coordinates. The fake list moves by the requested gesture;
-            this does not emulate Android inertia or Snapchat rendering.
+            It runs the real positioning and scroll calculations and records coordinates. The fake list moves by the
+            requested gesture; this does not emulate Android inertia or Snapchat rendering.
           </div>
         </section>
       </div>

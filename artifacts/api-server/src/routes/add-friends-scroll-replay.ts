@@ -26,15 +26,36 @@ router.post("/debug/add-friends-scroll-replay", async (req, res) => {
   }
 
   const body = req.body as {
+    regressionFixture?: unknown;
     imageBase64?: unknown;
     uiXml?: unknown;
     screenWidth?: unknown;
     screenHeight?: unknown;
     crop?: { left?: unknown; top?: unknown; width?: unknown; height?: unknown } | null;
     friendName?: unknown;
+    alignBeforeAction?: unknown;
     previousCenterY?: unknown;
     rowHeight?: unknown;
   };
+  if (body.regressionFixture === true) {
+    try {
+      const { stdout } = await execFileAsync(process.execPath, [
+        replayScript,
+        "--regression-fixture",
+      ], {
+        cwd: apiRoot,
+        timeout: 30_000,
+        maxBuffer: 2 * 1024 * 1024,
+      });
+      return res.json(JSON.parse(stdout));
+    } catch (error) {
+      const details = error && typeof error === "object" && "stderr" in error
+        ? String((error as { stderr?: unknown }).stderr ?? "")
+        : "";
+      const message = details.trim() || (error instanceof Error ? error.message : "Replay failed.");
+      return res.status(422).json({ error: message.slice(0, 2000) });
+    }
+  }
   if (typeof body.imageBase64 !== "string" || typeof body.uiXml !== "string") {
     return res.status(400).json({ error: "Choose a screenshot and provide its matching UIAutomator XML dump." });
   }
@@ -100,6 +121,7 @@ router.post("/debug/add-friends-scroll-replay", async (req, res) => {
     if (typeof body.friendName === "string" && body.friendName.trim()) {
       args.push(`--friend=${body.friendName.trim().slice(0, 160)}`);
     }
+    if (body.alignBeforeAction === true) args.push("--align-before-action");
     if (Number.isFinite(Number(body.previousCenterY))) {
       args.push(`--previous-center-y=${Math.round(Number(body.previousCenterY))}`);
     }

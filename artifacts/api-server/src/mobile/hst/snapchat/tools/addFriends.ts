@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as android from "../../../androidManager";
-import type { SnapchatContext, UiNode } from "../context";
+import type { SnapchatContext, UiNode, UiState } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForSuggestions } from "../navigation/openAddFriends";
 import { handleFriendRequestLimit } from "../navigation/handleFriendRequestCooldown";
 import {
+  alignAddFriendsContactToTop,
   alignFirstAddFriendsContactToTop,
   scrollAddFriendsListOneSlot,
 } from "../navigation/scrollAddFriendsListOneSlot";
@@ -273,6 +274,26 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     });
     return { addButtons, candidates };
   };
+  const positionFriendForAction = async (
+    state: { nodes: UiNode[] },
+    selectedFriend: { friendName: string; friendKey: string },
+  ): Promise<{
+    state: UiState;
+    selected: { friendName: string; friendKey: string; row: UiNode; candidate: UiNode; identityText: string[] };
+  } | null> => {
+    if (!await alignAddFriendsContactToTop(
+      context,
+      state.nodes,
+      screenWidth,
+      screenHeight,
+      selectedFriend.friendName,
+    )) return null;
+    const refreshedState = await dump(context.serial);
+    const refreshedSelected = findAddCandidates(refreshedState.nodes).candidates.find(candidate =>
+      candidate.friendKey === selectedFriend.friendKey,
+    );
+    return refreshedSelected ? { state: refreshedState, selected: refreshedSelected } : null;
+  };
   const getAvoidedTerm = (selectedFriend: { identityText: string[] }): string | undefined => {
     const match = avoidTerms.find(term =>
       selectedFriend.identityText.some(value => {
@@ -301,8 +322,18 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     matchDescription: string,
     requireDismissControl = false,
   ): Promise<boolean> => {
-    const { friendName, row } = selectedFriend;
     attemptedFriends.add(selectedFriend.friendKey);
+    const positioned = await positionFriendForAction(state, selectedFriend);
+    if (!positioned) {
+      context.onLog(
+        `Add Friends: could not bring ${selectedFriend.friendName} to the first contact position before dismissing it; ` +
+        `${requireDismissControl ? "stopping without adding it." : "skipping it and continuing."}`,
+      );
+      return !requireDismissControl;
+    }
+    state = positioned.state;
+    selectedFriend = positioned.selected;
+    const { friendName, row } = selectedFriend;
     const previousCenterY = center(row).y;
     const previousTopY = row.bounds[1];
     const rowBounds = row.bounds;
@@ -506,8 +537,19 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         continue;
       }
     }
-    const currentCandidate = selected.candidate;
     const { friendName, friendKey } = selected;
+    const positioned = await positionFriendForAction(state, selected);
+    if (!positioned) {
+      attemptedFriends.add(friendKey);
+      context.onLog(
+        `Add Friends: could not bring ${friendName} to the first contact position; ` +
+        `skipping this row without sending an Add tap.`,
+      );
+      continue;
+    }
+    state = positioned.state;
+    selected = positioned.selected;
+    const currentCandidate = selected.candidate;
     const previousCenterY = center(selected.row).y;
     const previousRowHeight = selected.row.bounds[3] - selected.row.bounds[1];
     if (context.isAborted()) break;

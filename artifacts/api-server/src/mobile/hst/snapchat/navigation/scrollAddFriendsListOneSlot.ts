@@ -587,6 +587,116 @@ export async function scrollAddFriendsListOneSlot(
   return true;
 }
 
+export async function alignAddFriendsContactToTop(
+  context: SnapchatContext,
+  nodes: UiNode[],
+  screenWidth: number,
+  screenHeight: number,
+  friendName: string,
+  replayIO: AddFriendsScrollReplayIO = realReplayIO,
+): Promise<boolean> {
+  const safeTop = Math.ceil(screenHeight * 0.12);
+  const safeBottom = Math.floor(screenHeight * 0.82);
+  const minimumTravel = Math.max(36, Math.round(screenHeight * 0.025));
+  const tolerance = Math.max(18, Math.round(screenHeight * 0.012));
+  const maximumTravel = Math.max(minimumTravel, Math.round(screenHeight * 0.25));
+  let currentNodes = nodes;
+  const title = currentNodes.find(node =>
+    shortResourceId(node) === "section-title" &&
+    [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
+  );
+  if (!title) {
+    context.onLog(`Add Friends: Find friends heading was not exposed before acting on ${friendName}.`);
+    return false;
+  }
+  const listTop = title.bounds[3];
+  const findRows = (sourceNodes: UiNode[]) => {
+    const rows = findFriendsRows(sourceNodes);
+    const target = rows
+      .filter(row =>
+        normalizeContactName(contactNameInRow(sourceNodes, row)) === normalizeContactName(friendName) &&
+        row.bounds[3] > Math.max(listTop, safeTop) &&
+        row.bounds[1] < screenHeight * 0.85,
+      )
+      .sort((a, b) => a.bounds[1] - b.bounds[1])[0];
+    const firstVisible = rows
+      .filter(row =>
+        row.bounds[1] > Math.max(listTop, safeTop) &&
+        row.bounds[3] < safeBottom,
+      )
+      .sort((a, b) => a.bounds[1] - b.bounds[1])[0];
+    return { target, firstVisible };
+  };
+  let { target, firstVisible } = findRows(currentNodes);
+  if (!target || !firstVisible) {
+    context.onLog(`Add Friends: could not locate ${friendName} and the first visible card before its action.`);
+    return false;
+  }
+  const targetTop = firstVisible.bounds[1];
+  let previousTargetTop = target.bounds[1];
+  let previousGestureDistance = 0;
+  const minimumLaneWidth = Math.max(8, Math.round(screenWidth * 0.01));
+
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    const alignmentError = target.bounds[1] - targetTop;
+    if (Math.abs(alignmentError) <= tolerance) {
+      context.onLog(
+        `Add Friends: ${friendName} is at the first contact position before its action ` +
+        `(y=${target.bounds[1]}, target y=${targetTop}).`,
+      );
+      return true;
+    }
+    const observedMovement = previousTargetTop - target.bounds[1];
+    const movementRatio = previousGestureDistance > 0 && Math.abs(observedMovement) > 8
+      ? Math.abs(observedMovement) / previousGestureDistance
+      : 1;
+    const requestedTravel = Math.max(
+      minimumTravel,
+      Math.round(Math.abs(alignmentError) / movementRatio),
+    );
+    const gestureDistance = Math.min(requestedTravel, maximumTravel);
+    const lane = blankRowLane(currentNodes, target, screenWidth, minimumLaneWidth);
+    const fingerDelta = -Math.sign(alignmentError) * gestureDistance;
+    const gesture = fitVerticalGesture(
+      center(target).y,
+      fingerDelta,
+      Math.max(listTop + 6, safeTop),
+      safeBottom,
+    );
+    context.onLog(
+      `Add Friends: positioning ${friendName} at the first contact position before its action ` +
+      `(row y=${target.bounds[1]}, target y=${targetTop}, swipe ${gesture.distance}px at x=${lane.x}, ` +
+      `y=${gesture.startY}→${gesture.endY}).`,
+    );
+    if (context.isAborted()) return false;
+    await replayIO.swipe(
+      context.serial,
+      lane.x,
+      gesture.startY,
+      lane.x,
+      gesture.endY,
+      300,
+      false,
+    );
+    previousTargetTop = target.bounds[1];
+    previousGestureDistance = gesture.distance;
+    await context.sleep(750, "exact");
+    if (context.isAborted()) return false;
+    currentNodes = (await replayIO.dump(context.serial)).nodes;
+    ({ target, firstVisible } = findRows(currentNodes));
+    if (!target || !firstVisible) {
+      context.onLog(`Add Friends: ${friendName} was not exposed after its positioning swipe.`);
+      return false;
+    }
+  }
+
+  context.onLog(
+    `Add Friends: ${friendName} did not reach the first contact position after three positioning corrections; ` +
+    `the action was not sent.`,
+  );
+  return false;
+}
+
 export async function alignFirstAddFriendsContactToTop(
   context: SnapchatContext,
   nodes: UiNode[],

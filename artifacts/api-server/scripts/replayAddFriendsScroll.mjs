@@ -20,7 +20,8 @@ if (options.has("--help")) {
   console.log(
     "Replay Add Friends scrolling with an injected screenshot and UIAutomator XML.\n" +
     "Options: --image FILE --xml FILE --crop LEFT,TOP,WIDTH,HEIGHT --screen WIDTH,HEIGHT " +
-    "--friend NAME --previous-center-y PX --row-height PX --divider-fixture",
+    "--friend NAME --align-before-action --regression-fixture " +
+    "--previous-center-y PX --row-height PX --divider-fixture",
   );
   process.exit(0);
 }
@@ -84,6 +85,36 @@ function buildFixtureNodes() {
   return nodes;
 }
 
+function buildRegressionFixtureNodes() {
+  const nodes = [{
+    text: "Find friends", desc: "", resourceId: "com.snapchat.android:id/section-title",
+    className: "android.widget.TextView", packageName: "com.snapchat.android",
+    clickable: false, focusable: false, focused: false, selected: false, bounds: [20, 440, 700, 500],
+  }];
+  const contacts = [
+    ["Ritz Data 1102", 588],
+    ["Entourage Donna Pawson", 774],
+    ["Noughty Nineties Roxanne Beckett", 960],
+    ["lucybrockle", 1146],
+    ["Rehab Ed Robotham", 1340],
+    ["Lauren Smith", 1526],
+    ["Horny Josh Carson", 1712],
+  ];
+  for (const [name, top] of contacts) {
+    nodes.push({
+      text: "", desc: "", resourceId: "com.snapchat.android:id/scu_search_friend_cell",
+      className: "android.view.ViewGroup", packageName: "com.snapchat.android",
+      clickable: true, focusable: false, focused: false, selected: false, bounds: [0, top, 1080, top + 186],
+    });
+    nodes.push({
+      text: name, desc: "", resourceId: "com.snapchat.android:id/result-title",
+      className: "android.widget.TextView", packageName: "com.snapchat.android",
+      clickable: false, focusable: false, focused: false, selected: false, bounds: [214, top + 30, 644, top + 90],
+    });
+  }
+  return nodes;
+}
+
 function rowsFrom(nodes) {
   const titleIndex = nodes.findIndex(node =>
     node.resourceId.split("/").at(-1) === "section-title" &&
@@ -111,7 +142,10 @@ function nameInRow(nodes, row) {
 }
 
 const xmlPath = options.get("--xml");
-let nodes = xmlPath ? parseUiDump(await fs.readFile(xmlPath, "utf8")) : buildFixtureNodes();
+const regressionFixture = options.has("--regression-fixture");
+let nodes = xmlPath
+  ? parseUiDump(await fs.readFile(xmlPath, "utf8"))
+  : regressionFixture ? buildRegressionFixtureNodes() : buildFixtureNodes();
 let rows = rowsFrom(nodes);
 assert(rows.length >= 2, "The supplied UI dump must contain at least two Find Friends contact rows.");
 
@@ -120,8 +154,8 @@ let screenHeight;
 if (options.has("--screen")) {
   [screenWidth, screenHeight] = options.get("--screen").split(",").map(Number);
 } else if (!xmlPath) {
-  screenWidth = 720;
-  screenHeight = 1600;
+  screenWidth = regressionFixture ? 1080 : 720;
+  screenHeight = regressionFixture ? 2408 : 1600;
 } else {
   screenWidth = Math.max(...nodes.map(node => node.bounds[2]));
   screenHeight = Math.max(...nodes.map(node => node.bounds[3]));
@@ -208,19 +242,23 @@ await build({
     },
   }],
 });
-const { scrollAddFriendsListOneSlot } = await import(pathToFileURL(modulePath).href);
+const { alignAddFriendsContactToTop, scrollAddFriendsListOneSlot } =
+  await import(pathToFileURL(modulePath).href);
 
 const swipes = [];
 const logs = [];
 let currentNodes = nodes.map(node => ({ ...node, bounds: [...node.bounds] }));
+const movementScale = Number(options.get("--movement-scale") ?? (regressionFixture ? 1.5 : 1));
+assert(Number.isFinite(movementScale) && movementScale > 0, "--movement-scale must be a positive number.");
 const replayIO = {
   captureScreenPixels: async () => screenshot,
   dump: async () => ({ xml: "", nodes: currentNodes }),
   swipe: async (_serial, x1, y1, x2, y2, durationMs = 300) => {
     swipes.push({ x1, y1, x2, y2, durationMs });
-    const contentMovement = y2 - y1;
+    const contentMovement = Math.round((y2 - y1) * movementScale);
     const currentRows = rowsFrom(currentNodes);
     currentNodes = currentNodes.map(node => {
+      if (node.resourceId.split("/").at(-1) === "section-title") return node;
       const belongsToRow = currentRows.some(row =>
         row === node ||
         (node.bounds[0] >= row.bounds[0] &&
@@ -235,10 +273,6 @@ const replayIO = {
   },
 };
 
-const priorCenterY = Number(options.get("--previous-center-y") ?? (rows[0].bounds[1] + rows[0].bounds[3]) / 2);
-const rowHeight = Number(options.get("--row-height") ?? (rows[0].bounds[3] - rows[0].bounds[1]));
-const expectedTop = rows[0].bounds[1];
-const expectedNextName = nameInRow(nodes, rows[1]);
 const context = {
   serial: "FAKE_REPLAY_ADD_FRIENDS",
   path: {},
@@ -252,12 +286,56 @@ const context = {
   sleep: async () => {},
 };
 
+const listTop = () => nodes.find(node =>
+  node.resourceId.split("/").at(-1) === "section-title" &&
+  /^find friends$/i.test(node.text || node.desc),
+)?.bounds[3] ?? 0;
+const visibleRows = (sourceNodes) => {
+  const top = listTop();
+  return rowsFrom(sourceNodes).filter(row =>
+    row.bounds[1] > Math.max(top, Math.ceil(screenHeight * 0.12)) &&
+    row.bounds[3] < Math.floor(screenHeight * 0.82),
+  );
+};
+const requestedFriend = options.get("--friend") ??
+  (regressionFixture
+    ? "Rehab Ed Robotham"
+    : options.has("--align-before-action")
+      ? nameInRow(nodes, visibleRows(nodes)[0] ?? rows[0]) || "Previously handled contact"
+      : "Previously handled contact");
+let alignedBeforeAction = false;
+if (options.has("--align-before-action") || regressionFixture) {
+  alignedBeforeAction = await alignAddFriendsContactToTop(
+    context,
+    nodes,
+    screenWidth,
+    screenHeight,
+    requestedFriend,
+    replayIO,
+  );
+  assert.equal(alignedBeforeAction, true, `Could not position "${requestedFriend}" at the top before the action.`);
+  nodes = currentNodes;
+}
+
+rows = rowsFrom(nodes);
+const visibleBeforeAction = visibleRows(nodes);
+const matchingTarget = rows.find(row => nameInRow(nodes, row) === requestedFriend);
+const actionRow = matchingTarget && visibleBeforeAction.includes(matchingTarget)
+  ? matchingTarget
+  : visibleBeforeAction[0];
+assert(actionRow, "The replay has no fully visible contact row after positioning.");
+const actionRowIndex = rows.indexOf(actionRow);
+const expectedNextName = nameInRow(nodes, rows[actionRowIndex + 1]);
+assert(expectedNextName, "The target contact has no following row in the supplied UI dump.");
+const expectedTop = actionRow.bounds[1];
+const priorCenterY = Number(options.get("--previous-center-y") ?? (actionRow.bounds[1] + actionRow.bounds[3]) / 2);
+const rowHeight = Number(options.get("--row-height") ?? (actionRow.bounds[3] - actionRow.bounds[1]));
 const completed = await scrollAddFriendsListOneSlot(
   context,
   nodes,
   screenWidth,
   screenHeight,
-  options.get("--friend") ?? "Previously handled contact",
+  requestedFriend,
   "replay test",
   priorCenterY,
   rowHeight,
@@ -270,6 +348,16 @@ rows = rowsFrom(currentNodes);
 const alignedNext = rows.find(row => nameInRow(currentNodes, row) === expectedNextName);
 assert(alignedNext, `The next contact "${expectedNextName}" was not present after the simulated swipe.`);
 const alignmentTolerance = Math.max(18, Math.round(screenHeight * 0.012));
+if (options.has("--debug")) {
+  console.log(JSON.stringify({
+    expectedNextName,
+    expectedTop,
+    actualTop: alignedNext.bounds[1],
+    rows: rows.map(row => ({ name: nameInRow(currentNodes, row), bounds: row.bounds })),
+    swipes,
+    logs,
+  }, null, 2));
+}
 assert(
   Math.abs(alignedNext.bounds[1] - expectedTop) <= alignmentTolerance,
   `Next contact landed at y=${alignedNext.bounds[1]}, expected top y=${expectedTop}.`,
@@ -277,7 +365,9 @@ assert(
 
 console.log(JSON.stringify({
   result: "PASS",
-  mode: imagePath
+  mode: regressionFixture
+    ? "logged 4th-add regression fixture with pre-action alignment"
+    : imagePath
     ? xmlPath ? "injected screenshot + UI dump" : "injected screenshot + built-in UI fixture"
     : options.has("--divider-fixture")
       ? "built-in pixel-divider fixture"
@@ -286,6 +376,8 @@ console.log(JSON.stringify({
   expectedNext: expectedNextName,
   expectedTop,
   actualTop: alignedNext.bounds[1],
+  preActionAlignment: alignedBeforeAction,
+  simulatedMovementScale: movementScale,
   swipes,
   logs,
 }, null, 2));
