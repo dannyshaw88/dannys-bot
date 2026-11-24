@@ -333,8 +333,9 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       const liveState = await dump(context.serial);
       if (context.isAborted()) return false;
       if (liveState.nodes.length === 0) {
-        context.onLog(`Add Friends: could not refresh ${friendName}'s card after choosing Skip; no stale measurement or guessed swipe was used.`);
-        return true;
+        context.onLog(
+          `Add Friends: the post-Skip screen dump is empty; retrying the list read and per-contact scroll fallback.`,
+        );
       }
       if (!await scrollAddFriendsListOneSlot(
         context,
@@ -344,6 +345,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         friendName,
         `skipping a suggestion matched by ${matchDescription}`,
         previousCenterY,
+        rowBounds[3] - rowBounds[1],
       )) {
         context.onLog("Add Friends: could not scroll past the matched suggestion; continuing with currently visible candidates.");
       }
@@ -412,6 +414,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       screenHeight,
       previousTopY,
       `dismissing ${friendName}`,
+      rowBounds[3] - rowBounds[1],
     )) {
       context.onLog(
         `Add Friends: could not align the first remaining contact after dismissing ${friendName}; ` +
@@ -506,6 +509,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     const currentCandidate = selected.candidate;
     const { friendName, friendKey } = selected;
     const previousCenterY = center(selected.row).y;
+    const previousRowHeight = selected.row.bounds[3] - selected.row.bounds[1];
     if (context.isAborted()) break;
     let reservationKey: string | null = null;
     if (skipAdded) {
@@ -580,6 +584,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       friendName,
       "adding",
       previousCenterY,
+      previousRowHeight,
     )) {
       context.onLog("Add Friends: could not scroll after this Add; continuing with currently visible candidates.");
     }

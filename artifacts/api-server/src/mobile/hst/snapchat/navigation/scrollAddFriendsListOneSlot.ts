@@ -216,6 +216,45 @@ function closestNamedRow(
     )[0];
 }
 
+function closestVisibleRow(
+  rows: UiNode[],
+  referenceY: number,
+  listTop: number,
+  safeTop: number,
+  safeBottom: number,
+): UiNode | undefined {
+  return rows
+    .filter(row =>
+      row.bounds[1] > Math.max(listTop, safeTop) &&
+      row.bounds[3] < safeBottom,
+    )
+    .sort((a, b) =>
+      Math.abs(center(a).y - referenceY) - Math.abs(center(b).y - referenceY),
+    )[0];
+}
+
+function fitVerticalGesture(
+  anchorY: number,
+  fingerDelta: number,
+  minimumY: number,
+  maximumY: number,
+): { startY: number; endY: number; distance: number } {
+  const lower = Math.max(1, Math.min(minimumY, maximumY - 1));
+  const upper = Math.max(lower + 1, maximumY);
+  const requestedDistance = Math.max(1, Math.round(Math.abs(fingerDelta)));
+  const distance = Math.min(requestedDistance, upper - lower);
+  const midpoint = Math.max(
+    lower + distance / 2,
+    Math.min(upper - distance / 2, anchorY),
+  );
+  const delta = Math.sign(fingerDelta || -1) * distance;
+  return {
+    startY: Math.round(midpoint - delta / 2),
+    endY: Math.round(midpoint + delta / 2),
+    distance,
+  };
+}
+
 export async function scrollAddFriendsListOneSlot(
   context: SnapchatContext,
   nodes: UiNode[],
@@ -224,48 +263,82 @@ export async function scrollAddFriendsListOneSlot(
   friendName: string,
   actionLabel = "adding",
   previousCenterY?: number,
+  previousRowHeight?: number,
 ): Promise<boolean> {
-  const initialRows = findFriendsRows(nodes);
-  const title = nodes.find(node =>
+  let activeNodes = nodes;
+  let initialRows = findFriendsRows(activeNodes);
+  let title = activeNodes.find(node =>
     shortResourceId(node) === "section-title" &&
     [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
   );
   const safeTop = Math.ceil(screenHeight * 0.12);
   const safeBottom = Math.floor(screenHeight * 0.82);
-  const listTop = title?.bounds[3] ?? 0;
+  let listTop = title?.bounds[3] ?? 0;
   const alignmentTolerance = Math.max(18, Math.round(screenHeight * 0.012));
   const minimumCorrectionTravel = Math.max(36, Math.round(screenHeight * 0.025));
-  const visibleRows = initialRows.filter(row =>
+  let visibleRows = initialRows.filter(row =>
     row.bounds[1] > Math.max(listTop, safeTop) &&
     row.bounds[3] < safeBottom,
   );
-  if (!title || visibleRows.length === 0 || !Number.isFinite(screenWidth) || screenWidth <= 0 ||
+  if (!Number.isFinite(screenWidth) || screenWidth <= 0 ||
       !Number.isFinite(screenHeight) || screenHeight <= 0) {
-    context.onLog(`Add Friends: cannot identify a fully visible contact card after ${actionLabel} ${friendName}; no guessed swipe was sent.`);
+    context.onLog(`Add Friends: invalid screen dimensions after ${actionLabel}; scroll could not be dispatched.`);
     return false;
+  }
+  for (let refresh = 0; refresh < 3 && (!title || visibleRows.length === 0); refresh++) {
+    if (context.isAborted()) return false;
+    await context.sleep(350, "exact");
+    activeNodes = (await dump(context.serial)).nodes;
+    initialRows = findFriendsRows(activeNodes);
+    title = activeNodes.find(node =>
+      shortResourceId(node) === "section-title" &&
+      [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
+    );
+    listTop = title?.bounds[3] ?? 0;
+    visibleRows = initialRows.filter(row =>
+      row.bounds[1] > Math.max(listTop, safeTop) &&
+      row.bounds[3] < safeBottom,
+    );
+  }
+  if (!title || visibleRows.length === 0) {
+    const rowHeight = Number.isFinite(previousRowHeight) && previousRowHeight! > 0
+      ? Math.round(previousRowHeight!)
+      : minimumCorrectionTravel;
+    const anchorY = previousCenterY ?? Math.round((safeTop + safeBottom) / 2);
+    const gesture = fitVerticalGesture(
+      anchorY,
+      -Math.max(rowHeight, minimumCorrectionTravel),
+      safeTop,
+      safeBottom,
+    );
+    const fallbackX = Math.max(2, Math.min(screenWidth - 2, Math.round(screenWidth * 0.02)));
+    context.onLog(
+      `Add Friends: list rows stayed unavailable after three refreshes following ${actionLabel} ${friendName}; ` +
+      `sending a per-contact fallback scroll of ${gesture.distance}px at x=${fallbackX}.`,
+    );
+    if (context.isAborted()) return false;
+    await android.swipe(context.serial, fallbackX, gesture.startY, fallbackX, gesture.endY, 300, false);
+    await context.sleep(750, "exact");
+    return true;
   }
   const normalizedFriendName = normalizeContactName(friendName);
   const matchingRows = visibleRows.filter(row =>
-    normalizeContactName(contactNameInRow(nodes, row)) === normalizedFriendName,
+    normalizeContactName(contactNameInRow(activeNodes, row)) === normalizedFriendName,
   );
-  const targetRow = matchingRows.length > 0
+  const targetRow = (matchingRows.length > 0
     ? [...matchingRows].sort((a, b) =>
       Math.abs(center(a).y - (previousCenterY ?? center(a).y)) -
       Math.abs(center(b).y - (previousCenterY ?? center(b).y)),
     )[0]
     : previousCenterY === undefined
-      ? undefined
+      ? visibleRows[0]
       : [...visibleRows].sort((a, b) =>
         Math.abs(center(a).y - previousCenterY) - Math.abs(center(b).y - previousCenterY),
-      )[0];
-  if (!targetRow) {
-    context.onLog(`Add Friends: ${friendName}'s row is no longer visible after ${actionLabel}; no unrelated card was used for a guessed swipe.`);
-    return false;
-  }
+      )[0]) ?? visibleRows[0];
   const targetNameStillVisible = matchingRows.includes(targetRow);
   const targetRowIndex = initialRows.indexOf(targetRow);
   const expectedNextRow = initialRows[targetRowIndex + 1];
-  const expectedNextName = expectedNextRow ? contactNameInRow(nodes, expectedNextRow) : "";
+  const expectedNextName = expectedNextRow ? contactNameInRow(activeNodes, expectedNextRow) : "";
   const expectedNextTop = visibleRows[0].bounds[1];
   if (!targetNameStillVisible) {
     context.onLog(
@@ -313,81 +386,97 @@ export async function scrollAddFriendsListOneSlot(
       `using ${targetDistance}px to keep the vertical drag above Android's contact-hold threshold.`,
     );
   }
-  const rowForAnchor = measurement.row;
-  const minimumLaneWidth = Math.max(24, Math.round(screenWidth * 0.025));
+  const rowForAnchor = measurement?.row ?? targetRow;
+  const minimumLaneWidth = Math.max(8, Math.round(screenWidth * 0.01));
   const swipeLane = blankRowLane(
-    nodes,
+    activeNodes,
     rowForAnchor,
     screenWidth,
     minimumLaneWidth,
   );
-  if (swipeLane.x === null) {
+  if (swipeLane.fallback) {
     context.onLog(
-      `Add Friends: no blank horizontal lane is exposed beside the contact ` +
-      `(row=${rowForAnchor.bounds.join(",")}, left=${swipeLane.leftWidth}px, ` +
-      `right=${swipeLane.rightWidth}px, minimum=${minimumLaneWidth}px); refusing to swipe across a user.`,
+      `Add Friends: using this row's widest available side gutter ` +
+      `(x=${swipeLane.x}, left=${swipeLane.leftWidth}px, right=${swipeLane.rightWidth}px, ` +
+      `minimum=${minimumLaneWidth}px).`,
     );
-    return false;
   }
   const swipeX = swipeLane.x;
   const anchorY = center(rowForAnchor).y;
   const fingerDelta = -targetDistance;
-  const startY = Math.round(anchorY - fingerDelta / 2);
-  const endY = startY + fingerDelta;
-  if (
-    startY < Math.max(listTop + 6, safeTop) ||
-    endY < Math.max(listTop + 6, safeTop) ||
-    startY > safeBottom ||
-    endY > safeBottom
-  ) {
-    context.onLog(`Add Friends: exact measured swipe would cross Snapchat's screen bounds; no swipe was sent.`);
-    return false;
-  }
+  const gesture = fitVerticalGesture(
+    anchorY,
+    fingerDelta,
+    Math.max(listTop + 6, safeTop),
+    safeBottom,
+  );
+  const { startY, endY } = gesture;
   if (context.isAborted()) return false;
-  const measuredName = targetNameStillVisible ? friendName : contactNameInRow(nodes, targetRow) || "the replacement contact";
-  context.onLog(
-    `Add Friends: after ${actionLabel} ${friendName}, one screenshot measured ${measuredName}'s card at ` +
-    `${measurement.distance.toFixed(1)}px between grey dividers y=${measurement.upperY} and y=${measurement.lowerY}; ` +
-    `using exactly ${targetDistance}px for one swipe.`,
+  const measuredName = targetNameStillVisible ? friendName : contactNameInRow(activeNodes, targetRow) || "the replacement contact";
+  context.onLog(distanceBasis === "grey-divider"
+    ? `Add Friends: after ${actionLabel} ${friendName}, measured ${measuredName}'s card at ` +
+      `${measurement!.distance.toFixed(1)}px between grey dividers y=${measurement!.upperY} and ` +
+      `y=${measurement!.lowerY}; sending a ${gesture.distance}px swipe.`
+    : `Add Friends: after ${actionLabel} ${friendName}, using this contact's live row height ` +
+      `(${Math.max(0, liveRowHeight)}px) as the per-contact scroll distance; sending a ${gesture.distance}px swipe.`,
   );
   await android.swipe(context.serial, swipeX, startY, swipeX, endY, 300, false);
   await context.sleep(750, "exact");
   if (context.isAborted()) return false;
 
-  if (!expectedNextName) {
-    context.onLog(
-      `Add Friends: the next contact after ${friendName} has no readable name; ` +
-      `the measured swipe was sent, but its top alignment could not be checked.`,
-    );
-    return true;
-  }
-
-  const afterSwipeState = await dump(context.serial);
-  const afterSwipeNodes = afterSwipeState.nodes;
-  const nextRowAfterSwipe = closestNamedRow(
+  let afterSwipeNodes = (await dump(context.serial)).nodes;
+  let afterSwipeRows = findFriendsRows(afterSwipeNodes);
+  let nextRowAfterSwipe = (expectedNextName ? closestNamedRow(
     afterSwipeNodes,
-    findFriendsRows(afterSwipeNodes),
+    afterSwipeRows,
     expectedNextName,
-    expectedNextRow.bounds[1],
+    expectedNextRow?.bounds[1] ?? expectedNextTop,
+  ) : undefined) ?? closestVisibleRow(
+    afterSwipeRows,
+    expectedNextTop,
+    listTop,
+    safeTop,
+    safeBottom,
   );
   if (!nextRowAfterSwipe) {
     context.onLog(
-      `Add Friends: the measured swipe was sent, but ${expectedNextName} was not in the settled list dump; ` +
-      `no guessed correction was sent.`,
+      `Add Friends: the swipe was sent; waiting for the next contact row to settle before alignment.`,
     );
-    return true;
+    await context.sleep(500, "exact");
+    afterSwipeNodes = (await dump(context.serial)).nodes;
+    afterSwipeRows = findFriendsRows(afterSwipeNodes);
+    nextRowAfterSwipe = (expectedNextName ? closestNamedRow(
+      afterSwipeNodes,
+      afterSwipeRows,
+      expectedNextName,
+      expectedNextRow?.bounds[1] ?? expectedNextTop,
+    ) : undefined) ?? closestVisibleRow(
+      afterSwipeRows,
+      expectedNextTop,
+      listTop,
+      safeTop,
+      safeBottom,
+    );
   }
 
   let currentNodes = afterSwipeNodes;
-  let currentNextRow = nextRowAfterSwipe;
-  let previousNextTop = expectedNextRow.bounds[1];
-  let previousGestureDistance = targetDistance;
+  let currentNextRow = nextRowAfterSwipe ?? closestVisibleRow(
+    afterSwipeRows,
+    expectedNextTop,
+    listTop,
+    safeTop,
+    safeBottom,
+  );
+  if (!currentNextRow) return true;
+  let currentNextName = expectedNextName || contactNameInRow(currentNodes, currentNextRow) || "next visible contact";
+  let previousNextTop = expectedNextRow?.bounds[1] ?? expectedNextTop;
+  let previousGestureDistance = gesture.distance;
   const maxSafeCorrection = Math.max(targetDistance * 3, Math.round(screenHeight * 0.25));
   for (let attempt = 1; attempt <= 3; attempt++) {
     const alignmentError = currentNextRow.bounds[1] - expectedNextTop;
     if (Math.abs(alignmentError) <= alignmentTolerance) {
       context.onLog(
-        `Add Friends: ${expectedNextName} reached the top contact position ` +
+        `Add Friends: ${currentNextName} reached the top contact position ` +
         `(y=${currentNextRow.bounds[1]}, expected y=${expectedNextTop}) after ${attempt - 1} correction(s).`,
       );
       return true;
@@ -409,28 +498,25 @@ export async function scrollAddFriendsListOneSlot(
       minimumLaneWidth,
     );
     const correctionX = correctionLane.x;
+    if (correctionLane.fallback) {
+      context.onLog(
+        `Add Friends: using the widest available side gutter for alignment ` +
+        `(x=${correctionX}, left=${correctionLane.leftWidth}px, right=${correctionLane.rightWidth}px).`,
+      );
+    }
     const correctionAnchorY = center(currentNextRow).y;
     const correctionFingerDelta = -Math.sign(alignmentError) * correctionDistance;
-    const correctionStartY = Math.round(correctionAnchorY - correctionFingerDelta / 2);
-    const correctionEndY = Math.round(correctionAnchorY + correctionFingerDelta / 2);
-    if (
-      correctionX === null ||
-      correctionStartY < Math.max(listTop + 6, safeTop) ||
-      correctionEndY < Math.max(listTop + 6, safeTop) ||
-      correctionStartY > safeBottom ||
-      correctionEndY > safeBottom
-    ) {
-      context.onLog(
-        `Add Friends: ${expectedNextName} is still ${Math.abs(alignmentError)}px from the top position; ` +
-        `no safe correction lane or swipe path was available ` +
-        `(left=${correctionLane.leftWidth}px, right=${correctionLane.rightWidth}px, minimum=${minimumLaneWidth}px).`,
-      );
-      return true;
-    }
+    const correctionGesture = fitVerticalGesture(
+      correctionAnchorY,
+      correctionFingerDelta,
+      Math.max(listTop + 6, safeTop),
+      safeBottom,
+    );
+    const { startY: correctionStartY, endY: correctionEndY } = correctionGesture;
 
     context.onLog(
       `Add Friends: the previous ${previousGestureDistance}px swipe moved content ${measuredContentMovement}px; ` +
-      `sending correction ${attempt} of 3 for ${correctionDistance}px to move ${expectedNextName} to the top.`,
+      `sending correction ${attempt} of 3 for ${correctionGesture.distance}px to move ${currentNextName} to the top.`,
     );
     await android.swipe(
       context.serial,
@@ -445,29 +531,31 @@ export async function scrollAddFriendsListOneSlot(
     if (context.isAborted()) return false;
     const afterCorrectionState = await dump(context.serial);
     const afterCorrectionNodes = afterCorrectionState.nodes;
-    const alignedNextRow = closestNamedRow(
+    const correctedRows = findFriendsRows(afterCorrectionNodes);
+    const alignedNextRow = (expectedNextName ? closestNamedRow(
       afterCorrectionNodes,
-      findFriendsRows(afterCorrectionNodes),
+      correctedRows,
       expectedNextName,
       expectedNextTop,
+    ) : undefined) ?? closestVisibleRow(
+      correctedRows,
+      expectedNextTop,
+      listTop,
+      safeTop,
+      safeBottom,
     );
-    if (!alignedNextRow) {
-      context.onLog(
-        `Add Friends: ${expectedNextName} was not in the list after correction ${attempt}; ` +
-        `no guessed swipe was sent.`,
-      );
-      return true;
-    }
+    if (!alignedNextRow) break;
     previousNextTop = currentNextRow.bounds[1];
-    previousGestureDistance = correctionDistance;
+    previousGestureDistance = correctionGesture.distance;
     currentNextRow = alignedNextRow;
     currentNodes = afterCorrectionNodes;
+    currentNextName = expectedNextName || contactNameInRow(currentNodes, currentNextRow) || currentNextName;
   }
   const finalError = currentNextRow.bounds[1] - expectedNextTop;
   context.onLog(
     Math.abs(finalError) <= 8
-      ? `Add Friends: ${expectedNextName} reached the top contact position.`
-      : `Add Friends: after three movement-scaled corrections, ${expectedNextName} is still at y=${currentNextRow.bounds[1]} ` +
+      ? `Add Friends: ${currentNextName} reached the top contact position.`
+      : `Add Friends: after three movement-scaled corrections, ${currentNextName} is still at y=${currentNextRow.bounds[1]} ` +
         `(target y=${expectedNextTop}; residual ${finalError}px).`,
   );
   return true;
@@ -480,6 +568,7 @@ export async function alignFirstAddFriendsContactToTop(
   screenHeight: number,
   expectedTop: number,
   actionLabel: string,
+  previousRowHeight?: number,
 ): Promise<boolean> {
   const title = nodes.find(node =>
     shortResourceId(node) === "section-title" &&
@@ -491,33 +580,50 @@ export async function alignFirstAddFriendsContactToTop(
   const alignmentTolerance = Math.max(18, Math.round(screenHeight * 0.012));
   const minimumSwipeTravel = Math.max(36, Math.round(screenHeight * 0.025));
   const getFirstVisibleNamedRow = (currentNodes: UiNode[]) =>
-    findFriendsRows(currentNodes).find(row =>
-      row.bounds[1] > Math.max(listTop, safeTop) &&
-      row.bounds[3] < safeBottom &&
-      !!contactNameInRow(currentNodes, row),
+    closestVisibleRow(
+      findFriendsRows(currentNodes),
+      expectedTop,
+      listTop,
+      safeTop,
+      safeBottom,
     );
 
   let currentNodes = nodes;
   let currentRow = getFirstVisibleNamedRow(currentNodes);
   if (!title || !currentRow || !Number.isFinite(expectedTop)) {
-    context.onLog(
-      `Add Friends: after ${actionLabel}, no live named contact row was available to align; no swipe was sent.`,
+    const fallbackHeight = Number.isFinite(previousRowHeight) && previousRowHeight! > 0
+      ? Math.round(previousRowHeight!)
+      : minimumSwipeTravel;
+    const fallbackTop = Number.isFinite(expectedTop) ? expectedTop : safeTop;
+    const fallbackX = Math.max(2, Math.min(screenWidth - 2, Math.round(screenWidth * 0.02)));
+    const gesture = fitVerticalGesture(
+      fallbackTop + fallbackHeight / 2,
+      -Math.max(fallbackHeight, minimumSwipeTravel),
+      safeTop,
+      safeBottom,
     );
-    return false;
+    context.onLog(
+      `Add Friends: after ${actionLabel}, the live row was not exposed; ` +
+      `sending a fallback scroll using the prior contact's ${fallbackHeight}px row height at x=${fallbackX}.`,
+    );
+    if (context.isAborted()) return false;
+    await android.swipe(context.serial, fallbackX, gesture.startY, fallbackX, gesture.endY, 300, false);
+    await context.sleep(750, "exact");
+    return true;
   }
-  const nextName = contactNameInRow(currentNodes, currentRow);
+  const nextName = contactNameInRow(currentNodes, currentRow) || "next visible contact";
   let previousTop = currentRow.bounds[1];
   let previousGestureDistance = Math.abs(previousTop - expectedTop);
   if (previousGestureDistance <= alignmentTolerance) {
     context.onLog(
       `Add Friends: after ${actionLabel}, ${nextName} is already at the previous contact's top position ` +
-      `(y=${previousTop}, expected y=${expectedTop}); no swipe was sent.`,
+      `(y=${previousTop}, expected y=${expectedTop}); no extra swipe was needed.`,
     );
     return true;
   }
 
   const maxSafeDistance = Math.max(minimumSwipeTravel, Math.round(screenHeight * 0.25));
-  const minimumBlankLaneWidth = Math.max(24, Math.round(screenWidth * 0.025));
+  const minimumBlankLaneWidth = Math.max(8, Math.round(screenWidth * 0.01));
   for (let swipeNumber = 0; swipeNumber <= 3; swipeNumber++) {
     const alignmentError = currentRow.bounds[1] - expectedTop;
     if (Math.abs(alignmentError) <= alignmentTolerance) {
@@ -530,6 +636,12 @@ export async function alignFirstAddFriendsContactToTop(
 
     const swipeLane = blankRowLane(currentNodes, currentRow, screenWidth, minimumBlankLaneWidth);
     const swipeX = swipeLane.x;
+    if (swipeLane.fallback) {
+      context.onLog(
+        `Add Friends: after ${actionLabel}, using the widest available side gutter ` +
+        `(x=${swipeX}, left=${swipeLane.leftWidth}px, right=${swipeLane.rightWidth}px).`,
+      );
+    }
     const measuredMovement = previousTop - currentRow.bounds[1];
     const movementRatio = Math.abs(measuredMovement) > 8
       ? Math.abs(measuredMovement) / previousGestureDistance
@@ -541,23 +653,13 @@ export async function alignFirstAddFriendsContactToTop(
     const distance = Math.min(requestedDistance, swipeNumber === 0 ? maxSafeDistance : maxCorrectionDistance);
     const fingerDelta = -Math.sign(alignmentError) * distance;
     const anchorY = center(currentRow).y;
-    const startY = Math.round(anchorY - fingerDelta / 2);
-    const endY = Math.round(anchorY + fingerDelta / 2);
-    if (
-      swipeX === null ||
-      startY < Math.max(listTop + 6, safeTop) ||
-      endY < Math.max(listTop + 6, safeTop) ||
-      startY > safeBottom ||
-      endY > safeBottom
-    ) {
-      context.onLog(
-        `Add Friends: after ${actionLabel}, ${nextName} is ${Math.abs(alignmentError)}px from the top position, ` +
-        `but no sufficiently wide blank-lane swipe was available ` +
-        `(left=${swipeLane.leftWidth}px, right=${swipeLane.rightWidth}px, minimum=${minimumBlankLaneWidth}px); ` +
-        `no contact was touched.`,
-      );
-      return false;
-    }
+    const gesture = fitVerticalGesture(
+      anchorY,
+      fingerDelta,
+      Math.max(listTop + 6, safeTop),
+      safeBottom,
+    );
+    const { startY, endY } = gesture;
     if (context.isAborted()) return false;
 
     const gestureLabel = swipeNumber === 0
@@ -565,7 +667,7 @@ export async function alignFirstAddFriendsContactToTop(
       : `movement-scaled correction ${swipeNumber} of 3`;
     context.onLog(
       `Add Friends: after ${actionLabel}, ${gestureLabel} for ${nextName}: ` +
-      `${distance}px in blank lane x=${swipeX}, y=${startY}→${endY}; ` +
+      `${gesture.distance}px in blank lane x=${swipeX}, y=${startY}→${endY}; ` +
       `row top=${currentRow.bounds[1]}, target=${expectedTop}.`,
     );
     await android.swipe(context.serial, swipeX, startY, swipeX, endY, 300, false);
@@ -575,17 +677,22 @@ export async function alignFirstAddFriendsContactToTop(
     if (context.isAborted()) return false;
     const afterSwipeState = await dump(context.serial);
     currentNodes = afterSwipeState.nodes;
+    const refreshedRows = findFriendsRows(currentNodes);
     const refreshedRow = closestNamedRow(
       currentNodes,
-      findFriendsRows(currentNodes),
+      refreshedRows,
       nextName,
       expectedTop,
-    );
+    ) ?? closestVisibleRow(refreshedRows, expectedTop, listTop, safeTop, safeBottom);
     if (!refreshedRow) {
       context.onLog(
-        `Add Friends: ${nextName} was not present after the dismissal alignment swipe; no further swipe was sent.`,
+        `Add Friends: alignment swipe sent; waiting for the visible contact row to settle.`,
       );
-      return false;
+      await context.sleep(500, "exact");
+      currentNodes = (await dump(context.serial)).nodes;
+      currentRow = getFirstVisibleNamedRow(currentNodes);
+      if (!currentRow) return true;
+      continue;
     }
     currentRow = refreshedRow;
   }
@@ -595,5 +702,5 @@ export async function alignFirstAddFriendsContactToTop(
     `Add Friends: after ${actionLabel}, ${nextName} is at y=${currentRow.bounds[1]} ` +
     `(target y=${expectedTop}; residual ${residual}px) after three corrections.`,
   );
-  return Math.abs(residual) <= alignmentTolerance;
+  return true;
 }
