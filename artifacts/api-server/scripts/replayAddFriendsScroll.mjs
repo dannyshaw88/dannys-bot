@@ -20,7 +20,7 @@ if (options.has("--help")) {
   console.log(
     "Replay Add Friends scrolling with an injected screenshot and UIAutomator XML.\n" +
     "Options: --image FILE --xml FILE --crop LEFT,TOP,WIDTH,HEIGHT --screen WIDTH,HEIGHT " +
-    "--friend NAME --previous-center-y PX --row-height PX",
+    "--friend NAME --previous-center-y PX --row-height PX --divider-fixture",
   );
   process.exit(0);
 }
@@ -119,6 +119,9 @@ let screenWidth;
 let screenHeight;
 if (options.has("--screen")) {
   [screenWidth, screenHeight] = options.get("--screen").split(",").map(Number);
+} else if (!xmlPath) {
+  screenWidth = 720;
+  screenHeight = 1600;
 } else {
   screenWidth = Math.max(...nodes.map(node => node.bounds[2]));
   screenHeight = Math.max(...nodes.map(node => node.bounds[3]));
@@ -151,13 +154,27 @@ if (imagePath) {
     pixels: decoded.data,
   };
 } else {
-  // A black fixture intentionally has no detectable divider lines. This exercises
-  // the live per-row-height fallback while the injected device records the swipe.
+  // Default black fixture intentionally has no dividers; --divider-fixture
+  // draws neutral divider lines to exercise the pixel-measured path.
+  const pixels = Buffer.alloc(screenWidth * screenHeight * 3);
+  if (options.has("--divider-fixture")) {
+    const rows = rowsFrom(nodes);
+    for (const y of new Set(rows.flatMap(row => [row.bounds[1], row.bounds[3]]))) {
+      for (let lineY = y; lineY < Math.min(screenHeight, y + 2); lineY++) {
+        for (let x = 30; x < Math.min(screenWidth - 20, 692); x++) {
+          const index = (lineY * screenWidth + x) * 3;
+          pixels[index] = 145;
+          pixels[index + 1] = 145;
+          pixels[index + 2] = 145;
+        }
+      }
+    }
+  }
   screenshot = {
     width: screenWidth,
     height: screenHeight,
     channels: 3,
-    pixels: Buffer.alloc(screenWidth * screenHeight * 3),
+    pixels,
   };
 }
 
@@ -171,6 +188,25 @@ await build({
   format: "esm",
   packages: "external",
   logLevel: "silent",
+  plugins: [{
+    name: "fake-device-runtime",
+    setup(build) {
+      build.onResolve({ filter: /^\.\.\/\.\.\/\.\.\/androidManager$/ }, () => ({
+        path: "androidManager",
+        namespace: "fake-device-runtime",
+      }));
+      build.onResolve({ filter: /^\.\.\/runtime$/ }, () => ({
+        path: "runtime",
+        namespace: "fake-device-runtime",
+      }));
+      build.onLoad({ filter: /.*/, namespace: "fake-device-runtime" }, ({ path: stub }) => ({
+        contents: stub === "androidManager"
+          ? "export const captureScreenPixels = async () => { throw new Error('Replay must inject screenshot pixels'); }; export const swipe = async () => { throw new Error('Replay must capture gestures'); };"
+          : "export const center = node => ({ x: Math.round((node.bounds[0] + node.bounds[2]) / 2), y: Math.round((node.bounds[1] + node.bounds[3]) / 2) }); export const shortResourceId = node => node.resourceId.split('/').pop() ?? node.resourceId; export const dump = async () => { throw new Error('Replay must inject the UI dump'); };",
+        loader: "js",
+      }));
+    },
+  }],
 });
 const { scrollAddFriendsListOneSlot } = await import(pathToFileURL(modulePath).href);
 
@@ -241,7 +277,11 @@ assert(
 
 console.log(JSON.stringify({
   result: "PASS",
-  mode: imagePath ? "injected screenshot + UI dump" : "built-in no-divider fallback fixture",
+  mode: imagePath
+    ? xmlPath ? "injected screenshot + UI dump" : "injected screenshot + built-in UI fixture"
+    : options.has("--divider-fixture")
+      ? "built-in pixel-divider fixture"
+      : "built-in no-divider fallback fixture",
   dimensions: `${screenWidth}x${screenHeight}`,
   expectedNext: expectedNextName,
   expectedTop,
