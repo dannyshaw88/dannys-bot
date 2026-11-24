@@ -242,8 +242,18 @@ await build({
     },
   }],
 });
-const { alignAddFriendsContactToTop, scrollAddFriendsListOneSlot } =
+const { alignAddFriendsContactToTop, alignFirstAddFriendsContactToTop, scrollAddFriendsListOneSlot } =
   await import(pathToFileURL(modulePath).href);
+const sceneModelPath = path.join(apiRoot, "node_modules", ".cache", "add-friends-scene-model.mjs");
+await build({
+  entryPoints: [path.resolve(apiRoot, "../dannys-bot/src/components/tools/addFriendsReplayScene.ts")],
+  outfile: sceneModelPath,
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  logLevel: "silent",
+});
+const { dismissReplayContact } = await import(pathToFileURL(sceneModelPath).href);
 
 const swipes = [];
 const logs = [];
@@ -349,7 +359,17 @@ assert(expectedNextName, "The target contact has no following row in the supplie
 const expectedTop = actionRow.bounds[1];
 const priorCenterY = Number(options.get("--previous-center-y") ?? (actionRow.bounds[1] + actionRow.bounds[3]) / 2);
 const rowHeight = Number(options.get("--row-height") ?? (actionRow.bounds[3] - actionRow.bounds[1]));
-if (simulatedAction) {
+if (simulatedAction === "dismiss") {
+  currentNodes = dismissReplayContact(currentNodes, requestedFriend, screenWidth);
+  let nextId = Math.max(...currentNodes.map(node => node.replayId ?? -1)) + 1;
+  for (const node of currentNodes) {
+    if (node.replayId === undefined) {
+      node.replayId = nextId++;
+      rowMemberIds.add(node.replayId);
+    }
+  }
+  nodes = currentNodes;
+} else if (simulatedAction) {
   const rowBounds = actionRow.bounds;
   currentNodes = currentNodes.flatMap(node => {
     const insideSelectedRow =
@@ -360,23 +380,21 @@ if (simulatedAction) {
       node.bounds[3] <= rowBounds[3];
     if (!insideSelectedRow) return [node];
     const resourceId = node.resourceId.split("/").at(-1);
-    if (simulatedAction === "dismiss" && resourceId === "friend-cell-dismiss") return [];
-    if (resourceId === "result-reason" && simulatedAction !== "add") {
-      const label = simulatedAction === "dismiss" ? "Dismissed in simulator" : "Skipped in simulator";
-      return [{ ...node, text: label, desc: label }];
-    }
     if (simulatedAction === "add") {
       if (resourceId === "scu_quick_add_chat") return [{ ...node, text: "Message", desc: "Message" }];
       if (resourceId === "scu_search_action_button") return [{ ...node, text: "Snap", desc: "Snap" }];
-    }
-    if (simulatedAction === "dismiss" && resourceId === "scu_search_action_button") {
-      return [{ ...node, text: "Dismissed", desc: "Dismissed" }];
     }
     return [node];
   });
   nodes = currentNodes;
 }
-const completed = await scrollAddFriendsListOneSlot(
+const afterActionNodes = currentNodes.map(({ replayId: _replayId, ...node }) => ({ ...node, bounds: [...node.bounds] }));
+const completed = simulatedAction === "dismiss"
+  ? await alignFirstAddFriendsContactToTop(
+    context, currentNodes, screenWidth, screenHeight, expectedTop,
+    `dismissing ${requestedFriend}`, rowHeight, replayIO,
+  )
+  : await scrollAddFriendsListOneSlot(
   context,
   nodes,
   screenWidth,
@@ -425,7 +443,7 @@ console.log(JSON.stringify({
   preActionAlignment: alignedBeforeAction,
   simulatedMovementScale: movementScale,
   ...(options.has("--return-screen")
-    ? { nodes: currentNodes.map(({ replayId: _replayId, ...node }) => node) }
+    ? { nodes: currentNodes.map(({ replayId: _replayId, ...node }) => node), afterActionNodes }
     : {}),
   swipes,
   logs,

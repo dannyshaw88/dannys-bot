@@ -718,7 +718,10 @@ export async function alignFirstAddFriendsContactToTop(
   const minimumSwipeTravel = Math.max(36, Math.round(screenHeight * 0.025));
   const getFirstVisibleNamedRow = (currentNodes: UiNode[]) =>
     closestVisibleRow(
-      findFriendsRows(currentNodes),
+      // A dismissed feedback card retains scu_search_friend_cell, but has
+      // feedback-title instead of result-title. It must be scrolled past, not
+      // mistaken for the next contact already sitting at the expected top.
+      findFriendsRows(currentNodes).filter(row => Boolean(contactNameInRow(currentNodes, row))),
       expectedTop,
       listTop,
       safeTop,
@@ -814,7 +817,8 @@ export async function alignFirstAddFriendsContactToTop(
     if (context.isAborted()) return false;
     const afterSwipeState = await replayIO.dump(context.serial);
     currentNodes = afterSwipeState.nodes;
-    const refreshedRows = findFriendsRows(currentNodes);
+    const refreshedRows = findFriendsRows(currentNodes)
+      .filter(row => Boolean(contactNameInRow(currentNodes, row)));
     const refreshedRow = closestNamedRow(
       currentNodes,
       refreshedRows,

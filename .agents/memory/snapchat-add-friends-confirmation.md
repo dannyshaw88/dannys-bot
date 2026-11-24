@@ -11,6 +11,16 @@ The Settings replay is an import-driven phone simulator: load or paste an Inspec
 
 **How to apply:** Preserve contact names and each row's reported height while rebuilding invalid off-screen y=0 positions into a visible list. After each simulated action, show the updated screen and scroll log, and allow another action or reset to the imported state.
 
+### Preserve real card states in replay
+
+Do not invent a subtitle for a missing `result-reason`. Blank, mutual-friends, recently-joined, contact-book, and wrapped-name cards must retain their own imported heights. Keep the imported visible position; RecyclerView's cached y=0 cards belong off-screen, not ahead of the visible cards. Every recommendation in the test screen needs a Dismiss control.
+
+Dismiss must replace the recommendation with Snapchat's feedback card (including its changed height, feedback choices, and Undo), reflow subsequent cards, and expose that intermediate state before scrolling. Do not model dismissal as deleting the row or merely changing the Add label.
+
+**Why:** The user supplied paired before/after Inspect examples and wants a faithful screen test, not a simplified success animation. Snapchat reuses the same row-container identifier for contacts and dismissal feedback; assuming every row is a named contact falsely reports that scrolling is already complete.
+
+**How to apply:** Distinguish named contacts from feedback when choosing the next target. Test the real Dismiss alignment helper against the feedback state, not the normal Add/Skip helper against a relabeled row. Preserve the feedback row in the scrollable content until it moves above the viewport.
+
 ## Position the selected contact before acting
 
 For every Add, Skip, or Dismiss decision, first move that exact contact to the first visible contact position. Re-dump the UI and reselect the same contact and its live action control before tapping. After the action, measure that contact's live card and move the next contact to the same first position.
