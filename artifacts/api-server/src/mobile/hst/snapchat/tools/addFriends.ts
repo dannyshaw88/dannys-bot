@@ -4,7 +4,10 @@ import * as android from "../../../androidManager";
 import type { SnapchatContext, UiNode } from "../context";
 import { hasSnapchatChatComposer, openAddFriendsForSuggestions } from "../navigation/openAddFriends";
 import { handleFriendRequestLimit } from "../navigation/handleFriendRequestCooldown";
-import { scrollAddFriendsListOneSlot } from "../navigation/scrollAddFriendsListOneSlot";
+import {
+  alignFirstAddFriendsContactToTop,
+  scrollAddFriendsListOneSlot,
+} from "../navigation/scrollAddFriendsListOneSlot";
 import { sqlite } from "../../../../storage";
 import { center, dump, logAction, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
 
@@ -322,6 +325,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     const { friendName, row } = selectedFriend;
     attemptedFriends.add(selectedFriend.friendKey);
     const previousCenterY = center(row).y;
+    const previousTopY = row.bounds[1];
     const rowBounds = row.bounds;
     const addButtonCenterY = center(selectedFriend.candidate).y;
     const addButtonHeight = selectedFriend.candidate.bounds[3] - selectedFriend.candidate.bounds[1];
@@ -399,17 +403,22 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     if (context.isAborted()) return false;
     const afterDismiss = await dump(context.serial);
     if (context.isAborted()) return false;
-    context.onLog(`Add Friends: dismissed ${friendName} (${matchDescription}); measuring the refreshed contact card before scrolling.`);
-    if (!await scrollAddFriendsListOneSlot(
+    context.onLog(
+      `Add Friends: dismissed ${friendName} (${matchDescription}); aligning the first remaining contact ` +
+      `to the dismissed contact's former top position.`,
+    );
+    if (!await alignFirstAddFriendsContactToTop(
       context,
       afterDismiss.nodes,
       screenWidth,
       screenHeight,
-      friendName,
-      "dismissing",
-      previousCenterY,
+      previousTopY,
+      `dismissing ${friendName}`,
     )) {
-      context.onLog("Add Friends: could not measure a refreshed card after dismissal; continuing with currently visible candidates.");
+      context.onLog(
+        `Add Friends: could not align the first remaining contact after dismissing ${friendName}; ` +
+        `continuing with currently visible candidates.`,
+      );
     }
     return !context.isAborted();
   };

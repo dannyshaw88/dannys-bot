@@ -360,3 +360,170 @@ export async function scrollAddFriendsListOneSlot(
   );
   return true;
 }
+
+export async function alignFirstAddFriendsContactToTop(
+  context: SnapchatContext,
+  nodes: UiNode[],
+  screenWidth: number,
+  screenHeight: number,
+  expectedTop: number,
+  actionLabel: string,
+): Promise<boolean> {
+  const title = nodes.find(node =>
+    shortResourceId(node) === "section-title" &&
+    [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
+  );
+  const safeTop = Math.ceil(screenHeight * 0.12);
+  const safeBottom = Math.floor(screenHeight * 0.82);
+  const listTop = title?.bounds[3] ?? 0;
+  const getFirstVisibleNamedRow = (currentNodes: UiNode[]) =>
+    findFriendsRows(currentNodes).find(row =>
+      row.bounds[1] > Math.max(listTop, safeTop) &&
+      row.bounds[3] < safeBottom &&
+      !!contactNameInRow(currentNodes, row),
+    );
+
+  let currentNodes = nodes;
+  let currentRow = getFirstVisibleNamedRow(currentNodes);
+  if (!title || !currentRow || !Number.isFinite(expectedTop)) {
+    context.onLog(
+      `Add Friends: after ${actionLabel}, no live named contact row was available to align; no guessed swipe was sent.`,
+    );
+    return false;
+  }
+  const nextName = contactNameInRow(currentNodes, currentRow);
+  let previousTop = currentRow.bounds[1];
+  let previousGestureDistance = Math.abs(previousTop - expectedTop);
+  if (previousGestureDistance <= 8) {
+    context.onLog(
+      `Add Friends: after ${actionLabel}, ${nextName} is already at the previous contact's top position ` +
+      `(y=${previousTop}, expected y=${expectedTop}).`,
+    );
+    return true;
+  }
+
+  const maxSafeDistance = Math.max(1, Math.round(screenHeight * 0.25));
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    const alignmentError = currentRow.bounds[1] - expectedTop;
+    if (Math.abs(alignmentError) <= 8) {
+      context.onLog(
+        `Add Friends: after ${actionLabel}, ${nextName} reached the previous contact's top position ` +
+        `(y=${currentRow.bounds[1]}, expected y=${expectedTop}) after ${attempt} correction(s).`,
+      );
+      return true;
+    }
+
+    const distance = Math.min(Math.abs(alignmentError), maxSafeDistance);
+    const swipeX = blankRowLaneX(currentNodes, currentRow, screenWidth);
+    const fingerDelta = -Math.sign(alignmentError) * distance;
+    const anchorY = center(currentRow).y;
+    const startY = Math.round(anchorY - fingerDelta / 2);
+    const endY = Math.round(anchorY + fingerDelta / 2);
+    if (
+      swipeX === null ||
+      startY < Math.max(listTop + 6, safeTop) ||
+      endY < Math.max(listTop + 6, safeTop) ||
+      startY > safeBottom ||
+      endY > safeBottom
+    ) {
+      context.onLog(
+        `Add Friends: after ${actionLabel}, ${nextName} is ${Math.abs(alignmentError)}px from the top position, ` +
+        `but no safe blank-lane swipe was available.`,
+      );
+      return false;
+    }
+    if (context.isAborted()) return false;
+
+    if (attempt === 0) {
+      context.onLog(
+        `Add Friends: after ${actionLabel}, the first remaining contact ${nextName} is at y=${currentRow.bounds[1]}, ` +
+        `not the previous contact's top y=${expectedTop}; scrolling ${distance}px to align it.`,
+      );
+    } else {
+      const measuredMovement = previousTop - currentRow.bounds[1];
+      const movementRatio = Math.abs(measuredMovement) > 8
+        ? Math.abs(measuredMovement) / previousGestureDistance
+        : 0.5;
+      const correctionDistance = Math.min(
+        Math.max(1, Math.round(Math.abs(alignmentError) / movementRatio)),
+        Math.max(maxSafeDistance, previousGestureDistance * 3),
+      );
+      const correctionDelta = -Math.sign(alignmentError) * correctionDistance;
+      const correctionStartY = Math.round(anchorY - correctionDelta / 2);
+      const correctionEndY = Math.round(anchorY + correctionDelta / 2);
+      if (
+        correctionStartY < Math.max(listTop + 6, safeTop) ||
+        correctionEndY < Math.max(listTop + 6, safeTop) ||
+        correctionStartY > safeBottom ||
+        correctionEndY > safeBottom
+      ) {
+        context.onLog(
+          `Add Friends: after ${actionLabel}, ${nextName} is still ${Math.abs(alignmentError)}px from the top position; ` +
+          `the movement-scaled correction would cross a safe screen boundary.`,
+        );
+        return false;
+      }
+      context.onLog(
+        `Add Friends: after ${actionLabel}, the last swipe moved ${measuredMovement}px; ` +
+        `sending movement-scaled correction ${attempt} of 3 for ${correctionDistance}px.`,
+      );
+      await android.swipe(
+        context.serial,
+        swipeX,
+        correctionStartY,
+        swipeX,
+        correctionEndY,
+        650,
+        false,
+      );
+      previousTop = currentRow.bounds[1];
+      previousGestureDistance = correctionDistance;
+      await context.sleep(750, "exact");
+      if (context.isAborted()) return false;
+      const afterCorrectionState = await dump(context.serial);
+      currentNodes = afterCorrectionState.nodes;
+      const refreshedRow = closestNamedRow(
+        currentNodes,
+        findFriendsRows(currentNodes),
+        nextName,
+        expectedTop,
+      );
+      if (!refreshedRow) {
+        context.onLog(
+          `Add Friends: ${nextName} was not present after the dismissal alignment correction; no further swipe was sent.`,
+        );
+        return false;
+      }
+      currentRow = refreshedRow;
+      continue;
+    }
+
+    await android.swipe(context.serial, swipeX, startY, swipeX, endY, 650, false);
+    previousTop = currentRow.bounds[1];
+    previousGestureDistance = distance;
+    await context.sleep(750, "exact");
+    if (context.isAborted()) return false;
+    const afterSwipeState = await dump(context.serial);
+    currentNodes = afterSwipeState.nodes;
+    const refreshedRow = closestNamedRow(
+      currentNodes,
+      findFriendsRows(currentNodes),
+      nextName,
+      expectedTop,
+    );
+    if (!refreshedRow) {
+      context.onLog(
+        `Add Friends: ${nextName} was not present after the dismissal scroll; no guessed correction was sent.`,
+      );
+      return false;
+    }
+    currentRow = refreshedRow;
+  }
+
+  const residual = currentRow.bounds[1] - expectedTop;
+  context.onLog(
+    `Add Friends: after ${actionLabel}, ${nextName} is at y=${currentRow.bounds[1]} ` +
+    `(target y=${expectedTop}; residual ${residual}px) after three corrections.`,
+  );
+  return Math.abs(residual) <= 8;
+}
