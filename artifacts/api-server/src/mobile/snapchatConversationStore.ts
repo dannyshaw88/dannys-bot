@@ -19,6 +19,7 @@ export type SnapchatUnansweredAuditEntry = {
   serial: string;
   accountUsername?: string;
   contactName: string;
+  contactUsername?: string;
   stage: string;
   reason: string;
   capturedMessages: string[];
@@ -241,13 +242,22 @@ function findOrCreateConversation(
     displayName: string;
   },
 ): SnapchatConversation {
+  const usernameKey = normalizeContact(identity.username);
+  const displayNameKey = normalizeContact(identity.displayName);
+  // When verified usernames differ from display names, only the username may
+  // match a conversation; display names can be stale or shared by other users.
+  const identityAliases = usernameKey && usernameKey !== displayNameKey
+    ? [usernameKey]
+    : [usernameKey, displayNameKey].filter(Boolean);
   const aliases = [...new Set([identity.username, identity.displayName]
     .map(normalizeContact)
     .filter(Boolean))];
   let conversation = conversations.find(existing =>
     existing.slotId === identity.slotId &&
     existing.serial === identity.serial &&
-    aliases.some(alias => existing.aliases.some(existingAlias => normalizeContact(existingAlias) === alias)),
+    identityAliases.some(alias =>
+      normalizeContact(existing.username) === alias,
+    ),
   );
   if (!conversation) {
     conversation = {
@@ -286,13 +296,19 @@ function addReply(
   conversations: SnapchatConversation[],
   entry: Omit<SnapchatReplyHistoryEntry, "replyNumber"> & { replyNumber?: number; capturedAt?: string },
 ): SnapchatReplyHistoryEntry {
-  const aliases = new Set([entry.username, entry.displayName].map(normalizeContact).filter(Boolean));
+  const usernameKey = normalizeContact(entry.username);
+  const displayNameKey = normalizeContact(entry.displayName);
+  // Keep counts tied to the verified username, never a display-name alias.
+  const aliases = new Set(
+    usernameKey && usernameKey !== displayNameKey
+      ? [usernameKey]
+      : [entry.username, entry.displayName].map(normalizeContact).filter(Boolean),
+  );
   const highestReplyNumber = conversations
     .filter(conversation =>
       conversation.slotId === entry.slotId &&
-      [...aliases].some(alias =>
-        conversation.aliases.some(existingAlias => normalizeContact(existingAlias) === alias),
-      ),
+      conversation.serial === entry.serial &&
+      [...aliases].some(alias => normalizeContact(conversation.username) === alias),
     )
     .flatMap(conversation => conversation.messages)
     .reduce((max, message) =>
@@ -332,7 +348,7 @@ function addFailure(
     slotId: entry.slotId,
     serial: entry.serial,
     accountUsername: entry.accountUsername,
-    username: entry.contactName,
+    username: entry.contactUsername || entry.contactName,
     displayName: entry.contactName,
   });
   appendSnapshot(conversation, entry.capturedMessages, entry.recordedAt);
@@ -470,14 +486,22 @@ export function containsSnapchatBoundlusLink(text: string): boolean {
   return /(?:^|[^a-z0-9.-])(?:www\.)?boundlus\.com(?:$|[/?#\s.)\]},!?;:])/i.test(decoded);
 }
 
-export function getSnapchatReplyHistory(slotId: string, contactKey: string): {
+export function getSnapchatReplyHistory(
+  slotId: string,
+  contactKey: string,
+  serial?: string,
+  displayName?: string,
+): {
   previousReplyCount: number;
   sentReplies: Array<{ replyNumber: number; capturedMessages: string[]; sentText: string }>;
+  legacyNameOnlyHistory: boolean;
 } {
   const expected = normalizeContact(contactKey);
-  const conversations = readConversations().filter(entry =>
+  const allConversations = readConversations();
+  const conversations = allConversations.filter(entry =>
     entry.slotId === slotId &&
-    entry.aliases.some(alias => normalizeContact(alias) === expected),
+    (!serial || entry.serial === serial) &&
+    normalizeContact(entry.username) === expected,
   );
   const replies = conversations.flatMap(conversation =>
     conversation.messages
@@ -487,6 +511,15 @@ export function getSnapchatReplyHistory(slotId: string, contactKey: string): {
     (a.message.replyNumber ?? 0) - (b.message.replyNumber ?? 0) ||
     parseTime(a.message.timestamp) - parseTime(b.message.timestamp),
   );
+  const expectedDisplayName = normalizeContact(displayName ?? "");
+  const legacyNameOnlyHistory = !replies.length && Boolean(expectedDisplayName) &&
+    allConversations.some(entry =>
+      entry.slotId === slotId &&
+      (!serial || entry.serial === serial) &&
+      normalizeContact(entry.displayName) === expectedDisplayName &&
+      normalizeContact(entry.username) === expectedDisplayName &&
+      entry.messages.some(message => message.sender === "Luna" && message.timestampKind === "sent"),
+    );
   return {
     previousReplyCount: replies.reduce((max, item) => Math.max(max, item.message.replyNumber ?? 0), 0),
     sentReplies: replies.slice(-10).map(({ conversation, message }) => ({
@@ -498,6 +531,7 @@ export function getSnapchatReplyHistory(slotId: string, contactKey: string): {
         .map(prior => prior.text),
       sentText: message.text,
     })),
+    legacyNameOnlyHistory,
   };
 }
 
@@ -533,7 +567,7 @@ export function clearSnapchatReplyHistory(slotId: string): void {
 }
 
 export function appendSnapchatReplyHistory(
-  entry: Omit<SnapchatReplyHistoryEntry, "replyNumber"> & { capturedAt?: string },
+  entry: Omit<SnapchatReplyHistoryEntry, "replyNumber"> & { replyNumber?: number; capturedAt?: string },
 ): SnapchatReplyHistoryEntry {
   const conversations = readConversations();
   const record = addReply(conversations, entry);

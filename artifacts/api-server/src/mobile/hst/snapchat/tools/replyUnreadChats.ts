@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import * as android from "../../../androidManager";
 import { storage } from "../../../../storage";
 import {
@@ -26,6 +27,13 @@ import {
   normalizeSnapchatContactLabel,
   stripSnapchatPeerNamePrefix,
 } from "./replyUnreadChatText";
+import {
+  contactNameFromNode,
+  conversationHeaderMatches,
+  findChatComposer,
+  isGenericContactLabel,
+  verifyUnreadConversationIdentity,
+} from "./replyUnreadChatIdentity";
 
 const normalizedText = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 const comparableMessageText = (value: string) => value
@@ -86,28 +94,6 @@ function filterPromptIgnoredTranscript(
   return { messages, ignoredCount: transcript.length - messages.length };
 }
 
-function findChatComposer(nodes: UiNode[], screenHeight: number): UiNode | undefined {
-  const editFields = nodes.filter(node => /edittext/i.test(node.className));
-  const byResourceId = editFields.find(node =>
-    /chat_input_text_field|chat.*composer|message.*input/i.test(node.resourceId),
-  );
-  if (byResourceId) return byResourceId;
-
-  const byPlaceholder = editFields.find(node =>
-    /send a chat|send chat|type a message|message/i.test(`${node.text} ${node.desc}`),
-  );
-  if (byPlaceholder) return byPlaceholder;
-
-  // Snapchat has changed the composer ID between app versions. When its
-  // accessibility tree omits the placeholder, the single lower-screen
-  // EditText is the focused chat composer; do not mistake a top search field
-  // or keyboard key for it.
-  const lowerFields = editFields
-    .filter(node => node.bounds[1] >= screenHeight * 0.55)
-    .sort((a, b) => b.bounds[1] - a.bounds[1]);
-  return lowerFields.length === 1 ? lowerFields[0] : undefined;
-}
-
 async function waitForChatComposer(
   context: SnapchatContext,
   initialState: UiState,
@@ -137,11 +123,22 @@ function senderFromDescription(
   return undefined;
 }
 
-function visibleConversation(nodes: UiNode[], composerTop: number, peerName: string): string[] {
+function visibleConversation(
+  nodes: UiNode[],
+  composerTop: number,
+  peerName: string,
+  headerBottom = 0,
+): string[] {
   const excluded = /^(send|chat|call|video|audio|camera|back|more|typing|delivered|opened|seen|unread|new snap|today|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|message|me|you|you sent|sent by you)$/i;
   const seen = new Set<string>();
   return nodes
-    .filter(node => node.bounds[1] >= 220 && node.bounds[1] < composerTop && !/edittext/i.test(node.className))
+    .filter(node =>
+      node.bounds[1] >= Math.max(220, headerBottom + 12) &&
+      node.bounds[1] < composerTop &&
+      !/edittext/i.test(node.className) &&
+      (!node.text.trim() || !isGenericContactLabel(node.text, node)) &&
+      (!node.desc.trim() || !isGenericContactLabel(node.desc, node)),
+    )
     .sort((a, b) => a.bounds[1] - b.bounds[1] || a.bounds[0] - b.bounds[0])
     .map(node => {
       const text = node.text.trim();
@@ -306,26 +303,25 @@ function unreadChatRows(
           Math.abs(center(node).x - center(statusNode).x) <= 520,
         );
     const nameCandidates = rowNodes
-      .filter(node => {
-        const text = node.text.trim();
-        return text &&
-          node !== statusNode &&
-          !unreadChatStatus(text) &&
-          !/^(unread|received|sent|opened|new|camera|chat)$/i.test(text);
+      .map(node => ({ node, displayName: contactNameFromNode(node) }))
+      .filter((candidate): candidate is { node: UiNode; displayName: string } => {
+        const { node, displayName } = candidate;
+        if (!displayName || node === statusNode || unreadChatStatus(displayName)) return false;
+        if (/^(unread|received|sent|opened|new|camera|chat)$/i.test(displayName)) return false;
+        return true;
       })
       .sort((left, right) => {
-        const leftY = center(left).y;
-        const rightY = center(right).y;
+        const leftY = center(left.node).y;
+        const rightY = center(right.node).y;
         const leftIsAbove = leftY <= statusY;
         const rightIsAbove = rightY <= statusY;
         if (leftIsAbove !== rightIsAbove) return leftIsAbove ? -1 : 1;
         return Math.abs(statusY - leftY) - Math.abs(statusY - rightY);
       });
-    const nameNode = nameCandidates[0];
-    const displayName = nameNode?.text.trim() || statusLabel;
-    const key = nameNode
-      ? `name:${normalizedText(displayName)}`
-      : `status:${status}:${normalizedText(statusLabel)}:${Math.round(statusY / 80)}`;
+    const nameCandidate = nameCandidates[0];
+    if (!nameCandidate) continue;
+    const { node: nameNode, displayName } = nameCandidate;
+    const key = `name:${normalizedText(displayName)}:${status}`;
     const rowHeight = marker ? marker.bounds[3] - marker.bounds[1] : 0;
     const chatActionNode = (status === "mixed" || status === "media") && marker
       ? rowNodes.find(node =>
@@ -333,10 +329,9 @@ function unreadChatRows(
           node.bounds[0] >= marker.bounds[0] + rowHeight * 0.65,
         )
       : undefined;
-    const nameBottom = nameNode?.bounds[3];
+    const nameBottom = nameNode.bounds[3];
     const preview = rowNodes
       .filter(node =>
-        nameBottom !== undefined &&
         node !== nameNode &&
         node !== statusNode &&
         !node.clickable &&
@@ -389,17 +384,20 @@ async function openUnreadChatFromLiveList(
         return { state, tapped, stillOnChatList: false, targetStillVisible: false };
       }
 
-      const liveRow = unreadChatRows(state.nodes, replyToEverything).find(row =>
-        row.key === targetRow.key ||
-        (
-          row.status === targetRow.status &&
-          normalizedText(row.statusLabel) === normalizedText(targetRow.statusLabel) &&
-          Math.abs(center(row.statusNode).y - center(targetRow.statusNode).y) <= 140
-        ),
+      const liveRows = unreadChatRows(state.nodes, replyToEverything).filter(row =>
+        row.status === targetRow.status &&
+        normalizedText(row.statusLabel) === normalizedText(targetRow.statusLabel) &&
+        normalizedText(row.displayName) === normalizedText(targetRow.displayName),
       );
-      if (!liveRow) {
-        return { state, tapped, stillOnChatList: true, targetStillVisible: false };
+      if (liveRows.length !== 1) {
+        return {
+          state,
+          tapped,
+          stillOnChatList: true,
+          targetStillVisible: liveRows.length > 0,
+        };
       }
+      const liveRow = liveRows[0];
 
       if (attempt > 1) {
         context.onLog(`Reply to Unread Chats: "${targetRow.displayName}" is still in the live Unread list after the first tap; retrying once with refreshed row bounds.`);
@@ -418,12 +416,9 @@ async function openUnreadChatFromLiveList(
       }
 
       const targetStillVisible = unreadChatRows(state.nodes, replyToEverything).some(row =>
-        row.key === targetRow.key ||
-        (
-          row.status === targetRow.status &&
-          normalizedText(row.statusLabel) === normalizedText(targetRow.statusLabel) &&
-          Math.abs(center(row.statusNode).y - center(targetRow.statusNode).y) <= 140
-        ),
+        row.status === targetRow.status &&
+        normalizedText(row.statusLabel) === normalizedText(targetRow.statusLabel) &&
+        normalizedText(row.displayName) === normalizedText(targetRow.displayName),
       );
       if (!targetStillVisible || attempt === 2) {
         return { state, tapped, stillOnChatList: true, targetStillVisible };
@@ -502,6 +497,7 @@ async function runReplyUnreadChatsAttempt(
   adPopupRetryUsed: boolean,
 ): Promise<void> {
   const { enabled, replyGoal, replyToEverything } = context.tools.replyUnreadChats;
+  const promptFingerprint = `sha256:${createHash("sha256").update(replyGoal, "utf8").digest("hex").slice(0, 16)}`;
   if (!enabled || requested === 0) return;
   logAction(context, `Reply to up to ${requested} unread chats`);
   if (adPopupRetryUsed) {
@@ -523,26 +519,42 @@ async function runReplyUnreadChatsAttempt(
     return;
   }
   const recordedSkips = new Set<string>();
-  let activeContact: { displayName: string; stage: string; capturedMessages: string[] } | null = null;
+  let activeContact: {
+    displayName: string;
+    stage: string;
+    capturedMessages: string[];
+    attemptId: string;
+    verifiedUsername?: string;
+  } | null = null;
   const recordNotReplied = (
     displayName: string,
     stage: string,
     reason: string,
     capturedMessages: string[] = [],
+    persist = true,
   ) => {
+    const matchingActive = activeContact &&
+      normalizedText(activeContact.displayName) === normalizedText(displayName)
+      ? activeContact
+      : null;
+    const attemptId = matchingActive?.attemptId;
     if (activeContact && normalizedText(activeContact.displayName) === normalizedText(displayName)) {
       activeContact = null;
     }
     const identity = `${normalizedText(displayName)}:${stage}:${reason}`;
     if (recordedSkips.has(identity)) return;
     recordedSkips.add(identity);
-    context.onLog(`Reply to Unread Chats: not replying to "${displayName}" — ${reason}`);
+    context.onLog(
+      `${attemptId ? `[Reply attempt=${attemptId}] ` : ""}outcome=skip contact=${JSON.stringify(displayName)} stage=${stage} reason=${JSON.stringify(reason)} savedFailure=${persist}`,
+    );
+    if (!persist) return;
     try {
       appendSnapchatConversationFailure({
         slotId,
         serial: context.serial,
         accountUsername: context.targetUsername?.trim() || undefined,
         contactName: displayName,
+        contactUsername: matchingActive?.verifiedUsername,
         stage,
         reason,
         capturedMessages,
@@ -663,12 +675,16 @@ async function runReplyUnreadChatsAttempt(
     const identity = row.key;
     if (visited.has(identity)) break;
     visited.add(identity);
+    const attemptId = randomUUID().slice(0, 12);
     activeContact = {
       displayName: row.displayName,
       stage: "opening-chat",
       capturedMessages: row.preview,
+      attemptId,
     };
-    context.onLog(`Reply to Unread Chats: matched unread label "${row.statusLabel}" for "${row.displayName}".`);
+    context.onLog(
+      `[Reply attempt=${attemptId}] selected contact=${JSON.stringify(row.displayName)} unreadLabel=${JSON.stringify(row.statusLabel)} slotId=${slotId} promptVersion=${promptFingerprint}`,
+    );
     const openResult = await openUnreadChatFromLiveList(
       context,
       row,
@@ -764,7 +780,6 @@ async function runReplyUnreadChatsAttempt(
       );
       break;
     }
-    const contactKey = row.displayName;
     let thread = await dump(context.serial);
     const threadNotice = await handleNotAddedFriendNotice(context, row.displayName, thread);
     if (threadNotice === "exited") {
@@ -798,8 +813,40 @@ async function runReplyUnreadChatsAttempt(
       break;
     }
     thread = composerResult.state;
-    const composer = composerResult.composer;
-    const screenTranscript = visibleConversation(thread.nodes, composer.bounds[1], row.displayName);
+    const identityCheck = await verifyUnreadConversationIdentity(
+      context,
+      row.displayName,
+      screenHeight,
+    );
+    if (!identityCheck.ok) {
+      context.onLog(
+        `[Reply attempt=${attemptId}] verified open chat=NO; skipping before history or draft (${identityCheck.reason}).`,
+      );
+      recordNotReplied(
+        row.displayName,
+        "verify-contact",
+        identityCheck.reason,
+        row.preview,
+        false,
+      );
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
+    }
+    const verifiedIdentity = identityCheck.value;
+    const contactKey = verifiedIdentity.username;
+    activeContact.verifiedUsername = verifiedIdentity.username;
+    thread = verifiedIdentity.state;
+    context.onLog(
+      `[Reply attempt=${attemptId}] verified open chat=YES displayName=${JSON.stringify(verifiedIdentity.displayName)} username=@${verifiedIdentity.username} slotId=${slotId}`,
+    );
+    const composer = verifiedIdentity.composer;
+    const screenTranscript = visibleConversation(
+      thread.nodes,
+      composer.bounds[1],
+      verifiedIdentity.displayName,
+      verifiedIdentity.headerBottom,
+    );
     const { messages: transcript, ignoredCount } = filterPromptIgnoredTranscript(screenTranscript, replyGoal);
     if (ignoredCount) {
       context.onLog(`Reply to Unread Chats: omitted ${ignoredCount} transcript item(s) matching this slot's prompt ignore list.`);
@@ -809,6 +856,8 @@ async function runReplyUnreadChatsAttempt(
       displayName: row.displayName,
       stage: "reading-conversation",
       capturedMessages: transcript,
+      attemptId,
+      verifiedUsername: verifiedIdentity.username,
     };
     if (transcript.length === 0) {
       recordNotReplied(
@@ -826,7 +875,25 @@ async function runReplyUnreadChatsAttempt(
       continue;
     }
     let reply: string;
-    const history = getSnapchatReplyHistory(context.slotId, contactKey);
+    const history = getSnapchatReplyHistory(
+      context.slotId,
+      contactKey,
+      context.serial,
+      verifiedIdentity.displayName,
+    );
+    context.onLog(
+      `[Reply attempt=${attemptId}] history key=slot:${slotId}/device:${context.serial}/contact:@${contactKey}; priorReplies=${history.previousReplyCount}; linkAlreadySent=${history.sentReplies.some(entry => containsSnapchatBoundlusLink(entry.sentText))}; legacyNameOnlyHistory=${history.legacyNameOnlyHistory}`,
+    );
+    if (history.legacyNameOnlyHistory) {
+      const reason = "prior replies exist only under this display name and cannot be safely attached to the verified username";
+      context.onLog(
+        `[Reply attempt=${attemptId}] outcome=skip-before-draft; ${reason}; no prompt call, send, reply count, or link state was changed.`,
+      );
+      recordNotReplied(row.displayName, "legacy-history-identity", reason, transcript, false);
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
+    }
     const modelContext = labelConversationForLuna(transcript, history.sentReplies);
     if (!modelContext.latestIncomingMessage) {
       recordNotReplied(
@@ -840,7 +907,7 @@ async function runReplyUnreadChatsAttempt(
       continue;
     }
     context.onLog(
-      `Luna live context [slot=${slotId}; promptChars=${replyGoal.length}; nextReply=${history.previousReplyCount + 1}]: newest contact message=${JSON.stringify(modelContext.latestIncomingMessage)}; transcript=${JSON.stringify(modelContext.transcript.slice(-12))}; prior Luna replies=${JSON.stringify(history.sentReplies.map(entry => entry.sentText))}`,
+      `[Reply attempt=${attemptId}] Luna context slotId=${slotId} contact=@${contactKey} newestIncoming=${JSON.stringify(modelContext.latestIncomingMessage)} nextReply=${history.previousReplyCount + 1} promptChars=${replyGoal.length} promptVersion=${promptFingerprint} transcript=${JSON.stringify(modelContext.transcript.slice(-12))} priorReplies=${JSON.stringify(history.sentReplies.map(entry => entry.sentText))}`,
     );
     context.onLog(
       `Reply to Unread Chats: preparing a role-labelled conversation with ${history.sentReplies.length} prior Luna reply record(s); next reply #${history.previousReplyCount + 1}.`,
@@ -906,7 +973,9 @@ async function runReplyUnreadChatsAttempt(
       list = await dump(context.serial);
       continue;
     }
-    context.onLog(`Luna draft (not sent yet): ${reply.replace(/[\r\n]+/g, " ")}`);
+    context.onLog(
+      `[Reply attempt=${attemptId}] Luna draft (not sent yet): ${reply.replace(/[\r\n]+/g, " ")}`,
+    );
     const verifiedThread = await dump(context.serial);
     const lateNotice = await handleNotAddedFriendNotice(context, row.displayName, verifiedThread);
     if (lateNotice === "exited") {
@@ -998,8 +1067,52 @@ async function runReplyUnreadChatsAttempt(
     if (isEmptyComposerValue(enteredReply)) {
       context.onLog("Reply to Unread Chats: no readable draft is available; still attempting Enter as requested.");
     }
+    const beforeSendIdentity = await verifyUnreadConversationIdentity(
+      context,
+      verifiedIdentity.displayName,
+      screenHeight,
+      verifiedIdentity.username,
+    );
+    if (!beforeSendIdentity.ok) {
+      context.onLog(
+        `[Reply attempt=${attemptId}] outcome=skip-before-send; contact identity could not be reconfirmed (${beforeSendIdentity.reason}); no Enter, reply count, link state, or saved reply.`,
+      );
+      recordNotReplied(
+        row.displayName,
+        "verify-before-send",
+        beforeSendIdentity.reason,
+        transcript,
+        false,
+      );
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
+    }
+    sendState = beforeSendIdentity.value.state;
+    const composerBeforeSend = findChatComposer(sendState.nodes, screenHeight);
+    if (!composerBeforeSend) {
+      context.onLog(
+        `[Reply attempt=${attemptId}] outcome=skip-before-send; the verified conversation composer was not restored; no reply was sent or counted.`,
+      );
+      recordNotReplied(
+        row.displayName,
+        "verify-before-send",
+        "the verified conversation composer was not restored after checking the contact identity.",
+        transcript,
+        false,
+      );
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
+    }
+    if (!isEmptyComposerValue(composerBeforeSend.text.trim())) {
+      enteredReply = composerBeforeSend.text.trim();
+    }
+    context.onLog(
+      `[Reply attempt=${attemptId}] pre-send identity confirmed=@${verifiedIdentity.username}; entering send action.`,
+    );
     if (activeContact) activeContact.stage = "sending-reply";
-    context.onLog("Reply to Unread Chats: sending the text currently in the composer.");
+    context.onLog(`[Reply attempt=${attemptId}] sending the text currently in the composer.`);
     try {
       await android.keyevent(context.serial, 66);
     } catch (error) {
@@ -1015,7 +1128,12 @@ async function runReplyUnreadChatsAttempt(
       continue;
     }
     const sentState = await dump(context.serial);
-    const afterConversation = visibleConversation(sentState.nodes, composer.bounds[1], row.displayName)
+    const afterConversation = visibleConversation(
+      sentState.nodes,
+      composer.bounds[1],
+      verifiedIdentity.displayName,
+      verifiedIdentity.headerBottom,
+    )
       .map(normalizedText).join(" ");
     const beforeConversation = transcript.map(normalizedText).join(" ");
     const composerAfterSend = findChatComposer(sentState.nodes, screenHeight);
@@ -1024,12 +1142,24 @@ async function runReplyUnreadChatsAttempt(
       !beforeConversation.includes(normalizedText(enteredReply)) &&
       isEmptyComposerValue(composerAfterSend?.text ?? "");
     if (!sentTextConfirmed) {
+      context.onLog(
+        `[Reply attempt=${attemptId}] outcome=not-confirmed-sent; reply count, link state, and saved reply were not updated.`,
+      );
       recordNotReplied(
         row.displayName,
         "sending-reply",
         "Snapchat did not confirm the reply was sent, so it was not counted as replied.",
         [...transcript, `Draft intended: ${enteredReply}`],
       );
+      await exitSnapchatConversation(context).catch(() => false);
+      list = await dump(context.serial);
+      continue;
+    }
+    if (!conversationHeaderMatches(sentState.nodes, verifiedIdentity.displayName, screenHeight)) {
+      context.onLog(
+        `[Reply attempt=${attemptId}] outcome=sent-but-not-attributed; the conversation header changed, so no contact history, reply count, or link state was updated.`,
+      );
+      activeContact = null;
       await exitSnapchatConversation(context).catch(() => false);
       list = await dump(context.serial);
       continue;
@@ -1042,21 +1172,26 @@ async function runReplyUnreadChatsAttempt(
         accountUsername: context.targetUsername?.trim() || slotId,
         username: contactKey,
         displayName: row.displayName,
+        replyNumber: history.previousReplyCount + 1,
         capturedMessages: transcript,
         capturedAt: transcriptCapturedAt,
         sentText: enteredReply,
         sentAt: new Date().toISOString(),
       });
-      context.onLog(`Reply log saved for ${row.displayName}; confirmed sent reply #${record.replyNumber}.`);
+      context.onLog(
+        `[Reply attempt=${attemptId}] outcome=sent-and-saved contact=@${contactKey} replyNumber=${record.replyNumber} slotId=${slotId}.`,
+      );
     } catch (error) {
-      context.onLog(`Reply to Unread Chats warning: the message was sent, but the local log could not be saved (${error instanceof Error ? error.message : "write failed"}).`);
+      context.onLog(
+        `[Reply attempt=${attemptId}] outcome=sent-but-history-save-failed; the message was sent, but its verified-contact history could not be saved (${error instanceof Error ? error.message : "write failed"}).`,
+      );
     }
     replied++;
     context.onMetric?.("snapchat_replies");
     const linksSent = countLinksInText(enteredReply);
     if (linksSent > 0) {
       context.onMetric?.("snapchat_links_sent", linksSent);
-      context.onLog(`Reply to Unread Chats: confirmed ${linksSent} link${linksSent === 1 ? "" : "s"} sent in ${row.displayName}'s reply.`);
+      context.onLog(`[Reply attempt=${attemptId}] confirmed ${linksSent} link${linksSent === 1 ? "" : "s"} sent in @${contactKey}'s reply.`);
     }
     const exitedToChatSurface = await exitSnapchatConversation(context).catch(() => false);
     if (!exitedToChatSurface) {
