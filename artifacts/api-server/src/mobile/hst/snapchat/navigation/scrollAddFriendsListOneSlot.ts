@@ -22,11 +22,31 @@ function findFriendsRows(nodes: UiNode[]): UiNode[] {
     .sort((a, b) => a.bounds[1] - b.bounds[1]);
 }
 
+function normalizeContactName(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200d\u2060\ufeff\ufe0e\ufe0f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("en-US");
+}
+
+function contactNameInRow(nodes: UiNode[], row: UiNode): string {
+  const name = nodes.find(node =>
+    shortResourceId(node) === "result-title" &&
+    node.bounds[0] >= row.bounds[0] &&
+    node.bounds[1] >= row.bounds[1] &&
+    node.bounds[2] <= row.bounds[2] &&
+    node.bounds[3] <= row.bounds[3],
+  );
+  return name?.text.trim() || name?.desc.trim() || "";
+}
+
 function findHorizontalDividerYs(
   screen: { width: number; height: number; channels: number; pixels: Buffer },
   rows: UiNode[],
 ): number[] {
-  if (rows.length < 2 || screen.channels < 3) return [];
+  if (rows.length === 0 || screen.channels < 3) return [];
   const x1 = Math.max(0, Math.round(screen.width * 0.04), Math.min(...rows.map(row => row.bounds[0])) + 6);
   const x2 = Math.min(screen.width - 1, Math.round(screen.width * 0.96), Math.max(...rows.map(row => row.bounds[2])) - 6);
   if (x2 <= x1) return [];
@@ -65,34 +85,26 @@ function findHorizontalDividerYs(
     .map(run => Math.round(run.reduce((sum, y) => sum + y, 0) / run.length));
 }
 
-function measureMiddleContactDivider(
+function measureContactDivider(
   rows: UiNode[],
   screen: { width: number; height: number; channels: number; pixels: Buffer },
+  row: UiNode,
 ): { distance: number; upperY: number; lowerY: number; row: UiNode } | null {
-  if (rows.length < 3) return null;
   const dividerYs = findHorizontalDividerYs(screen, rows);
   if (dividerYs.length < 2) return null;
-  const middleRows = rows.slice(1, -1);
-
-  for (const row of [...middleRows].sort((a, b) =>
-    Math.abs((a.bounds[1] + a.bounds[3]) / 2 - screen.height / 2) -
-    Math.abs((b.bounds[1] + b.bounds[3]) / 2 - screen.height / 2),
-  )) {
-    const centerY = (row.bounds[1] + row.bounds[3]) / 2;
-    const upperY = dividerYs.filter(y => y <= centerY).at(-1);
-    const lowerY = dividerYs.find(y => y > centerY);
-    if (upperY === undefined || lowerY === undefined) continue;
-    const distance = lowerY - upperY;
-    const lineMargin = Math.max(12, Math.round((row.bounds[3] - row.bounds[1]) * 0.15));
-    if (
-      distance < 20 ||
-      distance > screen.height * 0.2 ||
-      upperY < row.bounds[1] - lineMargin ||
-      lowerY > row.bounds[3] + lineMargin
-    ) continue;
-    return { distance, upperY, lowerY, row };
-  }
-  return null;
+  const centerY = (row.bounds[1] + row.bounds[3]) / 2;
+  const upperY = dividerYs.filter(y => y <= centerY).at(-1);
+  const lowerY = dividerYs.find(y => y > centerY);
+  if (upperY === undefined || lowerY === undefined) return null;
+  const distance = lowerY - upperY;
+  const lineMargin = Math.max(12, Math.round((row.bounds[3] - row.bounds[1]) * 0.15));
+  if (
+    distance < 20 ||
+    distance > screen.height * 0.2 ||
+    upperY < row.bounds[1] - lineMargin ||
+    lowerY > row.bounds[3] + lineMargin
+  ) return null;
+  return { distance, upperY, lowerY, row };
 }
 
 function blankRowLaneX(nodes: UiNode[], row: UiNode, screenWidth: number): number | null {
@@ -130,6 +142,7 @@ export async function scrollAddFriendsListOneSlot(
   screenHeight: number,
   friendName: string,
   actionLabel = "adding",
+  previousCenterY?: number,
 ): Promise<boolean> {
   const initialRows = findFriendsRows(nodes);
   const title = nodes.find(node =>
@@ -139,14 +152,39 @@ export async function scrollAddFriendsListOneSlot(
   const safeTop = Math.ceil(screenHeight * 0.12);
   const safeBottom = Math.floor(screenHeight * 0.82);
   const listTop = title?.bounds[3] ?? 0;
-  const middleRows = initialRows.filter(row =>
+  const visibleRows = initialRows.filter(row =>
     row.bounds[1] > Math.max(listTop, safeTop) &&
     row.bounds[3] < safeBottom,
   );
-  if (!title || middleRows.length < 3 || !Number.isFinite(screenWidth) || screenWidth <= 0 ||
+  if (!title || visibleRows.length === 0 || !Number.isFinite(screenWidth) || screenWidth <= 0 ||
       !Number.isFinite(screenHeight) || screenHeight <= 0) {
-    context.onLog(`Add Friends: cannot identify a fully visible middle contact after ${actionLabel} ${friendName}; no guessed swipe was sent.`);
+    context.onLog(`Add Friends: cannot identify a fully visible contact card after ${actionLabel} ${friendName}; no guessed swipe was sent.`);
     return false;
+  }
+  const normalizedFriendName = normalizeContactName(friendName);
+  const matchingRows = visibleRows.filter(row =>
+    normalizeContactName(contactNameInRow(nodes, row)) === normalizedFriendName,
+  );
+  const targetRow = matchingRows.length > 0
+    ? [...matchingRows].sort((a, b) =>
+      Math.abs(center(a).y - (previousCenterY ?? center(a).y)) -
+      Math.abs(center(b).y - (previousCenterY ?? center(b).y)),
+    )[0]
+    : previousCenterY === undefined
+      ? undefined
+      : [...visibleRows].sort((a, b) =>
+        Math.abs(center(a).y - previousCenterY) - Math.abs(center(b).y - previousCenterY),
+      )[0];
+  if (!targetRow) {
+    context.onLog(`Add Friends: ${friendName}'s row is no longer visible after ${actionLabel}; no unrelated card was used for a guessed swipe.`);
+    return false;
+  }
+  const targetNameStillVisible = matchingRows.includes(targetRow);
+  if (!targetNameStillVisible) {
+    context.onLog(
+      `Add Friends: ${friendName}'s card changed or disappeared after ${actionLabel}; ` +
+      `measuring the live card now occupying its previous position.`,
+    );
   }
   const screenshot = await android.captureScreenPixels(context.serial);
   if (!screenshot || screenshot.width !== screenWidth || screenshot.height !== screenHeight) {
@@ -156,10 +194,10 @@ export async function scrollAddFriendsListOneSlot(
     );
     return false;
   }
-  const measurement = measureMiddleContactDivider(middleRows, screenshot);
+  const measurement = measureContactDivider(initialRows, screenshot, targetRow);
   if (!measurement || measurement.distance <= 0) {
     context.onLog(
-      `Add Friends: could not detect the upper and lower grey divider pixels around a middle contact ` +
+      `Add Friends: could not detect the upper and lower grey divider pixels around ${friendName}'s current card ` +
       `after ${actionLabel} ${friendName}; no guessed swipe was sent.`,
     );
     return false;
@@ -186,9 +224,11 @@ export async function scrollAddFriendsListOneSlot(
     return false;
   }
   if (context.isAborted()) return false;
+  const measuredName = targetNameStillVisible ? friendName : contactNameInRow(nodes, targetRow) || "the replacement contact";
   context.onLog(
-    `Add Friends: one screenshot measured ${measurement.distance.toFixed(1)}px from grey line y=${measurement.upperY} ` +
-    `to y=${measurement.lowerY}; using exactly ${targetDistance}px for one swipe.`,
+    `Add Friends: after ${actionLabel} ${friendName}, one screenshot measured ${measuredName}'s card at ` +
+    `${measurement.distance.toFixed(1)}px between grey dividers y=${measurement.upperY} and y=${measurement.lowerY}; ` +
+    `using exactly ${targetDistance}px for one swipe.`,
   );
   await android.swipe(context.serial, swipeX, startY, swipeX, endY, 650, false);
   await context.sleep(220, "exact");

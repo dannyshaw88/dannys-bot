@@ -233,20 +233,24 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       return null;
     }
   };
-  const skipAndScroll = async (
-    state: { nodes: UiNode[] },
-    selectedFriend: { friendName: string; friendKey: string },
-  ) => {
+  const skipAndScroll = async (selectedFriend: { friendName: string; friendKey: string; row: UiNode }) => {
     const { friendName, friendKey } = selectedFriend;
     attemptedFriends.add(friendKey);
-    context.onLog(`Add Friends: skipping ${friendName}; it is already on the farm list or is currently being added.`);
+    context.onLog(`Add Friends: action for ${friendName} is Skip; it is already on the farm list or is currently being added.`);
+    const liveState = await dump(context.serial);
+    if (context.isAborted()) return;
+    if (liveState.nodes.length === 0) {
+      context.onLog(`Add Friends: could not refresh ${friendName}'s card after choosing Skip; no stale measurement or guessed swipe was used.`);
+      return;
+    }
     if (!await scrollAddFriendsListOneSlot(
       context,
-      state.nodes,
+      liveState.nodes,
       screenWidth,
       screenHeight,
       friendName,
       "skipping a recently added name",
+      center(selectedFriend.row).y,
     )) {
       context.onLog("Add Friends: could not scroll past that name; continuing with currently visible candidates.");
     }
@@ -317,6 +321,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   ): Promise<boolean> => {
     const { friendName, row } = selectedFriend;
     attemptedFriends.add(selectedFriend.friendKey);
+    const previousCenterY = center(row).y;
     const rowBounds = row.bounds;
     const addButtonCenterY = center(selectedFriend.candidate).y;
     const addButtonHeight = selectedFriend.candidate.bounds[3] - selectedFriend.candidate.bounds[1];
@@ -331,20 +336,30 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       Math.abs(center(node).y - addButtonCenterY) <= sameRowTolerance,
     );
     if (!dismiss) {
-      context.onLog(`Add Friends: ${friendName} matched ${matchDescription}, but its row Hide control was not exposed; it will not be added.`);
+      context.onLog(
+        `Add Friends: action for ${friendName} is Skip because its row Hide control was not exposed; ` +
+        `it matched ${matchDescription}.`,
+      );
+      const liveState = await dump(context.serial);
+      if (context.isAborted()) return false;
+      if (liveState.nodes.length === 0) {
+        context.onLog(`Add Friends: could not refresh ${friendName}'s card after choosing Skip; no stale measurement or guessed swipe was used.`);
+        return true;
+      }
       if (!await scrollAddFriendsListOneSlot(
         context,
-        state.nodes,
+        liveState.nodes,
         screenWidth,
         screenHeight,
         friendName,
         `skipping a suggestion matched by ${matchDescription}`,
+        previousCenterY,
       )) {
         context.onLog("Add Friends: could not scroll past the matched suggestion; continuing with currently visible candidates.");
       }
       return !context.isAborted();
     }
-    context.onLog(`Add Friends: ${friendName} matched ${matchDescription}; dismissing it with the row Hide control.`);
+    context.onLog(`Add Friends: action for ${friendName} is Dismiss; matched ${matchDescription}.`);
     if (context.isAborted()) return false;
     const liveRowY = center(selectedFriend.candidate).y;
     const calibration = android.loadNavigationCalibrationMap(context.serial);
@@ -382,7 +397,20 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     }
     await context.sleep(350, "exact");
     if (context.isAborted()) return false;
-    context.onLog(`Add Friends: dismissed ${friendName} (${matchDescription}); using Snapchat's refreshed list position without an extra scroll.`);
+    const afterDismiss = await dump(context.serial);
+    if (context.isAborted()) return false;
+    context.onLog(`Add Friends: dismissed ${friendName} (${matchDescription}); measuring the refreshed contact card before scrolling.`);
+    if (!await scrollAddFriendsListOneSlot(
+      context,
+      afterDismiss.nodes,
+      screenWidth,
+      screenHeight,
+      friendName,
+      "dismissing",
+      previousCenterY,
+    )) {
+      context.onLog("Add Friends: could not measure a refreshed card after dismissal; continuing with currently visible candidates.");
+    }
     return !context.isAborted();
   };
 
@@ -423,7 +451,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       return false;
     }
     if (alreadyAddedBeforeWait) {
-      await skipAndScroll(state, selected);
+      await skipAndScroll(selected);
       continue;
     }
     if (added > 0 && !delaySatisfiedSinceLastAdd) {
@@ -464,12 +492,13 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         return false;
       }
       if (alreadyAddedAfterWait) {
-        await skipAndScroll(state, selected);
+        await skipAndScroll(selected);
         continue;
       }
     }
     const currentCandidate = selected.candidate;
     const { friendName, friendKey } = selected;
+    const previousCenterY = center(selected.row).y;
     if (context.isAborted()) break;
     let reservationKey: string | null = null;
     if (skipAdded) {
@@ -481,10 +510,11 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         return false;
       }
       if (reservationKey === null) {
-        await skipAndScroll(state, selected);
+        await skipAndScroll(selected);
         continue;
       }
     }
+    context.onLog(`Add Friends: action for ${friendName} is Add.`);
     if (!await tapNode(context, currentCandidate, `tap Add for ${friendName} under Find Friends`, 0, true)) {
       if (reservationKey !== null) releaseFriendReservation(reservationKey);
       break;
@@ -527,13 +557,17 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       context.onLog(`Add Friends: ${friendName} was added, but could not be saved to the farm-wide name list.`);
     }
     context.onLog(`Add Friends: added ${friendName}; saved the display name to the farm-wide list.`);
+    await context.sleep(350, "exact");
+    if (context.isAborted()) break;
+    const afterAdd = await dump(context.serial);
     if (!await scrollAddFriendsListOneSlot(
       context,
-      afterTap.nodes,
+      afterAdd.nodes,
       screenWidth,
       screenHeight,
       friendName,
       "adding",
+      previousCenterY,
     )) {
       context.onLog("Add Friends: could not scroll after this Add; continuing with currently visible candidates.");
     }
