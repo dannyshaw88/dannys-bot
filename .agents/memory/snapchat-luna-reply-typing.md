@@ -22,11 +22,11 @@ Reply to Unread Chats must enter Luna's reply through the device's saved mirror 
 **How to apply:** Keep the original contact name as identity metadata, but pass only the extracted bubble text in the transcript and newest-message field. Decode XML entities in one pass so escaped literal entity text is not decoded a second time.
 
 ## Batched calibrated reply typing
-When `batchTaps` is enabled, execute consecutive calibrated key taps in one ADB shell command. Keep keyboard-layer controls as separate commands and preserve the configured pauses inside the batch.
+When `batchTaps` is enabled, batch consecutive calibrated key taps into bounded ADB shell commands. Split long drafts into ordered chunks, keep keyboard-layer controls separate, and preserve configured pauses.
 
-**Why:** The Snapchat caller already requested batched taps, but the saved-calibration typer did not implement that option; a separate ADB process per character adds transport overhead.
+**Why:** A live Windows run rejected a 102-tap command with `spawn ENAMETOOLONG` in 8 ms before ADB ran, while shorter batches in the same run succeeded. This is a process-command-size failure, not evidence that the keyboard was missing or slow to appear.
 
-**How to apply:** Keep batching limited to the Snapchat reply path until verified on a physical device. Measure device-input queue wait separately from ADB command time.
+**How to apply:** Bound batches by serialized command length, not only tap count; preserve tap order and pauses across chunks, and log each chunk's size. Keep batching limited to the Snapchat reply path until verified on a physical device. Measure device-input queue wait separately from ADB command time.
 
 **Debugging log:** For live Snapchat replies, show the full Luna draft before typing and log concise action outcomes; suppress per-character progress lines.
 
