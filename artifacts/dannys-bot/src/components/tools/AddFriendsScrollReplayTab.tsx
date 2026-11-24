@@ -1,505 +1,495 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { AlertCircle, CheckCircle2, FileCode2, ImageUp, Loader2, Play } from "lucide-react";
+import { useMemo, useState } from "react";
+import { RotateCcw, Upload } from "lucide-react";
+import sampleInspectDump from "@assets/equinox-inspect-dump-1795559682316_1795561582044.txt?raw";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
-type CropRect = { left: number; top: number; width: number; height: number };
+type Action = "add" | "skip" | "dismiss";
+type Bounds = [number, number, number, number];
+type UiNode = {
+  text: string;
+  desc: string;
+  resourceId: string;
+  className: string;
+  packageName: string;
+  clickable: boolean;
+  focusable: boolean;
+  focused: boolean;
+  selected: boolean;
+  bounds: Bounds;
+};
+type Contact = {
+  name: string;
+  reason: string;
+  top: number;
+  bottom: number;
+  height: number;
+  action: string;
+  hasDismiss: boolean;
+  children: UiNode[];
+};
 type ReplayResult = {
-  result: string;
-  mode: string;
-  dimensions: string;
   expectedNext: string;
   expectedTop: number;
   actualTop: number;
-  preActionAlignment?: boolean;
-  simulatedMovementScale?: number;
+  action: Action;
   swipes: Array<{ x1: number; y1: number; x2: number; y2: number; durationMs: number }>;
   logs: string[];
+  nodes: UiNode[];
 };
+type Scene = { width: number; height: number; nodes: UiNode[] };
 
-function escapeXml(value: string): string {
+function decodeXml(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&#(\d+);/g, (_, number: string) => String.fromCodePoint(Number(number)))
+    .replace(/&#x([\da-f]+);/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)));
+}
+
+function readAttributes(source: string): Record<string, string> {
+  return Object.fromEntries(
+    [...source.matchAll(/([\w:-]+)="([^"]*)"/g)].map(([, key, value]) => [key, decodeXml(value)]),
+  );
+}
+
+function parseInspectNodes(source: string): UiNode[] {
+  const nodes: UiNode[] = [];
+  const xmlNodes = [...source.matchAll(/<node\b([^>]*)\/?>/g)];
+  if (xmlNodes.length) {
+    for (const [, rawAttributes] of xmlNodes) {
+      const attributes = readAttributes(rawAttributes);
+      const bounds = attributes.bounds?.match(/^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/);
+      if (!bounds) continue;
+      nodes.push({
+        text: attributes.text ?? "",
+        desc: attributes["content-desc"] ?? "",
+        resourceId: attributes["resource-id"] ?? attributes.id ?? "",
+        className: attributes.class ?? "",
+        packageName: attributes.package ?? "",
+        clickable: attributes.clickable === "true",
+        focusable: attributes.focusable === "true",
+        focused: attributes.focused === "true",
+        selected: attributes.selected === "true",
+        bounds: bounds.slice(1).map(Number) as Bounds,
+      });
+    }
+    return nodes;
+  }
+
+  for (const line of source.split(/\r?\n/)) {
+    if (!/\bclickable=(?:true|false)\b/.test(line)) continue;
+    const boundsMatches = [...line.matchAll(/\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/g)];
+    const bounds = boundsMatches.at(-1);
+    if (!bounds) continue;
+    const attributes = readAttributes(line);
+    const className = line.match(
+      /\bfocused=(?:true|false)\s+([A-Za-z][\w.$]*)(?=\s+(?:id|desc|text)="|\s+\[)/,
+    )?.[1] ?? "";
+    nodes.push({
+      text: attributes.text ?? "",
+      desc: attributes.desc ?? "",
+      resourceId: attributes.id ?? "",
+      className,
+      packageName: attributes.package ?? "",
+      clickable: /\bclickable=true\b/.test(line),
+      focusable: /\bfocusable=true\b/.test(line),
+      focused: /\bfocused=true\b/.test(line),
+      selected: /\bselected=true\b/.test(line),
+      bounds: bounds.slice(1).map(Number) as Bounds,
+    });
+  }
+  return nodes;
+}
+
+function shortId(node: UiNode): string {
+  return node.resourceId.split("/").at(-1) ?? node.resourceId;
+}
+
+function prepareScene(source: string): Scene {
+  const nodes = parseInspectNodes(source);
+  const headingIndex = nodes.findIndex(node =>
+    shortId(node) === "section-title" &&
+    /^find friends$/i.test(node.text || node.desc),
+  );
+  if (headingIndex < 0) throw new Error("This dump has no Find friends screen.");
+  const nextSection = nodes.findIndex((node, index) =>
+    index > headingIndex && shortId(node) === "section-title",
+  );
+  const sectionEnd = nextSection < 0 ? nodes.length : nextSection;
+  const rowIndices = nodes.flatMap((node, index) =>
+    index > headingIndex &&
+    index < sectionEnd &&
+    shortId(node) === "scu_search_friend_cell" &&
+    node.bounds[3] > node.bounds[1]
+      ? [index]
+      : [],
+  );
+  if (rowIndices.length < 2) throw new Error("This dump has fewer than two Find friends contact cards.");
+
+  const width = Math.max(...nodes.map(node => node.bounds[2]));
+  const height = Math.max(...nodes.map(node => node.bounds[3]));
+  const headingBottom = nodes[headingIndex].bounds[3];
+  let nextTop = Math.max(headingBottom + 24, Math.round(height * 0.187));
+
+  for (let rowNumber = 0; rowNumber < rowIndices.length; rowNumber++) {
+    const rowIndex = rowIndices[rowNumber];
+    const row = nodes[rowIndex];
+    const originalTop = row.bounds[1];
+    const rowHeight = Math.max(110, Math.min(260, row.bounds[3] - originalTop || 186));
+    const offset = nextTop - originalTop;
+    const groupEnd = rowIndices[rowNumber + 1] ?? sectionEnd;
+    for (let index = rowIndex; index < groupEnd; index++) {
+      const node = nodes[index];
+      node.bounds = [node.bounds[0], node.bounds[1] + offset, node.bounds[2], node.bounds[3] + offset];
+    }
+    nodes[rowIndex].bounds[3] = nextTop + rowHeight;
+    nextTop += rowHeight;
+  }
+  return { width, height, nodes };
+}
+
+function contactsFrom(nodes: UiNode[]): Contact[] {
+  const headingIndex = nodes.findIndex(node =>
+    shortId(node) === "section-title" &&
+    /^find friends$/i.test(node.text || node.desc),
+  );
+  if (headingIndex < 0) return [];
+  const nextSection = nodes.findIndex((node, index) =>
+    index > headingIndex && shortId(node) === "section-title",
+  );
+  const end = nextSection < 0 ? nodes.length : nextSection;
+  const indices = nodes.flatMap((node, index) =>
+    index > headingIndex && index < end && shortId(node) === "scu_search_friend_cell" ? [index] : [],
+  );
+  return indices.flatMap((index, rowNumber) => {
+    const row = nodes[index];
+    const rowEnd = indices[rowNumber + 1] ?? end;
+    const children = nodes.slice(index + 1, rowEnd);
+    const title = children.find(node => shortId(node) === "result-title");
+    const name = title?.text.trim() || title?.desc.trim();
+    if (!name) return [];
+    const reason = children.find(node => shortId(node) === "result-reason");
+    const action = children.find(node => shortId(node) === "scu_search_action_button");
+    return [{
+      name,
+      reason: reason?.text.trim() || reason?.desc.trim() || "IN MY CONTACTS",
+      top: row.bounds[1],
+      bottom: row.bounds[3],
+      height: row.bounds[3] - row.bounds[1],
+      action: action?.text.trim() || action?.desc.trim() || "Add",
+      hasDismiss: children.some(node => shortId(node) === "friend-cell-dismiss"),
+      children,
+    }];
+  });
+}
+
+function xmlEscape(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function normalizeUiDump(value: string): string {
-  if (/<node\b/.test(value)) return value;
-  const nodes = value.split(/\r?\n/).flatMap(line => {
-    const bounds = line.match(/\[\d+,\d+\]\[\d+,\d+\]/)?.[0];
-    if (!bounds || !/\bclickable=(?:true|false)\b/.test(line)) return [];
-    const attr = (name: string) => line.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] ?? "";
-    const className = line.match(
-      /\bfocused=(?:true|false)\s+(.+?)(?=\s+(?:id|desc|text)="|\s+\[\d+,\d+\]\[\d+,\d+\])/,
-    )?.[1]?.trim() ?? "";
-    return [`<node text="${escapeXml(attr("text"))}" content-desc="${escapeXml(attr("desc"))}" resource-id="${escapeXml(attr("id"))}" class="${escapeXml(className)}" clickable="${/\bclickable=true\b/.test(line)}" bounds="${bounds}"/>`];
-  });
-  return nodes.length ? `<hierarchy>${nodes.join("")}</hierarchy>` : value;
+function serializeNodes(nodes: UiNode[]): string {
+  return `<hierarchy>${nodes.map(node =>
+    `<node text="${xmlEscape(node.text)}" content-desc="${xmlEscape(node.desc)}" resource-id="${xmlEscape(node.resourceId)}" class="${xmlEscape(node.className)}" package="${xmlEscape(node.packageName)}" clickable="${node.clickable}" focusable="${node.focusable}" focused="${node.focused}" selected="${node.selected}" bounds="[${node.bounds[0]},${node.bounds[1]}][${node.bounds[2]},${node.bounds[3]}]"/>`,
+  ).join("")}</hierarchy>`;
 }
 
-function inferScreenSize(xml: string): { width: number; height: number } | null {
-  const bounds = [...xml.matchAll(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/g)]
-    .map(match => ({
-      left: Number(match[1]),
-      top: Number(match[2]),
-      right: Number(match[3]),
-      bottom: Number(match[4]),
-    }));
-  const root = bounds.filter(rect => rect.left === 0 && rect.top === 0)
-    .sort((a, b) => b.right * b.bottom - a.right * a.bottom)[0];
-  if (root) return { width: root.right, height: root.bottom };
-  if (bounds.length === 0) return null;
-  return {
-    width: Math.max(...bounds.map(rect => rect.right)),
-    height: Math.max(...bounds.map(rect => rect.bottom)),
-  };
+function initials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase();
 }
 
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Could not read screenshot."));
-    reader.onerror = () => reject(new Error("Could not read screenshot."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function diagnoseCycleLog(value: string): string[] {
-  if (!value.trim()) return [];
-  const findings: string[] = [];
-  const cards = [...value.matchAll(
-    /after adding ([^\r\n,]+), divider measurement was unavailable[^\r\n]*card bounds=(-?\d+),(-?\d+),(-?\d+),(-?\d+)[^\r\n]*/gi,
-  )];
-  const card = cards.at(-1);
-  const final = value.match(
-    /after three movement-scaled corrections,[^\r\n]+ at y=(-?\d+) \(target y=(-?\d+); residual (-?\d+)px\)/i,
-  );
-  if (card && final) {
-    const cardTop = Number(card[2]);
-    const intendedTop = Number(final[2]);
-    const gap = cardTop - intendedTop;
-    if (Math.abs(gap) > 80) {
-      findings.push(
-        `The post-action card was at y=${cardTop}, but the routine aimed the next contact at y=${intendedTop} ` +
-        `(${Math.abs(gap)}px apart). The chosen contact had not first been brought to the top before its action.`,
-      );
-    }
-  }
-  const movementPattern =
-    /the previous (\d+)px swipe moved content (-?\d+)px; sending correction \d+ of 3 for (\d+)px to move ([^\r\n]+?) to the top\./gi;
-  const targetName = final?.[0].match(/corrections, (.+?) is still at y=/i)?.[1]?.trim();
-  const movements = [...value.matchAll(movementPattern)].filter(movement =>
-    !targetName || movement[4].trim() === targetName,
-  );
-  if (movements.length) {
-    findings.push("Observed correction sequence (swipe distance → measured list movement):");
-    for (const movement of movements) {
-      findings.push(`• ${movement[1]}px → ${movement[2]}px; next correction was ${movement[3]}px.`);
-    }
-    if (movements.some(movement => Number(movement[2]) < 0)) {
-      findings.push(
-        "A negative measured movement means the contact moved back down the screen during a correction; " +
-        "that reversal is why the list appeared to scroll backwards.",
-      );
-    }
-  }
-  if (findings.length === 0) {
-    findings.push("No Add Friends row-position or correction-movement sequence was found in this log.");
-  }
-  return findings;
-}
+const importedExample = prepareScene(sampleInspectDump);
 
 export function AddFriendsScrollReplayTab() {
-  const imageRef = useRef<HTMLImageElement>(null);
-  const [screenshot, setScreenshot] = useState<File | null>(null);
-  const [imageUrl, setImageUrl] = useState("");
-  const [uiXml, setUiXml] = useState("");
-  const [cycleLog, setCycleLog] = useState("");
-  const [crop, setCrop] = useState<CropRect | null>(null);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
-  const [screenWidth, setScreenWidth] = useState("720");
-  const [screenHeight, setScreenHeight] = useState("1600");
-  const [friendName, setFriendName] = useState("");
-  const [alignBeforeAction, setAlignBeforeAction] = useState(true);
-  const [previousCenterY, setPreviousCenterY] = useState("");
-  const [rowHeight, setRowHeight] = useState("");
+  const [scene, setScene] = useState<Scene>(importedExample);
+  const [baseline, setBaseline] = useState<Scene>(importedExample);
+  const [dumpText, setDumpText] = useState(sampleInspectDump);
+  const [selected, setSelected] = useState(() => contactsFrom(importedExample.nodes)[0]?.name ?? "");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<ReplayResult | null>(null);
-  const cycleLogDiagnosis = diagnoseCycleLog(cycleLog);
+  const [status, setStatus] = useState("");
+  const [replayLog, setReplayLog] = useState<string[]>([]);
+  const contacts = useMemo(() => contactsFrom(scene.nodes), [scene.nodes]);
+  const heading = scene.nodes.find(node => shortId(node) === "section-title" && /^find friends$/i.test(node.text || node.desc));
+  const listTop = heading?.bounds[3] ?? 426;
+  const navTop = scene.height - Math.round(scene.height * 0.056);
+  const selectedContact = contacts.find(contact => contact.name === selected);
 
-  useEffect(() => {
-    if (!screenshot) {
-      setImageUrl("");
-      return;
+  const loadDump = (text: string) => {
+    try {
+      const nextScene = prepareScene(text);
+      setDumpText(text);
+      setScene(nextScene);
+      setBaseline(nextScene);
+      setSelected(contactsFrom(nextScene.nodes)[0]?.name ?? "");
+      setError("");
+      setStatus(`Loaded ${contactsFrom(nextScene.nodes).length} contacts from the Inspect dump.`);
+      setReplayLog([]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not read this Inspect dump.");
     }
-    const url = URL.createObjectURL(screenshot);
-    setImageUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [screenshot]);
-
-  useEffect(() => {
-    const inferred = inferScreenSize(normalizeUiDump(uiXml));
-    if (!inferred) return;
-    setScreenWidth(String(inferred.width));
-    setScreenHeight(String(inferred.height));
-  }, [uiXml]);
-
-  const loadUiDump = async (file?: File) => {
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setError("The UI dump must be under 2 MB.");
-      return;
-    }
-    setUiXml(await file.text());
-    setError("");
   };
 
-  const loadCycleLog = async (file?: File) => {
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setError("The cycle log must be under 2 MB.");
-      return;
-    }
-    setCycleLog(await file.text());
-    setError("");
-  };
-
-  const pointerPoint = (event: PointerEvent<HTMLImageElement>) => {
-    const image = imageRef.current;
-    if (!image) return null;
-    const rect = image.getBoundingClientRect();
-    return {
-      x: Math.max(0, Math.min(image.naturalWidth, (event.clientX - rect.left) * image.naturalWidth / rect.width)),
-      y: Math.max(0, Math.min(image.naturalHeight, (event.clientY - rect.top) * image.naturalHeight / rect.height)),
-    };
-  };
-
-  const beginCrop = (event: PointerEvent<HTMLImageElement>) => {
-    const point = pointerPoint(event);
-    if (!point) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDragStart(point);
-    setCrop({ left: point.x, top: point.y, width: 1, height: 1 });
-  };
-
-  const updateCrop = (event: PointerEvent<HTMLImageElement>) => {
-    if (!dragStart) return;
-    const point = pointerPoint(event);
-    if (!point) return;
-    setCrop({
-      left: Math.min(dragStart.x, point.x),
-      top: Math.min(dragStart.y, point.y),
-      width: Math.abs(point.x - dragStart.x),
-      height: Math.abs(point.y - dragStart.y),
-    });
-  };
-
-  const finishCrop = (event: PointerEvent<HTMLImageElement>) => {
-    updateCrop(event);
-    setDragStart(null);
-  };
-
-  const cropStyle = () => {
-    const image = imageRef.current;
-    if (!image || !crop || image.naturalWidth === 0 || image.naturalHeight === 0) return undefined;
-    return {
-      left: `${crop.left / image.naturalWidth * 100}%`,
-      top: `${crop.top / image.naturalHeight * 100}%`,
-      width: `${crop.width / image.naturalWidth * 100}%`,
-      height: `${crop.height / image.naturalHeight * 100}%`,
-    };
-  };
-
-  const runReplay = async (regressionFixture = false) => {
-    if (!regressionFixture && (!screenshot || !uiXml.trim())) {
-      setError("Choose a screenshot and its matching UIAutomator XML dump.");
-      return;
-    }
-    const normalizedUiXml = regressionFixture ? "" : normalizeUiDump(uiXml);
-    if (!regressionFixture && screenshot && screenshot.size > 20 * 1024 * 1024) {
-      setError("The screenshot must be under 20 MB.");
-      return;
-    }
-    if (!regressionFixture && crop && (crop.width < 30 || crop.height < 60)) {
-      setError("Drag a larger crop around the phone display, or choose the full image.");
-      return;
-    }
+  const runAction = async (action: Action, contactName = selected) => {
+    const contact = contacts.find(item => item.name === contactName);
+    if (!contact || running) return;
     setRunning(true);
     setError("");
-    setResult(null);
+    setStatus("");
     try {
-      const imageBase64 = regressionFixture ? undefined : await readAsDataUrl(screenshot!);
       const response = await fetch("/api/debug/add-friends-scroll-replay", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(regressionFixture
-          ? { regressionFixture: true }
-          : {
-            imageBase64,
-            uiXml: normalizedUiXml,
-            screenWidth: Number(screenWidth),
-            screenHeight: Number(screenHeight),
-            alignBeforeAction,
-            crop: crop ? {
-              left: Math.floor(crop.left),
-              top: Math.floor(crop.top),
-              width: Math.max(1, Math.floor(crop.width)),
-              height: Math.max(1, Math.floor(crop.height)),
-            } : null,
-            friendName: friendName.trim() || undefined,
-            previousCenterY: previousCenterY ? Number(previousCenterY) : undefined,
-            rowHeight: rowHeight ? Number(rowHeight) : undefined,
-          }),
+        body: JSON.stringify({
+          uiXml: serializeNodes(scene.nodes),
+          screenWidth: scene.width,
+          screenHeight: scene.height,
+          friendName: contact.name,
+          action,
+        }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Replay failed.");
-      setResult(payload as ReplayResult);
+      if (!response.ok) throw new Error(payload.error || "The simulated action failed.");
+      const result = payload as ReplayResult;
+      if (!Array.isArray(result.nodes)) throw new Error("The replay returned no updated screen.");
+      setScene({ ...scene, nodes: result.nodes });
+      setSelected(result.expectedNext || contact.name);
+      setStatus(`${action[0].toUpperCase()}${action.slice(1)} ${contact.name}; ${result.expectedNext} moved to the first row.`);
+      setReplayLog(result.logs);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Replay failed.");
+      setError(caught instanceof Error ? caught.message : "The simulated action failed.");
     } finally {
       setRunning(false);
     }
   };
 
+  const resetScreen = () => {
+    setScene({ ...baseline, nodes: baseline.nodes.map(node => ({ ...node, bounds: [...node.bounds] as Bounds })) });
+    setSelected(contactsFrom(baseline.nodes)[0]?.name ?? "");
+    setStatus("Restored the imported screen.");
+    setError("");
+    setReplayLog([]);
+  };
+
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-semibold">Add Friends Scroll Replay</h2>
+        <h2 className="text-xl font-semibold">Snapchat Add Friends screen test</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Run the real scroll decision against a saved screen and UI dump. Swipes are recorded by a fake device;
-          nothing is sent to a phone. Files are temporary and deleted after the replay.
+          The attached Inspect example is loaded. Click a contact, then try Add, Skip, or the grey X.
         </p>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-        <section className="desktop-card space-y-4 p-5">
-          <h3 className="font-semibold">1. Load the capture</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="scroll-replay-image">Screen screenshot</Label>
-              <Input
-                id="scroll-replay-image"
-                data-testid="input-scroll-replay-image"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={event => {
-                  setScreenshot(event.target.files?.[0] ?? null);
-                  setCrop(null);
-                  setResult(null);
-                  setError("");
-                }}
-              />
-              <p className="text-xs text-muted-foreground">PNG, JPEG, or WebP; maximum 20 MB.</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="scroll-replay-xml">Matching UI dump (XML or Inspect text)</Label>
-              <Input
-                id="scroll-replay-xml"
-                data-testid="input-scroll-replay-xml"
-                type="file"
-                accept=".xml,.txt,text/plain,application/xml"
-                onChange={event => void loadUiDump(event.target.files?.[0])}
-              />
-              <p className="text-xs text-muted-foreground">Phone Farm → Inspect → Dump All downloads the tree text.</p>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="scroll-replay-log">Phone Farm run log (optional)</Label>
-              <Input
-                id="scroll-replay-log"
-                data-testid="input-scroll-replay-log"
-                type="file"
-                accept=".txt,.log,text/plain"
-                onChange={event => void loadCycleLog(event.target.files?.[0])}
-              />
-              <p className="text-xs text-muted-foreground">The log analysis shows measured row positions and direction reversals.</p>
-            </div>
+      <div className="grid gap-5 xl:grid-cols-[minmax(320px,0.85fr)_minmax(340px,1.15fr)]">
+        <section className="desktop-card space-y-4 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold">Imported phone screen</h3>
+            <Button type="button" variant="outline" size="sm" data-testid="button-reset-add-friends-screen" onClick={resetScreen}>
+              <RotateCcw className="mr-2 h-4 w-4" /> Reset
+            </Button>
           </div>
-
-          {imageUrl && (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label>Drag over the phone display to crop it</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  data-testid="button-scroll-replay-full-image"
-                  onClick={() => {
-                    const image = imageRef.current;
-                    if (image) setCrop({ left: 0, top: 0, width: image.naturalWidth, height: image.naturalHeight });
-                  }}
-                >
-                  Use full image
-                </Button>
-              </div>
-              <div className="max-w-full overflow-auto rounded-lg border border-border bg-muted/30 p-2">
-                <div className="relative inline-block max-w-full">
-                  <img
-                    ref={imageRef}
-                    src={imageUrl}
-                    alt="Screenshot to replay"
-                    data-testid="image-scroll-replay-source"
-                    draggable={false}
-                    className="block max-h-[520px] max-w-full w-auto select-none touch-none"
-                    onPointerDown={beginCrop}
-                    onPointerMove={updateCrop}
-                    onPointerUp={finishCrop}
-                    onPointerCancel={() => setDragStart(null)}
-                    onLoad={() => setCrop(null)}
-                  />
-                  {crop && (
-                    <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute border-2 border-cyan-400 bg-cyan-300/10"
-                      style={cropStyle()}
-                    />
-                  )}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                The crop rectangle is shown in cyan. For an already-cropped phone screenshot, choose “Use full image.”
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="scroll-replay-xml-text">UI dump contents</Label>
-            <textarea
-              id="scroll-replay-xml-text"
-              data-testid="textarea-scroll-replay-xml"
-              value={uiXml}
-              onChange={event => setUiXml(event.target.value)}
-              placeholder="Upload/paste XML or the text from Phone Farm → Inspect → Dump All"
-              className="min-h-36 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              spellCheck={false}
-            />
+          <div className="mx-auto w-full max-w-[330px]">
+            <svg
+              viewBox={`0 0 ${scene.width} ${scene.height}`}
+              role="img"
+              aria-label="Reconstructed Snapchat Add Friends screen"
+              data-testid="screen-add-friends-simulator"
+              className="block h-auto w-full overflow-hidden rounded-[2rem] border-[7px] border-neutral-900 bg-white shadow-xl"
+            >
+              <defs>
+                <clipPath id="friend-list-clip">
+                  <rect x="0" y={listTop} width={scene.width} height={Math.max(0, navTop - listTop)} />
+                </clipPath>
+              </defs>
+              <rect width={scene.width} height={scene.height} fill="#ffffff" />
+              <rect width={scene.width} height={70} fill="#f7f7f7" />
+              <text x="50" y="48" fontSize="28" fill="#222">9:41</text>
+              <text x={scene.width - 180} y="48" fontSize="24" fill="#222">●  ▮  ▰</text>
+              <path d="M70 162 L45 185 L70 208" fill="none" stroke="#252525" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
+              <text x={scene.width / 2} y="187" textAnchor="middle" fontSize="42" fontWeight="700" fill="#171717">Add friends</text>
+              <circle cx={scene.width - 76} cy="162" r="7" fill="#272727" />
+              <circle cx={scene.width - 54} cy="162" r="7" fill="#272727" />
+              <circle cx={scene.width - 32} cy="162" r="7" fill="#272727" />
+              <rect x="40" y="219" width={scene.width - 80} height="107" rx="54" fill="#f1f1f3" />
+              <circle cx="87" cy="271" r="19" fill="none" stroke="#6e6e73" strokeWidth="7" />
+              <path d="M101 285 L116 300" stroke="#6e6e73" strokeWidth="7" strokeLinecap="round" />
+              <text x="145" y="286" fontSize="31" fill="#717176">Search...</text>
+              <text x="45" y={listTop - 24} fontSize="31" fontWeight="700" fill="#1e1e1e">Find friends</text>
+              <text x={scene.width - 280} y={listTop - 24} fontSize="26" fill="#555">All contacts ›</text>
+              <line x1="0" x2={scene.width} y1={listTop} y2={listTop} stroke="#e7e7e7" strokeWidth="2" />
+              <g clipPath="url(#friend-list-clip)">
+                {contacts.map((contact, index) => {
+                  const isSelected = selected === contact.name;
+                  const isDismissed = contact.reason === "Dismissed in simulator";
+                  const isSkipped = contact.reason === "Skipped in simulator";
+                  const added = contact.action === "Snap" || contact.action === "Message";
+                  const centerY = contact.top + contact.height / 2;
+                  const buttonY = centerY - 44;
+                  return (
+                    <g
+                      key={`${contact.name}-${index}`}
+                      data-testid={`card-sim-contact-${index}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Select ${contact.name}`}
+                      onClick={() => setSelected(contact.name)}
+                      onKeyDown={event => {
+                        if (event.key === "Enter" || event.key === " ") setSelected(contact.name);
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <rect
+                        x="0"
+                        y={contact.top}
+                        width={scene.width}
+                        height={contact.height}
+                        fill={isSelected ? "#f5fbff" : isDismissed ? "#f2f2f2" : "#ffffff"}
+                        stroke={isSelected ? "#18a8dc" : "#eeeeee"}
+                        strokeWidth={isSelected ? "4" : "2"}
+                      />
+                      <circle cx="112" cy={centerY} r="67" fill={["#f4dcd3", "#d7e5e2", "#e5ddf0", "#eee7ce"][index % 4]} />
+                      <text x="112" y={centerY + 12} textAnchor="middle" fontSize="39" fontWeight="600" fill="#4f5558">
+                        {initials(contact.name)}
+                      </text>
+                      <text x="214" y={contact.top + 67} fontSize="35" fontWeight="600" fill="#202124">
+                        {contact.name.length > 23 ? `${contact.name.slice(0, 21)}…` : contact.name}
+                      </text>
+                      <text x="214" y={contact.top + contact.height - 28} fontSize="23" fill="#747474">
+                        {isDismissed ? "Dismissed in simulator" : isSkipped ? "Skipped in simulator" : contact.reason}
+                      </text>
+                      {isDismissed ? (
+                        <rect x="709" y={buttonY} width="247" height="88" rx="44" fill="#d8d8d8" />
+                      ) : added ? (
+                        <>
+                          <rect x="660" y={buttonY} width="164" height="88" rx="44" fill="#f4f4f4" />
+                          <text x="742" y={buttonY + 56} textAnchor="middle" fontSize="25" fontWeight="600" fill="#222">Message</text>
+                          <rect x="834" y={buttonY} width="155" height="88" rx="44" fill="#ffeb00" />
+                          <text x="911" y={buttonY + 56} textAnchor="middle" fontSize="25" fontWeight="700" fill="#222">Snap</text>
+                        </>
+                      ) : (
+                        <>
+                          <g
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Add ${contact.name}`}
+                            data-testid={`button-sim-add-${index}`}
+                            onClick={event => { event.stopPropagation(); setSelected(contact.name); void runAction("add", contact.name); }}
+                            onKeyDown={event => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.stopPropagation();
+                                setSelected(contact.name);
+                                void runAction("add", contact.name);
+                              }
+                            }}
+                          >
+                            <rect x="709" y={buttonY} width="247" height="88" rx="44" fill="#ffeb00" />
+                            <text x="832" y={buttonY + 56} textAnchor="middle" fontSize="29" fontWeight="700" fill="#222">＋ Add</text>
+                          </g>
+                          {contact.hasDismiss && (
+                            <g
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Dismiss ${contact.name}`}
+                              data-testid={`button-sim-dismiss-${index}`}
+                              onClick={event => { event.stopPropagation(); setSelected(contact.name); void runAction("dismiss", contact.name); }}
+                              onKeyDown={event => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.stopPropagation();
+                                  setSelected(contact.name);
+                                  void runAction("dismiss", contact.name);
+                                }
+                              }}
+                            >
+                              <circle cx="1012" cy={centerY} r="22" fill="#efefef" />
+                              <path d={`M1004 ${centerY - 8} L1020 ${centerY + 8} M1020 ${centerY - 8} L1004 ${centerY + 8}`} stroke="#8b8b8b" strokeWidth="5" strokeLinecap="round" />
+                            </g>
+                          )}
+                        </>
+                      )}
+                    </g>
+                  );
+                })}
+              </g>
+              <rect x="0" y={navTop} width={scene.width} height={scene.height - navTop} fill="#171717" />
+              <circle cx={scene.width / 2} cy={navTop + (scene.height - navTop) / 2} r="27" fill="#777" />
+            </svg>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="scroll-replay-log-text">Run log contents</Label>
-            <textarea
-              id="scroll-replay-log-text"
-              data-testid="textarea-scroll-replay-log"
-              value={cycleLog}
-              onChange={event => setCycleLog(event.target.value)}
-              placeholder="Upload or paste the run log around the Add Friends actions"
-              className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              spellCheck={false}
-            />
-          </div>
-          {cycleLog.trim() && (
-            <div data-testid="status-scroll-replay-log-diagnosis" className="space-y-1 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-              <p className="font-semibold">Run-log finding</p>
-              {cycleLogDiagnosis.map((finding, index) => (
-                <p key={index} className="text-muted-foreground">{finding}</p>
-              ))}
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground">
+            Contact order and card heights come from Inspect. Off-screen rows reported at y=0 are rebuilt into a visible list.
+          </p>
         </section>
 
-        <section className="desktop-card space-y-4 p-5">
-          <h3 className="font-semibold">2. Replay the scroll</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="scroll-replay-width">Screen width</Label>
-              <Input id="scroll-replay-width" data-testid="input-scroll-replay-width" type="number" min="100" value={screenWidth} onChange={event => setScreenWidth(event.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="scroll-replay-height">Screen height</Label>
-              <Input id="scroll-replay-height" data-testid="input-scroll-replay-height" type="number" min="100" value={screenHeight} onChange={event => setScreenHeight(event.target.value)} />
-            </div>
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="scroll-replay-friend">Contact selected for this replay (optional)</Label>
-              <Input id="scroll-replay-friend" data-testid="input-scroll-replay-friend" value={friendName} onChange={event => setFriendName(event.target.value)} placeholder="e.g. the contact whose Add row is shown" />
-            </div>
-            <label className="col-span-2 flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                data-testid="checkbox-scroll-replay-align-first"
-                checked={alignBeforeAction}
-                onChange={event => setAlignBeforeAction(event.target.checked)}
-              />
-              Bring the selected contact to the top before the action
+        <section className="desktop-card space-y-4 p-4">
+          <div className="space-y-2">
+            <h3 className="font-semibold">Import an Inspect dump</h3>
+            <Input
+              type="file"
+              accept=".txt,.xml,text/plain,application/xml"
+              data-testid="input-add-friends-inspect"
+              onChange={event => {
+                const file = event.target.files?.[0];
+                if (file) void file.text().then(loadDump);
+              }}
+            />
+            <textarea
+              value={dumpText}
+              onChange={event => setDumpText(event.target.value)}
+              data-testid="textarea-add-friends-inspect"
+              aria-label="Inspect dump text"
+              className="min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+              spellCheck={false}
+            />
+            <Button type="button" variant="outline" data-testid="button-load-add-friends-inspect" onClick={() => loadDump(dumpText)}>
+              <Upload className="mr-2 h-4 w-4" /> Load this dump
+            </Button>
+          </div>
+
+          <div className="space-y-2 border-t border-border pt-4">
+            <h3 className="font-semibold">Choose a contact and test the action</h3>
+            <label className="block space-y-1 text-sm">
+              <span>Contact visible in the screen</span>
+              <select
+                value={selected}
+                onChange={event => setSelected(event.target.value)}
+                data-testid="select-add-friends-sim-contact"
+                className="w-full rounded-md border border-input bg-background px-3 py-2"
+              >
+              {contacts.map((contact, index) => (
+                  <option key={`${contact.name}-${index}`} value={contact.name} disabled={contact.bottom <= listTop || contact.top >= navTop}>
+                    {contact.name} {contact.top < navTop && contact.bottom > listTop ? "" : "(off-screen)"}
+                  </option>
+                ))}
+              </select>
             </label>
-            <details className="col-span-2 rounded-md border border-border p-3">
-              <summary className="cursor-pointer text-sm font-medium">Position overrides</summary>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="scroll-replay-center-y">Previous row center Y</Label>
-                  <Input id="scroll-replay-center-y" data-testid="input-scroll-replay-center-y" type="number" value={previousCenterY} onChange={event => setPreviousCenterY(event.target.value)} placeholder="Auto" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="scroll-replay-row-height">Previous row height</Label>
-                  <Input id="scroll-replay-row-height" data-testid="input-scroll-replay-row-height" type="number" min="1" value={rowHeight} onChange={event => setRowHeight(event.target.value)} placeholder="Auto" />
-                </div>
-              </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Button type="button" data-testid="button-sim-action-add" disabled={running || !selectedContact} onClick={() => void runAction("add")}>Add</Button>
+              <Button type="button" variant="outline" data-testid="button-sim-action-skip" disabled={running || !selectedContact} onClick={() => void runAction("skip")}>Skip</Button>
+              <Button type="button" variant="outline" data-testid="button-sim-action-dismiss" disabled={running || !selectedContact} onClick={() => void runAction("dismiss")}>Dismiss</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              These run the same contact-positioning and one-card scroll helpers as the phone tool. No phone is touched.
+            </p>
+          </div>
+
+          {(status || error) && (
+            <div
+              role={error ? "alert" : "status"}
+              data-testid={error ? "status-add-friends-sim-error" : "status-add-friends-sim-result"}
+              className={`rounded-md border p-3 text-sm ${error ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-emerald-500/30 bg-emerald-500/5"}`}
+            >
+              {error || status}
+            </div>
+          )}
+          {replayLog.length > 0 && (
+            <details open className="rounded-md border border-border p-3">
+              <summary className="cursor-pointer text-sm font-medium">What the code did</summary>
+              <pre data-testid="text-add-friends-sim-log" className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap text-xs">{replayLog.join("\n")}</pre>
             </details>
-          </div>
-
-          <Button
-            type="button"
-            data-testid="button-run-scroll-replay"
-            className="w-full"
-            onClick={() => void runReplay()}
-            disabled={running || !screenshot || !uiXml.trim()}
-          >
-            {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-            {running ? "Running replay…" : "Run scroll replay"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            data-testid="button-run-add-friends-regression"
-            className="w-full"
-            onClick={() => void runReplay(true)}
-            disabled={running}
-          >
-            Run logged 4th-add regression
-          </Button>
-
-          {error && (
-            <div role="alert" data-testid="status-scroll-replay-error" className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{error}</span>
-            </div>
           )}
-
-          {result && (
-            <div data-testid="status-scroll-replay-result" className="space-y-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
-              <div className="flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="h-4 w-4" />
-                Replay passed
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <span className="text-muted-foreground">Next contact</span><span>{result.expectedNext}</span>
-                <span className="text-muted-foreground">Expected top</span><span>{result.expectedTop}px</span>
-                <span className="text-muted-foreground">Simulated top</span><span>{result.actualTop}px</span>
-                <span className="text-muted-foreground">Swipes sent</span><span>{result.swipes.length}</span>
-                <span className="text-muted-foreground">Input mode</span><span>{result.mode}</span>
-                <span className="text-muted-foreground">Aligned before action</span><span>{result.preActionAlignment ? "Yes" : "No"}</span>
-                <span className="text-muted-foreground">Simulated list response</span><span>{result.simulatedMovementScale ?? 1}× finger travel</span>
-              </div>
-              {result.swipes.map((swipe, index) => (
-                <div key={`${swipe.x1}-${swipe.y1}-${index}`} data-testid={`row-scroll-replay-swipe-${index}`} className="rounded bg-background/80 p-2 font-mono text-xs">
-                  Swipe {index + 1}: ({swipe.x1},{swipe.y1}) → ({swipe.x2},{swipe.y2}), {swipe.durationMs} ms
-                </div>
-              ))}
-              <details>
-                <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium">
-                  <FileCode2 className="h-4 w-4" /> Replay log
-                </summary>
-                <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-background p-3 text-xs">{result.logs.join("\n")}</pre>
-              </details>
-            </div>
-          )}
-
-          <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
-            <div className="mb-1 flex items-center gap-2 font-medium text-foreground">
-              <ImageUp className="h-4 w-4" /> What this replay verifies
-            </div>
-            It runs the real positioning and scroll calculations and records coordinates. The fake list moves by the
-            requested gesture; this does not emulate Android inertia or Snapchat rendering.
-          </div>
         </section>
       </div>
     </div>

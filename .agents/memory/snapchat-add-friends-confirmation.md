@@ -1,7 +1,15 @@
 ---
 name: Snapchat Add Friends contact positioning
-description: Position every chosen contact before acting, then advance exactly one live card.
+description: Import Inspect dumps into a simple phone preview that exercises Add Friends positioning and scrolling.
 ---
+
+## Add Friends screen test
+
+The Settings replay is an import-driven phone simulator: load or paste an Inspect dump, render a basic Snapchat screen in contact order, and click Add, Skip, or Dismiss to run the same positioning and one-card scroll helpers against fake device input. Keep it direct and interactive; a screenshot, separate diagnostic form, or hard-coded scenario is not a substitute.
+
+**Why:** The user wants to test code changes inside Replit against imported device examples instead of waiting for repeated Windows Electron builds.
+
+**How to apply:** Preserve contact names and each row's reported height while rebuilding invalid off-screen y=0 positions into a visible list. After each simulated action, show the updated screen and scroll log, and allow another action or reset to the imported state.
 
 ## Position the selected contact before acting
 

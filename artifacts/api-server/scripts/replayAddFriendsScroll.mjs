@@ -18,9 +18,9 @@ for (let i = 2; i < process.argv.length; i++) {
 
 if (options.has("--help")) {
   console.log(
-    "Replay Add Friends scrolling with an injected screenshot and UIAutomator XML.\n" +
+    "Replay Add Friends scrolling from an Inspect/UIAutomator dump.\n" +
     "Options: --image FILE --xml FILE --crop LEFT,TOP,WIDTH,HEIGHT --screen WIDTH,HEIGHT " +
-    "--friend NAME --align-before-action --regression-fixture " +
+    "--friend NAME --action add|skip|dismiss --return-screen --align-before-action --regression-fixture " +
     "--previous-center-y PX --row-height PX --divider-fixture",
   );
   process.exit(0);
@@ -44,7 +44,7 @@ function parseUiDump(xml) {
       [...match[1].matchAll(/([\w:-]+)="([^"]*)"/g)]
         .map(([, key, value]) => [key, decodeXml(value)]),
     );
-    const bounds = attributes.bounds?.match(/^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$/);
+    const bounds = attributes.bounds?.match(/^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/);
     if (!bounds) continue;
     nodes.push({
       text: attributes.text ?? "",
@@ -247,26 +247,40 @@ const { alignAddFriendsContactToTop, scrollAddFriendsListOneSlot } =
 
 const swipes = [];
 const logs = [];
-let currentNodes = nodes.map(node => ({ ...node, bounds: [...node.bounds] }));
+let currentNodes = nodes.map((node, replayId) => ({ ...node, bounds: [...node.bounds], replayId }));
 const movementScale = Number(options.get("--movement-scale") ?? (regressionFixture ? 1.5 : 1));
 assert(Number.isFinite(movementScale) && movementScale > 0, "--movement-scale must be a positive number.");
+const findFriendsHeadingIndex = currentNodes.findIndex(node =>
+  node.resourceId.split("/").at(-1) === "section-title" &&
+  /^find friends$/i.test(node.text || node.desc),
+);
+const nextSectionIndex = currentNodes.findIndex((node, index) =>
+  index > findFriendsHeadingIndex &&
+  node.resourceId.split("/").at(-1) === "section-title",
+);
+const rowIndicesInTree = currentNodes.flatMap((node, index) =>
+  index > findFriendsHeadingIndex &&
+  (nextSectionIndex < 0 || index < nextSectionIndex) &&
+  node.resourceId.split("/").at(-1) === "scu_search_friend_cell"
+    ? [index]
+    : [],
+);
+const rowMemberIds = new Set();
+for (let index = 0; index < rowIndicesInTree.length; index++) {
+  const start = rowIndicesInTree[index];
+  const end = rowIndicesInTree[index + 1] ?? (nextSectionIndex < 0 ? currentNodes.length : nextSectionIndex);
+  for (let nodeIndex = start; nodeIndex < end; nodeIndex++) {
+    rowMemberIds.add(currentNodes[nodeIndex].replayId);
+  }
+}
 const replayIO = {
   captureScreenPixels: async () => screenshot,
   dump: async () => ({ xml: "", nodes: currentNodes }),
   swipe: async (_serial, x1, y1, x2, y2, durationMs = 300) => {
     swipes.push({ x1, y1, x2, y2, durationMs });
     const contentMovement = Math.round((y2 - y1) * movementScale);
-    const currentRows = rowsFrom(currentNodes);
     currentNodes = currentNodes.map(node => {
-      if (node.resourceId.split("/").at(-1) === "section-title") return node;
-      const belongsToRow = currentRows.some(row =>
-        row === node ||
-        (node.bounds[0] >= row.bounds[0] &&
-         node.bounds[1] >= row.bounds[1] &&
-         node.bounds[2] <= row.bounds[2] &&
-         node.bounds[3] <= row.bounds[3]),
-      );
-      return belongsToRow
+      return rowMemberIds.has(node.replayId)
         ? { ...node, bounds: [node.bounds[0], node.bounds[1] + contentMovement, node.bounds[2], node.bounds[3] + contentMovement] }
         : node;
     });
@@ -304,7 +318,12 @@ const requestedFriend = options.get("--friend") ??
       ? nameInRow(nodes, visibleRows(nodes)[0] ?? rows[0]) || "Previously handled contact"
       : "Previously handled contact");
 let alignedBeforeAction = false;
-if (options.has("--align-before-action") || regressionFixture) {
+const simulatedAction = options.get("--action")?.toLowerCase();
+assert(
+  !simulatedAction || ["add", "skip", "dismiss"].includes(simulatedAction),
+  "--action must be add, skip, or dismiss.",
+);
+if (options.has("--align-before-action") || regressionFixture || simulatedAction) {
   alignedBeforeAction = await alignAddFriendsContactToTop(
     context,
     nodes,
@@ -330,6 +349,33 @@ assert(expectedNextName, "The target contact has no following row in the supplie
 const expectedTop = actionRow.bounds[1];
 const priorCenterY = Number(options.get("--previous-center-y") ?? (actionRow.bounds[1] + actionRow.bounds[3]) / 2);
 const rowHeight = Number(options.get("--row-height") ?? (actionRow.bounds[3] - actionRow.bounds[1]));
+if (simulatedAction) {
+  const rowBounds = actionRow.bounds;
+  currentNodes = currentNodes.flatMap(node => {
+    const insideSelectedRow =
+      node !== actionRow &&
+      node.bounds[0] >= rowBounds[0] &&
+      node.bounds[1] >= rowBounds[1] &&
+      node.bounds[2] <= rowBounds[2] &&
+      node.bounds[3] <= rowBounds[3];
+    if (!insideSelectedRow) return [node];
+    const resourceId = node.resourceId.split("/").at(-1);
+    if (simulatedAction === "dismiss" && resourceId === "friend-cell-dismiss") return [];
+    if (resourceId === "result-reason" && simulatedAction !== "add") {
+      const label = simulatedAction === "dismiss" ? "Dismissed in simulator" : "Skipped in simulator";
+      return [{ ...node, text: label, desc: label }];
+    }
+    if (simulatedAction === "add") {
+      if (resourceId === "scu_quick_add_chat") return [{ ...node, text: "Message", desc: "Message" }];
+      if (resourceId === "scu_search_action_button") return [{ ...node, text: "Snap", desc: "Snap" }];
+    }
+    if (simulatedAction === "dismiss" && resourceId === "scu_search_action_button") {
+      return [{ ...node, text: "Dismissed", desc: "Dismissed" }];
+    }
+    return [node];
+  });
+  nodes = currentNodes;
+}
 const completed = await scrollAddFriendsListOneSlot(
   context,
   nodes,
@@ -378,6 +424,9 @@ console.log(JSON.stringify({
   actualTop: alignedNext.bounds[1],
   preActionAlignment: alignedBeforeAction,
   simulatedMovementScale: movementScale,
+  ...(options.has("--return-screen")
+    ? { nodes: currentNodes.map(({ replayId: _replayId, ...node }) => node) }
+    : {}),
   swipes,
   logs,
 }, null, 2));
