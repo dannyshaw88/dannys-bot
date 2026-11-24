@@ -162,3 +162,4 @@
 - [Snapchat ad-experience popup](snapchat-ad-experience-popup.md) — check only when Reply to Unread Chats cannot find/open chats, then choose Smaller In-Feed Ads and retry once
 - [Phone Farm device capacity](phone-farm-device-capacity.md) — device slots have no fixed total cap; the grid-size selector controls per-page visibility
 - [Google Chrome browser click parity](google-chrome-single-click.md) — standalone Facebook controls must receive one native click; synthetic replay can close the chat panel immediately
+- [Google Chrome Send DMs status display](google-chrome-send-dms-status.md) — keep completion summaries and progress narration out of the toolbar and activity log

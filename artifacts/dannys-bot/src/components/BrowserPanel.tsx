@@ -191,7 +191,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [sendDmAmountMax, setSendDmAmountMax] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.amountMax", "");
   const [sendDmProgress, setSendDmProgress] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.progress", "");
   const [sendDmNextRunAt, setSendDmNextRunAt] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.nextRunAt", "");
-  const [sendDmRunStatus, setSendDmRunStatus] = useState("");
   const sendDmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sendDmRunLockRef = useRef(false);
   const sendDmUserStoppedRef = useRef(false);
@@ -483,10 +482,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         switch (msg.type) {
           case "loading":
             setIsLoading(msg.loading);
-            break;
-          case "googleChromeDmStatus":
-            setSendDmRunStatus(msg.message ?? "");
-            appendLog(msg.message ?? "Send DMs update", msg.kind ?? "step");
             break;
           case "urlChange":
             if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) setAddressBar(msg.url);
@@ -901,19 +896,19 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     const amountMin = parsePositive(sendDmAmountMin);
     const amountMax = parsePositive(sendDmAmountMax);
     if (sendDmAmountEnabled && (amountMin === null || amountMax === null || amountMax < amountMin)) {
-      setSendDmRunStatus("Set a valid minimum and maximum amount in Browser settings.");
+      appendLog("Send DMs: set a valid minimum and maximum amount in Browser settings.", "fail");
       return;
     }
     const intervalMin = parsePositive(sendDmIntervalMin);
     const intervalMax = parsePositive(sendDmIntervalMax);
     if (sendDmScheduleEnabled && (intervalMin === null || intervalMax === null || intervalMax < intervalMin)) {
-      setSendDmRunStatus("Set a valid minimum and maximum interval in Browser settings.");
+      appendLog("Send DMs: set a valid minimum and maximum interval in Browser settings.", "fail");
       return;
     }
 
     const messageOptions = sendDmMessage.split("!!").map(value => value.trim()).filter(Boolean);
     if (!messageOptions.length) {
-      setSendDmRunStatus("Enter a non-empty message in Browser settings.");
+      appendLog("Send DMs: enter a non-empty message in Browser settings.", "fail");
       return;
     }
     const message = messageOptions[Math.floor(Math.random() * messageOptions.length)];
@@ -946,8 +941,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     setSendDmToolActive(true);
     setAddressBar(parsedUrl.href);
     setIsLoading(true);
-    setSendDmRunStatus("Opening configured page and counting eligible users…");
-    appendLog(`Send DMs: opening ${parsedUrl.href}`, "step");
     try {
       const response = await fetch(`/api/browser/${profileId}/send-dms/run`, {
         method: "POST",
@@ -977,12 +970,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         messagedUrls: [...new Set([...alreadyMessagedUrls, ...newMessagedUrls])].slice(-5000),
       };
       setSendDmProgress(JSON.stringify(progress));
-      const summary = `Finished: ${data.sent ?? 0} sent; ${data.failed ?? 0} failed; ${data.skipped ?? 0} skipped.`;
-      setSendDmRunStatus(summary);
-      appendLog(`Send DMs: ${summary}`, data.failed ? "fail" : "ok");
     } catch (error: any) {
       const messageText = error?.message ?? "Send DMs run failed";
-      setSendDmRunStatus(messageText);
       appendLog(`Send DMs: ${messageText}`, "fail");
     } finally {
       setIsLoading(false);
@@ -1002,7 +991,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     sendDmUserStoppedRef.current = true;
     setSendDmToolActive(false);
     setIsLoading(false);
-    setSendDmRunStatus("Stopping Send DMs…");
     if (sendDmTimerRef.current) {
       clearTimeout(sendDmTimerRef.current);
       sendDmTimerRef.current = null;
@@ -1152,8 +1140,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               size="icon"
               className={`h-12 w-12 shrink-0 text-green-600 hover:text-green-700 transition-opacity ${sendDmToolActive ? "opacity-35" : "opacity-100"}`}
               onClick={startSendDmTool}
-              title="Play — run configured Send DMs"
-              aria-label="Play Send DMs"
+              title="Play"
+              aria-label="Play"
               aria-pressed={sendDmToolActive}
             >
               <Play className="w-6 h-6" fill="currentColor" />
@@ -1163,25 +1151,14 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               size="icon"
               className={`h-12 w-12 shrink-0 text-red-600 hover:text-red-700 transition-opacity ${sendDmToolActive ? "opacity-100" : "opacity-35"}`}
               onClick={stopSendDmTool}
-              title="Stop — cancel this run and its next scheduled run"
-              aria-label="Stop Send DMs"
+              title="Stop"
+              aria-label="Stop"
               aria-pressed={!sendDmToolActive}
             >
               <Square className="w-5 h-5" fill="currentColor" />
             </Button>
           </>
         )}
-        {genericBrowser && sendDmRunStatus && (
-          <span
-            className="max-w-[180px] truncate text-[11px] text-muted-foreground"
-            role="status"
-            aria-live="polite"
-            title={sendDmRunStatus}
-          >
-            {sendDmRunStatus}
-          </span>
-        )}
-
         <form onSubmit={onAddressSubmit} className="flex-1 min-w-0">
           <div className="relative">
             <Globe className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
