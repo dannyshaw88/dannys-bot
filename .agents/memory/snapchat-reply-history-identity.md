@@ -11,6 +11,12 @@ Snapchat reply history must match the current account's username plus the recipi
 
 ### Conversation history storage
 
+Conversation exit uses two Android Back presses separated by exactly one requested 500ms wait, without screen reads before or between the presses. Preserve cancellation and input-error handling.
+
+**Why:** The user explicitly required two presses regardless of the intermediate screen and removed the intervening UI read to avoid its latency.
+
+**How to apply:** Keep any caller's subsequent chat-list handling outside the two-press sequence.
+
 Store one conversation per current account username and contact username. Merge sent replies and genuine failed attempts into that conversation, label each sender, and timestamp every event. Show conversations newest first, with each conversation's messages oldest first; failed sends must say `FAILED` with a reason. Do not store unread-list scans, Spotlight/media-only rows, false Delivered entries, or run-ended noise as conversation records. For incoming messages without Snapchat-provided timestamps, show when the message was observed rather than implying it was sent then. The bundled conversation store is canonical; legacy copies are not active history, and clearing a slot must clear that slot's records from both.
 
 **Why:** the user explicitly asked for one simple, timestamped conversation per contact instead of split reply/audit entries, with only real conversation activity.
