@@ -49,7 +49,9 @@ try {
     return { events, done };
   }
   for (const action of ["add", "dismiss", "skip"]) {
-    const { events, done } = await execute(contacts, "Entourage Mike Hunt", action);
+    const { events, done } = await execute(contacts, "Entourage Mike Hunt", action, {
+      requestedCount: 2, delaySeconds: 25,
+    });
     assert.deepEqual(done.completedStep, { action, friendName: "Entourage Mike Hunt" });
     assert.equal(done.nextVisibleContact, "Yes 119");
     assert.equal(done.actions.length, action === "skip" ? 0 : 1);
@@ -63,6 +65,9 @@ try {
     }
     assert.equal(model.contactsFrom(done.nodes).find(card => card.name === "Yes 119").top, 506);
     assert(done.logs.some(line => line.includes(action === "skip" ? "Skip because" : `is ${action === "add" ? "Add" : "Dismiss"}`)));
+    const waits = done.logs.filter(line => line.includes("waiting 25s between actions"));
+    assert.equal(waits.length, action === "add" ? 1 : 0,
+      "Only a completed Add may consume the configured delay, before the next contact is considered.");
     console.log(`PASS: actual runAddFriends ${action} path, streamed inputs and final device position.`);
   }
   const slow = await execute(mixed, "azou", "add", { movementScale: 0.55 });

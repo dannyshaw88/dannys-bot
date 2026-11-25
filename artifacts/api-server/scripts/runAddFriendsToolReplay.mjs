@@ -83,7 +83,8 @@ try {
   const context = {
     serial: "REPLAY_ONLY_NO_PHYSICAL_DEVICE",
     tools: { addFriends: {
-      enabled: true, min: 1, max: 1, delayMinSeconds: 0, delayMaxSeconds: 0,
+      enabled: true, min: input.requestedCount ?? 1, max: input.requestedCount ?? 1,
+      delayMinSeconds: input.delaySeconds ?? 0, delayMaxSeconds: input.delaySeconds ?? 0,
       skipAdded: false, dismissNonEnglish: false,
       maxFollowsEnabled: input.maxFollowsEnabled === true,
       maxFollowsMin: input.maxFollowsMin ?? 50,

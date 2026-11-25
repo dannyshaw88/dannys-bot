@@ -218,7 +218,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let added = 0;
   let noMoreAvailable = false;
-  let delaySatisfiedSinceLastAdd = false;
   const attemptedFriends = new Set<string>();
   const recoveryAttempts = new Map<string, number>();
   const skipAdded = context.tools.addFriends.skipAdded === true;
@@ -512,48 +511,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       if (!await dismissSuggestion(state, selected, "found on the farm-wide list", true)) break;
       continue;
     }
-    if (added > 0 && !delaySatisfiedSinceLastAdd) {
-      await waitBetweenActions(
-        context,
-        context.tools.addFriends.delayMinSeconds,
-        context.tools.addFriends.delayMaxSeconds,
-        "Add Friends",
-      );
-      if (context.isAborted()) break;
-      delaySatisfiedSinceLastAdd = true;
-      state = await dump(context.serial);
-      const cooldownAfterWait = await handleFriendRequestLimit(context, "Add Friends", state.nodes);
-      if (cooldownAfterWait) {
-        logAction(context, `${added} of ${requested} friends added; paused by Snapchat's friend-request limit`);
-        return cooldownAfterWait;
-      }
-      ({ addButtons, candidates } = findAddCandidates(state.nodes));
-      selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
-      if (!selected) continue;
-      const nonEnglishLetterAfterWait = dismissNonEnglish ? getNonEnglishLetter(selected) : undefined;
-      if (nonEnglishLetterAfterWait) {
-        if (!await dismissSuggestion(
-          state,
-          selected,
-          describeNonEnglishLetter(nonEnglishLetterAfterWait),
-        )) break;
-        continue;
-      }
-      const avoidedAfterWait = getAvoidedTerm(selected);
-      if (avoidedAfterWait) {
-        if (!await dismissSuggestion(state, selected, `Avoid Users Containing entry “${avoidedAfterWait}”`)) break;
-        continue;
-      }
-      const alreadyAddedAfterWait = wasRecentlyAdded(selected.friendName);
-      if (alreadyAddedAfterWait === null) {
-        logAction(context, `${added} friends added; stopped because the Skip Added list could not be read`);
-        return false;
-      }
-      if (alreadyAddedAfterWait) {
-        if (!await dismissSuggestion(state, selected, "found on the farm-wide list", true)) break;
-        continue;
-      }
-    }
     const { friendName, friendKey } = selected;
     const positioned = await positionFriendForAction(state, selected);
     if (!positioned) {
@@ -621,7 +578,6 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     recoveryAttempts.delete(friendKey);
     added++;
     dailyAddFriendsState(context, true);
-    delaySatisfiedSinceLastAdd = false;
     context.onMetric?.("snapchat_add_friends");
     try {
       if (reservationKey !== null) {
@@ -647,6 +603,16 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       previousRowHeight,
     )) {
       context.onLog("Add Friends: could not scroll after this Add; continuing with currently visible candidates.");
+    }
+    // Consume this Add's delay here, before examining another contact. Deferring
+    // it until the next Add lets intervening dismissals inherit the pending wait.
+    if (added < requested && !context.isAborted()) {
+      await waitBetweenActions(
+        context,
+        context.tools.addFriends.delayMinSeconds,
+        context.tools.addFriends.delayMaxSeconds,
+        "Add Friends",
+      );
     }
     await context.onAddFriendsStepComplete?.({ action: "add", friendName });
   }

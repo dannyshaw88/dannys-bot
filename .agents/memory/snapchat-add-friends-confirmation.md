@@ -31,7 +31,7 @@ The configured Min/Max delay in seconds applies only between Add attempts, not S
 
 **Why:** The user explicitly clarified that the allocated wait time is for Adds only, never skips or dismissals.
 
-**How to apply:** Evaluate exclusion/dismissal decisions before the configurable Add delay; do not apply or reset that delay when a contact is skipped or dismissed.
+**How to apply:** Consume the configured delay inside the completed Add sequence, after its scroll and before considering another contact (unless the requested Add count is complete). Never defer an Add's pending delay until the next eligible Add: intervening dismissals would then appear to trigger that wait. Skip and Dismiss retain only their fixed pre-scroll settle.
 
 After each Add, Dismiss, or Skip action, wait about three seconds before reading the resulting card and scrolling. Preserve this delay in the visible replay too.
 
