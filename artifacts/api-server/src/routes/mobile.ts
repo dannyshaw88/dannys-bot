@@ -8149,6 +8149,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                     logger.warn({ err: error, serial, slotId }, "[snapchat-cooldown] cooldown persistence failed");
                     tLog("Warning: could not persist the Snapchat friend-request cooldown; this cycle will still skip both friend tools.");
                   });
+                // Persist the popup event immediately, rather than waiting for
+                // cycle finalization (which can be aborted or switch accounts).
+                if (resolvedSlotUsername) {
+                  await storage.incrementStat(0, `mob:snapchat__${resolvedSlotUsername}:snapchat_cooldown`)
+                    .catch(error => {
+                      logger.warn({ err: error, serial, slotId }, "[snapchat-cooldown] statistic persistence failed");
+                      tLog("Warning: could not save the Snapchat Cooldown statistic.");
+                    });
+                } else {
+                  tLog("Warning: Snapchat Cooldown statistic was not saved because the current account username is missing.");
+                }
                 await storage.createSessionAction({
                   profileId: mobileProfileId ?? 0,
                   toolId: 0,
