@@ -92,8 +92,15 @@ export function contactsFrom(nodes: UiNode[]): Contact[] {
 export function listTopFor(scene: Scene): number {
   const heading = scene.nodes.findIndex(node => shortId(node) === "section-title" && /^find friends$/i.test(label(node)));
   const firstRow = scene.nodes.findIndex((node, index) => index > heading && shortId(node) === "scu_search_friend_cell");
-  return Math.max(...scene.nodes.slice(heading, firstRow).filter(node =>
-    ["section-title", "section-description"].includes(shortId(node))).map(node => node.bounds[3])) + Math.round(scene.width * 0.022);
+  const headingBottom = Math.max(...scene.nodes.slice(heading, firstRow).filter(node =>
+    ["section-title", "section-description"].includes(shortId(node))).map(node => node.bounds[3]));
+  const estimatedTop = headingBottom + Math.round(scene.width * 0.022);
+  // Header spacing varies by device. Never let estimated padding exclude a
+  // real row already exposed below the header (including a one-pixel overlap).
+  const visibleRowTop = scene.nodes.filter(node =>
+    shortId(node) === "scu_search_friend_cell" && node.bounds[1] >= headingBottom)
+    .reduce((top, node) => Math.min(top, node.bounds[1]), estimatedTop);
+  return visibleRowTop;
 }
 
 export function prepareScene(source: string): Scene {

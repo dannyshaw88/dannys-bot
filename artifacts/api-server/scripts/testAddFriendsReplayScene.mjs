@@ -16,8 +16,14 @@ try {
     entryPoints: [path.resolve(apiRoot, "../dannys-bot/src/components/tools/addFriendsReplayScene.ts")],
     outfile: modulePath, bundle: true, platform: "node", format: "esm", logLevel: "silent",
   });
-  const { prepareScene, contactsFrom, dismissReplayContact, serializeNodes, parseInspectNodes, rowGroups } = await import(pathToFileURL(modulePath).href);
+  const { prepareScene, contactsFrom, dismissReplayContact, serializeNodes, parseInspectNodes, rowGroups, listTopFor } = await import(pathToFileURL(modulePath).href);
   const read = name => fs.readFile(path.join(root, "attached_assets", name), "utf8");
+  const latest = prepareScene(await read("equinox-inspect-dump-1795566367033_1795566446072.txt"));
+  const firstEligible = contactsFrom(latest.nodes).find(card =>
+    !card.dismissed && card.action === "Add" && card.top >= listTopFor(latest));
+  assert.equal(listTopFor(latest), 610);
+  assert.equal(firstEligible?.name, "T_KiimsS BlChrD");
+  assert.equal(firstEligible?.top, 610, "The first visible card must not be excluded by estimated header padding.");
   const mixed = prepareScene(await read("equinox-inspect-dump-1795563512708_1795563527991.txt"));
   const mixedCards = contactsFrom(mixed.nodes);
   const azou = mixedCards.find(card => card.name === "azou");
