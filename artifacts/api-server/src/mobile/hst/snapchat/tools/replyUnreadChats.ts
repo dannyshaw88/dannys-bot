@@ -875,13 +875,12 @@ async function runReplyUnreadChatsAttempt(
     }
     let reply: string;
     const history = getSnapchatReplyHistory(
-      context.slotId,
+      context.targetUsername?.trim() || "",
       contactKey,
-      context.serial,
       verifiedIdentity.displayName,
     );
     context.onLog(
-      `[Reply attempt=${attemptId}] history key=slot:${slotId}/device:${context.serial}/contact:@${contactKey}; priorReplies=${history.previousReplyCount}; linkAlreadySent=${history.sentReplies.some(entry => containsSnapchatBoundlusLink(entry.sentText))}; legacyNameOnlyHistory=${history.legacyNameOnlyHistory}`,
+      `[Reply attempt=${attemptId}] history key=account:@${context.targetUsername?.trim() || "unknown"}/contact:@${contactKey}; priorReplies=${history.previousReplyCount}; linkAlreadySent=${history.sentReplies.some(entry => containsSnapchatBoundlusLink(entry.sentText))}; legacyNameOnlyHistory=${history.legacyNameOnlyHistory}`,
     );
     // Legacy name-only records remain separate, but must not block a reply
     // whose contact username was just obtained from the opened profile.
@@ -1129,7 +1128,7 @@ async function runReplyUnreadChatsAttempt(
       const record = appendSnapchatReplyHistory({
         slotId,
         serial: context.serial,
-        accountUsername: context.targetUsername?.trim() || slotId,
+        accountUsername: context.targetUsername?.trim() || undefined,
         username: contactKey,
         displayName: verifiedIdentity.displayName,
         replyNumber: history.previousReplyCount + 1,

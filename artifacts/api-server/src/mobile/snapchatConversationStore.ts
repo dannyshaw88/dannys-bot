@@ -108,6 +108,22 @@ function normalizeContact(value: string): string {
     .toLocaleLowerCase();
 }
 
+function accountKey(identity: { accountUsername?: string; slotId: string }): string {
+  const value = normalizeContact(identity.accountUsername?.trim() ?? "");
+  return value && value !== normalizeContact(identity.slotId) ? value : "";
+}
+
+function sameAccount(
+  left: { accountUsername?: string; slotId: string; serial: string },
+  right: { accountUsername?: string; slotId: string; serial: string },
+): boolean {
+  const leftKey = accountKey(left);
+  const rightKey = accountKey(right);
+  // Unattributed legacy records stay separate from all named accounts.
+  if (leftKey || rightKey) return Boolean(leftKey && rightKey && leftKey === rightKey);
+  return left.slotId === right.slotId && left.serial === right.serial;
+}
+
 function parseTime(value: string): number {
   const time = Date.parse(value);
   return Number.isFinite(time) ? time : Number.NEGATIVE_INFINITY;
@@ -253,8 +269,7 @@ function findOrCreateConversation(
     .map(normalizeContact)
     .filter(Boolean))];
   let conversation = conversations.find(existing =>
-    existing.slotId === identity.slotId &&
-    existing.serial === identity.serial &&
+    sameAccount(existing, identity) &&
     identityAliases.some(alias =>
       normalizeContact(existing.username) === alias,
     ),
@@ -288,6 +303,8 @@ function findOrCreateConversation(
     }
     conversation.displayName ||= identity.displayName;
     if (identity.accountUsername) conversation.accountUsername = identity.accountUsername;
+    conversation.slotId = identity.slotId;
+    conversation.serial = identity.serial;
   }
   return conversation;
 }
@@ -306,8 +323,7 @@ function addReply(
   );
   const highestReplyNumber = conversations
     .filter(conversation =>
-      conversation.slotId === entry.slotId &&
-      conversation.serial === entry.serial &&
+      sameAccount(conversation, entry) &&
       [...aliases].some(alias => normalizeContact(conversation.username) === alias),
     )
     .flatMap(conversation => conversation.messages)
@@ -487,9 +503,8 @@ export function containsSnapchatBoundlusLink(text: string): boolean {
 }
 
 export function getSnapchatReplyHistory(
-  slotId: string,
+  accountUsername: string,
   contactKey: string,
-  serial?: string,
   displayName?: string,
 ): {
   previousReplyCount: number;
@@ -497,10 +512,11 @@ export function getSnapchatReplyHistory(
   legacyNameOnlyHistory: boolean;
 } {
   const expected = normalizeContact(contactKey);
+  const expectedAccount = normalizeContact(accountUsername.trim());
   const allConversations = readConversations();
   const conversations = allConversations.filter(entry =>
-    entry.slotId === slotId &&
-    (!serial || entry.serial === serial) &&
+    Boolean(expectedAccount) &&
+    accountKey(entry) === expectedAccount &&
     normalizeContact(entry.username) === expected,
   );
   const replies = conversations.flatMap(conversation =>
@@ -514,8 +530,8 @@ export function getSnapchatReplyHistory(
   const expectedDisplayName = normalizeContact(displayName ?? "");
   const legacyNameOnlyHistory = !replies.length && Boolean(expectedDisplayName) &&
     allConversations.some(entry =>
-      entry.slotId === slotId &&
-      (!serial || entry.serial === serial) &&
+      Boolean(expectedAccount) &&
+      accountKey(entry) === expectedAccount &&
       normalizeContact(entry.displayName) === expectedDisplayName &&
       normalizeContact(entry.username) === expectedDisplayName &&
       entry.messages.some(message => message.sender === "Luna" && message.timestampKind === "sent"),
