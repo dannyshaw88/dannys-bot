@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { adjacentFarmDevice, type FarmNavigationDevice } from "@/lib/farmDeviceNavigation";
+import { automationCycleRequest } from "@/lib/automationCycleRequest";
 import { _hstTimers, _hstStop, _hstNextRunAt, _hstUiMounted, registerHstToggleHandler } from "@/lib/hstRunner";
 import { persistHstToggle, type HstToggleEvent } from "@/lib/hstToggleCoordinator";
 import {
@@ -5735,11 +5736,12 @@ function useAutomationSettings(phone: UsbPhone | null, onLog?: (msg: string) => 
       let retryBusy = false;
       let serverWindowRetryAt: number | null = null;
       try {
-        const r = await fetch(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
+        const r = await automationCycleRequest(`/api/mobile/devices/${encodeURIComponent(serial)}/automation-cycle`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: ctrl.signal,
           body: JSON.stringify({
+            background: true,
             cycleId,
             slotId,
             count,

@@ -33,6 +33,7 @@ import {
 import { fixAiSlop } from "../instagram/fixAiSlop";
 import { getRuntimeSnapshot } from "../diagnostics/runtimeSnapshot";
 import { timeStartupPhase } from "../diagnostics/startupTiming";
+import { AutomationCycleJobs } from "../mobile/automationCycleJobs";
 import { accountSlotTypingTiming } from "../diagnostics/accountSlotTyping";
 import {
   alterJpegBuffer,
@@ -7491,6 +7492,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     });
   });
 
+  const cycleJobs = new AutomationCycleJobs();
+  app.get("/api/mobile/devices/:serial/automation-cycle/jobs/:cycleId", (req: Request, res: Response) => {
+    const job = cycleJobs.get(p(req, "serial"), p(req, "cycleId"));
+    res.setHeader("Cache-Control", "no-store");
+    if (!job) {
+      res.status(404).json({ ok: false, error: "Automation job is unavailable; the API may have restarted" });
+      return;
+    }
+    res.json(job);
+  });
+
   // Abort endpoint — called by the frontend when the master toggle is switched
   // off mid-cycle.  The frontend passes the same cycleId it used to start the
   // cycle so we can ignore stale abort POSTs that arrive after the next cycle
@@ -7498,6 +7510,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
   app.post("/api/mobile/devices/:serial/automation-cycle/abort", (req: Request, res: Response) => {
     const serial = p(req, "serial");
     const cycleId: string | undefined = req.body?.cycleId;
+    if (cycleId) cycleJobs.abort(serial, cycleId);
     // Only set the abort flag if a real cycleId was supplied AND it matches
     // the cycle currently registered on this device.  A null/empty cycleId
     // (sent when the client toggle was turned off while no cycle was in-flight)
@@ -7510,7 +7523,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     res.json({ ok: true });
   });
 
-  app.post("/api/mobile/devices/:serial/automation-cycle", async (req: Request, res: Response): Promise<void> => {
+  const executeAutomationCycle = async (req: Request, res: Response): Promise<void> => {
     const serial = p(req, "serial");
     let snapchatWindowCloseLogTimer: ReturnType<typeof setTimeout> | null = null;
     // Reject a Snapchat cycle before even querying ADB if this slot is outside
@@ -7584,6 +7597,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // abort POST that arrives after this cycle started will NOT match and is
     // safely ignored.
     const incomingCycleId: string = req.body?.cycleId ?? `fallback-${Date.now()}`;
+    if (cycleJobs.isAborted(serial, incomingCycleId)) {
+      res.status(409).json({ ok: false, aborted: true, error: "Cycle cancelled before startup" });
+      return;
+    }
     const requestedSlotIdx: number = typeof req.body?.slotIdx === "number" ? req.body.slotIdx : 0;
     const incomingSlotId = typeof req.body?.slotId === "string" ? req.body.slotId.trim() : "";
     const accountSlots = loadInstanceConfigs()[serial]?.account?.slots ?? [];
@@ -10125,6 +10142,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // slot wallpaper instead of continuing to poll a stale screencap stream.
       mirrorLive.delete(serial);
     }
+  };
+
+  app.post("/api/mobile/devices/:serial/automation-cycle", async (req: Request, res: Response): Promise<void> => {
+    if (req.body?.background !== true) {
+      await executeAutomationCycle(req, res);
+      return;
+    }
+    const cycleId = req.body?.cycleId;
+    if (typeof cycleId !== "string" || !cycleId.trim() || cycleId.length > 200) {
+      res.status(400).json({ ok: false, error: "A valid cycleId is required" });
+      return;
+    }
+    const serial = p(req, "serial");
+    if (!cycleJobs.start(serial, cycleId, req, executeAutomationCycle)) {
+      res.status(409).json({ ok: false, error: "An automation cycle is already in progress on this device" });
+      return;
+    }
+    res.status(202).json({ ok: true, background: true, cycleId });
   });
 
   app.get("/api/mobile/devices/:serial/slots/:slotIdx/cycle-notebook", (req: Request, res: Response) => {

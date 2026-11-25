@@ -161,5 +161,6 @@
 - [Farm device proxy routing](farm-device-proxy-routing.md) — prefer laptop broadband plus a per-device proxy exit; device Wi-Fi plus assigned proxy is the fallback
 - [Snapchat ad-experience popup](snapchat-ad-experience-popup.md) — check only when Reply to Unread Chats cannot find/open chats, then choose Smaller In-Feed Ads and retry once
 - [Phone Farm device capacity](phone-farm-device-capacity.md) — device slots have no fixed total cap; the grid-size selector controls per-page visibility
+- [Cycle HTTP connections](automation-cycle-http-connections.md) — acknowledge starts promptly; long-held cycle requests can starve mirrors and controls without CPU overload
 - [Google Chrome browser click parity](google-chrome-single-click.md) — target profile-ID users from Followers, verify recipient and composer, and use one native click
 - [Google Chrome Send DMs status display](google-chrome-send-dms-status.md) — keep completion summaries and progress narration out of the toolbar and activity log
