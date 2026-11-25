@@ -12721,7 +12721,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       }).parse(req.body);
       const result = await android.captureOneTap(serial, timeoutMs, message => {
         req.log.info({ serial }, `${message} serial=${serial}`);
-      });
+      }, true);
       if (!result) {
         return void res.status(408).json({ ok: false, error: "No tap detected within timeout — make sure a keyboard key was pressed" });
       }

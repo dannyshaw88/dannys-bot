@@ -16137,6 +16137,7 @@ export async function captureOneTap(
   serial: string,
   timeoutMs = 15_000,
   onLog?: (msg: string) => void,
+  diagnoseAllInputs = false,
 ): Promise<{ x: number; y: number } | null> {
   const tools = detectToolset();
   const adb = requireTool(tools.adb, "adb");
@@ -16182,6 +16183,57 @@ export async function captureOneTap(
     let stderr = "";
 
     const child = spawn(adb, ["-s", serial, "shell", "getevent", "-l", device]);
+    // Observation only. Do not feed this stream into coordinate capture or
+    // change the selected input used by working devices.
+    const inputCounts = new Map<string, { events: number; x: number; y: number }>();
+    let observer: ReturnType<typeof spawn> | undefined;
+    let observerError = "";
+    let observerBuffer = "";
+    if (diagnoseAllInputs) {
+      observer = spawn(adb, ["-s", serial, "shell", "getevent", "-l"]);
+      observer.stdout?.on("data", (chunk: Buffer) => {
+        if (resolved) return;
+        observerBuffer = (observerBuffer + chunk.toString()).slice(-65536);
+        const lines = observerBuffer.split("\n");
+        observerBuffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const source = line.match(/\/dev\/input\/event\d+/)?.[0];
+          if (!source || (!inputCounts.has(source) && inputCounts.size >= 64)) continue;
+          const counts = inputCounts.get(source) ?? { events: 0, x: 0, y: 0 };
+          counts.events++;
+          if (/ABS_(?:MT_POSITION_)?X\b/.test(line)) counts.x++;
+          if (/ABS_(?:MT_POSITION_)?Y\b/.test(line)) counts.y++;
+          inputCounts.set(source, counts);
+        }
+      });
+      observer.stderr?.on("data", (chunk: Buffer) => {
+        if (!resolved) observerError = (observerError + chunk.toString()).slice(0, 1500);
+      });
+      observer.on("error", error => {
+        if (!resolved) observerError = error.message.slice(0, 1500);
+      });
+      observer.on("close", (code, signal) => {
+        if (!resolved) onLog?.(`[keyboard-calibration] input observer closed: code=${code}, signal=${signal}`);
+      });
+      // Discovery is asynchronous and read-only; never delays normal capture.
+      void runAdb(adb, ["-s", serial, "shell", "getevent", "-lp"], 8000).then(output => {
+        const inputs = output.split(/^add device \d+:/m).flatMap(block => {
+          const path = block.match(/^\s*(\/dev\/input\/\S+)/m)?.[1];
+          if (!path) return [];
+          return [{
+            path,
+            name: block.match(/name:\s*"([^"]*)"/)?.[1]?.slice(0, 100) ?? "unknown",
+            multitouchX: /ABS_MT_POSITION_X/.test(block),
+            multitouchY: /ABS_MT_POSITION_Y/.test(block),
+            absoluteX: /\bABS_X\b/.test(block),
+            absoluteY: /\bABS_Y\b/.test(block),
+          }];
+        }).slice(0, 64);
+        onLog?.(`[keyboard-calibration] input inventory: ${JSON.stringify(inputs)}`);
+      }).catch(error => {
+        onLog?.(`[keyboard-calibration] input inventory failed: ${String(error?.message ?? error).slice(0, 1500)}`);
+      });
+    }
 
     const finish = (result: { x: number; y: number } | null, reason: string) => {
       if (resolved) return;
@@ -16194,7 +16246,11 @@ export async function captureOneTap(
         `parsedX=${rawX !== null}, parsedY=${rawY !== null}` +
         (stderr ? `, stderr=${JSON.stringify(stderr)}` : ""),
       );
+      if (diagnoseAllInputs) {
+        onLog?.(`[keyboard-calibration] input observer summary: selected=${device}, sources=${JSON.stringify(Object.fromEntries(inputCounts))}, error=${JSON.stringify(observerError || null)}`);
+      }
       try { child.kill(); } catch { /**/ }
+      try { observer?.kill(); } catch { /**/ }
       resolve(result);
     };
 
