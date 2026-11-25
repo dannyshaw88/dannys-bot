@@ -5,6 +5,12 @@ description: Import Inspect dumps into a simple phone preview that exercises Add
 
 ## Add Friends screen test
 
+Replay examples imported into the frontend are required source assets, not disposable uploads. Keep explicit tracking exceptions when repository-wide upload ignore rules would exclude them.
+
+**Why:** Replit built successfully with local examples while the Windows checkout failed because those imported text files were ignored.
+
+**How to apply:** Check that every build-time example dependency is included in a clean checkout; a successful build with ignored local files does not prove portability.
+
 ### Daily Max Follows
 
 Max Follows is an optional Min/Max daily cap per account slot. Draw once for the PC-local date, persist the draw across cycles/restarts, count Add Friends actions, and skip the tool before navigation once reached until the next date. Include the checkbox and both bounds in Copy Settings. Keep replacement account usernames isolated when a slot is reused.

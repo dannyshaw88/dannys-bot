@@ -78,6 +78,10 @@ attached_assets/*.webp
 # Runtime visual references used by the packaged mobile detector.
 !attached_assets/home_1787131461428.jpg
 !attached_assets/like-reference-reels.png
+# Bundled Scroll Replay examples imported by the frontend at build time.
+!attached_assets/equinox-inspect-dump-1795563512708_1795563527991.txt
+!attached_assets/equinox-inspect-dump-1795563594602_1795563612145.txt
+!attached_assets/DISMISSED_1795563650788.txt
 
 # Local mobile-device runtime state — may contain account credentials or
 # emulator-specific configuration and is not part of the application source.
