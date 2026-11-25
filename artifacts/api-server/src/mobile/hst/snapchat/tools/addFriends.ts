@@ -8,6 +8,8 @@ import {
   alignAddFriendsContactToTop,
   alignFirstAddFriendsContactToTop,
   scrollAddFriendsListOneSlot,
+  findFriendsRows,
+  revealAddFriendsSuggestions,
 } from "../navigation/scrollAddFriendsListOneSlot";
 import { sqlite } from "../../../../storage";
 import { dailyAddFriendsState } from "./addFriendsDailyLimit";
@@ -249,6 +251,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     }
   };
   const findAddCandidates = (nodes: UiNode[]) => {
+    const suggestionRows = findFriendsRows(nodes);
     const addButtons = nodes.filter(node =>
       shortResourceId(node) === "scu_search_action_button" &&
       [node.text, node.desc].some(value => /^add$/i.test(value.trim())) &&
@@ -257,8 +260,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     );
     const candidates = addButtons.flatMap(candidate => {
       const candidateY = center(candidate).y;
-      const row = nodes.find(node =>
-        shortResourceId(node) === "scu_search_friend_cell" &&
+      const row = suggestionRows.find(node =>
         candidateY >= node.bounds[1] && candidateY <= node.bounds[3],
       );
       if (!row) return [];
@@ -478,6 +480,9 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       logAction(context, `${added} of ${requested} friends added; paused by Snapchat's friend-request limit`);
       return cooldownResult;
     }
+    state = { ...state, nodes: await revealAddFriendsSuggestions(
+      context, state.nodes, screenWidth, screenHeight,
+    ) };
     let { addButtons, candidates } = findAddCandidates(state.nodes);
     let selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
     const candidate = selected?.candidate;

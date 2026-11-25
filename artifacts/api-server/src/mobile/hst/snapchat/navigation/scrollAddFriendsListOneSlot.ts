@@ -27,7 +27,7 @@ const realReplayIO: AddFriendsScrollReplayIO = {
   swipe: android.swipe,
 };
 
-function findFriendsRows(nodes: UiNode[]): UiNode[] {
+export function findFriendsRows(nodes: UiNode[]): UiNode[] {
   const titleIndex = nodes.findIndex(node =>
     shortResourceId(node) === "section-title" &&
     [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
@@ -45,6 +45,48 @@ function findFriendsRows(nodes: UiNode[]): UiNode[] {
       node.bounds[3] > node.bounds[1],
     )
     .sort((a, b) => a.bounds[1] - b.bounds[1]);
+}
+
+/** Move the recommendations section past incoming requests before selecting a target. */
+export async function revealAddFriendsSuggestions(
+  context: SnapchatContext,
+  nodes: UiNode[],
+  screenWidth: number,
+  screenHeight: number,
+  replayIO: AddFriendsScrollReplayIO = realReplayIO,
+): Promise<UiNode[]> {
+  const heading = (source: UiNode[], label: RegExp) => source.find(node =>
+    shortResourceId(node) === "section-title" &&
+    [node.text, node.desc].some(value => label.test(value.trim())),
+  );
+  const incoming = heading(nodes, /^added me$/i);
+  let suggestions = heading(nodes, /^find friends$/i);
+  if (!incoming || !suggestions || incoming.bounds[1] >= suggestions.bounds[1]) return nodes;
+  // Use the actual first section's position, not a device-specific starting pixel.
+  const destination = incoming.bounds[1];
+  let current = nodes;
+  for (let attempt = 0; attempt < 8 && !context.isAborted(); attempt++) {
+    if (!suggestions || suggestions.bounds[1] <= destination + 12) return current;
+    const row = findFriendsRows(current).find(row => row.bounds[3] > row.bounds[1]);
+    if (!row) return [];
+    const lane = blankRowLane(current, row, screenWidth, Math.max(8, Math.round(screenWidth * 0.01)));
+    const distance = Math.min(
+      suggestions.bounds[1] - destination,
+      Math.floor(screenHeight * 0.4),
+    );
+    const gesture = fitVerticalGesture(
+      Math.floor(screenHeight * 0.75), -distance,
+      destination, Math.floor(screenHeight * 0.82),
+    );
+    context.onLog(`Add Friends: scrolling past Added Me to the Find friends section (${gesture.distance}px upward).`);
+    await replayIO.swipe(context.serial, lane.x, gesture.startY, lane.x, gesture.endY, 300, false);
+    await context.sleep(750, "exact");
+    current = (await replayIO.dump(context.serial)).nodes;
+    suggestions = heading(current, /^find friends$/i);
+  }
+  if (suggestions && suggestions.bounds[1] <= destination + 12) return current;
+  context.onLog("Add Friends: Find friends section has not reached the starting position; no incoming request will be processed.");
+  return [];
 }
 
 function normalizeContactName(value: string): string {
