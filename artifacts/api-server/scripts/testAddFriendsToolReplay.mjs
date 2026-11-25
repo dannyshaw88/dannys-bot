@@ -78,6 +78,14 @@ try {
   assert.equal(empty.done.actions.length, 0);
   assert.equal(empty.done.swipes.length, 0);
   console.log("PASS: no eligible Add rows produced the real no-action result, not a fabricated pass.");
+  const capped = await execute(contacts, "Entourage Mike Hunt", "add", {
+    maxFollowsEnabled: true, maxFollowsMin: 0, maxFollowsMax: 0,
+  });
+  assert.equal(capped.done.completedStep, null);
+  assert.equal(capped.done.actions.length, 0);
+  assert.equal(capped.done.swipes.length, 0);
+  assert(capped.done.logs.some(line => line.includes("daily Max Follows reached")));
+  console.log("PASS: daily cap skips the actual tool before any device input.");
 } finally {
   await fs.rm(directory, { recursive: true, force: true });
 }

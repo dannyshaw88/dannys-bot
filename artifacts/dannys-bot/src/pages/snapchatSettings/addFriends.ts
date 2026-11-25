@@ -5,6 +5,9 @@ export type AddFriendsSettings = {
   delayMinSeconds: number;
   delayMaxSeconds: number;
   skipAdded: boolean;
+  maxFollowsEnabled: boolean;
+  maxFollowsMin: number;
+  maxFollowsMax: number;
   dismissNonEnglish: boolean;
   avoidUsersContainingEnabled: boolean;
   avoidUsersContainingWords: string;
@@ -20,6 +23,9 @@ export const addFriendsSettingsDefault: AddFriendsSettings = {
   delayMinSeconds: 1,
   delayMaxSeconds: 3,
   skipAdded: false,
+  maxFollowsEnabled: false,
+  maxFollowsMin: 50,
+  maxFollowsMax: 100,
   dismissNonEnglish: false,
   avoidUsersContainingEnabled: false,
   avoidUsersContainingWords: "",

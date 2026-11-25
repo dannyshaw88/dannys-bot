@@ -43,8 +43,16 @@ export function ReplyUnreadChatsSetting({
       )}
       childrenBelow={(
       <div className="space-y-1">
+        <textarea
+          placeholder="Conversation goal and purpose"
+          aria-label="Conversation goal and purpose"
+          value={value.replyGoal}
+          rows={5}
+          onChange={event => onUpdate({ replyGoal: event.target.value })}
+          disabled={loading || !value.enabled}
+          className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+        />
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <label className="text-sm text-muted-foreground">Conversation goal and purpose</label>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <Button
               type="button"
@@ -116,13 +124,6 @@ export function ReplyUnreadChatsSetting({
             </Button>
           </div>
         </div>
-        <textarea
-          value={value.replyGoal}
-          rows={5}
-          onChange={event => onUpdate({ replyGoal: event.target.value })}
-          disabled={loading || !value.enabled}
-          className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
-        />
       </div>
       )}
     />

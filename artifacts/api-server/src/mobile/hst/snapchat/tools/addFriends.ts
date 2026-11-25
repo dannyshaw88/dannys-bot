@@ -10,6 +10,7 @@ import {
   scrollAddFriendsListOneSlot,
 } from "../navigation/scrollAddFriendsListOneSlot";
 import { sqlite } from "../../../../storage";
+import { dailyAddFriendsState } from "./addFriendsDailyLimit";
 import { center, dump, logAction, randomCount, shortResourceId, tapNode, waitBetweenActions } from "../runtime";
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
@@ -198,6 +199,17 @@ function recordAddedFriendName(displayName: string): void {
 export async function runAddFriends(context: SnapchatContext): Promise<boolean | "friend-request-cooldown" | "friend-request-cooldown-blocked"> {
   const requested = randomCount(context.tools.addFriends.min, context.tools.addFriends.max);
   if (!context.tools.addFriends.enabled || requested === 0) return false;
+  const dailyLimitReached = () => {
+    if (!context.tools.addFriends.maxFollowsEnabled) return false;
+    const day = dailyAddFriendsState(context);
+    context.onLog(`Add Friends: Max Follows ${day.count}/${day.limit} for ${day.date}.`);
+    if (day.limit !== null && day.count >= day.limit) {
+      logAction(context, `Add Friends skipped: daily Max Follows reached (${day.count}/${day.limit}); resumes next day.`);
+      return true;
+    }
+    return false;
+  };
+  if (dailyLimitReached()) return false;
   logAction(context, `Add ${requested} friends`);
   if (!await openAddFriendsForSuggestions(context)) {
     logAction(context, "0 friends added; could not open the friend list");
@@ -460,6 +472,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   };
 
   while (added < requested && !context.isAborted()) {
+    if (dailyLimitReached()) break;
     let state = await dump(context.serial);
     const cooldownResult = await handleFriendRequestLimit(context, "Add Friends", state.nodes);
     if (cooldownResult) {
@@ -607,6 +620,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     attemptedFriends.add(friendKey);
     recoveryAttempts.delete(friendKey);
     added++;
+    dailyAddFriendsState(context, true);
     delaySatisfiedSinceLastAdd = false;
     context.onMetric?.("snapchat_add_friends");
     try {

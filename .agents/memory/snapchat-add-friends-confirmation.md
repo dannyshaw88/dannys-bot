@@ -5,6 +5,14 @@ description: Import Inspect dumps into a simple phone preview that exercises Add
 
 ## Add Friends screen test
 
+### Daily Max Follows
+
+Max Follows is an optional Min/Max daily cap per account slot. Draw once for the PC-local date, persist the draw across cycles/restarts, count Add Friends actions, and skip the tool before navigation once reached until the next date. Include the checkbox and both bounds in Copy Settings. Keep replacement account usernames isolated when a slot is reused.
+
+**Why:** The user requested a daily randomized maximum that stops every later Add Friends run for that account slot until the following day.
+
+**How to apply:** Use persisted action counts, including actions before metrics flush, and seed available same-day statistics. Never redraw per cycle or copy a slot's consumed count/random draw through Copy Settings.
+
 The Settings replay must execute the actual current Add Friends tool, not a separate simulation of its decisions or a helper-only preview. Load or paste an Inspect dump, render a basic Snapchat screen, and run one real tool action plus its post-action handling. Recompile the current source on each run so code changes can be tested immediately.
 
 **Why:** The user wants to test code changes inside Replit against imported device examples instead of waiting for repeated Windows Electron builds.

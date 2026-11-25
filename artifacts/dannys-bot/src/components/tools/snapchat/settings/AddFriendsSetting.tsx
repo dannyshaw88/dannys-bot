@@ -64,8 +64,28 @@ export function AddFriendsSetting({ value, loading, onUpdate }: AddFriendsSettin
         </>
       }
       childrenBelow={
-        <div>
+        <div className="ml-[163px] min-w-0">
           <div className="flex w-full flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap">
+            <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
+              <input type="checkbox" checked={value.maxFollowsEnabled ?? false}
+                onChange={event => onUpdate({ maxFollowsEnabled: event.target.checked })}
+                disabled={loading || !value.enabled} className="h-4 w-4 accent-primary"
+                data-testid="checkbox-max-follows" />
+              Max Follows
+            </label>
+            <input type="number" min={0} aria-label="Max Follows minimum" title="Minimum daily follows"
+              className="box-content w-[3ch] h-7 rounded border bg-background px-1 text-center text-xs"
+              value={value.maxFollowsMin ?? 50}
+              disabled={loading || !value.enabled || !value.maxFollowsEnabled}
+              onChange={event => onUpdate({ maxFollowsMin: Math.max(0, Math.trunc(Number(event.target.value) || 0)) })}
+              data-testid="input-max-follows-min" />
+            <span className="text-[10px] text-muted-foreground">–</span>
+            <input type="number" min={0} aria-label="Max Follows maximum" title="Maximum daily follows"
+              className="box-content w-[3ch] h-7 rounded border bg-background px-1 text-center text-xs"
+              value={value.maxFollowsMax ?? 100}
+              disabled={loading || !value.enabled || !value.maxFollowsEnabled}
+              onChange={event => onUpdate({ maxFollowsMax: Math.max(0, Math.trunc(Number(event.target.value) || 0)) })}
+              data-testid="input-max-follows-max" />
             <label className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -116,10 +136,11 @@ export function AddFriendsSetting({ value, loading, onUpdate }: AddFriendsSettin
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={loading || !value.enabled}
-              className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-border px-1.5 text-[9px] text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Upload text file"
+              title={fileName || "Upload text file"}
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               {fileName ? <FileText className="h-3 w-3" /> : <Upload className="h-3 w-3" />}
-              {fileName || "Upload text file"}
             </button>
             {fileName && (
               <span className="max-w-[90px] shrink-0 truncate text-[9px] text-muted-foreground" title={fileName}>

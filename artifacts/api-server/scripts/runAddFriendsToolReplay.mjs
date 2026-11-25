@@ -47,7 +47,7 @@ try {
         builder.onResolve({ filter: /(?:^replay-android$|(?:^|\/)androidManager(?:\.ts)?$)/ }, () =>
           ({ path: "android", namespace: "replay-boundary" }));
         builder.onResolve({ filter: /(?:^|\/)storage(?:\.ts)?$/ }, args => {
-          if (!args.importer.endsWith("/snapchat/tools/addFriends.ts")) throw new Error("Unexpected storage dependency in replay.");
+          if (!/\/snapchat\/tools\/(?:addFriends|addFriendsDailyLimit)\.ts$/.test(args.importer)) throw new Error("Unexpected storage dependency in replay.");
           return { path: "storage", namespace: "replay-boundary" };
         });
         builder.onLoad({ filter: /.*/, namespace: "replay-boundary" }, ({ path: name }) => ({
@@ -85,6 +85,9 @@ try {
     tools: { addFriends: {
       enabled: true, min: 1, max: 1, delayMinSeconds: 0, delayMaxSeconds: 0,
       skipAdded: false, dismissNonEnglish: false,
+      maxFollowsEnabled: input.maxFollowsEnabled === true,
+      maxFollowsMin: input.maxFollowsMin ?? 50,
+      maxFollowsMax: input.maxFollowsMax ?? 100,
       avoidUsersContainingEnabled: input.action === "dismiss" || input.action === "skip",
       avoidUsersContainingWords: input.action === "add" ? "" : input.friendName,
     } },

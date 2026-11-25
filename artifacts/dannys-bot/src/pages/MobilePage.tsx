@@ -6422,6 +6422,7 @@ const SNAPCHAT_COPY_OPTIONS = [
     { key: "chance", label: "Chance %", fields: ["activatePctMin", "activatePctMax"] },
     { key: "amount", label: "Count", fields: ["min", "max"] },
     { key: "delay", label: "Delay between actions (s)", fields: ["delayMinSeconds", "delayMaxSeconds"] },
+    { key: "maxFollows", label: "Max Follows", fields: ["maxFollowsEnabled", "maxFollowsMin", "maxFollowsMax"] },
     { key: "skipAdded", label: "Skip Added", fields: ["skipAdded"] },
     { key: "dismissNonEnglish", label: "Dismiss Non-English", fields: ["dismissNonEnglish"] },
     {
@@ -7791,7 +7792,7 @@ export function AutomationSettingsPanel({
             onChange={e => setSettings(s => ({ ...s, cycleIntervalMax: Math.max(1, clamp4(Number(e.target.value))) }))}
             disabled={fieldDisabled("cycleIntervalMin", "cycleIntervalMax")}
           />
-          <Label className="text-sm text-muted-foreground whitespace-nowrap">minutes</Label>
+          <Label className="text-sm text-muted-foreground whitespace-nowrap">Mins</Label>
         </div>
       {slotPlatform !== "snapchat" && (
       <>
@@ -10150,10 +10151,10 @@ export function AutomationSettingsPanel({
       </div>
       )}
       {slotPlatform === "snapchat" && (
-        <div className="bg-card border border-border rounded-xl p-5 space-y-2">
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP3)</p>
-          <p className="text-sm text-foreground">
-            Open Snapchat in the floating-window view, swipe it away using the gesture selected in My Device, then lock the phone.
+        <div className="bg-card border border-border rounded-xl p-5 overflow-x-auto">
+          <p className="text-sm text-foreground whitespace-nowrap">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">(STEP3)</span>
+            {" - Closes Snapchat via swipe gesture, executes airplane mode then locks the phone."}
           </p>
         </div>
       )}
