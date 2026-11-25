@@ -29,7 +29,6 @@ import {
 } from "./replyUnreadChatText";
 import {
   contactNameFromNode,
-  conversationHeaderMatches,
   findChatComposer,
   isGenericContactLabel,
   verifyUnreadConversationIdentity,
@@ -884,16 +883,8 @@ async function runReplyUnreadChatsAttempt(
     context.onLog(
       `[Reply attempt=${attemptId}] history key=slot:${slotId}/device:${context.serial}/contact:@${contactKey}; priorReplies=${history.previousReplyCount}; linkAlreadySent=${history.sentReplies.some(entry => containsSnapchatBoundlusLink(entry.sentText))}; legacyNameOnlyHistory=${history.legacyNameOnlyHistory}`,
     );
-    if (history.legacyNameOnlyHistory) {
-      const reason = "prior replies exist only under this display name and cannot be safely attached to the verified username";
-      context.onLog(
-        `[Reply attempt=${attemptId}] outcome=skip-before-draft; ${reason}; no prompt call, send, reply count, or link state was changed.`,
-      );
-      recordNotReplied(row.displayName, "legacy-history-identity", reason, transcript, false);
-      await exitSnapchatConversation(context).catch(() => false);
-      list = await dump(context.serial);
-      continue;
-    }
+    // Legacy name-only records remain separate, but must not block a reply
+    // whose contact username was just obtained from the opened profile.
     const modelContext = labelConversationForLuna(transcript, history.sentReplies);
     if (!modelContext.latestIncomingMessage) {
       recordNotReplied(
@@ -1067,28 +1058,6 @@ async function runReplyUnreadChatsAttempt(
     if (isEmptyComposerValue(enteredReply)) {
       context.onLog("Reply to Unread Chats: no readable draft is available; still attempting Enter as requested.");
     }
-    const beforeSendIdentity = await verifyUnreadConversationIdentity(
-      context,
-      verifiedIdentity.displayName,
-      screenHeight,
-      verifiedIdentity.username,
-    );
-    if (!beforeSendIdentity.ok) {
-      context.onLog(
-        `[Reply attempt=${attemptId}] outcome=skip-before-send; contact identity could not be reconfirmed (${beforeSendIdentity.reason}); no Enter, reply count, link state, or saved reply.`,
-      );
-      recordNotReplied(
-        row.displayName,
-        "verify-before-send",
-        beforeSendIdentity.reason,
-        transcript,
-        false,
-      );
-      await exitSnapchatConversation(context).catch(() => false);
-      list = await dump(context.serial);
-      continue;
-    }
-    sendState = beforeSendIdentity.value.state;
     const composerBeforeSend = findChatComposer(sendState.nodes, screenHeight);
     if (!composerBeforeSend) {
       context.onLog(
@@ -1109,7 +1078,7 @@ async function runReplyUnreadChatsAttempt(
       enteredReply = composerBeforeSend.text.trim();
     }
     context.onLog(
-      `[Reply attempt=${attemptId}] pre-send identity confirmed=@${verifiedIdentity.username}; entering send action.`,
+      `[Reply attempt=${attemptId}] replying to profile username=@${verifiedIdentity.username}; entering send action.`,
     );
     if (activeContact) activeContact.stage = "sending-reply";
     context.onLog(`[Reply attempt=${attemptId}] sending the text currently in the composer.`);
@@ -1155,15 +1124,6 @@ async function runReplyUnreadChatsAttempt(
       list = await dump(context.serial);
       continue;
     }
-    if (!conversationHeaderMatches(sentState.nodes, verifiedIdentity.displayName, screenHeight)) {
-      context.onLog(
-        `[Reply attempt=${attemptId}] outcome=sent-but-not-attributed; the conversation header changed, so no contact history, reply count, or link state was updated.`,
-      );
-      activeContact = null;
-      await exitSnapchatConversation(context).catch(() => false);
-      list = await dump(context.serial);
-      continue;
-    }
     activeContact = null;
     try {
       const record = appendSnapchatReplyHistory({
@@ -1171,7 +1131,7 @@ async function runReplyUnreadChatsAttempt(
         serial: context.serial,
         accountUsername: context.targetUsername?.trim() || slotId,
         username: contactKey,
-        displayName: row.displayName,
+        displayName: verifiedIdentity.displayName,
         replyNumber: history.previousReplyCount + 1,
         capturedMessages: transcript,
         capturedAt: transcriptCapturedAt,

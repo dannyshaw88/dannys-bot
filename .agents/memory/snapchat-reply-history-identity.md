@@ -19,7 +19,9 @@ Before opening each unread contact, rescan the current list and perform the row 
 
 An unread row can open a received photo/video Snap instead of the chat thread. When the live screen confirms Snapchat's media viewer, swipe down to close it, exit the conversation with the top-left chevron, verify the chat list, and continue to the next unread row rather than aborting the tool.
 
-When replying, verify the chat header, tap the display-name text to read the profile username, then return to the thread before checking its composer. Do not require a Send button before typing: Snapchat shows it only after reply text is entered.
+When replying, use the name at the top of the opened chat to visit the profile once, read and log its username, then return to reply. That profile username is the only recipient identity check. Do not require equality with an Unread-list label, revisit the profile before sending, or reject a sent reply because the header text changed. Continue using the profile username for Luna's prior-conversation history. Do not require a Send button before typing: Snapchat shows it only after reply text is entered.
+
+**Why:** The user explicitly specified opened chat → tap top name → profile username → reply, with no other recipient checks. UI controls were being misread as contact names and name-comparison gates then blocked real opened conversations.
 
 Before profile lookup, Luna generation, and typing, check the live conversation text for Snapchat's explicit "has not added you as a friend" notice. If present, skip sending and exit with the top-left conversation chevron; do not use the generic Report or block button as the signal.
 
