@@ -27,6 +27,12 @@ The Settings replay must execute the actual current Add Friends tool, not a sepa
 
 ### Preserve real card states in replay
 
+The configured Min/Max delay in seconds applies only between Add attempts, not Skip or Dismiss actions. Keep it distinct from the fixed post-action settle before measuring and scrolling.
+
+**Why:** The user explicitly clarified that the allocated wait time is for Adds only, never skips or dismissals.
+
+**How to apply:** Evaluate exclusion/dismissal decisions before the configurable Add delay; do not apply or reset that delay when a contact is skipped or dismissed.
+
 After each Add, Dismiss, or Skip action, wait about three seconds before reading the resulting card and scrolling. Preserve this delay in the visible replay too.
 
 **Why:** The user explicitly requires action → three-second settle → scroll so the action result is visible before movement.
