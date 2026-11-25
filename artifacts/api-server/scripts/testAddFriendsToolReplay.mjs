@@ -28,6 +28,7 @@ try {
       uiXml: model.serializeNodes(scene.nodes), screenWidth: scene.width,
       screenHeight: scene.height, friendName, action, ...extra,
     }));
+    const startedAt = Date.now();
     const { stdout } = await promisify(execFile)(process.execPath, [
       path.join(apiRoot, "scripts/runAddFriendsToolReplay.mjs"), input,
     ], { cwd: apiRoot, maxBuffer: 8 * 1024 * 1024, timeout: 30_000 });
@@ -42,6 +43,9 @@ try {
     for (const filename of [...start.sourceFiles].sort()) hash.update(await fs.readFile(path.resolve(apiRoot, filename)));
     assert.equal(start.sourceHash, hash.digest("hex").slice(0, 12), "The runner must compile/hash today's source, not a cached tool copy.");
     assert(done);
+    if (done.completedStep) {
+      assert(Date.now() - startedAt >= 3000, "The visible replay must preserve the three-second post-action settle.");
+    }
     return { events, done };
   }
   for (const action of ["add", "dismiss", "skip"]) {

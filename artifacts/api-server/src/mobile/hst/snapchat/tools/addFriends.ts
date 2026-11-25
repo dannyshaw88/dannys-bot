@@ -361,6 +361,8 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         `Add Friends: action for ${friendName} is Skip because its row Hide control was not exposed; ` +
         `it matched ${matchDescription}.`,
       );
+      await context.sleep(3000, "exact");
+      if (context.isAborted()) return false;
       const liveState = await dump(context.serial);
       if (context.isAborted()) return false;
       if (liveState.nodes.length === 0) {
@@ -419,7 +421,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       );
       return false;
     }
-    await context.sleep(350, "exact");
+    await context.sleep(3000, "exact");
     if (context.isAborted()) return false;
     const afterDismiss = await dump(context.serial);
     if (context.isAborted()) return false;
@@ -617,7 +619,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       context.onLog(`Add Friends: ${friendName} was added, but could not be saved to the farm-wide name list.`);
     }
     context.onLog(`Add Friends: added ${friendName}; saved the display name to the farm-wide list.`);
-    await context.sleep(350, "exact");
+    await context.sleep(3000, "exact");
     if (context.isAborted()) break;
     const afterAdd = await dump(context.serial);
     if (!await scrollAddFriendsListOneSlot(

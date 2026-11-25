@@ -13,6 +13,12 @@ The Settings replay must execute the actual current Add Friends tool, not a sepa
 
 ### Preserve real card states in replay
 
+After each Add, Dismiss, or Skip action, wait about three seconds before reading the resulting card and scrolling. Preserve this delay in the visible replay too.
+
+**Why:** The user explicitly requires action → three-second settle → scroll so the action result is visible before movement.
+
+**How to apply:** Keep the post-action delay in the real tool; the replay must not shorten it.
+
 Do not invent a subtitle for a missing `result-reason`. Blank, mutual-friends, recently-joined, contact-book, and wrapped-name cards must retain their own imported heights. Keep the imported visible position; RecyclerView's cached y=0 cards belong off-screen, not ahead of the visible cards. Every recommendation in the test screen needs a Dismiss control.
 
 Dismiss must replace the recommendation with Snapchat's feedback card (including its changed height, feedback choices, and Undo), reflow subsequent cards, and expose that intermediate state before scrolling. Do not model dismissal as deleting the row or merely changing the Add label.

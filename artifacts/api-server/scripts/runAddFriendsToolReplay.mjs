@@ -92,7 +92,8 @@ try {
     onLog: message => { logs.push(message); emit({ type: "log", message }); },
     onProgress() {}, onMetric: key => emit({ type: "metric", key }),
     isAborted: () => false, effectiveTypingProfile: () => ({}),
-    sleep: async ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 220))),
+    // Preserve the real post-action settling period in the visible replay.
+    sleep: async ms => new Promise(resolve => setTimeout(resolve, ms === 3000 ? ms : Math.min(ms, 220))),
     onAddFriendsStepComplete: async step => { completedStep = step; throw stop; },
   };
   let result;
