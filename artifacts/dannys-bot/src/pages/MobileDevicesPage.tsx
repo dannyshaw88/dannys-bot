@@ -1149,6 +1149,7 @@ function DeviceCard({
   custom,
   onCustomize,
   compact = false,
+  smallControls = false,
   denseControls = false,
 }: {
   device:      FarmDevice;
@@ -1166,6 +1167,7 @@ function DeviceCard({
   custom:      SlotCustomization;
   onCustomize: (c: SlotCustomization) => void;
   compact?:    boolean;
+  smallControls?: boolean;
   denseControls?: boolean;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
@@ -1389,7 +1391,7 @@ function DeviceCard({
       </div>
 
       {/* Brightness controls sit on the top-left, clear of the phone preview. */}
-      <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
+      <div className={`absolute top-2 left-2 z-10 flex items-center gap-1${smallControls ? " origin-top-left scale-75" : ""}`}>
         <button
           onClick={event => { void handleBrightnessAdjust(event, "down"); }}
           disabled={!online || rebooting || brightnessAdjusting !== null}
@@ -1417,7 +1419,7 @@ function DeviceCard({
       </div>
 
       {/* Remaining persistent device controls stay in the top-right. */}
-      <div className={`absolute top-2 right-2 z-10 flex items-center gap-1${denseControls ? " origin-top-right scale-[0.58]" : ""}`}>
+      <div className={`absolute top-2 right-2 z-10 flex items-center gap-1${denseControls ? " origin-top-right scale-[0.58]" : smallControls ? " origin-top-right scale-75" : ""}`}>
         <button
           onClick={handleRestart}
           disabled={rebooting}
@@ -1834,6 +1836,7 @@ export function MobileDevicesPage() {
                       custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}
                       onCustomize={c => setSlotCustom(prev => ({ ...prev, [device.slotIndex]: c }))}
                       compact={devicesPerPage >= 16}
+                      smallControls={devicesPerPage >= 10}
                       denseControls={devicesPerPage >= 32}
                     />
                   );
