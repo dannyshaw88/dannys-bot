@@ -8,6 +8,7 @@ import sharp from "sharp";
 import { createHash, randomBytes } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { logger } from "../lib/logger";
+import { beginStartupPhase } from "../diagnostics/startupTiming";
 import * as recorder from "./sessionRecorder";
 import { getDebugScreenshotFolderName } from "./debugScreenshotPaths";
 import {
@@ -1242,35 +1243,51 @@ export async function launchInstagram(
   serial: string,
   options?: InstagramLaunchOptions,
 ): Promise<void> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  // Use am start instead of monkey — monkey can trigger ADB server restarts
-  // which kill scrcpy connections. am start is a clean single-activity launch.
-  const start = () => spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
-    "com.instagram.android/com.instagram.mainactivity.LauncherActivity",
-    "--activity-clear-top",
-  ], { encoding: "utf8", timeout: 10000 });
+  const endStartupPhase = beginStartupPhase(serial, "launch-instagram");
+  try {
+    const tools = detectToolset();
+    const adb = requireTool(tools.adb, "adb");
+    // Use am start instead of monkey — monkey can trigger ADB server restarts
+    // which kill scrcpy connections. am start is a clean single-activity launch.
+    const start = () => spawnSync(adb, ["-s", serial, "shell", "am", "start", "-n",
+      "com.instagram.android/com.instagram.mainactivity.LauncherActivity",
+      "--activity-clear-top",
+    ], { encoding: "utf8", timeout: 10000 });
 
-  if (options?.diagnostic) {
-    await runInstagramLaunchDiagnostic(serial, start, options.diagnosticContext);
-    return;
+    if (options?.diagnostic) {
+      await runInstagramLaunchDiagnostic(serial, start, options.diagnosticContext);
+      return;
+    }
+    start();
+  } catch (error) {
+    endStartupPhase(true);
+    throw error;
+  } finally {
+    endStartupPhase();
   }
-  start();
 }
 
 export async function launchSnapchat(serial: string): Promise<void> {
-  const tools = detectToolset();
-  const adb = requireTool(tools.adb, "adb");
-  const result = spawnSync(adb, [
-    "-s", serial, "shell", "am", "start",
-    "-a", "android.intent.action.MAIN",
-    "-c", "android.intent.category.LAUNCHER",
-    "-p", "com.snapchat.android",
-    "--activity-clear-top",
-  ], { encoding: "utf8", timeout: 10000 });
-  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-  if (result.error || result.status !== 0 || /\b(?:Error:|No activity found|unable to resolve)\b/i.test(output)) {
-    throw new Error(`Could not launch Snapchat${output.trim() ? `: ${output.trim().slice(0, 240)}` : ""}`);
+  const endStartupPhase = beginStartupPhase(serial, "launch-snapchat");
+  try {
+    const tools = detectToolset();
+    const adb = requireTool(tools.adb, "adb");
+    const result = spawnSync(adb, [
+      "-s", serial, "shell", "am", "start",
+      "-a", "android.intent.action.MAIN",
+      "-c", "android.intent.category.LAUNCHER",
+      "-p", "com.snapchat.android",
+      "--activity-clear-top",
+    ], { encoding: "utf8", timeout: 10000 });
+    const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    if (result.error || result.status !== 0 || /\b(?:Error:|No activity found|unable to resolve)\b/i.test(output)) {
+      throw new Error(`Could not launch Snapchat${output.trim() ? `: ${output.trim().slice(0, 240)}` : ""}`);
+    }
+  } catch (error) {
+    endStartupPhase(true);
+    throw error;
+  } finally {
+    endStartupPhase();
   }
 }
 

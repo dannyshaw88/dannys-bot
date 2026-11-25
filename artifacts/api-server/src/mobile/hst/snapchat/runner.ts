@@ -1,4 +1,5 @@
 import type { SnapchatContext, SnapchatRunnableToolKey } from "./context";
+import { timeStartupPhase } from "../../../diagnostics/startupTiming";
 import { closeAddFriendsPanel } from "./navigation/closeAddFriendsPanel";
 import { ensureSnapchatAccount } from "./navigation/ensureSnapchatAccount";
 import { dismissSnapchatStartupPopup } from "./navigation/dismissNotificationPermission";
@@ -51,13 +52,13 @@ export async function runSnapchatTools(context: SnapchatContext): Promise<void> 
 }
 
 async function runSnapchatToolsInContext(context: SnapchatContext): Promise<void> {
-  const startupPopupResult = await dismissSnapchatStartupPopup(context);
+  const startupPopupResult = await timeStartupPhase(context.serial, "snapchat-startup-popup", () => dismissSnapchatStartupPopup(context));
   if (startupPopupResult === "aborted") {
     if (!context.isAborted()) context.onLog("Snapchat tool dispatcher skipped because startup popup handling was interrupted.");
     return;
   }
 
-  if (!await ensureSnapchatAccount(context, startupPopupResult === "tapped")) {
+  if (!await timeStartupPhase(context.serial, "snapchat-account-verification", () => ensureSnapchatAccount(context, startupPopupResult === "tapped"))) {
     context.onLog("Snapchat tool dispatcher skipped because the configured slot account was not confirmed.");
     return;
   }

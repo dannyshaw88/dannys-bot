@@ -32,6 +32,7 @@ import {
 } from "../mobile/mobileAutomationProcessLock";
 import { fixAiSlop } from "../instagram/fixAiSlop";
 import { getRuntimeSnapshot } from "../diagnostics/runtimeSnapshot";
+import { timeStartupPhase } from "../diagnostics/startupTiming";
 import {
   alterJpegBuffer,
   type AlterationLevel,
@@ -8021,7 +8022,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // very short screen-off timeout, waiting until after WAKEUP lets the
       // display go dark while swipeUpFromBottom is still preparing its ADB
       // screen-size/input work.
-      screenTimeoutLease = await android.beginScreenTimeoutLease(serial);
+      screenTimeoutLease = await timeStartupPhase(serial, "screen-timeout-lease", () => android.beginScreenTimeoutLease(serial));
       tLog(
         screenTimeoutLease.changed
           ? `▶ Screen timeout held open for wake/unlock (previously ${screenTimeoutLease.previousTimeoutMs}ms)`
@@ -8029,7 +8030,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       );
       tLog("▶ Waking screen…");
       logger.info({ serial, slotId, slotIdx: incomingSlotIdx, cycleId: incomingCycleId, command: "KEYCODE_WAKEUP(224)" }, "[mobile-screen-state] intentional command");
-      await android.wakeScreen(serial);
+      await timeStartupPhase(serial, "wake-screen", () => android.wakeScreen(serial));
       steps.push("power-on");
       // Give the physical panel time to finish powering on before sending the
       // unlock gesture. On some devices the keyevent returns before the panel
@@ -8038,7 +8039,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tLog("▶ Letting screen settle for 2.5 seconds before unlock…");
       await sleepOrAbort(serial, 2500, "navigation", "static");
       tLog("▶ Unlocking screen after wake settle…");
-      await android.unlockScreen(serial);
+      await timeStartupPhase(serial, "unlock-screen", () => android.unlockScreen(serial));
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete
 

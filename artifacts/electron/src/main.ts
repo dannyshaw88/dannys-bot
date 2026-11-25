@@ -1174,6 +1174,44 @@ async function createWindow() {
   _serverDebugLogPath = path.join(getUserDataPath(), "aura-farming-debug.log");
   setEbLogPath(logPath);
   appendToMainLog(`app ready — v${app.getVersion()} pid=${process.pid}`);
+  // One outstanding renderer probe at most: a stuck UI must not accumulate
+  // queued JavaScript requests. Only slow/missed probes are written to disk.
+  const diagnosticWindow = win;
+  let lastDiagnosticTick = performance.now();
+  let rendererProbeStarted: number | null = null;
+  let rendererProbeWarned = false;
+  const responsivenessTimer = setInterval(() => {
+    const now = performance.now();
+    const mainDelayMs = Math.round(now - lastDiagnosticTick - 5000);
+    lastDiagnosticTick = now;
+    if (mainDelayMs >= 500) {
+      appendToMainLog(`[STARTUP-DIAG] main-stall delayMs=${mainDelayMs}`);
+    }
+    if (diagnosticWindow.isDestroyed()) return;
+    if (rendererProbeStarted !== null) {
+      if (!rendererProbeWarned && now - rendererProbeStarted >= 5000) {
+        rendererProbeWarned = true;
+        appendToMainLog(`[STARTUP-DIAG] renderer-probe-pending elapsedMs=${Math.round(now - rendererProbeStarted)} mainDelayMs=${mainDelayMs}`);
+      }
+      return;
+    }
+    if (!diagnosticWindow.isVisible() || diagnosticWindow.webContents.isLoading()) return;
+    rendererProbeStarted = now;
+    void diagnosticWindow.webContents.executeJavaScript("1", false).then(() => {
+      const elapsedMs = Math.round(performance.now() - now);
+      if (elapsedMs >= 500 || rendererProbeWarned) {
+        appendToMainLog(`[STARTUP-DIAG] renderer-probe-returned elapsedMs=${elapsedMs}`);
+      }
+    }).catch(() => {
+      appendToMainLog("[STARTUP-DIAG] renderer-probe-failed");
+    }).finally(() => {
+      rendererProbeStarted = null;
+      rendererProbeWarned = false;
+    });
+  }, 5000);
+  responsivenessTimer.unref();
+  diagnosticWindow.once("closed", () => clearInterval(responsivenessTimer));
+  appendToMainLog("[STARTUP-DIAG] enabled: startup phase timings, API stalls, main stalls and single-flight renderer probes");
 
   app.on("render-process-gone", (_e, contents, details) => {
     appendToMainLog(`RENDER PROCESS GONE: url=${contents.getURL()} reason=${details.reason} exitCode=${details.exitCode}`);
