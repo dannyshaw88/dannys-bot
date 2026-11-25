@@ -16145,13 +16145,20 @@ export async function captureOneTap(
   // the rest of the mobile input path. UIAutomator root bounds can omit the
   // bottom navigation area and must not define calibration's coordinate space.
   const { w: screenW, h: screenH } = getScreenSize(serial);
-  if (!screenW || !screenH) return null;
+  if (!screenW || !screenH) {
+    onLog?.("[keyboard-calibration] capture unavailable: missing logical display dimensions");
+    return null;
+  }
 
   // Use cached device info if available, otherwise discover it now.
   let devInfo = _calDeviceInfoCache.get(serial);
+  const usedCachedDevice = Boolean(devInfo);
   if (!devInfo) {
     const discovered = await _getTouchDeviceInfo(adb, serial);
-    if (!discovered) return null;
+    if (!discovered) {
+      onLog?.("[keyboard-calibration] capture unavailable: no compatible touchscreen found by getevent -lp");
+      return null;
+    }
     _calDeviceInfoCache.set(serial, discovered);
     devInfo = discovered;
   }
@@ -16159,7 +16166,7 @@ export async function captureOneTap(
   const rangeX = maxX - minX;
   const rangeY = maxY - minY;
   onLog?.(
-    `[keyboard-calibration] capture ready: device=${device}, ` +
+    `[keyboard-calibration] capture ready: device=${device}, cached=${usedCachedDevice}, timeoutMs=${timeoutMs}, ` +
     `rawX=${minX}..${maxX}, rawY=${minY}..${maxY}, display=${screenW}x${screenH}`,
   );
 
@@ -16167,18 +16174,37 @@ export async function captureOneTap(
     let rawX: number | null = null;
     let rawY: number | null = null;
     let resolved = false;
+    const startedAt = Date.now();
+    let eventLines = 0;
+    let xEvents = 0;
+    let yEvents = 0;
+    let syncEvents = 0;
+    let stderr = "";
 
     const child = spawn(adb, ["-s", serial, "shell", "getevent", "-l", device]);
 
-    const finish = (result: { x: number; y: number } | null) => {
+    const finish = (result: { x: number; y: number } | null, reason: string) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timer);
+      onLog?.(
+        `[keyboard-calibration] capture finished: reason=${reason}, device=${device}, ` +
+        `elapsedMs=${Date.now() - startedAt}, eventLines=${eventLines}, ` +
+        `xEvents=${xEvents}, yEvents=${yEvents}, syncEvents=${syncEvents}, ` +
+        `parsedX=${rawX !== null}, parsedY=${rawY !== null}` +
+        (stderr ? `, stderr=${JSON.stringify(stderr)}` : ""),
+      );
       try { child.kill(); } catch { /**/ }
       resolve(result);
     };
 
-    const timer = setTimeout(() => finish(null), timeoutMs);
+    const timer = setTimeout(() => finish(null, "timeout"), timeoutMs);
+    // Bounded command errors only: never log raw touch streams or typed text.
+    child.stderr?.on("data", (chunk: Buffer) => {
+      if (!resolved && stderr.length < 1500) {
+        stderr += chunk.toString().slice(0, 1500 - stderr.length);
+      }
+    });
 
     let buf = "";
     child.stdout?.on("data", (chunk: Buffer) => {
@@ -16186,10 +16212,14 @@ export async function captureOneTap(
       const lines = buf.split("\n");
       buf = lines.pop() ?? "";
       for (const line of lines) {
+        if (line.trim()) eventLines++;
+        if (/SYN_REPORT/.test(line)) syncEvents++;
         if (/ABS_MT_POSITION_X/.test(line)) {
+          xEvents++;
           const m = line.match(/([0-9a-f]{8})\s*$/i);
           if (m) rawX = parseInt(m[1], 16);
         } else if (/ABS_MT_POSITION_Y/.test(line)) {
+          yEvents++;
           const m = line.match(/([0-9a-f]{8})\s*$/i);
           if (m) rawY = parseInt(m[1], 16);
         } else if (/SYN_REPORT/.test(line) && rawX !== null && rawY !== null) {
@@ -16205,13 +16235,16 @@ export async function captureOneTap(
             `[keyboard-calibration] captured raw=(${rawX},${rawY}) ` +
             `mapped=(${x},${y}) display=${screenW}x${screenH}`,
           );
-          finish({ x, y });
+          finish({ x, y }, "captured");
         }
       }
     });
 
-    child.on("error", () => finish(null));
-    child.on("close", () => finish(null));
+    child.on("error", (error) => {
+      if (!resolved) stderr = `${stderr} ${error.message}`.slice(0, 1500);
+      finish(null, "process-error");
+    });
+    child.on("close", (code, signal) => finish(null, `process-close(code=${code},signal=${signal})`));
   });
 }
 
