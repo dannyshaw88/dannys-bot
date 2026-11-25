@@ -3,6 +3,14 @@ name: Keyboard calibration UX
 description: CalibrationDialog architecture — 3 modes, server-side caching, merge-not-replace save strategy.
 ---
 
+## Multiple advertised touchscreens
+
+Do not assume the first input advertising multitouch axes is the live touchscreen.
+
+**Why:** A Redmi 9 exposed both `mtk-tpd` and `fts_ts`; the former advertised valid axes but stayed silent while the latter emitted real X/Y events. This was an input-selection issue, not missing USB permissions or a broken phone.
+
+**How to apply:** Preserve working readers. Recover a silent selection only from unambiguous observed X/Y activity and valid axis ranges belonging to that input. Input event numbers are device-specific, not model-wide constants.
+
 The CalibrationDialog in MobilePage.tsx has three `mode` values: `"intro"`, `"wizard"`, `"editMap"`.
 
 - **intro**: shows existing key count; "View & fix individual keys" opens editMap; "Re-run full calibration" opens wizard.

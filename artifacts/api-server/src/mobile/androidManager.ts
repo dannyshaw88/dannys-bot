@@ -16186,6 +16186,9 @@ export async function captureOneTap(
     // Observation only. Do not feed this stream into coordinate capture or
     // change the selected input used by working devices.
     const inputCounts = new Map<string, { events: number; x: number; y: number }>();
+    const observedTouchDevices = new Map<string, {
+      device: string; minX: number; maxX: number; minY: number; maxY: number;
+    }>();
     let observer: ReturnType<typeof spawn> | undefined;
     let observerError = "";
     let observerBuffer = "";
@@ -16220,6 +16223,18 @@ export async function captureOneTap(
         const inputs = output.split(/^add device \d+:/m).flatMap(block => {
           const path = block.match(/^\s*(\/dev\/input\/\S+)/m)?.[1];
           if (!path) return [];
+          const x = block.match(/ABS_MT_POSITION_X\s*:.*?min\s+(-?\d+).*?max\s+(-?\d+)/i);
+          const y = block.match(/ABS_MT_POSITION_Y\s*:.*?min\s+(-?\d+).*?max\s+(-?\d+)/i);
+          if (x && y) {
+            const bounds = {
+              device: path,
+              minX: Number(x[1]), maxX: Number(x[2]),
+              minY: Number(y[1]), maxY: Number(y[2]),
+            };
+            if (bounds.maxX > bounds.minX && bounds.maxY > bounds.minY) {
+              observedTouchDevices.set(path, bounds);
+            }
+          }
           return [{
             path,
             name: block.match(/name:\s*"([^"]*)"/)?.[1]?.slice(0, 100) ?? "unknown",
@@ -16248,6 +16263,22 @@ export async function captureOneTap(
       );
       if (diagnoseAllInputs) {
         onLog?.(`[keyboard-calibration] input observer summary: selected=${device}, sources=${JSON.stringify(Object.fromEntries(inputCounts))}, error=${JSON.stringify(observerError || null)}`);
+        // Some phones advertise an inactive touchscreen before the real one.
+        // Preserve successful readers; only replace a silent reader with one
+        // unambiguous, observed multitouch source, using its own axis bounds.
+        if (!result && reason === "timeout" && eventLines === 0) {
+          const active = [...inputCounts.entries()].filter(([path, counts]) =>
+            path !== device && counts.x > 0 && counts.y > 0 && observedTouchDevices.has(path),
+          );
+          if (active.length === 1) {
+            const replacement = observedTouchDevices.get(active[0][0])!;
+            _calDeviceInfoCache.set(serial, replacement);
+            onLog?.(
+              `[keyboard-calibration] selected input was silent; next capture will use observed touchscreen=${replacement.device}, ` +
+              `rawX=${replacement.minX}..${replacement.maxX}, rawY=${replacement.minY}..${replacement.maxY}`,
+            );
+          }
+        }
       }
       try { child.kill(); } catch { /**/ }
       try { observer?.kill(); } catch { /**/ }
