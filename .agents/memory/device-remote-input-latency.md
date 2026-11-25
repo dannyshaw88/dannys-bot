@@ -8,3 +8,9 @@ The user reports that physical touchscreen input responds quickly while remote a
 **Why:** Physical touches bypass the desktop's ADB control path. Identical speed profiles do not rule out a device-specific ADB transport, shell/input-dispatch, or local input-queue delay.
 
 **How to apply:** Compare per-device input-gate wait with ADB command duration. High gate wait means the desktop queued the action; high command time means the ADB/device path is slow. Do not attribute broad remote-action lag to the typing profile without those measurements.
+
+Account-slot keyboard buttons need the same batch/per-tap timing measurements as unread-chat reply typing. Diagnostics for account fields must use numbered taps, never actual key labels or field values.
+
+**Why:** The user requested equivalent diagnostics for slow manual account-slot typing; these fields can contain passwords and OTP secrets, so the reply tool's character-labelled timing output is inappropriate here.
+
+**How to apply:** Preserve configured typing behaviour, report queue time, ADB duration and configured pauses, and keep account-field timing messages safe for exported logs.

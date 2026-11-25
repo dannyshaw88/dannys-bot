@@ -33,6 +33,7 @@ import {
 import { fixAiSlop } from "../instagram/fixAiSlop";
 import { getRuntimeSnapshot } from "../diagnostics/runtimeSnapshot";
 import { timeStartupPhase } from "../diagnostics/startupTiming";
+import { accountSlotTypingTiming } from "../diagnostics/accountSlotTyping";
 import {
   alterJpegBuffer,
   type AlterationLevel,
@@ -10568,10 +10569,18 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     try {
       const input = inputTextSchema.parse(req.body);
       const serial = p(req, "serial");
-      req.log.info({ serial, characterCount: input.text.length }, "[mirror-calibrated-type] starting");
+      const typingStartedAt = performance.now();
+      req.log.info(`[account-slot-typing] starting serial=${serial} characterCount=${input.text.length}`);
       const result = await android.typeViaSavedCalibrationMap(serial, input.text, effectiveTypingProfile(serial), message => {
-        req.log.info({ serial, message }, "[mirror-calibrated-type]");
-      }, { batchTaps: true });
+        const timing = accountSlotTypingTiming(message);
+        if (timing) req.log.info(`[account-slot-typing] serial=${serial} ${timing}`);
+      }, {
+        batchTaps: true,
+        measureTapTimings: true,
+        compactLogs: true,
+        debugLabel: "account-slot-typing",
+      });
+      req.log.info(`[account-slot-typing] finished serial=${serial} totalMs=${Math.round(performance.now() - typingStartedAt)} ok=${result.ok} calibrated=${result.available} missingCount=${result.missing.length}`);
       if (!result.ok) {
         return void res.status(422).json({
           ok: false,
