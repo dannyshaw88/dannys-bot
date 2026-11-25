@@ -16189,6 +16189,27 @@ export async function captureOneTap(
     const observedTouchDevices = new Map<string, {
       device: string; minX: number; maxX: number; minY: number; maxY: number;
     }>();
+    const observedPoints = new Map<string, { x?: number; y?: number; complete?: boolean }>();
+    const tryObservedTouch = () => {
+      if (resolved || xEvents > 0 || yEvents > 0) return;
+      const active = [...inputCounts.entries()].filter(([path, counts]) =>
+        counts.x > 0 && counts.y > 0 && observedTouchDevices.has(path),
+      );
+      if (active.length !== 1) return;
+      const path = active[0][0];
+      const point = observedPoints.get(path);
+      const bounds = observedTouchDevices.get(path)!;
+      if (!point?.complete || point.x === undefined || point.y === undefined) return;
+      const x = Math.round(Math.min(1, Math.max(0,
+        (point.x - bounds.minX) / (bounds.maxX - bounds.minX),
+      )) * (screenW - 1));
+      const y = Math.round(Math.min(1, Math.max(0,
+        (point.y - bounds.minY) / (bounds.maxY - bounds.minY),
+      )) * (screenH - 1));
+      _calDeviceInfoCache.set(serial, bounds);
+      onLog?.(`[keyboard-calibration] captured observed touchscreen=${path}, mapped=(${x},${y}), previous=${device}`);
+      finish({ x, y }, "captured-observed-input");
+    };
     let observer: ReturnType<typeof spawn> | undefined;
     let observerError = "";
     let observerBuffer = "";
@@ -16207,7 +16228,22 @@ export async function captureOneTap(
           if (/ABS_(?:MT_POSITION_)?X\b/.test(line)) counts.x++;
           if (/ABS_(?:MT_POSITION_)?Y\b/.test(line)) counts.y++;
           inputCounts.set(source, counts);
+          const point = observedPoints.get(source) ?? {};
+          const value = line.match(/([0-9a-f]{8})\s*$/i);
+          if (/ABS_MT_POSITION_X/.test(line) && value) {
+            point.x = parseInt(value[1], 16);
+            point.complete = false;
+          }
+          if (/ABS_MT_POSITION_Y/.test(line) && value) {
+            point.y = parseInt(value[1], 16);
+            point.complete = false;
+          }
+          if (/SYN_REPORT/.test(line) && point.x !== undefined && point.y !== undefined) {
+            point.complete = true;
+          }
+          observedPoints.set(source, point);
         }
+        tryObservedTouch();
       });
       observer.stderr?.on("data", (chunk: Buffer) => {
         if (!resolved) observerError = (observerError + chunk.toString()).slice(0, 1500);
@@ -16245,6 +16281,7 @@ export async function captureOneTap(
           }];
         }).slice(0, 64);
         onLog?.(`[keyboard-calibration] input inventory: ${JSON.stringify(inputs)}`);
+        tryObservedTouch();
       }).catch(error => {
         onLog?.(`[keyboard-calibration] input inventory failed: ${String(error?.message ?? error).slice(0, 1500)}`);
       });

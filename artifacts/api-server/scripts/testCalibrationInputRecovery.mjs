@@ -25,10 +25,11 @@ async function scenario({ active = [3], selectedWorks = false, validBounds = tru
     children.push(child);
     setTimeout(() => {
       if (args.at(-1) === "-l") {
-        for (const id of active) child.stdout.emit("data", Buffer.from(
+        child.stdout.emit("data", Buffer.from(active.map(id =>
           `/dev/input/event${id}: EV_ABS ABS_MT_POSITION_X 000001f4\n` +
-          `/dev/input/event${id}: EV_ABS ABS_MT_POSITION_Y 000003e8\n`,
-        ));
+          `/dev/input/event${id}: EV_ABS ABS_MT_POSITION_Y 000003e8\n` +
+          `/dev/input/event${id}: EV_SYN SYN_REPORT 00000000\n`,
+        ).join("")));
       } else if (selectedWorks || (recover && args.at(-1) === "/dev/input/event3")) {
         child.stdout.emit("data", Buffer.from(
           "EV_ABS ABS_MT_POSITION_X 000001f4\nEV_ABS ABS_MT_POSITION_Y 000003e8\nEV_SYN SYN_REPORT 00000000\n",
@@ -50,7 +51,7 @@ async function scenario({ active = [3], selectedWorks = false, validBounds = tru
   );
   const first = await fn("phone", 30, line => logs.push(line), true);
   if (!selectedWorks && active.length === 1 && validBounds) {
-    assert.equal(first, null);
+    assert.deepEqual(first, { x: 540, y: 1170 }, "Live alternate touch must complete the same capture");
     assert.equal(cache.get("phone").device, "/dev/input/event3");
     recover = true;
     const second = await fn("phone", 30, line => logs.push(line), true);
