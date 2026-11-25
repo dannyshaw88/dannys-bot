@@ -3,7 +3,8 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useImperativeHandle, useMemo, type ReactNode } from "react";
-import { useParams, useSearch } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
+import { adjacentFarmDevice, type FarmNavigationDevice } from "@/lib/farmDeviceNavigation";
 import { _hstTimers, _hstStop, _hstNextRunAt, _hstUiMounted, registerHstToggleHandler } from "@/lib/hstRunner";
 import { persistHstToggle, type HstToggleEvent } from "@/lib/hstToggleCoordinator";
 import {
@@ -13649,6 +13650,7 @@ function serialToBrowserId(serial: string): number {
 const BOT_TAP_RE = /tapp(?:ing|ed)[^\n(]*\((\d+),\s*(\d+)\)/i;
 
 export function MobilePage() {
+  const [, setLocation] = useLocation();
   // When navigated from the Phone Farm grid (/mobile/farm/:serial), only this
   // phone's serial is shown. When navigated directly (/mobile/farm with no
   // param) all connected phones are shown as before.
@@ -13990,16 +13992,30 @@ export function MobilePage() {
   // Fetch the farm slot index for the targeted serial so the header can
   // show "Phone Farm - Slot X - Device Name" instead of just "Phone Farm".
   const [farmSlotIndex, setFarmSlotIndex] = useState<number | null>(null);
+  const [farmNavigationDevices, setFarmNavigationDevices] = useState<FarmNavigationDevice[]>([]);
   useEffect(() => {
     if (!targetSerial) { setFarmSlotIndex(null); return; }
+    let cancelled = false;
+    setFarmSlotIndex(null);
     fetch("/api/mobile/farm-devices")
       .then(r => r.ok ? r.json() : Promise.reject())
       .then((d: { devices: Array<{ serial: string; slotIndex: number }> }) => {
+        if (cancelled) return;
+        setFarmNavigationDevices(d.devices);
         const dev = d.devices.find(dev => dev.serial === targetSerial);
         setFarmSlotIndex(dev?.slotIndex ?? null);
       })
-      .catch(() => setFarmSlotIndex(null));
+      .catch(() => { if (!cancelled) { setFarmSlotIndex(null); setFarmNavigationDevices([]); } });
+    return () => { cancelled = true; };
   }, [targetSerial]);
+  const navigateFarmDevice = (direction: -1 | 1) => {
+    const serial = adjacentFarmDevice(farmNavigationDevices, targetSerial, direction);
+    if (!serial) return;
+    sessionStorage.setItem("mobile_device_nav_started_at", String(performance.now()));
+    sessionStorage.setItem("mobile_autopower_serial", serial);
+    setOpenAccountSlot(null);
+    setLocation(`/mobile/farm/${encodeURIComponent(serial)}?autopower=1`);
+  };
 
   // Keep an intentional manual mirror session alive through transient USB
   // polling gaps. A phone card can briefly disappear while ADB refreshes;
@@ -14044,25 +14060,34 @@ export function MobilePage() {
       <main className="ml-[133px] flex-1 h-screen flex flex-col overflow-hidden">
         <LiveActivityTicker />
         {/* Header */}
-        <div className="shrink-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 relative flex items-center justify-end">
+        <div className="shrink-0 min-h-[58px] z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 relative flex items-center justify-end">
           {/* Title — absolutely centred in the bar, independent of button widths */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="flex items-center gap-3 pointer-events-auto">
-              <FilledFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />
+              {targetSerial ? (
+                <button type="button" aria-label="Previous farm device" title="Previous device"
+                  onClick={() => navigateFarmDevice(-1)}
+                  disabled={!adjacentFarmDevice(farmNavigationDevices, targetSerial, -1)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed">
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+              ) : <FilledFarmIcon className="w-5 h-5" style={{ color: "#1AD2F2" }} />}
               <h1 className="text-lg font-bold text-foreground">
                 {targetSerial
                   ? openAccountSlot !== null
-                    ? `Phone Farm - Slot ${openAccountSlot + 1} - ${deviceFriendlyName ?? targetSerial}`
-                    : `Phone Farm - ${deviceFriendlyName ?? targetSerial}`
+                    ? `${deviceFriendlyName ?? targetSerial} - Slot ${openAccountSlot + 1}`
+                    : `${deviceFriendlyName ?? targetSerial}`
                   : "Phone Farm"}
               </h1>
+              {targetSerial && (
+                <button type="button" aria-label="Next farm device" title="Next device"
+                  onClick={() => navigateFarmDevice(1)}
+                  disabled={!adjacentFarmDevice(farmNavigationDevices, targetSerial, 1)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed">
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              )}
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={() => refresh(true)} disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors disabled:opacity-50">
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />Refresh
-            </button>
           </div>
         </div>
 
