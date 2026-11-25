@@ -37,6 +37,7 @@ const ACTIVITY_METRICS: ActivityMetric[] = [
   { pattern: /^\d+\s+friends?\s+added$/i, icon: UserPlus, color: "text-blue-500" },
   { pattern: /^\d+\s+friend requests?\s+accepted$/i, icon: UserPlus, color: "text-emerald-500" },
   { pattern: /^\d+\s+repl(?:y|ies)\s+sent$/i, icon: Send, color: "text-violet-500" },
+  { pattern: /^\d+\s+links?\s+sent$/i, icon: Send, color: "text-fuchsia-500" },
   { pattern: /^\d+\s+Snaps?\s+uploaded$/i, icon: ImagePlus, color: "text-fuchsia-500" },
   { pattern: /^\d+\s+Spotlights?\s+viewed$/i, icon: Eye, color: "text-indigo-500" },
   { pattern: /^\d+\s+Spotlight\s+likes?$/i, icon: Heart, color: "text-red-500", filled: true },
