@@ -69,6 +69,12 @@ For every Add, Skip, or Dismiss decision, first move that exact contact to the f
 
 ## Avoid Users Containing dismissals
 
+Do not add a recovery/retry tap for a failed Dismiss. Investigate why the first tap failed.
+
+**Why:** The user explicitly rejected retrying as a substitute for finding the original failure.
+
+**How to apply:** Inspect the first dispatched tap and its target; do not add another attempt.
+
 Never long-press a suggestion. Tiny vertical swipes can be interpreted as contact holds; treat near-aligned rows as aligned, require meaningful travel and a sufficiently wide verified blank lane for scrolling, and log the dispatched coordinates.
 
 When a suggestion matches the farm-wide Skip Added list, dismiss it with its live Hide/X control instead of skipping or scrolling past it. If Hide is unavailable or the row remains afterward, stop rather than Add or bypass that contact.
