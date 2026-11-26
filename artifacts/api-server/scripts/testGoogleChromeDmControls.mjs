@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import { transform } from "esbuild";
+import { build, transform } from "esbuild";
+import { fileURLToPath } from "node:url";
 
 const source = await fs.readFile(new URL("../src/instagram/googleChromeDmControls.ts", import.meta.url), "utf8");
 const { code } = await transform(source, { loader: "ts", format: "esm" });
@@ -8,10 +9,30 @@ const { findGoogleChromeDmControl: find } = await import(`data:text/javascript;b
 const delaySource = await fs.readFile(new URL("../src/instagram/googleChromeDmDelay.ts", import.meta.url), "utf8");
 const delayCode = await transform(delaySource, { loader: "ts", format: "esm" });
 const { waitForGoogleChromeDmDelay } = await import(`data:text/javascript;base64,${Buffer.from(delayCode.code).toString("base64")}`);
-const eligibilitySource = await fs.readFile(new URL("../src/instagram/googleChromeDmEligibility.ts", import.meta.url), "utf8");
-const eligibilityCode = await transform(eligibilitySource, { loader: "ts", format: "esm" });
-const { googleChromeGirlsOnlyRejection: reject } = await import(`data:text/javascript;base64,${Buffer.from(eligibilityCode.code).toString("base64")}`);
+const eligibilityBuild = await build({
+  entryPoints: [fileURLToPath(new URL("../src/instagram/googleChromeDmEligibility.ts", import.meta.url))],
+  bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
+});
+const { googleChromeGirlsOnlyRejection: reject } = await import(`data:text/javascript;base64,${Buffer.from(eligibilityBuild.outputFiles[0].text).toString("base64")}`);
 const photoUrl = "https://images.example.test/personal-picture.jpg";
+const internationalNames = JSON.parse(await fs.readFile(
+  new URL("../src/instagram/data/internationalGivenNames/names.json", import.meta.url), "utf8",
+));
+assert(internationalNames.female.length >= 16_000);
+assert(internationalNames.maleOrAmbiguous.length >= 26_000);
+for (const name of [
+  "Sarita", "Sarita Bb", "Saritabb", "Eulália", "Agnieszka", "Ayşe",
+  "Zofia", "Saoirse", "Siobhán", "Graciela", "Eunice", "Francine",
+  "Soraya", "Ainhoa", "Özlem", "Özge", "Isidora", "Nadine", "Fleur", "Belén",
+]) {
+  assert.equal(reject({ name, photoUrl }), null, `international name: ${name}`);
+  assert(reject({ name }), `international name still needs a photo: ${name}`);
+}
+for (const name of ["Kazimierz", "Toshihiro", "Abdulrahman", "Bartosz", "Svetozar",
+  "LinaToshihiro", "SaritaShop", "Saritabb12", "Unknownusername", "banana"]) {
+  assert(reject({ name, photoUrl }), `broader data must not weaken guards: ${name}`);
+}
+console.log(`PASS: ${internationalNames.female.length} international female-labelled entries and ${internationalNames.maleOrAmbiguous.length} male/ambiguous entries; Sarita and cross-language regressions passed.`);
 for (const name of ["Haven rose", "Alice", "Luna Zamorano", "Luna", "Bambi", "Anya Sweete", "María García", "Anne-Marie Smith", "عائشة حسن", "Анна Иванова"]) {
   // The Arabic surname حسن is also a known male name and must fail the user's
   // any-name-token rule, even when it can legitimately be someone's surname.
@@ -341,6 +362,21 @@ assert.equal(correctedNames.sent, 3);
 assert.equal(correctedNames.skipped, 4);
 assert.deepEqual(correctedNames.sentUrls, [201, 202, 203].map(id => `https://www.facebook.com/profile.php?id=${id}`));
 console.log("PASS: production dispatcher selects Luna, Bambi and Anya while preserving the screenshot's word-count, numeric and business exclusions.");
+fixtureCandidates = [
+  { url: "https://www.facebook.com/profile.php?id=301", name: "Sarita Bb", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=302", name: "Agnieszka", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=303", name: "Toshihiro", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=304", name: "Sarita" },
+];
+events.length = 0; waits = 0;
+const international = await runGoogleChromeDm(10_000_000, {
+  url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+  message: "Local fixture only", amount: 10, girlsOnly: true,
+  delayMinSeconds: 0, delayMaxSeconds: 0,
+});
+assert.equal(international.sent, 2);
+assert.equal(international.skipped, 2);
+assert.deepEqual(international.sentUrls, [301, 302].map(id => `https://www.facebook.com/profile.php?id=${id}`));
 await assert.rejects(() => runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/", message: "Fixture", delayMinSeconds: 4, delayMaxSeconds: 1,
 }), /valid minimum and maximum/);

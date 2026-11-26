@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm, mkdir, copyFile } from "node:fs/promises";
+import { rm, mkdir, copyFile, cp } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -134,6 +134,13 @@ async function copyVendorAssets() {
   await copyFile(
     path.join(srcDir, "scrcpy-server-v3.1"),
     path.join(destDir, "scrcpy-server-v3.1"),
+  );
+  // Ship the derived dataset's transparent source, attribution and GFDL text
+  // with both API distributions and Electron's recursively copied server dist.
+  await cp(
+    path.resolve(artifactDir, "src/instagram/data/internationalGivenNames"),
+    path.resolve(artifactDir, "dist/licenses/internationalGivenNames"),
+    { recursive: true },
   );
 
 }

@@ -40,3 +40,9 @@ Female-name coverage must include Luna and Bambi; the user also confirmed Anya a
 **Why:** The user explicitly corrected their rejection and said the recognised women's-name list was too narrow.
 
 **How to apply:** Broaden coverage rather than treating a small list as comprehensive, while preserving the other eligibility requirements.
+
+Use a documented international name source for broad coverage rather than adding only the names in each screenshot.
+
+**Why:** The user repeated that the women's-name list was too narrow and explicitly asked to broaden it, suggesting Forebears if needed.
+
+**How to apply:** Bundle licensed name facts for offline use, preserve accepted examples and other eligibility gates, and keep source/license attribution in packaged distributions. When expanding embedded-name matching, prefer leading/longest matches so overlapping fragments do not invalidate an accepted joined name.

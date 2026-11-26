@@ -1,3 +1,5 @@
+import internationalNames from "./data/internationalGivenNames/names.json";
+
 /** Conservative name conventions, not identity or gender verification.
  * Unknown first names fail closed instead of passing an incomplete blocklist.
  */
@@ -120,7 +122,19 @@ jewelry beauty cosmetics photography realty realestate estate travel hotel
 entertainment music band records news media marketing onlyfans promo promotions
 sonorense sierreno
 ltd limited inc llc company corporation corp group team model manager brand
+unknown username banana
 `));
+
+// Preserve existing accepted spellings and user-confirmed examples while
+// broadening exact matches with a documented international source.
+for (const name of internationalNames.female) {
+  if (!maleNames.has(name) && !businessWords.has(name)) femaleNames.add(name);
+}
+for (const name of internationalNames.maleOrAmbiguous) {
+  if (!femaleNames.has(name)) maleNames.add(name);
+}
+const embeddedNameLengths = [...new Set([...femaleNames].map(name => name.length))]
+  .filter(length => length >= 4).sort((a, b) => a - b);
 
 /** Embedded matches need at least four letters: short fragments such as
  * "ana" in "banana" are not useful evidence. Exact short names still work.
@@ -128,20 +142,29 @@ ltd limited inc llc company corporation corp group team model manager brand
 function matchesFemaleUsername(value: string): boolean {
   const username = normalize(value);
   if ([...businessWords].some(word => word.length >= 4 && username.includes(word))) return false;
-  const matches = [...femaleNames]
-    .filter(name => name.length >= 4 && username.includes(name));
-  if (!matches.length) return false;
-  // Do not let a joined known male name bypass the existing male-name gate.
-  for (const name of matches) {
-    let offset = username.indexOf(name);
-    while (offset >= 0) {
-      const before = username.slice(0, offset);
-      const after = username.slice(offset + name.length);
-      if (maleNames.has(before) || maleNames.has(after)) return false;
-      offset = username.indexOf(name, offset + 1);
+  // Check substrings by length using Set lookups, rather than scanning tens of
+  // thousands of names for every follower and every subsequent list refresh.
+  const matches: Array<{ name: string; offset: number }> = [];
+  for (let offset = 0; offset <= username.length - 4; offset++) {
+    for (const length of embeddedNameLengths) {
+      if (offset + length > username.length) break;
+      const name = username.slice(offset, offset + length);
+      if (femaleNames.has(name)) matches.push({ name, offset });
     }
   }
-  return true;
+  if (!matches.length) return false;
+  // Prefer a female name at the beginning, then the longest matching name.
+  // A shorter overlapping split must not veto "LinaVale" as "Li" + "Nava"...
+  // merely because Li happens to occur in the international exclusions.
+  const leading = matches.filter(match => match.offset === 0);
+  const preferred = leading.length ? leading : matches;
+  const longest = Math.max(...preferred.map(match => match.name.length));
+  for (const { name, offset } of preferred.filter(match => match.name.length === longest)) {
+    const before = username.slice(0, offset);
+    const after = username.slice(offset + name.length);
+    if (!maleNames.has(before) && !maleNames.has(after)) return true;
+  }
+  return false;
 }
 
 export function hasGoogleChromeDmPhoto(url?: string): boolean {
