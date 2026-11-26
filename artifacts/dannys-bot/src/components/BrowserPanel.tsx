@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { recordLoginEvent } from "@/lib/ipLoginTracker";
+import { BrowserAddressHistory, useBrowserAddressHistory } from "@/components/BrowserAddressHistory";
 
 function usePersistentBrowserSetting<T extends string | boolean>(key: string, initialValue: T) {
   const [value, setValue] = useState<T>(() => {
@@ -150,6 +151,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
 
   const [isLoading, setIsLoading] = useState(false);
   const [addressBar, setAddressBar] = useState("https://www.google.com/");
+  const { addresses: visitedAddresses, recordVisitedAddress } = useBrowserAddressHistory(genericBrowser === true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [loginState, setLoginState] = useState<LoginState>("idle");
@@ -487,6 +489,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
             setIsLoading(msg.loading);
             break;
           case "urlChange":
+            recordVisitedAddress(msg.url);
             if (msg.url && msg.url !== "about:blank" && !addressFocusedRef.current) setAddressBar(msg.url);
             if (msg.url && (msg.url.includes("instagram.com/accounts/login") || msg.url.includes("instagram.com/login"))) {
               setLoginState(prev => prev === "ok" ? "idle" : prev);
@@ -628,7 +631,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     ws.onerror = () => {
       ws.close();
     };
-  }, [profileId, streamUrl, forceStream, setStatusSafe, appendLog]);
+  }, [profileId, streamUrl, forceStream, setStatusSafe, appendLog, recordVisitedAddress]);
 
   useEffect(() => () => {
     // Invalidate callbacks BEFORE close: its asynchronous onclose must not
@@ -1186,10 +1189,18 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
               onChange={e => setAddressBar(e.target.value)}
               onFocus={() => { addressFocusedRef.current = true; }}
               onBlur={() => { addressFocusedRef.current = false; }}
-              className="pl-8 h-8 text-sm font-mono bg-muted/50 border-muted focus:bg-background"
+              className={`pl-8 ${genericBrowser ? "pr-9" : ""} h-8 text-sm font-mono bg-muted/50 border-muted focus:bg-background`}
               placeholder="https://www.instagram.com/"
               disabled={!connected}
             />
+            {genericBrowser && (
+              <BrowserAddressHistory addresses={visitedAddresses} disabled={!connected}
+                onSelect={url => {
+                  setAddressBar(url);
+                  setIsLoading(true);
+                  send({ type: "navigate", url });
+                }} />
+            )}
           </div>
         </form>
 

@@ -164,3 +164,4 @@
 - [Cycle HTTP connections](automation-cycle-http-connections.md) — acknowledge starts promptly; long-held cycle requests can starve mirrors and controls without CPU overload
 - [Google Chrome browser click parity](google-chrome-single-click.md) — target profile-ID users from Followers, verify recipient and composer, and use one native click
 - [Google Chrome Send DMs status display](google-chrome-send-dms-status.md) — keep completion summaries and progress narration out of the toolbar and activity log
+- [Button overlay positioning](button-overlay-positioning.md) — position toolbar overlays through wrappers so shared Button elevation does not override their layout
