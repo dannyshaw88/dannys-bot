@@ -8,6 +8,27 @@ const { findGoogleChromeDmControl: find } = await import(`data:text/javascript;b
 const delaySource = await fs.readFile(new URL("../src/instagram/googleChromeDmDelay.ts", import.meta.url), "utf8");
 const delayCode = await transform(delaySource, { loader: "ts", format: "esm" });
 const { waitForGoogleChromeDmDelay } = await import(`data:text/javascript;base64,${Buffer.from(delayCode.code).toString("base64")}`);
+const eligibilitySource = await fs.readFile(new URL("../src/instagram/googleChromeDmEligibility.ts", import.meta.url), "utf8");
+const eligibilityCode = await transform(eligibilitySource, { loader: "ts", format: "esm" });
+const { googleChromeGirlsOnlyRejection: reject } = await import(`data:text/javascript;base64,${Buffer.from(eligibilityCode.code).toString("base64")}`);
+const photoUrl = "https://images.example.test/personal-picture.jpg";
+for (const name of ["Haven rose", "Alice", "María García", "Anne-Marie Smith", "عائشة حسن", "Анна Иванова"]) {
+  // The Arabic surname حسن is also a known male name and must fail the user's
+  // any-name-token rule, even when it can legitimately be someone's surname.
+  if (name === "عائشة حسن") { assert(reject({ name, photoUrl })); continue; }
+  assert.equal(reject({ name, photoUrl }), null, name);
+}
+for (const name of [
+  "Sebastián", "SEBASTIAN", "Sébastien", "Pretty Girls Around The World",
+  "Sonorense sierreño", "Nibabi Mo’s", "Mécanique", "Maria John",
+  "Maria Unknown Third", "Alice123", "Alice 💗", "Unknownname Smith",
+  "محمد", "Иван", "Andrea Rossi", "Jean Martin",
+]) assert(reject({ name, photoUrl }), name);
+for (const picture of [undefined, "", "https://example.test/default-avatar.png",
+  "https://www.facebook.com/rsrc.php/default.jpg", "data:image/png;base64,AAA"]) {
+  assert(reject({ name: "Haven rose", photoUrl: picture }), `missing/default picture: ${picture}`);
+}
+console.log("PASS: strict positive-name match, one/two name parts, male/ambiguous and unknown-name rejection, multilingual names and required non-placeholder photo.");
 
 class Node {
   constructor(kind, label = "", children = []) {
@@ -74,6 +95,48 @@ console.log("PASS: Facebook Send-label variants, matching chat Close, disabled/h
 // Execute the production dispatcher with browser-boundary stubs. No real account,
 // network request or message is used by this regression.
 const browserSource = await fs.readFile(new URL("../src/instagram/browserSession.ts", import.meta.url), "utf8");
+const collectStart = browserSource.indexOf("const collectEligibleProfiles = async () => session.page.evaluate");
+const collectEnd = browserSource.indexOf("\n    let candidates = await collectEligibleProfiles();", collectStart);
+assert(collectStart > 0 && collectEnd > collectStart);
+const visibleNode = {
+  style: { visibility: "visible", display: "block" },
+  getBoundingClientRect: () => ({ width: 50, height: 50 }),
+};
+const picture = {
+  ...visibleNode, tagName: "IMG", complete: true, naturalWidth: 50, currentSrc: photoUrl,
+  getAttribute: () => null,
+};
+const svgPicture = {
+  ...visibleNode, tagName: "image",
+  getAttribute: name => name === "xlink:href" ? "https://images.example.test/sebastian.jpg" : null,
+};
+const anchor = (id, name, images = []) => ({
+  ...visibleNode, href: `https://www.facebook.com/profile.php?id=${id}`, innerText: name,
+  getAttribute: () => null, querySelectorAll: () => images,
+});
+const anchors = [
+  anchor("123", "Haven rose"), anchor("123", "", [picture]),
+  anchor("456", "Sebastián", [svgPicture]), anchor("789", "Alice Smith"),
+];
+const section = { querySelectorAll: () => anchors };
+const heading = { innerText: "Followers", parentElement: section, querySelectorAll: () => [] };
+globalThis.document = {
+  location: { href: "https://www.facebook.com/test/followers" },
+  querySelector: () => ({ querySelectorAll: () => [heading] }),
+};
+const collectorCode = await transform(
+  "const session = { page: { evaluate: fn => fn() } }; export " + browserSource.slice(collectStart, collectEnd),
+  { loader: "ts", format: "esm" },
+);
+const { collectEligibleProfiles } = await import(`data:text/javascript;base64,${Buffer.from(collectorCode.code).toString("base64")}`);
+const collected = await collectEligibleProfiles();
+assert.equal(collected.find(candidate => candidate.name === "Haven rose").photoUrl, photoUrl);
+assert.equal(collected.find(candidate => candidate.name === "Sebastián").photoUrl, "https://images.example.test/sebastian.jpg");
+assert.equal(collected.find(candidate => candidate.name === "Alice Smith").photoUrl, undefined);
+picture.complete = false;
+assert.equal((await collectEligibleProfiles()).find(candidate => candidate.name === "Haven rose").photoUrl, undefined);
+delete globalThis.document;
+console.log("PASS: production follower collector pairs HTML/SVG photos by exact profile ID, never borrows a neighbour's image, and excludes unloaded pictures.");
 const start = browserSource.indexOf("export async function runGoogleChromeDm(");
 const end = browserSource.indexOf("// ── Send a DM through the live browser session", start);
 assert(start >= 0 && end > start);
@@ -102,13 +165,19 @@ const wrap = value => ({
 const message = { click: async () => { events.push("message"); editor.isConnected = true; } };
 let waits = 0;
 let location = "";
+let fixtureCandidates = [
+  { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
+  { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
+];
 const page = {
   goto: async url => { location = url; events.push("navigate"); },
   url: () => location,
-  evaluate: async () => [
-    { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
-    { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
-  ],
+  evaluate: async fn => {
+    const text = fn.toString();
+    if (text.includes("scrollHeight")) return 1000;
+    if (text.includes("scrollTo")) return;
+    return fixtureCandidates;
+  },
   evaluateHandle: async () => wrap(message),
   waitForFunction: async (fn, _options, ...args) => {
     waits++;
@@ -125,6 +194,7 @@ const page = {
 const gaps = [];
 globalThis.__chromeDmFixture = {
   page, find: (_handle, action) => find(editor, action),
+  reject,
   wait: async (seconds, stopped) => {
     const started = Date.now();
     await waitForGoogleChromeDmDelay(seconds, stopped);
@@ -138,6 +208,7 @@ const activeGoogleChromeDmRuns = new Map();
 const sessions = new Map([[10000000, {page: globalThis.__chromeDmFixture.page}]]);
 const findGoogleChromeDmControl = globalThis.__chromeDmFixture.find;
 const waitForGoogleChromeDmDelay = globalThis.__chromeDmFixture.wait;
+const googleChromeGirlsOnlyRejection = globalThis.__chromeDmFixture.reject;
 const wsWrite = () => {};
 const log = () => {};
 `;
@@ -166,6 +237,43 @@ assert.deepEqual(events, [
   "navigate", "navigate", "message", "composer", "send", "close",
   "delay", "navigate", "message", "composer", "send", "close",
 ]);
+fixtureCandidates = [
+  { url: "https://www.facebook.com/profile.php?id=123", name: "Haven rose", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=456", name: "Sebastián", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=789", name: "Pretty Girls Around The World", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=890", name: "Sonorense sierreño", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=901", name: "Mécanique", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=912", name: "Nibabi Mo’s", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=923", name: "Alice Smith" },
+];
+for (const mode of [{ girlsOnly: true }, { excludedNameTokens: ["sebastian"] }]) {
+  events.length = 0; waits = 0;
+  const strict = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 10, ...mode,
+  });
+  assert.equal(strict.sent, 1);
+  assert.equal(strict.totalEligible, 1);
+  assert.equal(strict.skipped, 6);
+  assert.deepEqual(strict.sentUrls, ["https://www.facebook.com/profile.php?id=123"]);
+  assert.equal(events.filter(event => event === "send").length, 1);
+}
+console.log("PASS: real dispatcher with Girls Only (new and legacy clients) sends solely to Haven rose; excludes all other screenshot examples and a female-name profile without a photo.");
+fixtureCandidates = fixtureCandidates.slice(1);
+events.length = 0; waits = 0;
+const none = await runGoogleChromeDm(10_000_000, {
+  url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+  message: "Local fixture only", amount: 10, girlsOnly: true,
+});
+assert.equal(none.sent, 0);
+assert.deepEqual(events, ["navigate"], "no Message/Send click when no profile qualifies");
+events.length = 0; waits = 0;
+const disabled = await runGoogleChromeDm(10_000_000, {
+  url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+  message: "Local fixture only", amount: 1, girlsOnly: false,
+});
+assert.equal(disabled.sent, 1, "unchecked Girls Only preserves ordinary targeting");
+assert.deepEqual(disabled.sentUrls, ["https://www.facebook.com/profile.php?id=456"]);
 await assert.rejects(() => runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/", message: "Fixture", delayMinSeconds: 4, delayMaxSeconds: 1,
 }), /valid minimum and maximum/);

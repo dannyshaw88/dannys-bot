@@ -16,6 +16,7 @@ import { generateEbFingerprint } from "./browserFingerprint";
 import { LEAKS_PAGE_HTML } from "./leaksPage";
 import { findGoogleChromeDmControl } from "./googleChromeDmControls";
 import { waitForGoogleChromeDmDelay } from "./googleChromeDmDelay";
+import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
 // ── Electron native EB mode ───────────────────────────────────────────────────
@@ -4952,6 +4953,7 @@ type GoogleChromeDmOptions = {
   maxUsers?: number;
   stopAfterMinutes?: number;
   skipAlreadyMessaged?: boolean;
+  girlsOnly?: boolean;
   alreadyMessagedUrls?: string[];
   excludedNameTokens?: string[];
   startIndex?: number;
@@ -5048,7 +5050,13 @@ export async function runGoogleChromeDm(
   const shouldExcludeName = (name: string) => excludedNameTokens.size > 0
     && (name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().match(/\p{L}+/gu) ?? [])
       .some(token => excludedNameTokens.has(token));
-  const allowedCandidates = (candidates: Array<{ url: string; name: string }>) => candidates.filter(candidate =>
+  // Older clients signal Girls Only by supplying their male-name list.
+  // Keep those clients on the strict server rules as well.
+  const strictGirlsOnly = options.girlsOnly === true ||
+    (options.girlsOnly === undefined && excludedNameTokens.size > 0);
+  const allowedCandidates = (candidates: Array<{ url: string; name: string; photoUrl?: string }>) => candidates.filter(candidate =>
+    (!strictGirlsOnly || googleChromeGirlsOnlyRejection(candidate) === null)
+      &&
     !shouldExcludeName(candidate.name)
       && !(options.skipAlreadyMessaged && alreadyMessaged.has(cleanUrl(candidate.url))),
   );
@@ -5137,11 +5145,25 @@ export async function runGoogleChromeDm(
       if (!section) return [];
 
       const genericLabels = /^(sign up|log in|login|follow|message|view profile|profile|facebook)$/i;
-      const candidates = new Map<string, { url: string; name: string }>();
+      const candidates = new Map<string, { url: string; name: string; photoUrl?: string }>();
+      const photos = new Map<string, string>();
       for (const anchor of Array.from(section.querySelectorAll("a[href]")) as any[]) {
         if (!visibleCheck(anchor)) continue;
         const person = identity(anchor.href);
         if (!person) continue;
+        // Facebook often places the avatar and name in separate links. Match
+        // pictures by exact profile identity, never from a broad card ancestor.
+        for (const image of Array.from(anchor.querySelectorAll("img,image")) as any[]) {
+          if (!visibleCheck(image)) continue;
+          if (image.tagName.toLowerCase() === "img" && (!image.complete || image.naturalWidth <= 0)) continue;
+          const source = image.currentSrc || image.getAttribute("src") ||
+            image.getAttribute("href") || image.getAttribute("xlink:href");
+          if (!source || /(?:default|placeholder|silhouette)/i.test(image.getAttribute("alt") || "")) continue;
+          try {
+            const photo = new URL(source, doc.location.href);
+            if (/^https?:$/.test(photo.protocol)) photos.set(person.key, photo.href);
+          } catch {}
+        }
         const rawName = (anchor.innerText || anchor.textContent || anchor.getAttribute("aria-label") || "")
           .replace(/\s+/g, " ").trim();
         const name = rawName.replace(/^(?:profile picture of|profile picture for)\s+/i, "")
@@ -5152,7 +5174,9 @@ export async function runGoogleChromeDm(
           candidates.set(person.key, { url: person.url, name });
         }
       }
-      return [...candidates.values()];
+      return [...candidates.entries()].map(([key, candidate]) => ({
+        ...candidate, photoUrl: photos.get(key),
+      }));
     });
 
     let candidates = await collectEligibleProfiles();

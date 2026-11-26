@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { useBrowserWindows } from "@/contexts/BrowserWindowsContext";
 import { recordLoginEvent } from "@/lib/ipLoginTracker";
-import { getCommonMaleNameTokens } from "@/lib/browserDmNameFilter";
 
 function usePersistentBrowserSetting<T extends string | boolean>(key: string, initialValue: T) {
   const [value, setValue] = useState<T>(() => {
@@ -974,7 +973,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           skipAlreadyMessaged,
           alreadyMessagedUrls,
           startIndex,
-          excludedNameTokens: sendDmGirlsOnly ? getCommonMaleNameTokens() : [],
+          girlsOnly: sendDmGirlsOnly,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -1660,9 +1659,12 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                                 checked={sendDmGirlsOnly}
                                 onCheckedChange={(checked) => setSendDmGirlsOnly(checked === true)}
                               />
-                              <label htmlFor="browser-dm-girls-only" className="text-sm">
+                              <label htmlFor="browser-dm-girls-only" className="text-sm shrink-0">
                                 Girls Only
                               </label>
+                              <span className="text-xs text-muted-foreground">
+                                1–2 name parts, recognised female first name and profile picture. Unknown names are skipped.
+                              </span>
                             </div>
                             <div className="flex items-center gap-3">
                               <Checkbox

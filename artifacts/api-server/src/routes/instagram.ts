@@ -4818,6 +4818,7 @@ export async function registerInstagramRoutes(
         maxUsers: numberOrUndefined(body.maxUsers),
         stopAfterMinutes: numberOrUndefined(body.stopAfterMinutes),
         skipAlreadyMessaged: body.skipAlreadyMessaged === true,
+        girlsOnly: typeof body.girlsOnly === "boolean" ? body.girlsOnly : undefined,
         alreadyMessagedUrls: Array.isArray(body.alreadyMessagedUrls)
           ? body.alreadyMessagedUrls.filter((value): value is string => typeof value === "string").slice(-5000)
           : [],

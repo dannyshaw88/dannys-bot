@@ -23,8 +23,8 @@ Provide a saved Min/Max message delay in seconds immediately after the amount-of
 
 **How to apply:** Keep inter-message pacing distinct from the existing minutes-between-runs schedule. Default new settings to 30–60 seconds; validate the range in both UI and API.
 
-The user wants DM eligibility to exclude businesses/fake-looking accounts and favour personal-looking profiles: a plausible one- or two-part personal name, an ordinary person profile picture, and a girl's name. These are desired criteria, not proof of authenticity or gender.
+When Girls Only is ticked, the user requires exactly one or two name parts, a profile picture, and no men's names regardless of language. Improve this existing checkbox rather than adding a separate review-first workflow.
 
-**Why:** The user reported that the current “Girls Only” exclusion rule messaged business/non-person accounts, whereas they would have selected only the personal-looking candidate.
+**Why:** The user reported that men and business/non-person accounts were being messaged, and explicitly specified stronger requirements for the existing filter.
 
-**How to apply:** Treat this as a product requirement when revising eligibility. Do not claim the existing male-name blocklist satisfies it, infer gender from a face, or promise that visible profile information proves an account is real.
+**How to apply:** Use positive recognised female first-name matching and reject unknown first names, known male/ambiguous name tokens, and missing pictures. Names/pictures cannot prove gender or authenticity; do not claim exhaustive recognition across every language.
