@@ -385,7 +385,13 @@ const wrap = value => ({
   dispose: async () => {},
 });
 let detachNextMessageClick = false;
+let notClickableNextMessageClick = false;
 const message = { click: async () => {
+  if (notClickableNextMessageClick) {
+    notClickableNextMessageClick = false;
+    events.push("message-not-clickable");
+    throw new Error("Node is either not clickable or not an Element");
+  }
   if (detachNextMessageClick) {
     detachNextMessageClick = false;
     events.push("message-detached");
@@ -501,6 +507,18 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(retried.sent, 1, "re-resolve a detached Message button and use one fresh native click");
   assert.deepEqual(events, [
     "navigate", "navigate", "message-detached", "message", "composer", "send", "close",
+  ]);
+}
+{
+  events.length = 0; waits = 0;
+  notClickableNextMessageClick = true;
+  const retried = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 1,
+  });
+  assert.equal(retried.sent, 1, "re-resolve and retry a Message control with no clickable point");
+  assert.deepEqual(events, [
+    "navigate", "navigate", "message-not-clickable", "message", "composer", "send", "close",
   ]);
 }
 {

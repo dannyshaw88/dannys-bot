@@ -11,11 +11,11 @@ Require the message composer to identify the same recipient (for example, `Write
 
 **How to apply:** Keep these recipient and composer checks limited to the synthetic Google Chrome Send DMs flow. Fail closed whenever the profile identity, unique Message control, recipient-specific composer, or typed text cannot be confirmed. Preserve existing click behavior for other browser sessions.
 
-After confirming the profile, resolve the Message button from the live DOM immediately before clicking it. If the handle is detached before dispatch, re-resolve and retry once; never reuse the stale handle or synthesize a DOM click.
+After confirming the profile, resolve the Message button from the live DOM immediately before clicking it. If the handle is detached or Puppeteer reports no clickable point, re-resolve and retry once; never reuse the stale handle or synthesize a DOM click.
 
-**Why:** The Windows run visited the correct profile but aborted with “Node is detached from document” before Message was pressed.
+**Why:** Windows logs showed both “Node is detached from document” and “Node is either not clickable or not an Element” before Message was pressed.
 
-**How to apply:** Use a recipient/name-scoped live button lookup, preserve one native ElementHandle click per resolved node, log the stale-handle retry, and stop at that profile if the fresh click also fails.
+**How to apply:** Use a recipient/name-scoped live button lookup, preserve one native ElementHandle click per resolved node, log and retry transient node failures once, and stop at that profile if the fresh click also fails.
 
 Match Facebook's Send accessibility label variants, including “Press Enter to send,” within the verified composer's conversation. After confirmed sending, close that same chat once and verify closure before advancing. Never search a shared multi-chat container or use an Enter fallback after an uncertain send.
 

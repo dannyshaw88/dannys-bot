@@ -5340,6 +5340,11 @@ export async function runGoogleChromeDm(
           const messageButton = buttonHandle.asElement();
           if (!messageButton) {
             messageButtonFailure = "The current Message control was not a live element.";
+            if (clickAttempt < 2) {
+              log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control was not clickable as an element; re-resolving it once`, "browser");
+              await new Promise(resolve => setTimeout(resolve, 150));
+              continue;
+            }
             break;
           }
           await messageButton.click();
@@ -5347,9 +5352,9 @@ export async function runGoogleChromeDm(
           break;
         } catch (error: any) {
           messageButtonFailure = String(error?.message ?? error ?? "browser click failed").slice(0, 180);
-          const detached = /node is detached from document|not attached to the dom/i.test(messageButtonFailure);
-          if (clickAttempt < 2 && detached) {
-            log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control detached before click; re-resolving it once`, "browser");
+          const transientNode = /node is detached from document|not attached to the dom|node is either not clickable or not an element/i.test(messageButtonFailure);
+          if (clickAttempt < 2 && transientNode) {
+            log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control became stale or non-clickable; re-resolving it once`, "browser");
             await new Promise(resolve => setTimeout(resolve, 150));
           } else {
             break;
@@ -5397,6 +5402,7 @@ export async function runGoogleChromeDm(
         emit("The selected user's message field could not be confirmed; no text was entered.");
         continue;
       }
+      log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient-specific composer confirmed`, "browser");
 
       try {
         if (options.skipAlreadyMessaged) {
@@ -5405,12 +5411,13 @@ export async function runGoogleChromeDm(
           ).catch(() => null);
           const history = await historyHandle?.jsonValue().catch(() => false);
           await historyHandle?.dispose();
+          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation history=${history ?? "unknown"}; Skip Already Messaged is enabled`, "browser");
           if (history !== "empty") {
             if (history === "existing") {
               recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
               alreadyMessaged.add(googleChromeDmRecipientKey(candidate.url)!);
               result.skipped++;
-              log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: existing conversation confirmed; closing and skipping`, "browser");
+              log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: existing conversation; closing without typing or sending`, "browser");
             } else {
               result.failed++;
               log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation history unknown; no message entered`, "browser");
@@ -5439,6 +5446,7 @@ export async function runGoogleChromeDm(
           emit("Typed text did not match the configured message; it was not sent.");
           break;
         }
+        log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: message text verified in the matching composer`, "browser");
 
         const sendButtonHandle = await session.page.waitForFunction(
           findGoogleChromeDmControl, { timeout: 5_000, polling: 100 }, composer, "send",
@@ -5460,6 +5468,7 @@ export async function runGoogleChromeDm(
           await sendButtonHandle!.dispose();
           throw new Error("The Facebook account changed during this run; sending was stopped.");
         }
+        log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: clicking Send in the matching conversation`, "browser");
         recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
         alreadyMessaged.add(googleChromeDmRecipientKey(candidate.url)!);
         await sendElement.click();
