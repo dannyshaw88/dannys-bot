@@ -1,3 +1,13 @@
+## [1.2.684] — 2026-11-26
+
+### Fixed
+
+- Keep long Snapchat Add Friends positioning swipes at the device's calibrated gesture speed so a multi-row Added Me section does not fling past the first recommendation.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.684`.
+
 ## [1.2.683] — 2026-11-26
 
 ### Fixed

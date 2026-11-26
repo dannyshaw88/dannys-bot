@@ -41,8 +41,10 @@ function calibratedForwardDistance(serial: string, desiredContentTravel: number)
 
 function calibratedForwardSwipeDuration(serial: string, fingerTravel: number): number {
   const knownDurationPerPixel = observedForwardSwipeMsPerPixelBySerial.get(serial);
-  if (!knownDurationPerPixel) return 300;
-  return Math.max(300, Math.min(2500, Math.round(fingerTravel * knownDurationPerPixel)));
+  if (!knownDurationPerPixel) {
+    return Math.max(300, Math.min(5000, Math.round(fingerTravel * 2.8)));
+  }
+  return Math.max(300, Math.min(5000, Math.round(fingerTravel * knownDurationPerPixel)));
 }
 
 function recordForwardScrollRatio(
@@ -111,9 +113,9 @@ export async function revealAddFriendsSuggestions(
   // the Added Me heading's starting position. Sticky headings alone are not a
   // reliable signal that the list content has settled.
   const destination = incoming.bounds[1] + firstSuggestion.bounds[1] - suggestions.bounds[1];
-  const tolerance = Math.max(18, Math.round(screenHeight * 0.012));
+  const tolerance = Math.max(24, Math.round(screenHeight * 0.012));
   const minimumTravel = Math.max(36, Math.round(screenHeight * 0.025));
-  const minimumGestureY = Math.max(Math.ceil(screenHeight * 0.12), suggestions.bounds[3] + 6);
+  const minimumGestureY = Math.ceil(screenHeight * 0.12);
   const maximumGestureY = Math.floor(screenHeight * 0.82);
   const maximumTravel = maximumGestureY - minimumGestureY;
   if (maximumTravel < minimumTravel) {
@@ -142,7 +144,7 @@ export async function revealAddFriendsSuggestions(
     const observedRatio = observedForwardScrollRatioBySerial.get(context.serial);
     const requestedDistance = observedRatio
       ? Math.round(alignmentError / observedRatio)
-      : Math.max(minimumTravel, Math.round(alignmentError * 0.25));
+      : Math.max(minimumTravel, Math.round(alignmentError * 0.43));
     if (requestedDistance < minimumTravel) {
       context.onLog(`Add Friends: ${anchorName} needs only ${requestedDistance}px more travel, below the safe swipe threshold; no section scroll was sent.`);
       return [];
