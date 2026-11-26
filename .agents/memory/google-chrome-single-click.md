@@ -10,3 +10,9 @@ Require the message composer to identify the same recipient (for example, `Write
 **Why:** The prior broad ancestor scan selected a Page-level Sign up link and opened the Page's own Message panel. Its composer was not ready after the fixed 900 ms delay, so no message text was entered.
 
 **How to apply:** Keep these recipient and composer checks limited to the synthetic Google Chrome Send DMs flow. Fail closed whenever the profile identity, unique Message control, recipient-specific composer, or typed text cannot be confirmed. Preserve existing click behavior for other browser sessions.
+
+Match Facebook's Send accessibility label variants, including “Press Enter to send,” within the verified composer's conversation. After confirmed sending, close that same chat once and verify closure before advancing. Never search a shared multi-chat container or use an Enter fallback after an uncertain send.
+
+**Why:** Exact “Send”-only matching can leave typed text unsent on Facebook variants, and sending alone does not close a chat. The user reported both an unsent draft and an unclosed chat.
+
+**How to apply:** Check selectors with isolated DOM fixtures and the production dispatcher with browser-boundary stubs without sending real messages. Local fixtures are not proof of the user's signed-in Windows flow.

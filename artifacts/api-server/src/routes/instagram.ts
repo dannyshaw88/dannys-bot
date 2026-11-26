@@ -4653,7 +4653,13 @@ export async function registerInstagramRoutes(
           console.log(`[device-browser:${profileId}] Calling getOrCreateSession…`);
           await getOrCreateSession(profileId, ua, deviceProxy, undefined);
           console.log(`[device-browser:${profileId}] getOrCreateSession returned OK`);
-          if (hasActiveWS(profileId)) {
+          // A view may unmount while Chromium is starting. Never attach its
+          // already-closed socket over the returning view's live connection.
+          if (ws.readyState !== 1) return;
+          // The standalone Chrome view reconnects to one persistent browser.
+          // attachWS replaces the previous stream safely; a brief overlap is
+          // not a second browser. Other profile/device guards remain unchanged.
+          if (hasActiveWS(profileId) && profileId !== GOOGLE_CHROME_BROWSER_PROFILE_ID) {
             console.log(`[device-browser:${profileId}] already-connected — rejecting duplicate WS`);
             try { ws.send(JSON.stringify({ type: "already-connected" })); ws.close(); } catch {}
             return;

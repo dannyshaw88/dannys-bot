@@ -14,6 +14,7 @@ import { instagramApiCalls } from "../shared/schema";
 import { storage } from "../storage";
 import { generateEbFingerprint } from "./browserFingerprint";
 import { LEAKS_PAGE_HTML } from "./leaksPage";
+import { findGoogleChromeDmControl } from "./googleChromeDmControls";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
 // ── Electron native EB mode ───────────────────────────────────────────────────
@@ -5329,38 +5330,23 @@ export async function runGoogleChromeDm(
           break;
         }
 
-        const sendButtonHandle = await composer.evaluateHandle((element: any) => {
-          const getStyle = (globalThis as any).getComputedStyle as (node: any) => any;
-          const visible = (node: any) => {
-            const rect = node.getBoundingClientRect();
-            const style = getStyle(node);
-            return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-          };
-          let container: any = element;
-          for (let depth = 0; container && depth < 12; depth++, container = container.parentElement) {
-            const buttons = (Array.from(container.querySelectorAll("button,[role='button']")) as any[])
-              .filter(button => {
-                if (!visible(button)) return false;
-                const labels = [button.getAttribute("aria-label"), button.getAttribute("title"), button.innerText]
-                  .filter(Boolean).map((label: string) => label.replace(/\s+/g, " ").trim());
-                return labels.some(label => /^send$/i.test(label))
-                  && button.getAttribute("aria-disabled") !== "true"
-                  && !button.disabled;
-              });
-            if (buttons.length === 1) return buttons[0];
-            if (buttons.length > 1) return null;
-          }
-          return null;
-        });
-        const sendElement = sendButtonHandle.asElement();
+        const sendButtonHandle = await session.page.waitForFunction(
+          findGoogleChromeDmControl, { timeout: 5_000, polling: 100 }, composer, "send",
+        ).catch(() => null);
+        const sendElement = sendButtonHandle?.asElement();
         if (!sendElement) {
-          await sendButtonHandle.dispose();
+          await sendButtonHandle?.dispose();
           result.failed++;
           emit("No unambiguous Send button was found in the selected user's conversation.");
           break;
         }
+        if (isStopped()) {
+          result.stopped = true;
+          await sendButtonHandle!.dispose();
+          break;
+        }
         await sendElement.click();
-        await sendButtonHandle.dispose();
+        await sendButtonHandle!.dispose();
 
         const confirmationHandle = await session.page.waitForFunction((expectedName: string) => {
           const doc = (globalThis as any).document;
@@ -5388,6 +5374,31 @@ export async function runGoogleChromeDm(
           result.sent++;
           result.sentUrls.push(cleanUrl(candidate.url));
           emit(`Message sent to ${candidate.name}.`, "ok");
+          const closeHandle = await composer.evaluateHandle(findGoogleChromeDmControl, "close");
+          try {
+            const closeButton = closeHandle.asElement();
+            if (!closeButton) {
+              emit("Message sent, but the matching chat Close button could not be confirmed; stopping.");
+              break;
+            }
+            await closeButton.click();
+            const closed = await session.page.waitForFunction((element: any) => {
+              if (!element.isConnected) return true;
+              const rect = element.getBoundingClientRect();
+              const style = (globalThis as any).getComputedStyle(element);
+              return !rect.width || !rect.height || style.display === "none" || style.visibility === "hidden";
+            }, { timeout: 5_000, polling: 100 }, composer).catch(() => null);
+            if (!closed) {
+              emit("Message sent, but closing the chat was not confirmed; stopping.");
+              break;
+            }
+            await closed.dispose();
+          } catch {
+            emit("Message sent, but the matching chat could not be closed; stopping.");
+            break;
+          } finally {
+            await closeHandle.dispose();
+          }
         } else {
           result.failed++;
           emit("Message send was not confirmed; stopping to avoid a duplicate attempt.");

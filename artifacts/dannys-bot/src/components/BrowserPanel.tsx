@@ -423,11 +423,13 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
     esRef.current = ws as any;
 
     ws.onopen = () => {
+      if (wsGenRef.current !== myGen) return;
       setStatusSafe("connected");
       setIsLoading(false);
     };
 
     ws.onmessage = (evt) => {
+      if (wsGenRef.current !== myGen) return;
       // ── Binary frame = raw JPEG from screencast ──────────────────────────
       // The server sends Buffer (raw JPEG) for every screencast frame.
       // Receiving it as a Blob and piping through createImageBitmap() keeps
@@ -628,7 +630,14 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   }, [profileId, streamUrl, forceStream, setStatusSafe, appendLog]);
 
   useEffect(() => () => {
+    // Invalidate callbacks BEFORE close: its asynchronous onclose must not
+    // create an orphan reconnect after this panel has unmounted.
+    wsGenRef.current++;
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    if (firstFrameFallbackRef.current) {
+      clearTimeout(firstFrameFallbackRef.current);
+      firstFrameFallbackRef.current = null;
+    }
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
     // Cancel any in-flight RAF and release the pending ImageBitmap GPU resource.
     if (rafIdRef.current !== null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
