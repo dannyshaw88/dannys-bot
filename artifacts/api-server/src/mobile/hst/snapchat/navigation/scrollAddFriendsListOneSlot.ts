@@ -72,7 +72,7 @@ export function findFriendsRows(nodes: UiNode[]): UiNode[] {
     .sort((a, b) => a.bounds[1] - b.bounds[1]);
 }
 
-/** Move the recommendations section past incoming requests before selecting a target. */
+/** Move the first recommendation into the same screen position it will occupy below its heading. */
 export async function revealAddFriendsSuggestions(
   context: SnapchatContext,
   nodes: UiNode[],
@@ -85,42 +85,89 @@ export async function revealAddFriendsSuggestions(
     [node.text, node.desc].some(value => label.test(value.trim())),
   );
   const incoming = heading(nodes, /^added me$/i);
-  let suggestions = heading(nodes, /^find friends$/i);
+  const suggestions = heading(nodes, /^find friends$/i);
   if (!incoming || !suggestions || incoming.bounds[1] >= suggestions.bounds[1]) return nodes;
-  // Use the actual first section's position, not a device-specific starting pixel.
-  const destination = incoming.bounds[1];
+
+  const firstSuggestion = findFriendsRows(nodes).find(row =>
+    row.bounds[3] > suggestions.bounds[3] &&
+    row.bounds[1] < screenHeight * 0.85,
+  );
+  const anchorName = firstSuggestion && contactNameInRow(nodes, firstSuggestion);
+  if (!firstSuggestion || !anchorName ||
+      !Number.isFinite(screenWidth) || screenWidth <= 0 ||
+      !Number.isFinite(screenHeight) || screenHeight <= 0) {
+    context.onLog("Add Friends: could not identify the first Find friends contact; no section scroll was sent.");
+    return [];
+  }
+
+  // Keep the contact's offset under its heading and align that live row with
+  // the Added Me heading's starting position. Sticky headings alone are not a
+  // reliable signal that the list content has settled.
+  const destination = incoming.bounds[1] + firstSuggestion.bounds[1] - suggestions.bounds[1];
+  const tolerance = Math.max(18, Math.round(screenHeight * 0.012));
+  const minimumTravel = Math.max(36, Math.round(screenHeight * 0.025));
+  const maximumTravel = Math.max(minimumTravel, Math.round(screenHeight * 0.25));
   let current = nodes;
-  for (let attempt = 0; attempt < 8 && !context.isAborted(); attempt++) {
-    if (!suggestions || suggestions.bounds[1] <= destination + 12) return current;
-    const row = findFriendsRows(current).find(row => row.bounds[3] > row.bounds[1]);
-    if (!row) return [];
-    const anchorName = contactNameInRow(current, row);
-    const anchorTop = row.bounds[1];
+  for (let attempt = 0; attempt < 4 && !context.isAborted(); attempt++) {
+    const row = findFriendsRows(current).find(candidate =>
+      normalizeContactName(contactNameInRow(current, candidate)) === normalizeContactName(anchorName),
+    );
+    if (!row) {
+      context.onLog(`Add Friends: first Find friends contact ${anchorName} disappeared during section positioning; no contact action was sent.`);
+      return [];
+    }
+    const alignmentError = row.bounds[1] - destination;
+    if (Math.abs(alignmentError) <= tolerance) {
+      context.onLog(`Add Friends: first Find friends contact ${anchorName} reached its starting position (y=${row.bounds[1]}, target=${destination}).`);
+      return current;
+    }
+    if (alignmentError < -tolerance) {
+      context.onLog(`Add Friends: first Find friends contact ${anchorName} overshot its target by ${Math.abs(alignmentError)}px; refusing a backward swipe.`);
+      return [];
+    }
+
+    const observedRatio = observedForwardScrollRatioBySerial.get(context.serial);
+    const requestedDistance = observedRatio
+      ? Math.round(alignmentError / observedRatio)
+      : Math.max(minimumTravel, Math.round(alignmentError * 0.25));
+    if (requestedDistance < minimumTravel) {
+      context.onLog(`Add Friends: ${anchorName} needs only ${requestedDistance}px more travel, below the safe swipe threshold; no section scroll was sent.`);
+      return [];
+    }
+    const distance = Math.min(requestedDistance, maximumTravel);
     const lane = blankRowLane(current, row, screenWidth, Math.max(8, Math.round(screenWidth * 0.01)));
-    const distance = Math.min(
-      suggestions.bounds[1] - destination,
-      Math.floor(screenHeight * 0.4),
-    );
     const gesture = fitVerticalGesture(
-      Math.floor(screenHeight * 0.75), -distance,
-      destination, Math.floor(screenHeight * 0.82),
+      center(row).y,
+      -distance,
+      Math.max(Math.ceil(screenHeight * 0.12), suggestions.bounds[3] + 6),
+      Math.floor(screenHeight * 0.82),
     );
-    context.onLog(`Add Friends: scrolling past Added Me to the Find friends section (${gesture.distance}px upward).`);
+    const previousTop = row.bounds[1];
+    context.onLog(
+      `Add Friends: positioning first Find friends contact ${anchorName} ` +
+      `(row y=${previousTop}, target=${destination}, swipe=${gesture.distance}px${observedRatio ? `, learned movement ratio=${observedRatio.toFixed(2)}` : ", initial calibration swipe"}).`,
+    );
     await replayIO.swipe(context.serial, lane.x, gesture.startY, lane.x, gesture.endY, 300, false);
     await context.sleep(750, "exact");
     current = (await replayIO.dump(context.serial)).nodes;
-    if (anchorName) {
-      const movedAnchor = findFriendsRows(current).find(candidate =>
-        normalizeContactName(contactNameInRow(current, candidate)) === normalizeContactName(anchorName),
-      );
-      if (movedAnchor) {
-        recordForwardScrollRatio(context.serial, anchorTop, movedAnchor.bounds[1], gesture.distance);
-      }
+    const movedAnchor = findFriendsRows(current).find(candidate =>
+      normalizeContactName(contactNameInRow(current, candidate)) === normalizeContactName(anchorName),
+    );
+    if (!movedAnchor) {
+      context.onLog(`Add Friends: first Find friends contact ${anchorName} was no longer exposed after the positioning swipe; no contact action was sent.`);
+      return [];
     }
-    suggestions = heading(current, /^find friends$/i);
+    const measuredContentMovement = previousTop - movedAnchor.bounds[1];
+    recordForwardScrollRatio(context.serial, previousTop, movedAnchor.bounds[1], gesture.distance);
+    context.onLog(
+      `Add Friends: ${anchorName} moved ${Math.round(measuredContentMovement)}px ` +
+      `for ${gesture.distance}px finger travel; next target residual=${Math.round(movedAnchor.bounds[1] - destination)}px` +
+      `${observedForwardScrollRatioBySerial.has(context.serial)
+        ? `, learned movement ratio=${observedForwardScrollRatioBySerial.get(context.serial)!.toFixed(2)}`
+        : ", movement ratio not yet reliable"}.`,
+    );
   }
-  if (suggestions && suggestions.bounds[1] <= destination + 12) return current;
-  context.onLog("Add Friends: Find friends section has not reached the starting position; no incoming request will be processed.");
+  context.onLog(`Add Friends: first Find friends contact ${anchorName} did not reach its starting position after four measured swipes; no contact action was sent.`);
   return [];
 }
 

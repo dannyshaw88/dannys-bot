@@ -55,11 +55,11 @@ Dismiss must replace the recommendation with Snapchat's feedback card (including
 
 ## Position the selected contact before acting
 
-Incoming “Added Me” requests must never be processed by Add Friends. Scroll past that section to bring the live “Find friends” heading to the first section's starting position, without expanding incoming requests. Restrict recommendation candidates to the Find friends section.
+Incoming “Added Me” requests must never be processed by Add Friends. Restrict recommendation candidates to the Find friends section. If Added Me is above it, position the first named recommendation using its live row bounds; do not trust the section heading alone because it can stick while rows continue moving.
 
-**Why:** Incoming requests can push the recommendations halfway down the page; treating the first recommendation's current position as the correct top preserves the wrong starting point. Incoming and recommendation rows can share resource identifiers.
+**Why:** Incoming requests can push recommendations down the page, but a heading can remain pinned while rows move. Heading-only success checks allowed large scrolls to pass multiple contacts.
 
-**How to apply:** Use live section headings and their bounds, not fixed starting pixels or a count of incoming requests. Keep Accept Friends separate.
+**How to apply:** Use the live heading and first recommendation row as an anchor, preserve the row's offset below its heading, and verify that same named row reaches its target after each forward swipe. Calibrate finger travel from observed row movement; refuse the action if the anchor disappears or overshoots. Keep Accept Friends separate.
 
 For every Add, Skip, or Dismiss decision, first move that exact contact to the first visible contact position. Re-dump the UI and reselect the same contact and its live action control before tapping. After the action, measure that contact's live card and move the next contact to the same first position.
 

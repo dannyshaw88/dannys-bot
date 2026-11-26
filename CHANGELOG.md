@@ -1,3 +1,14 @@
+## [1.2.683] — 2026-11-26
+
+### Fixed
+
+- Position the first Snapchat Find friends contact from its live row bounds, calibrate against observed device movement, and stop safely if the row overshoots instead of scrolling through multiple contacts.
+- Remove the replay's movement-scale selector; swipe distances are calculated from the imported screen geometry and measured movement.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.683`.
+
 ## [1.2.682] — 2026-11-26
 
 ### Fixed
