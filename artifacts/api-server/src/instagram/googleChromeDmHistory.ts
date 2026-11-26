@@ -87,6 +87,11 @@ export function inspectGoogleChromeDmHistory(element: any): "existing" | "empty"
       if (/when you send a message,?\s+.+?\s+(?:will|can) see your public info/i.test(text)) return false;
       return text || row.querySelector("img,image,video,audio,[role='img']");
     })) return "existing";
+    const messageRegion = Array.from(container.querySelectorAll(
+      "[role='log'],[role='grid'],[role='feed'],[aria-label*='Messages'],[data-pagelet*='ChatTab']",
+    )).find(visible);
+    if (messageRegion && String(messageRegion.innerText || messageRegion.textContent || "")
+      .replace(/\s+/g, " ").trim()) return "existing";
     if (Array.from(container.querySelectorAll("[aria-busy='true'],[role='progressbar']"))
       .some(visible)) { delete element.__auraDmEmptySince; return false; }
     // Do not infer an empty thread merely from an empty textbox or missing rows.
@@ -99,8 +104,11 @@ export function inspectGoogleChromeDmHistory(element: any): "existing" | "empty"
       // this Facebook variant omitted semantic message-row attributes.
       const tail = text.slice((notice.index ?? 0) + notice[0].length).replace(/^[.\s]+/, "").trim();
       if (tail && !/^(?:Aa|Message(?:\.{3}|…)?|Write a message(?:\.{3}|…)?|Press Enter to send)$/i.test(tail)) {
+        // The new-chat notice remains visible in some FB layouts even above
+        // message history. Any additional rendered conversation content means
+        // this is not a fresh thread; skip it rather than retrying a DM.
         delete element.__auraDmEmptySince;
-        return false;
+        return "existing";
       }
       element.__auraDmEmptySince ??= Date.now();
       return Date.now() - element.__auraDmEmptySince >= 2000 ? "empty" : false;

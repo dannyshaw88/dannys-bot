@@ -4830,6 +4830,7 @@ export async function registerInstagramRoutes(
       res.json({ ok: true, ...result });
     } catch (err: any) {
       const message = err?.message ?? "Send DMs run failed";
+      console.error(`[googleChromeDm:${profileId}] run aborted: ${message}`);
       const status = /already active|open the Google Chrome browser|valid URL|valid minimum and maximum message delay|HTTP or HTTPS|enter a message|only available/i.test(message)
         ? 400
         : 500;

@@ -18,6 +18,7 @@ import { findGoogleChromeDmControl } from "./googleChromeDmControls";
 import { waitForGoogleChromeDmDelay } from "./googleChromeDmDelay";
 import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
 import { waitForGoogleChromeDmFollowers } from "./googleChromeDmFollowers";
+import { findGoogleChromeDmComposer } from "./googleChromeDmComposer";
 import { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } from "./googleChromeDmHistory";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
@@ -5356,24 +5357,9 @@ export async function runGoogleChromeDm(
 
       let composerHandle: any;
       try {
-        composerHandle = await session.page.waitForFunction((expectedName: string) => {
-          const doc = (globalThis as any).document;
-          const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
-          const visible = (element: any) => {
-            const rect = element.getBoundingClientRect();
-            const style = getStyle(element);
-            return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-          };
-          const normalize = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
-          const expected = normalize(expectedName);
-          return Array.from(doc.querySelectorAll("[contenteditable='true'][role='textbox'],textarea") as any[])
-            .find(element => {
-              if (!visible(element)) return false;
-              const label = `${element.getAttribute("aria-label") ?? ""} ${element.getAttribute("placeholder") ?? ""} ${element.getAttribute("data-placeholder") ?? ""}`.trim();
-              const recipient = label.match(/^write to\s+(.+)$/i)?.[1];
-              return !!recipient && normalize(recipient) === expected;
-            }) ?? false;
-        }, { timeout: 15_000, polling: 200 }, candidate.name);
+        composerHandle = await session.page.waitForFunction(
+          findGoogleChromeDmComposer, { timeout: 15_000, polling: 200 }, candidate.name,
+        );
       } catch {
         result.failed++;
         emit("The selected user's message field did not finish rendering; no text was entered.");
@@ -5528,6 +5514,10 @@ export async function runGoogleChromeDm(
       result.failed ? "fail" : "ok",
     );
     return result;
+  } catch (error: any) {
+    const reason = String(error?.message ?? error ?? "unknown error").slice(0, 500);
+    emit(`Run aborted: ${reason}`, "fail");
+    throw error;
   } finally {
     activeGoogleChromeDmRuns.delete(profileId);
   }

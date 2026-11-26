@@ -21,6 +21,11 @@ const historyBuild = await build({
   bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
 });
 const historyModule = await import(`data:text/javascript;base64,${Buffer.from(historyBuild.outputFiles[0].text).toString("base64")}`);
+const composerBuild = await build({
+  entryPoints: [fileURLToPath(new URL("../src/instagram/googleChromeDmComposer.ts", import.meta.url))],
+  bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
+});
+const composerModule = await import(`data:text/javascript;base64,${Buffer.from(composerBuild.outputFiles[0].text).toString("base64")}`);
 const historyDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "chrome-dm-history-"));
 const followersCode = await transform(await fs.readFile(
   new URL("../src/instagram/googleChromeDmFollowers.ts", import.meta.url), "utf8",
@@ -81,7 +86,7 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   composer.__auraDmEmptySince = Date.now() - 2500;
   assert.equal(inspect(composer), "empty");
   panel.innerText += " Previous message without row attributes";
-  assert.equal(inspect(composer), false, "an introductory notice above unclassified history is not an empty chat");
+  assert.equal(inspect(composer), "existing", "an introductory notice above unclassified history still means this thread has history");
   panel.innerText = "When you send a message, Haven rose will see your public info.";
   busy = [close];
   assert.equal(inspect(composer), false, "loading history must never pass as empty");
@@ -180,19 +185,44 @@ class Node {
   getBoundingClientRect() { return { width: 20, height: 20 }; }
   getAttribute(name) {
     if (name === "aria-label") return this.label;
+    if (name === "title") return this.title ?? null;
     if (name === "aria-disabled") return this.ariaDisabled ? "true" : null;
     return null;
   }
   querySelectorAll(selector) {
     const matches = [];
     for (const node of this.children) {
-      if (selector.includes("contenteditable") ? node.kind === "editor" : node.kind === "button") matches.push(node);
+      if (selector.includes("contenteditable") ? node.kind === "editor"
+        : selector.includes("h1,") ? node.kind === "heading" || node.kind === "button"
+        : selector.includes("button") ? node.kind === "button"
+        : false) matches.push(node);
       matches.push(...node.querySelectorAll(selector));
     }
     return matches;
   }
 }
 globalThis.getComputedStyle = node => node.style;
+{
+  const { findGoogleChromeDmComposer: findComposer } = composerModule;
+  const editor = new Node("editor");
+  editor.label = "Aa";
+  const close = new Node("button", "Close chat");
+  const heading = new Node("heading", "Haven rose");
+  const chat = new Node("container", "Haven rose\nYou sent: Hello\nAa", [heading, close, editor]);
+  globalThis.document = { querySelectorAll: selector => chat.querySelectorAll(selector) };
+  assert.equal(findComposer("Haven rose"), editor,
+    "find recipient chat by heading even when composer has no Write to label");
+  assert.equal(findComposer("Someone else"), false, "never reuse a different recipient's composer");
+  const secondEditor = new Node("editor");
+  const otherHeading = new Node("heading", "Haven rose");
+  const otherChat = new Node("container", "Haven rose", [otherHeading, new Node("button", "Close chat"), secondEditor]);
+  const root = new Node("container", "", [chat, otherChat]);
+  globalThis.document = { querySelectorAll: selector => root.querySelectorAll(selector) };
+  assert.equal(findComposer("Haven rose"), false, "two matching chats are ambiguous");
+  const oldDocument = globalThis.document;
+  globalThis.document = oldDocument;
+  console.log("PASS: composer matched by exact conversation header when Facebook omits the recipient-specific input label; wrong and ambiguous chats rejected.");
+}
 
 for (const label of ["Send", "Press Enter to send", "Send message", "Send (Enter)"]) {
   const editor = new Node("editor");
@@ -350,6 +380,7 @@ const gaps = [];
 globalThis.__chromeDmFixture = {
   waitFollowers,
   historyModule, historyDirectory, path,
+  composerModule,
   page, find: (_handle, action) => find(editor, action),
   reject,
   wait: async (seconds, stopped) => {
@@ -363,6 +394,7 @@ const prelude = `
 const waitForGoogleChromeDmFollowers = (read, stopped) => globalThis.__chromeDmFixture.waitFollowers(read, stopped, 1000, async () => {});
 const setTimeout = callback => globalThis.setTimeout(callback, 0);
 const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
+const { findGoogleChromeDmComposer } = globalThis.__chromeDmFixture.composerModule;
 const COOKIES_DIR = globalThis.__chromeDmFixture.historyDirectory;
 const path = globalThis.__chromeDmFixture.path;
 const GOOGLE_CHROME_BROWSER_PROFILE_ID = 10000000;
