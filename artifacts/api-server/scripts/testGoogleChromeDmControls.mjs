@@ -453,7 +453,7 @@ globalThis.__chromeDmFixture = {
   historyModule, historyDirectory, path,
   composerModule,
   page, find: (_handle, action) => find(editor, action),
-  findMessageButton,
+  findMessageButton, findGoogleChromeDmMessageButton: findMessageButton,
   composerUnavailable: false, browserLogs: [],
   reject,
   wait: async (seconds, stopped) => {
@@ -486,7 +486,7 @@ const result = await runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/profile.php?id=999&sk=followers",
   message: "Local fixture only", amount: 1,
 });
-assert.equal(result.sent, 1);
+assert.equal(result.sent, 1, JSON.stringify({ result, events, logs: globalThis.__chromeDmFixture.browserLogs }));
 assert.equal(result.failed, 0);
 assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "close"]);
 assert.equal(editor.isConnected, false);
