@@ -28,6 +28,7 @@ const realReplayIO: AddFriendsScrollReplayIO = {
 };
 
 const observedForwardScrollRatioBySerial = new Map<string, number>();
+const observedForwardSwipeMsPerPixelBySerial = new Map<string, number>();
 
 function forwardScrollRatio(serial: string): number {
   return observedForwardScrollRatioBySerial.get(serial) ?? 1;
@@ -36,6 +37,12 @@ function forwardScrollRatio(serial: string): number {
 function calibratedForwardDistance(serial: string, desiredContentTravel: number): number {
   const knownRatio = observedForwardScrollRatioBySerial.get(serial);
   return Math.round(desiredContentTravel / (knownRatio ?? 1));
+}
+
+function calibratedForwardSwipeDuration(serial: string, fingerTravel: number): number {
+  const knownDurationPerPixel = observedForwardSwipeMsPerPixelBySerial.get(serial);
+  if (!knownDurationPerPixel) return 300;
+  return Math.max(300, Math.min(2500, Math.round(fingerTravel * knownDurationPerPixel)));
 }
 
 function recordForwardScrollRatio(
@@ -106,7 +113,13 @@ export async function revealAddFriendsSuggestions(
   const destination = incoming.bounds[1] + firstSuggestion.bounds[1] - suggestions.bounds[1];
   const tolerance = Math.max(18, Math.round(screenHeight * 0.012));
   const minimumTravel = Math.max(36, Math.round(screenHeight * 0.025));
-  const maximumTravel = Math.max(minimumTravel, Math.round(screenHeight * 0.25));
+  const minimumGestureY = Math.max(Math.ceil(screenHeight * 0.12), suggestions.bounds[3] + 6);
+  const maximumGestureY = Math.floor(screenHeight * 0.82);
+  const maximumTravel = maximumGestureY - minimumGestureY;
+  if (maximumTravel < minimumTravel) {
+    context.onLog(`Add Friends: no safe swipe lane can reach the first Find friends contact ${anchorName}; no contact action was sent.`);
+    return [];
+  }
   let current = nodes;
   for (let attempt = 0; attempt < 4 && !context.isAborted(); attempt++) {
     const row = findFriendsRows(current).find(candidate =>
@@ -139,15 +152,17 @@ export async function revealAddFriendsSuggestions(
     const gesture = fitVerticalGesture(
       center(row).y,
       -distance,
-      Math.max(Math.ceil(screenHeight * 0.12), suggestions.bounds[3] + 6),
-      Math.floor(screenHeight * 0.82),
+      minimumGestureY,
+      maximumGestureY,
     );
+    const durationMs = calibratedForwardSwipeDuration(context.serial, gesture.distance);
     const previousTop = row.bounds[1];
     context.onLog(
       `Add Friends: positioning first Find friends contact ${anchorName} ` +
-      `(row y=${previousTop}, target=${destination}, swipe=${gesture.distance}px${observedRatio ? `, learned movement ratio=${observedRatio.toFixed(2)}` : ", initial calibration swipe"}).`,
+      `(row y=${previousTop}, target=${destination}, swipe=${gesture.distance}px/${durationMs}ms` +
+      `${observedRatio ? `, learned movement ratio=${observedRatio.toFixed(2)}` : ", initial calibration swipe"}).`,
     );
-    await replayIO.swipe(context.serial, lane.x, gesture.startY, lane.x, gesture.endY, 300, false);
+    await replayIO.swipe(context.serial, lane.x, gesture.startY, lane.x, gesture.endY, durationMs, false);
     await context.sleep(750, "exact");
     current = (await replayIO.dump(context.serial)).nodes;
     const movedAnchor = findFriendsRows(current).find(candidate =>
@@ -159,6 +174,12 @@ export async function revealAddFriendsSuggestions(
     }
     const measuredContentMovement = previousTop - movedAnchor.bounds[1];
     recordForwardScrollRatio(context.serial, previousTop, movedAnchor.bounds[1], gesture.distance);
+    if (measuredContentMovement > 8) {
+      observedForwardSwipeMsPerPixelBySerial.set(
+        context.serial,
+        Math.max(0.1, Math.min(20, durationMs / gesture.distance)),
+      );
+    }
     context.onLog(
       `Add Friends: ${anchorName} moved ${Math.round(measuredContentMovement)}px ` +
       `for ${gesture.distance}px finger travel; next target residual=${Math.round(movedAnchor.bounds[1] - destination)}px` +

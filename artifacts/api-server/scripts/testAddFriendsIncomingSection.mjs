@@ -47,11 +47,16 @@ try {
       serial: `FAKE-${resolutionScale}-${movementScale}`, isAborted: () => false, onLog() {}, sleep: async () => {},
     }, nodes, 720 * resolutionScale, 1280 * resolutionScale, {
       dump: async () => ({ nodes }),
-      swipe: async (_serial, _x1, y1, _x2, y2) => {
+      swipe: async (_serial, _x1, y1, _x2, y2, durationMs = 300) => {
         assert(y2 < y1, "Only upward scrolling past requests.");
         const fingerTravel = y1 - y2;
-        const contentTravel = fingerTravel * movementScale;
-        swipes.push({ fingerTravel, contentTravel });
+        // Larger gestures fling farther at the old fixed 300ms duration.
+        // Scaling duration from the first measured swipe keeps the tested
+        // gesture speed stable while preserving each device's travel factor.
+        const speed = fingerTravel / durationMs;
+        const flingMultiplier = 1 + Math.max(0, speed - 0.25) * 2;
+        const contentTravel = Math.round(fingerTravel * movementScale * flingMultiplier);
+        swipes.push({ fingerTravel, contentTravel, durationMs });
         nodes = nodes.map(n => ({
           ...n,
           bounds: [
