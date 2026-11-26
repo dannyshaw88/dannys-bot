@@ -4813,6 +4813,8 @@ export async function registerInstagramRoutes(
         url,
         message,
         amount: numberOrUndefined(body.amount),
+        delayMinSeconds: body.delayMinSeconds === undefined ? undefined : Number(body.delayMinSeconds),
+        delayMaxSeconds: body.delayMaxSeconds === undefined ? undefined : Number(body.delayMaxSeconds),
         maxUsers: numberOrUndefined(body.maxUsers),
         stopAfterMinutes: numberOrUndefined(body.stopAfterMinutes),
         skipAlreadyMessaged: body.skipAlreadyMessaged === true,
@@ -4827,7 +4829,7 @@ export async function registerInstagramRoutes(
       res.json({ ok: true, ...result });
     } catch (err: any) {
       const message = err?.message ?? "Send DMs run failed";
-      const status = /already active|open the Google Chrome browser|valid URL|HTTP or HTTPS|enter a message|only available/i.test(message)
+      const status = /already active|open the Google Chrome browser|valid URL|valid minimum and maximum message delay|HTTP or HTTPS|enter a message|only available/i.test(message)
         ? 400
         : 500;
       res.status(status).json({ ok: false, error: message });

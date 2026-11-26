@@ -189,6 +189,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
   const [sendDmAmountEnabled, setSendDmAmountEnabled] = usePersistentBrowserSetting<boolean>("aura.googleChrome.sendDms.amountEnabled", false);
   const [sendDmAmountMin, setSendDmAmountMin] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.amountMin", "");
   const [sendDmAmountMax, setSendDmAmountMax] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.amountMax", "");
+  const [sendDmDelayMin, setSendDmDelayMin] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.delayMinSeconds", "30");
+  const [sendDmDelayMax, setSendDmDelayMax] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.delayMaxSeconds", "60");
   const [sendDmProgress, setSendDmProgress] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.progress", "");
   const [sendDmNextRunAt, setSendDmNextRunAt] = usePersistentBrowserSetting<string>("aura.googleChrome.sendDms.nextRunAt", "");
   const sendDmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -902,6 +904,14 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     };
     const amountMin = parsePositive(sendDmAmountMin);
+    const delayMinSeconds = Number(sendDmDelayMin);
+    const delayMaxSeconds = Number(sendDmDelayMax);
+    if (!sendDmDelayMin.trim() || !sendDmDelayMax.trim() ||
+      !Number.isFinite(delayMinSeconds) || !Number.isFinite(delayMaxSeconds) ||
+      delayMinSeconds < 0 || delayMaxSeconds < delayMinSeconds) {
+      appendLog("Send DMs: enter a valid minimum and maximum message delay in seconds.", "fail");
+      return;
+    }
     const amountMax = parsePositive(sendDmAmountMax);
     if (sendDmAmountEnabled && (amountMin === null || amountMax === null || amountMax < amountMin)) {
       appendLog("Send DMs: set a valid minimum and maximum amount in Browser settings.", "fail");
@@ -957,6 +967,8 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
           url: parsedUrl.href,
           message,
           amount,
+          delayMinSeconds,
+          delayMaxSeconds,
           maxUsers,
           stopAfterMinutes,
           skipAlreadyMessaged,
@@ -1574,6 +1586,17 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                                 placeholder="Y"
                               />
                               <span className="text-sm text-muted-foreground whitespace-nowrap">max</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm whitespace-nowrap">Delay between messages</span>
+                              <Input type="number" min="0" step="any" value={sendDmDelayMin}
+                                onChange={(event) => setSendDmDelayMin(event.target.value)}
+                                className="w-20" aria-label="Minimum delay between messages in seconds" />
+                              <span className="text-sm text-muted-foreground whitespace-nowrap">min seconds</span>
+                              <Input type="number" min="0" step="any" value={sendDmDelayMax}
+                                onChange={(event) => setSendDmDelayMax(event.target.value)}
+                                className="w-20" aria-label="Maximum delay between messages in seconds" />
+                              <span className="text-sm text-muted-foreground whitespace-nowrap">max seconds</span>
                             </div>
                             <div className="flex items-center gap-3">
                               <Checkbox

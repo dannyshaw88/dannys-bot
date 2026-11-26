@@ -15,6 +15,7 @@ import { storage } from "../storage";
 import { generateEbFingerprint } from "./browserFingerprint";
 import { LEAKS_PAGE_HTML } from "./leaksPage";
 import { findGoogleChromeDmControl } from "./googleChromeDmControls";
+import { waitForGoogleChromeDmDelay } from "./googleChromeDmDelay";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
 // ── Electron native EB mode ───────────────────────────────────────────────────
@@ -4946,6 +4947,8 @@ type GoogleChromeDmOptions = {
   url: string;
   message: string;
   amount?: number;
+  delayMinSeconds?: number;
+  delayMaxSeconds?: number;
   maxUsers?: number;
   stopAfterMinutes?: number;
   skipAlreadyMessaged?: boolean;
@@ -5006,6 +5009,11 @@ export async function runGoogleChromeDm(
   }
   if (!options.message?.trim()) {
     throw new Error("Turn on Message to DM and enter a message before starting");
+  }
+  const delayMin = options.delayMinSeconds ?? 30;
+  const delayMax = options.delayMaxSeconds ?? 60;
+  if (!Number.isFinite(delayMin) || !Number.isFinite(delayMax) || delayMin < 0 || delayMax < delayMin) {
+    throw new Error("Enter a valid minimum and maximum message delay in seconds");
   }
 
   const run = { stopped: false };
@@ -5174,7 +5182,12 @@ export async function runGoogleChromeDm(
     const selected = filtered.slice(startIndex, startIndex + Math.min(amount, userLimit));
     emit(`Found ${filtered.length} eligible user${filtered.length === 1 ? "" : "s"}; attempting up to ${selected.length}.`);
 
+    let needsMessageDelay = false;
     for (const candidate of selected) {
+      if (needsMessageDelay && !isStopped()) {
+        await waitForGoogleChromeDmDelay(delayMin + Math.random() * (delayMax - delayMin), isStopped);
+        needsMessageDelay = false;
+      }
       if (isStopped()) {
         result.stopped = true;
         break;
@@ -5372,6 +5385,7 @@ export async function runGoogleChromeDm(
         if (confirmationHandle) await confirmationHandle.dispose().catch(() => {});
         if (confirmed) {
           result.sent++;
+          needsMessageDelay = true;
           result.sentUrls.push(cleanUrl(candidate.url));
           emit(`Message sent to ${candidate.name}.`, "ok");
           const closeHandle = await composer.evaluateHandle(findGoogleChromeDmControl, "close");

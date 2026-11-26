@@ -5,6 +5,9 @@ import { transform } from "esbuild";
 const source = await fs.readFile(new URL("../src/instagram/googleChromeDmControls.ts", import.meta.url), "utf8");
 const { code } = await transform(source, { loader: "ts", format: "esm" });
 const { findGoogleChromeDmControl: find } = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
+const delaySource = await fs.readFile(new URL("../src/instagram/googleChromeDmDelay.ts", import.meta.url), "utf8");
+const delayCode = await transform(delaySource, { loader: "ts", format: "esm" });
+const { waitForGoogleChromeDmDelay } = await import(`data:text/javascript;base64,${Buffer.from(delayCode.code).toString("base64")}`);
 
 class Node {
   constructor(kind, label = "", children = []) {
@@ -96,30 +99,45 @@ const wrap = value => ({
   jsonValue: async () => value,
   dispose: async () => {},
 });
-const message = { click: async () => events.push("message") };
+const message = { click: async () => { events.push("message"); editor.isConnected = true; } };
 let waits = 0;
 let location = "";
 const page = {
   goto: async url => { location = url; events.push("navigate"); },
   url: () => location,
-  evaluate: async () => [{ url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" }],
+  evaluate: async () => [
+    { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
+    { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
+  ],
   evaluateHandle: async () => wrap(message),
   waitForFunction: async (fn, _options, ...args) => {
     waits++;
-    if (waits <= 2) return wrap(true); // Followers loaded, then verified profile.
-    if (waits === 3) return wrap(editor); // Recipient-specific composer loaded.
-    if (waits === 4) return wrap(fn(editor, "send"));
-    if (waits === 5) return wrap(editor.innerText === ""); // Sent-text confirmation.
-    if (waits === 6) return wrap(fn(editor)); // Close confirmation.
+    if (waits === 1) return wrap(true); // Followers loaded.
+    const step = (waits - 2) % 5;
+    if (step === 0) return wrap(true); // Verified profile.
+    if (step === 1) return wrap(editor); // Recipient-specific composer.
+    if (step === 2) return wrap(fn(editor, "send"));
+    if (step === 3) return wrap(editor.innerText === ""); // Sent-text confirmation.
+    if (step === 4) return wrap(fn(editor)); // Close confirmation.
     throw new Error("Unexpected browser wait");
   },
 };
-globalThis.__chromeDmFixture = { page, find: (_handle, action) => find(editor, action) };
+const gaps = [];
+globalThis.__chromeDmFixture = {
+  page, find: (_handle, action) => find(editor, action),
+  wait: async (seconds, stopped) => {
+    const started = Date.now();
+    await waitForGoogleChromeDmDelay(seconds, stopped);
+    gaps.push({ seconds, elapsed: Date.now() - started });
+    events.push("delay");
+  },
+};
 const prelude = `
 const GOOGLE_CHROME_BROWSER_PROFILE_ID = 10000000;
 const activeGoogleChromeDmRuns = new Map();
 const sessions = new Map([[10000000, {page: globalThis.__chromeDmFixture.page}]]);
 const findGoogleChromeDmControl = globalThis.__chromeDmFixture.find;
+const waitForGoogleChromeDmDelay = globalThis.__chromeDmFixture.wait;
 const wsWrite = () => {};
 const log = () => {};
 `;
@@ -133,5 +151,32 @@ assert.equal(result.sent, 1);
 assert.equal(result.failed, 0);
 assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "close"]);
 assert.equal(editor.isConnected, false);
+assert.equal(gaps.length, 0, "no delay before first or after last recipient");
+events.length = 0;
+waits = 0;
+const two = await runGoogleChromeDm(10_000_000, {
+  url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+  message: "Local fixture only", amount: 2, delayMinSeconds: 0.03, delayMaxSeconds: 0.05,
+});
+assert.equal(two.sent, 2);
+assert.equal(gaps.length, 1, "one random gap between two successful messages");
+assert(gaps[0].seconds >= 0.03 && gaps[0].seconds <= 0.05);
+assert(gaps[0].elapsed >= 29);
+assert.deepEqual(events, [
+  "navigate", "navigate", "message", "composer", "send", "close",
+  "delay", "navigate", "message", "composer", "send", "close",
+]);
+await assert.rejects(() => runGoogleChromeDm(10_000_000, {
+  url: "https://www.facebook.com/", message: "Fixture", delayMinSeconds: 4, delayMaxSeconds: 1,
+}), /valid minimum and maximum/);
+const stoppedAt = Date.now();
+await waitForGoogleChromeDmDelay(60, () => true);
+assert(Date.now() - stoppedAt < 100, "already stopped wait exits immediately");
+let stopped = false;
+const timer = setTimeout(() => { stopped = true; }, 10);
+const duringWait = Date.now();
+await waitForGoogleChromeDmDelay(60, () => stopped);
+clearTimeout(timer);
+assert(Date.now() - duringWait < 1000, "Stop interrupts an active gap");
 delete globalThis.__chromeDmFixture;
-console.log("PASS: production Send DMs dispatcher sends once, confirms, then closes the matching chat once.");
+console.log("PASS: production send/close flow, one random inter-message gap, invalid range and responsive Stop.");

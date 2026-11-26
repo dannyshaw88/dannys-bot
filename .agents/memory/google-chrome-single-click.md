@@ -16,3 +16,9 @@ Match Facebook's Send accessibility label variants, including “Press Enter to 
 **Why:** Exact “Send”-only matching can leave typed text unsent on Facebook variants, and sending alone does not close a chat. The user reported both an unsent draft and an unclosed chat.
 
 **How to apply:** Check selectors with isolated DOM fixtures and the production dispatcher with browser-boundary stubs without sending real messages. Local fixtures are not proof of the user's signed-in Windows flow.
+
+Provide a saved Min/Max message delay in seconds immediately after the amount-of-users controls. Randomise each gap between successfully sent messages, not before the first or after the last, and keep Stop/time limits responsive.
+
+**Why:** The user said sending was too fast and explicitly requested this placement and seconds-based range.
+
+**How to apply:** Keep inter-message pacing distinct from the existing minutes-between-runs schedule. Default new settings to 30–60 seconds; validate the range in both UI and API.
