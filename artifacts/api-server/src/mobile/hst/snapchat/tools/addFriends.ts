@@ -432,36 +432,22 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     }
     context.onLog(`Add Friends: action for ${friendName} is Dismiss; matched ${matchDescription}.`);
     if (context.isAborted()) return false;
-    const liveRowY = center(selectedFriend.candidate).y;
-    const calibration = android.loadNavigationCalibrationMap(context.serial);
-    const hasDismissXCalibration = !!calibration?.points.snapchatFriendSuggestionDismissX;
+    const dismissPoint = center(dismiss);
     try {
-      if (hasDismissXCalibration) {
-        await android.tapCalibratedNavigationControlAtY(
-          context.serial,
-          "snapchatFriendSuggestionDismissX",
-          liveRowY,
-          message => context.onLog(`Add Friends: ${message}`),
-          `Snapchat: dismiss matched suggestion ${friendName} at its live row`,
-        );
-      } else {
-        const liveNodeCenterX = center(dismiss).x;
-        context.onLog(
-          `Add Friends: no calibrated dismiss X for this device; using live Hide-node center ` +
-          `(${liveNodeCenterX},${liveRowY}).`,
-        );
-        await android.tap(
-          context.serial,
-          liveNodeCenterX,
-          liveRowY,
-          "manual",
-          `Snapchat: dismiss matched suggestion ${friendName} at its live row`,
-          "automation",
-        );
-      }
+      context.onLog(
+        `Add Friends: using live Hide-node center (${dismissPoint.x},${dismissPoint.y}); saved Dismiss calibration is not used.`,
+      );
+      await android.tap(
+        context.serial,
+        dismissPoint.x,
+        dismissPoint.y,
+        "manual",
+        `Snapchat: dismiss matched suggestion ${friendName} at its live Hide control`,
+        "automation",
+      );
     } catch (error) {
       context.onLog(
-        `Add Friends stopped: the calibrated dismiss X could not be used safely` +
+        `Add Friends stopped: the live Hide control could not be tapped safely` +
         `${error instanceof Error ? ` (${error.message})` : ""}.`,
       );
       return false;

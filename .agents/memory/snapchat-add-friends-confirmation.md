@@ -75,6 +75,12 @@ Do not add a recovery/retry tap for a failed Dismiss. Investigate why the first 
 
 **How to apply:** Inspect the first dispatched tap and its target; do not add another attempt.
 
+Snapchat suggestion Dismiss must ignore saved calibration even when present; tap the exact matched live Hide control centre for both axes. Do not expose its retired mirror calibration option.
+
+**Why:** The user explicitly requested disconnecting the calibrated tap after a Dismiss failure.
+
+**How to apply:** Keep legacy stored points inert for compatibility; preserve unrelated navigation calibration. Regression replay rejects calibration reads by Add Friends.
+
 Never long-press a suggestion. Tiny vertical swipes can be interpreted as contact holds; treat near-aligned rows as aligned, require meaningful travel and a sufficiently wide verified blank lane for scrolling, and log the dispatched coordinates.
 
 When a suggestion matches the farm-wide Skip Added list, dismiss it with its live Hide/X control instead of skipping or scrolling past it. If Hide is unavailable or the row remains afterward, stop rather than Add or bypass that contact.

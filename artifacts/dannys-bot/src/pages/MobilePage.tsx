@@ -3071,7 +3071,6 @@ const NAVIGATION_APP_ORDER: NavigationApp[] = ["Snapchat", "Instagram", "WhatsAp
 const NAVIGATION_CONTROLS: NavigationControl[] = [
   { id: "snapchatClickPaperclip", app: "Snapchat", label: "Click Paperclip", instruction: "Open Snapchat's video Snap editor, tap the down chevron to expose the paperclip, then capture and tap the paperclip on the physical phone." },
   { id: "snapchatClickText", app: "Snapchat", label: "Click Text", instruction: "Open Snapchat's video Snap editor with the top-right T visible, then capture and tap the T on the physical phone." },
-  { id: "snapchatFriendSuggestionDismissX", app: "Snapchat", label: "Friend Suggestion Dismiss X", instruction: "Open Add Friends with a gray X visible. Capture the center of that X. Only its horizontal X coordinate is saved; Add Friends uses each live row's center Y.", axis: "x" },
   { id: "home", app: "Instagram", label: "Home", instruction: "Show the Instagram home feed, then tap the Home tab on the physical phone." },
   { id: "reels", app: "Instagram", label: "Reels", instruction: "Show Instagram's bottom navigation, then tap the Reels tab on the physical phone." },
   { id: "directMessages", app: "Instagram", label: "Direct Messages", instruction: "Show the Instagram home header, then tap the Direct Messages icon on the physical phone." },

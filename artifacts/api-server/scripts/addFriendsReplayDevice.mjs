@@ -51,7 +51,9 @@ export class AddFriendsReplayDevice {
     }));
   }
   async getScreenSizeAsync() { return { w: this.width, h: this.height }; }
-  loadNavigationCalibrationMap() { return null; }
+  loadNavigationCalibrationMap() {
+    throw new Error("Add Friends replay must use live controls, not read saved Dismiss calibration.");
+  }
   async isKeyboardShown() { return false; }
   async withInputTransaction(_serial, operation) { return operation(); }
   async keyevent(_serial, key) { throw new Error(`The live tool requested unsupported key ${key}; the replay did not fake success.`); }

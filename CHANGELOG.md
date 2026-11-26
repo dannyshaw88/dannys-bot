@@ -1,3 +1,10 @@
+## [1.2.690] — 2026-11-26
+
+### Fixed
+
+- Disconnect Snapchat suggestion Dismiss from saved calibration. Always tap the matched live Hide control's centre and remove its calibration option from the mirror.
+- Preserve other navigation calibrations and do not add retry taps.
+
 ## [1.2.689] — 2026-11-26
 
 ### Fixed

@@ -83,6 +83,8 @@ try {
     assert(done.swipes.length >= 1);
     const frames = events.filter(event => event.type === "frame");
     if (action === "dismiss") {
+      assert(done.logs.some(line => line.includes("saved Dismiss calibration is not used")));
+      assert(!done.logs.some(line => line.includes("[cal-navigation]")));
       const feedback = model.contactsFrom(frames[0].nodes)[0];
       assert(feedback.dismissed);
       assert.equal(feedback.height, 151);
