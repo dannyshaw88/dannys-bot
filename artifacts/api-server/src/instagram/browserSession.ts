@@ -5271,12 +5271,19 @@ export async function runGoogleChromeDm(
         continue;
       }
 
+      const navigationStartedAt = Date.now();
+      let navigationFailure = "";
       try {
-        await session.page.goto(candidate.url, { waitUntil: "domcontentloaded", timeout: 20_000 });
-      } catch {
-        result.failed++;
-        emit("Could not open a verified user profile; no message was entered.");
-        continue;
+        await session.page.goto(candidate.url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      } catch (error: any) {
+        navigationFailure = String(error?.message ?? error ?? "navigation failed").slice(0, 160);
+        if (profileKey(session.page.url()) !== expectedProfileKey) {
+          result.failed++;
+          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: profile navigation failed after ${Date.now() - navigationStartedAt}ms: ${navigationFailure}`, "browser");
+          emit("Could not open the selected profile; no message was entered.");
+          continue;
+        }
+        log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: navigation timed out after ${Date.now() - navigationStartedAt}ms, but the profile URL is active; waiting for its controls`, "browser");
       }
       if (isStopped()) {
         result.stopped = true;
@@ -5288,41 +5295,25 @@ export async function runGoogleChromeDm(
         continue;
       }
 
-      const profileReady = await session.page.waitForFunction((expectedName: string) => {
-        const doc = (globalThis as any).document;
-        const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
-        const visible = (element: any) => {
-          const rect = element.getBoundingClientRect();
-          const style = getStyle(element);
-          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+      const navigationElapsed = Date.now() - navigationStartedAt;
+      const navigationTiming = await session.page.evaluate(() => {
+        const entry = (globalThis as any).performance?.getEntriesByType?.("navigation")?.[0];
+        const elapsed = (value: number) => Number.isFinite(value) && value > 0 ? Math.round(value) : null;
+        return {
+          readyState: (globalThis as any).document?.readyState ?? "unknown",
+          domContentLoadedMs: elapsed(entry?.domContentLoadedEventEnd - entry?.startTime),
+          loadEventMs: elapsed(entry?.loadEventEnd - entry?.startTime),
         };
-        const normalize = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
-        const main = doc.querySelector("main,[role='main']");
-        if (!main) return false;
-        if (!normalize(main.innerText || "").includes(normalize(expectedName))) return false;
-        const messageButtons = (Array.from(main.querySelectorAll("button,[role='button']")) as any[])
-          .filter(button => {
-            if (!visible(button)) return false;
-            const labels = [button.getAttribute("aria-label"), button.getAttribute("title"), button.innerText]
-              .filter(Boolean).map((label: string) => label.replace(/\s+/g, " ").trim());
-            return labels.some(label => /^message$/i.test(label));
-          });
-        return messageButtons.length === 1;
-      }, { timeout: 8_000, polling: 200 }, candidate.name).catch(() => null);
-      if (isStopped()) {
-        result.stopped = true;
-        break;
-      }
-      if (!profileReady) {
-        result.failed++;
-        emit("The selected user's profile did not finish rendering; no message was entered.");
-        continue;
-      }
-      await profileReady.dispose();
+      }).catch(() => null);
+      log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: profile navigation returned after ${navigationElapsed}ms; timing=${JSON.stringify(navigationTiming)}${navigationFailure ? "; navigation timed out but URL matched" : ""}`, "browser");
 
       let messageButtonClicked = false;
       let messageButtonFailure = "";
-      for (let clickAttempt = 1; clickAttempt <= 2; clickAttempt++) {
+      let messageButtonAttempts = 0;
+      const messageButtonWaitStartedAt = Date.now();
+      const messageButtonDeadline = messageButtonWaitStartedAt + 30_000;
+      log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: locating the visible Message control for up to 30 seconds`, "browser");
+      while (!messageButtonClicked && Date.now() < messageButtonDeadline) {
         if (isStopped()) {
           result.stopped = true;
           break;
@@ -5334,30 +5325,32 @@ export async function runGoogleChromeDm(
 
         let buttonHandle: any;
         try {
+          const remainingMs = Math.max(1, messageButtonDeadline - Date.now());
+          messageButtonAttempts++;
           buttonHandle = await session.page.waitForFunction(
-            findGoogleChromeDmMessageButton, { timeout: 2_500, polling: 100 }, candidate.name,
+            findGoogleChromeDmMessageButton,
+            { timeout: Math.min(1_000, remainingMs), polling: 100 },
+            candidate.name,
           );
           const messageButton = buttonHandle.asElement();
           if (!messageButton) {
             messageButtonFailure = "The current Message control was not a live element.";
-            if (clickAttempt < 2) {
-              log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control was not clickable as an element; re-resolving it once`, "browser");
-              await new Promise(resolve => setTimeout(resolve, 150));
-              continue;
-            }
-            break;
+            await new Promise(resolve => setTimeout(resolve, Math.min(150, remainingMs)));
+            continue;
           }
           await messageButton.click();
           messageButtonClicked = true;
-          break;
+          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control clicked after ${Date.now() - messageButtonWaitStartedAt}ms (${messageButtonAttempts} lookup attempt${messageButtonAttempts === 1 ? "" : "s"})`, "browser");
         } catch (error: any) {
           messageButtonFailure = String(error?.message ?? error ?? "browser click failed").slice(0, 180);
           const transientNode = /node is detached from document|not attached to the dom|node is either not clickable or not an element/i.test(messageButtonFailure);
-          if (clickAttempt < 2 && transientNode) {
-            log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control became stale or non-clickable; re-resolving it once`, "browser");
-            await new Promise(resolve => setTimeout(resolve, 150));
+          if (transientNode) {
+            log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message click attempt ${messageButtonAttempts} hit a transient stale/non-clickable node; searching again`, "browser");
+            await new Promise(resolve => setTimeout(resolve, Math.min(150, Math.max(0, messageButtonDeadline - Date.now()))));
           } else {
-            break;
+            const timedOut = error?.name === "TimeoutError" || /timeout|waiting failed.*exceeded/i.test(messageButtonFailure);
+            if (!timedOut) break;
+            if (Date.now() >= messageButtonDeadline) break;
           }
         } finally {
           await buttonHandle?.dispose().catch(() => {});
@@ -5365,11 +5358,34 @@ export async function runGoogleChromeDm(
       }
       if (result.stopped) break;
       if (!messageButtonClicked) {
+        const buttonDiagnostics = await session.page.evaluate((expectedName: string) => {
+          const doc = (globalThis as any).document;
+          const styleOf = (globalThis as any).getComputedStyle as (element: any) => any;
+          const normalize = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "")
+            .replace(/\s+/g, " ").trim().toLowerCase();
+          const main = doc?.querySelector("main,[role='main']");
+          const messageCount = main ? (Array.from(main.querySelectorAll("button,[role='button']")) as any[])
+            .filter(button => {
+              const rect = button.getBoundingClientRect();
+              const style = styleOf(button);
+              if (!rect.width || !rect.height || style.display === "none" || style.visibility === "hidden") return false;
+              return [button.getAttribute("aria-label"), button.getAttribute("title"), button.innerText]
+                .filter(Boolean).some((label: string) => /^message$/i.test(label.replace(/\s+/g, " ").trim()));
+            }).length : 0;
+          return {
+            readyState: doc?.readyState ?? "unknown",
+            hasMain: !!main,
+            profileNameMatched: !!main && normalize(main.innerText || "").includes(normalize(expectedName)),
+            visibleMessageButtons: messageCount,
+          };
+        }, candidate.name).catch(() => null);
+        const lookupElapsed = Date.now() - messageButtonWaitStartedAt;
+        log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control unavailable after ${lookupElapsed}ms and ${messageButtonAttempts} lookups; diagnostics=${JSON.stringify(buttonDiagnostics)}`, "browser");
         result.failed++;
-        emit(`The Message button could not be pressed reliably; stopping at this profile. No message was entered. ${messageButtonFailure}`, "fail");
+        emit(`The selected profile's Message button did not become safely clickable within 30 seconds; no message was entered. ${messageButtonFailure}`, "fail");
         break;
       }
-      log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control clicked; waiting for the recipient's composer`, "browser");
+      log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: waiting for the recipient's composer`, "browser");
       if (isStopped()) {
         result.stopped = true;
         break;
