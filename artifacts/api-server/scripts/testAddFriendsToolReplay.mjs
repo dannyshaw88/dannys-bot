@@ -124,7 +124,7 @@ try {
   assert.deepEqual(incomingSectionAdds.done.actions.map(action => action.name), [
     "Entourage Mike Hunt",
     "Yes 119",
-  ], "A persistent Added Me section must not cause the completed first row to be re-anchored.");
+  ], `A persistent Added Me section must not cause the completed first row to be re-anchored.\n${incomingSectionAdds.done.logs.join("\n")}`);
   const firstTapIndex = incomingSectionAdds.events.findIndex(event =>
     event.type === "frame" && event.kind === "tap",
   );

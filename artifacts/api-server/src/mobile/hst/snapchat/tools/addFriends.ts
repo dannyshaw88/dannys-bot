@@ -298,6 +298,10 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     );
     return nameNode?.text.trim() || nameNode?.desc.trim() || "";
   };
+  const suggestionHeadingBottom = (nodes: UiNode[]): number | undefined => nodes.find(node =>
+    shortResourceId(node) === "section-title" &&
+    [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
+  )?.bounds[3];
   const nextContactNameAfter = (nodes: UiNode[], friendName: string): string | undefined => {
     const rows = findFriendsRows(nodes);
     const currentIndex = rows.findIndex(row =>
@@ -373,6 +377,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     const { friendName, row } = selectedFriend;
     const previousTopY = row.bounds[1];
     const expectedNextName = nextContactNameAfter(state.nodes, friendName);
+    const priorHeadingBottom = suggestionHeadingBottom(state.nodes);
     const rowBounds = row.bounds;
     const addButtonCenterY = center(selectedFriend.candidate).y;
     const addButtonHeight = selectedFriend.candidate.bounds[3] - selectedFriend.candidate.bounds[1];
@@ -417,6 +422,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         undefined,
         expectedNextName,
         previousTopY,
+        priorHeadingBottom,
       )) {
         context.onLog("Add Friends: could not confirm the next contact after Skip; stopping this tool before another row can be selected.");
         await context.onAddFriendsStepComplete?.({ action: "skip", friendName });
@@ -566,6 +572,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     const currentCandidate = selected.candidate;
     const expectedNextName = nextContactNameAfter(state.nodes, selected.friendName);
     const expectedTargetTop = selected.row.bounds[1];
+    const priorHeadingBottom = suggestionHeadingBottom(state.nodes);
     if (context.isAborted()) break;
     let reservationKey: string | null = null;
     if (skipAdded) {
@@ -651,6 +658,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       undefined,
       expectedNextName,
       expectedTargetTop,
+      priorHeadingBottom,
     )) {
       context.onLog("Add Friends: could not confirm the next contact after Add; stopping this tool before another row can be selected.");
       await context.onAddFriendsStepComplete?.({ action: "add", friendName });

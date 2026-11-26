@@ -370,6 +370,7 @@ export async function scrollAddFriendsListOneSlot(
   replayIO: AddFriendsScrollReplayIO = realReplayIO,
   expectedNextContactName?: string,
   expectedTargetTop?: number,
+  priorHeadingBottom?: number,
 ): Promise<boolean> {
   let activeNodes = nodes;
   let initialRows = findFriendsRows(activeNodes);
@@ -434,9 +435,29 @@ export async function scrollAddFriendsListOneSlot(
     );
     return false;
   }
-  const expectedNextTop = Number.isFinite(expectedTargetTop)
+  let expectedNextTop = Number.isFinite(expectedTargetTop)
     ? expectedTargetTop!
     : visibleRows[0].bounds[1];
+  let headingBottom = title.bounds[3];
+  if (Number.isFinite(priorHeadingBottom) && priorHeadingBottom! >= safeTop && headingBottom >= safeTop) {
+    expectedNextTop += headingBottom - priorHeadingBottom!;
+  }
+  const refreshHeadingTarget = (source: UiNode[]) => {
+    const liveTitle = source.find(node =>
+      shortResourceId(node) === "section-title" &&
+      [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
+    );
+    // RecyclerView can retain off-screen section nodes. They are not the
+    // visible pinned header and must never drag the target above the viewport.
+    if (!liveTitle || liveTitle.bounds[3] < safeTop || headingBottom < safeTop) return;
+    const shift = liveTitle.bounds[3] - headingBottom;
+    if (shift !== 0) {
+      expectedNextTop += shift;
+      context.onLog(`Add Friends: live Find friends header moved ${shift}px; next-contact target updated to ${expectedNextTop}.`);
+    }
+    headingBottom = liveTitle.bounds[3];
+    listTop = headingBottom;
+  };
   const preSwipeAlignmentError = expectedNextRow.bounds[1] - expectedNextTop;
   if (Math.abs(preSwipeAlignmentError) <= alignmentTolerance) {
     context.onLog(
@@ -498,6 +519,7 @@ export async function scrollAddFriendsListOneSlot(
   if (context.isAborted()) return false;
 
   let afterSwipeNodes = (await replayIO.dump(context.serial)).nodes;
+  refreshHeadingTarget(afterSwipeNodes);
   let afterSwipeRows = findFriendsRows(afterSwipeNodes);
   let nextRowAfterSwipe = closestNamedRow(
     afterSwipeNodes,
@@ -511,6 +533,7 @@ export async function scrollAddFriendsListOneSlot(
     );
     await context.sleep(500, "exact");
     afterSwipeNodes = (await replayIO.dump(context.serial)).nodes;
+    refreshHeadingTarget(afterSwipeNodes);
     afterSwipeRows = findFriendsRows(afterSwipeNodes);
     nextRowAfterSwipe = closestNamedRow(
       afterSwipeNodes,
@@ -619,6 +642,7 @@ export async function scrollAddFriendsListOneSlot(
     if (context.isAborted()) return false;
     const afterCorrectionState = await replayIO.dump(context.serial);
     const afterCorrectionNodes = afterCorrectionState.nodes;
+    refreshHeadingTarget(afterCorrectionNodes);
     const correctedRows = findFriendsRows(afterCorrectionNodes);
     const alignedNextRow = closestNamedRow(
       afterCorrectionNodes,

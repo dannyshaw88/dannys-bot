@@ -1,3 +1,10 @@
+## [1.2.688] — 2026-11-26
+
+### Fixed
+
+- Recalculate the next contact's target when the live Find Friends header moves during post-Add or Skip positioning, instead of accepting the previous contact's stale screen position.
+- Keep off-screen cached heading nodes from moving the target above the usable viewport.
+
 ## [1.2.687] — 2026-11-26
 
 ### Fixed

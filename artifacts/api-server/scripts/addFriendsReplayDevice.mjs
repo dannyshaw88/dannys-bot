@@ -86,7 +86,7 @@ export class AddFriendsReplayDevice {
     }
     this.nodes = this.nodes.map((node, index) => (
       members.has(index) ||
-      (this.moveSectionHeadings && (
+      (this.moveSectionHeadings && this.actions.length === 0 && (
         this.model.shortId(node) === "section-description" ||
         (this.model.shortId(node) === "section-title" &&
           ["added me", "find friends"].some(label =>
