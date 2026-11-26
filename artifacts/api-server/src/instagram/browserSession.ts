@@ -17,6 +17,7 @@ import { LEAKS_PAGE_HTML } from "./leaksPage";
 import { findGoogleChromeDmControl } from "./googleChromeDmControls";
 import { waitForGoogleChromeDmDelay } from "./googleChromeDmDelay";
 import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
+import { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } from "./googleChromeDmHistory";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
 // ── Electron native EB mode ───────────────────────────────────────────────────
@@ -5040,8 +5041,10 @@ export async function runGoogleChromeDm(
     }
   };
   const alreadyMessaged = new Set(
-    (options.alreadyMessagedUrls ?? []).map(cleanUrl),
+    (options.alreadyMessagedUrls ?? []).map(value => googleChromeDmRecipientKey(value)).filter((value): value is string => !!value),
   );
+  const historyFile = path.join(COOKIES_DIR, "google-chrome-dm-history.json");
+  let senderAccount = "";
   const excludedNameTokens = new Set(
     (options.excludedNameTokens ?? []).map(value =>
       value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase(),
@@ -5058,7 +5061,7 @@ export async function runGoogleChromeDm(
     (!strictGirlsOnly || googleChromeGirlsOnlyRejection(candidate) === null)
       &&
     !shouldExcludeName(candidate.name)
-      && !(options.skipAlreadyMessaged && alreadyMessaged.has(cleanUrl(candidate.url))),
+      && !(options.skipAlreadyMessaged && alreadyMessaged.has(googleChromeDmRecipientKey(candidate.url) ?? "")),
   );
   const startedAt = Date.now();
   const stopAt = Number.isFinite(options.stopAfterMinutes) && (options.stopAfterMinutes ?? 0) > 0
@@ -5087,6 +5090,14 @@ export async function runGoogleChromeDm(
     }
   };
   try {
+    const facebookCookies = await session.page.cookies("https://www.facebook.com");
+    senderAccount = facebookCookies.find(cookie => cookie.name === "c_user")?.value ?? "";
+    if (!/^\d+$/.test(senderAccount)) {
+      throw new Error("The signed-in Facebook account could not be verified; no messages were sent.");
+    }
+    for (const key of readGoogleChromeDmContacts(historyFile, senderAccount)) alreadyMessaged.add(key);
+    const importedUrls = (options.alreadyMessagedUrls ?? []).filter(value => googleChromeDmRecipientKey(value));
+    recordGoogleChromeDmContacts(historyFile, senderAccount, importedUrls);
     emit(`Opening configured page: ${targetUrl.href}`);
     session.navProtectedUntil = Date.now() + 35_000;
     await session.page.goto(targetUrl.href, { waitUntil: "domcontentloaded", timeout: 25_000 });
@@ -5203,11 +5214,18 @@ export async function runGoogleChromeDm(
     result.skipped = candidates.length - filtered.length;
     result.totalEligible = filtered.length;
     const startIndex = filtered.length > 0 ? result.nextIndex % filtered.length : 0;
-    const selected = filtered.slice(startIndex, startIndex + Math.min(amount, userLimit));
+    // Existing threads may only be discovered after opening the recipient's
+    // chat. Those skips must not consume the requested number of messages.
+    const selected = filtered.slice(startIndex, startIndex + userLimit);
     emit(`Found ${filtered.length} eligible user${filtered.length === 1 ? "" : "s"}; attempting up to ${selected.length}.`);
 
     let needsMessageDelay = false;
     for (const candidate of selected) {
+      if (result.sent >= amount) break;
+      if (options.skipAlreadyMessaged && alreadyMessaged.has(googleChromeDmRecipientKey(candidate.url) ?? "")) {
+        result.skipped++;
+        continue;
+      }
       if (needsMessageDelay && !isStopped()) {
         await waitForGoogleChromeDmDelay(delayMin + Math.random() * (delayMax - delayMin), isStopped);
         needsMessageDelay = false;
@@ -5356,6 +5374,34 @@ export async function runGoogleChromeDm(
       }
 
       try {
+        if (options.skipAlreadyMessaged) {
+          const historyHandle = await session.page.waitForFunction(
+            inspectGoogleChromeDmHistory, { timeout: 12_000, polling: 200 }, composer,
+          ).catch(() => null);
+          const history = await historyHandle?.jsonValue().catch(() => false);
+          await historyHandle?.dispose();
+          if (history !== "empty") {
+            if (history === "existing") {
+              recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
+              alreadyMessaged.add(googleChromeDmRecipientKey(candidate.url)!);
+              result.skipped++;
+            } else {
+              result.failed++;
+              emit("Conversation history could not be confirmed empty; no message was entered.");
+            }
+            const close = await composer.evaluateHandle(findGoogleChromeDmControl, "close");
+            try {
+              const button = close.asElement();
+              if (!button) break;
+              await button.click();
+              const closed = await session.page.waitForFunction((element: any) => !element.isConnected,
+                { timeout: 5_000, polling: 100 }, composer).catch(() => null);
+              if (!closed) break;
+              await closed.dispose();
+            } finally { await close.dispose(); }
+            continue;
+          }
+        }
         await composer.click();
         await composer.type(options.message.trim(), { delay: 0 });
         const typedText = await composer.evaluate((element: any) =>
@@ -5382,6 +5428,13 @@ export async function runGoogleChromeDm(
           await sendButtonHandle!.dispose();
           break;
         }
+        const currentCookies = await session.page.cookies("https://www.facebook.com");
+        if (currentCookies.find(cookie => cookie.name === "c_user")?.value !== senderAccount) {
+          await sendButtonHandle!.dispose();
+          throw new Error("The Facebook account changed during this run; sending was stopped.");
+        }
+        recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
+        alreadyMessaged.add(googleChromeDmRecipientKey(candidate.url)!);
         await sendElement.click();
         await sendButtonHandle!.dispose();
 

@@ -52,3 +52,9 @@ Treat Alkaline and Belcalis as accepted names, allow a dot between first and sur
 **Why:** The user explicitly corrected these screenshot rejections and confirmed all five targets.
 
 **How to apply:** Strip the title and normalise name-separating dots only for eligibility checks; retain original display names for recipient verification. Titles/dots must not bypass picture, numeric, male-name, business or two-name limits.
+
+Skip Already Messaged must include existing Facebook conversations and survive Windows app restarts or interrupted sends; frontend URL history alone is insufficient.
+
+**Why:** The user reported a repeat message on Windows after the recipient had already replied. Local app history cannot cover manually sent messages or a run interrupted before its response.
+
+**How to apply:** Key records by sender account and recipient Facebook ID, reserve before clicking Send, and inspect only the verified recipient's conversation before typing. Unknown/loading history must fail closed. Do not mistake the introductory public-info notice above older messages for an empty conversation.

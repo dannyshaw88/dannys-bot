@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { build, transform } from "esbuild";
 import { fileURLToPath } from "node:url";
+import os from "node:os";
+import path from "node:path";
 
 const source = await fs.readFile(new URL("../src/instagram/googleChromeDmControls.ts", import.meta.url), "utf8");
 const { code } = await transform(source, { loader: "ts", format: "esm" });
@@ -14,6 +16,67 @@ const eligibilityBuild = await build({
   bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
 });
 const { googleChromeGirlsOnlyRejection: reject } = await import(`data:text/javascript;base64,${Buffer.from(eligibilityBuild.outputFiles[0].text).toString("base64")}`);
+const historyBuild = await build({
+  entryPoints: [fileURLToPath(new URL("../src/instagram/googleChromeDmHistory.ts", import.meta.url))],
+  bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
+});
+const historyModule = await import(`data:text/javascript;base64,${Buffer.from(historyBuild.outputFiles[0].text).toString("base64")}`);
+const historyDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "chrome-dm-history-"));
+{
+  const { googleChromeDmRecipientKey: key, readGoogleChromeDmContacts: readContacts,
+    recordGoogleChromeDmContacts: recordContacts, inspectGoogleChromeDmHistory: inspect } = historyModule;
+  assert.equal(key("https://www.facebook.com/profile.php?id=600&sk=about#x"), "id:600");
+  assert.equal(key("https://m.facebook.com/people/Someone/600/"), "id:600");
+  assert.equal(key("https://facebook.com.evil.test/profile.php?id=600"), null);
+  const file = path.join(historyDirectory, "ledger-test.json");
+  recordContacts(file, "1", ["https://facebook.com/profile.php?id=600"]);
+  assert(readContacts(file, "1").has("id:600"), "reload persisted contacts from disk");
+  assert.equal(readContacts(file, "2").size, 0, "sender accounts have independent histories");
+  await fs.writeFile(file, "{broken");
+  assert.throws(() => readContacts(file, "1"), /could not be read/);
+  assert.throws(() => recordContacts(file, "1", ["https://facebook.com/profile.php?id=601"]), /could not be read/);
+  const close = {
+    getBoundingClientRect: () => ({ width: 10, height: 10 }),
+    style: { display: "block", visibility: "visible" },
+    getAttribute: attr => attr === "aria-label" ? "Close chat" : null,
+  };
+  const composer = {};
+  let rows = [], busy = [], otherEditors = [];
+  const panel = {
+    innerText: "",
+    querySelectorAll: selector => selector.includes("contenteditable") ? [composer, ...otherEditors]
+      : selector.includes("button") ? [close]
+      : selector.includes("data-message-id") ? rows : busy,
+  };
+  composer.parentElement = panel;
+  const row = (text, media = false) => ({
+    innerText: text, contains: () => false, querySelector: () => media ? {} : null,
+  });
+  const oldStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = node => node.style;
+  rows = [row("You sent: Hi, do you sell content?")];
+  assert.equal(inspect(composer), "existing", "detect old outgoing message before typing");
+  rows = [row("I'm only just working with onlyfans")];
+  assert.equal(inspect(composer), "existing", "detect existing incoming reply");
+  rows = [row("", true)];
+  assert.equal(inspect(composer), "existing", "media-only history is not a new conversation");
+  rows = [];
+  assert.equal(inspect(composer), false, "missing rows do not prove a new thread");
+  panel.innerText = "When you send a message, Haven rose will see your public info.";
+  assert.equal(inspect(composer), false, "new-thread notice must settle");
+  composer.__auraDmEmptySince = Date.now() - 2500;
+  assert.equal(inspect(composer), "empty");
+  panel.innerText += " Previous message without row attributes";
+  assert.equal(inspect(composer), false, "an introductory notice above unclassified history is not an empty chat");
+  panel.innerText = "When you send a message, Haven rose will see your public info.";
+  busy = [close];
+  assert.equal(inspect(composer), false, "loading history must never pass as empty");
+  busy = [];
+  otherEditors = [close];
+  assert.equal(inspect(composer), false, "never inspect a shared multi-chat ancestor");
+  globalThis.getComputedStyle = oldStyle;
+  console.log("PASS: canonical IDs, account-scoped disk history, corrupt-history fail-closed handling, old text/media and unknown/loading chat guards.");
+}
 const photoUrl = "https://images.example.test/personal-picture.jpg";
 const internationalNames = JSON.parse(await fs.readFile(
   new URL("../src/instagram/data/internationalGivenNames/names.json", import.meta.url), "utf8",
@@ -227,11 +290,14 @@ const wrap = value => ({
 const message = { click: async () => { events.push("message"); editor.isConnected = true; } };
 let waits = 0;
 let location = "";
+let historyVerdict = "empty";
+let senderId = "42";
 let fixtureCandidates = [
   { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
   { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
 ];
 const page = {
+  cookies: async () => [{ name: "c_user", value: senderId }],
   goto: async url => { location = url; events.push("navigate"); },
   url: () => location,
   evaluate: async fn => {
@@ -242,6 +308,15 @@ const page = {
   },
   evaluateHandle: async () => wrap(message),
   waitForFunction: async (fn, _options, ...args) => {
+    if (fn === historyModule.inspectGoogleChromeDmHistory) {
+      const verdict = typeof historyVerdict === "function" ? historyVerdict(location) : historyVerdict;
+      if (!verdict) throw new Error("History loading timeout");
+      return wrap(verdict);
+    }
+    if (fn.toString().includes("=> !element.isConnected")) {
+      waits += 3; // Skip the normal send/confirmation steps when closing a skipped chat.
+      return wrap(!editor.isConnected);
+    }
     waits++;
     if (waits === 1) return wrap(true); // Followers loaded.
     const step = (waits - 2) % 5;
@@ -255,6 +330,7 @@ const page = {
 };
 const gaps = [];
 globalThis.__chromeDmFixture = {
+  historyModule, historyDirectory, path,
   page, find: (_handle, action) => find(editor, action),
   reject,
   wait: async (seconds, stopped) => {
@@ -265,6 +341,9 @@ globalThis.__chromeDmFixture = {
   },
 };
 const prelude = `
+const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
+const COOKIES_DIR = globalThis.__chromeDmFixture.historyDirectory;
+const path = globalThis.__chromeDmFixture.path;
 const GOOGLE_CHROME_BROWSER_PROFILE_ID = 10000000;
 const activeGoogleChromeDmRuns = new Map();
 const sessions = new Map([[10000000, {page: globalThis.__chromeDmFixture.page}]]);
@@ -404,6 +483,69 @@ assert.equal(approvedFormats.sent, 5);
 assert.equal(approvedFormats.skipped, 3);
 assert.deepEqual(approvedFormats.sentUrls, [401, 402, 403, 404, 405].map(id => `https://www.facebook.com/profile.php?id=${id}`));
 console.log("PASS: production dispatcher targets all five user-confirmed profiles and excludes three-part, male-name and business variants.");
+{
+  const options = {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Fixture only", amount: 10, skipAlreadyMessaged: true,
+    delayMinSeconds: 0, delayMaxSeconds: 0,
+  };
+  const runWith = async (id, verdict) => {
+    fixtureCandidates = [{ url: `https://www.facebook.com/profile.php?id=${id}`, name: "Haven rose", photoUrl }];
+    historyVerdict = verdict;
+    events.length = 0; waits = 0;
+    return runGoogleChromeDm(10_000_000, options);
+  };
+  const oldThread = await runWith(600, "existing");
+  assert.equal(oldThread.sent, 0);
+  assert.equal(oldThread.skipped, 1);
+  assert.deepEqual(events, ["navigate", "navigate", "message", "close"], "existing conversation is closed without typing or sending");
+  const persisted = await runWith(600, "empty");
+  assert.equal(persisted.sent, 0);
+  assert(!events.includes("message"), "later run skips disk-recorded recipient before opening chat");
+  fixtureCandidates = [{ url: "https://m.facebook.com/people/Haven/600/?ref=followers", name: "Haven rose", photoUrl }];
+  events.length = 0; waits = 0;
+  assert.equal((await runGoogleChromeDm(10_000_000, options)).sent, 0);
+  assert(!events.includes("message"), "different profile URL for the same ID is still skipped");
+  const unknown = await runWith(601, false);
+  assert.equal(unknown.sent, 0);
+  assert.equal(unknown.failed, 1);
+  assert(!events.includes("composer") && !events.includes("send"), "unknown history never types or sends");
+  const newThread = await runWith(602, "empty");
+  assert.equal(newThread.sent, 1);
+  const nextRun = await runWith(602, "empty");
+  assert.equal(nextRun.sent, 0, "successful contact survives a new run");
+  senderId = "43";
+  const otherSender = await runWith(602, "empty");
+  assert.equal(otherSender.sent, 1, "different sender is not incorrectly blocked by another account's record");
+  senderId = "";
+  await assert.rejects(() => runWith(603, "empty"), /account could not be verified/);
+  senderId = "42";
+  const imported = await runGoogleChromeDm(10_000_000, {
+    ...options, alreadyMessagedUrls: ["https://facebook.com/people/Someone/603/?tracking=old"],
+  });
+  assert.equal(imported.sent, 0, "legacy frontend history is imported and ID-normalised");
+  // Reserve before native Send: an exception during the click cannot erase the
+  // recipient and allow an uncertain attempt to be sent again on the next run.
+  const originalSend = send.click;
+  send.click = async () => { events.push("send"); throw new Error("Browser disconnected during Send"); };
+  const uncertain = await runWith(604, "empty");
+  assert.equal(uncertain.sent, 0);
+  assert.equal(uncertain.failed, 1);
+  send.click = originalSend;
+  const retry = await runWith(604, "empty");
+  assert.equal(retry.sent, 0);
+  assert(!events.includes("message"), "interrupted send remains blocked from a duplicate attempt");
+  fixtureCandidates = [605, 606].map(id => ({
+    url: `https://facebook.com/profile.php?id=${id}`, name: "Haven rose", photoUrl,
+  }));
+  historyVerdict = url => url.includes("id=605") ? "existing" : "empty";
+  events.length = 0; waits = 0;
+  const skipThenSend = await runGoogleChromeDm(10_000_000, { ...options, amount: 1 });
+  assert.equal(skipThenSend.sent, 1, "a skipped existing conversation does not consume the requested amount");
+  assert.deepEqual(skipThenSend.sentUrls, ["https://facebook.com/profile.php?id=606"]);
+  historyVerdict = "empty";
+  console.log("PASS: production skip flow handles existing replies, repeated runs, URL aliases, unknown history, imported history, account isolation and interrupted sends.");
+}
 await assert.rejects(() => runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/", message: "Fixture", delayMinSeconds: 4, delayMaxSeconds: 1,
 }), /valid minimum and maximum/);
@@ -417,4 +559,5 @@ await waitForGoogleChromeDmDelay(60, () => stopped);
 clearTimeout(timer);
 assert(Date.now() - duringWait < 1000, "Stop interrupts an active gap");
 delete globalThis.__chromeDmFixture;
+await fs.rm(historyDirectory, { recursive: true, force: true });
 console.log("PASS: production send/close flow, one random inter-message gap, invalid range and responsive Stop.");
