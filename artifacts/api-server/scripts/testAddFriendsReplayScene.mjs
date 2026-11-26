@@ -76,6 +76,45 @@ try {
   assert(replay.logs.some(line => /dismissing/.test(line)), "Must use the actual Dismiss alignment path.");
   console.log("PASS: exact imported row heights, blank/mutual/contact subtitles, original viewport, real 151px feedback structure, 14px reflow, after-action snapshot, and real Dismiss scroll helper.");
 
+  const velocitySensitiveAdd = await promisify(execFile)(process.execPath, [
+    path.join(apiRoot, "scripts/replayAddFriendsScroll.mjs"),
+    "--action=add",
+    "--align-before-action",
+    "--velocity-sensitive",
+  ], { cwd: apiRoot, maxBuffer: 2 * 1024 * 1024 });
+  const velocitySensitiveReplay = JSON.parse(velocitySensitiveAdd.stdout);
+  assert.equal(velocitySensitiveReplay.result, "PASS");
+  assert(Math.abs(velocitySensitiveReplay.actualTop - velocitySensitiveReplay.expectedTop) <= 18);
+  assert(velocitySensitiveReplay.postActionSwipes.length > 0);
+  assert(
+    velocitySensitiveReplay.postActionSwipes.every(swipe => swipe.durationMs > 300),
+    "Post-Add positioning must preserve the measured swipe speed instead of reverting to a 300ms fling.",
+  );
+
+  const removedRowAdd = await promisify(execFile)(process.execPath, [
+    path.join(apiRoot, "scripts/replayAddFriendsScroll.mjs"),
+    "--action=add",
+    "--align-before-action",
+    "--remove-action-row",
+  ], { cwd: apiRoot, maxBuffer: 2 * 1024 * 1024 });
+  const removedRowReplay = JSON.parse(removedRowAdd.stdout);
+  assert.equal(removedRowReplay.result, "PASS");
+  assert.equal(removedRowReplay.actualTop, removedRowReplay.expectedTop);
+  assert.equal(removedRowReplay.postActionSwipes.length, 0, "If Snapchat reflows the next contact into place, do not scroll it past the top.");
+
+  const overshotAdd = await promisify(execFile)(process.execPath, [
+    path.join(apiRoot, "scripts/replayAddFriendsScroll.mjs"),
+    "--action=add",
+    "--align-before-action",
+    "--velocity-sensitive",
+    "--movement-scale=3",
+    "--expect-settle-failure",
+  ], { cwd: apiRoot, maxBuffer: 2 * 1024 * 1024 });
+  const overshotReplay = JSON.parse(overshotAdd.stdout);
+  assert.equal(overshotReplay.result, "UNSETTLED");
+  assert(overshotReplay.logs.some(line => /overshot the top/.test(line)));
+  console.log("PASS: post-Add settling tracks the exact next name, preserves calibrated swipe speed, skips redundant scrolls, and refuses overshoots.");
+
   const forwardOnly = await promisify(execFile)(process.execPath, [
     path.join(apiRoot, "scripts/replayAddFriendsScroll.mjs"), "--regression-fixture",
   ], { cwd: apiRoot, maxBuffer: 4 * 1024 * 1024 });

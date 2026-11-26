@@ -288,7 +288,11 @@ const replayIO = {
   dump: async () => ({ xml: "", nodes: currentNodes }),
   swipe: async (_serial, x1, y1, x2, y2, durationMs = 300) => {
     swipes.push({ x1, y1, x2, y2, durationMs });
-    const contentMovement = Math.round((y2 - y1) * movementScale);
+    const speed = Math.abs(y2 - y1) / durationMs;
+    const flingMultiplier = options.has("--velocity-sensitive")
+      ? 1 + Math.max(0, speed - 0.35) * 2.5
+      : 1;
+    const contentMovement = Math.round((y2 - y1) * movementScale * flingMultiplier);
     currentNodes = currentNodes.map(node => {
       return rowMemberIds.has(node.replayId)
         ? { ...node, bounds: [node.bounds[0], node.bounds[1] + contentMovement, node.bounds[2], node.bounds[3] + contentMovement] }
@@ -357,6 +361,7 @@ const actionRowIndex = rows.indexOf(actionRow);
 const expectedNextName = nameInRow(nodes, rows[actionRowIndex + 1]);
 assert(expectedNextName, "The target contact has no following row in the supplied UI dump.");
 const expectedTop = actionRow.bounds[1];
+const rowBounds = actionRow.bounds;
 const priorCenterY = Number(options.get("--previous-center-y") ?? (actionRow.bounds[1] + actionRow.bounds[3]) / 2);
 const rowHeight = Number(options.get("--row-height") ?? (actionRow.bounds[3] - actionRow.bounds[1]));
 if (simulatedAction === "dismiss") {
@@ -369,8 +374,31 @@ if (simulatedAction === "dismiss") {
     }
   }
   nodes = currentNodes;
+} else if (simulatedAction === "add" && options.has("--remove-action-row")) {
+  const removedHeight = rowBounds[3] - rowBounds[1];
+  currentNodes = currentNodes.flatMap(node => {
+    const insideSelectedRow =
+      node !== actionRow &&
+      node.bounds[0] >= rowBounds[0] &&
+      node.bounds[1] >= rowBounds[1] &&
+      node.bounds[2] <= rowBounds[2] &&
+      node.bounds[3] <= rowBounds[3];
+    if (node === actionRow || insideSelectedRow) return [];
+    if (rowMemberIds.has(node.replayId) && node.bounds[1] >= rowBounds[3]) {
+      return [{
+        ...node,
+        bounds: [
+          node.bounds[0],
+          node.bounds[1] - removedHeight,
+          node.bounds[2],
+          node.bounds[3] - removedHeight,
+        ],
+      }];
+    }
+    return [node];
+  });
+  nodes = currentNodes;
 } else if (simulatedAction) {
-  const rowBounds = actionRow.bounds;
   currentNodes = currentNodes.flatMap(node => {
     const insideSelectedRow =
       node !== actionRow &&
@@ -389,6 +417,7 @@ if (simulatedAction === "dismiss") {
   nodes = currentNodes;
 }
 const afterActionNodes = currentNodes.map(({ replayId: _replayId, ...node }) => ({ ...node, bounds: [...node.bounds] }));
+const swipesBeforePostAction = swipes.length;
 const completed = simulatedAction === "dismiss"
   ? await alignFirstAddFriendsContactToTop(
     context, currentNodes, screenWidth, screenHeight, expectedTop,
@@ -401,13 +430,19 @@ const completed = simulatedAction === "dismiss"
   screenHeight,
   requestedFriend,
   "replay test",
-  priorCenterY,
-  rowHeight,
   replayIO,
+  expectedNextName,
+  expectedTop,
 );
 
-assert.equal(completed, true, "Scroll helper should complete the fixture replay.");
-assert(swipes.length >= 1, "The fake device recorded no scroll gesture.");
+if (options.has("--expect-settle-failure")) {
+  assert.equal(completed, false, "The helper must refuse to continue after an overshoot.");
+} else {
+  assert.equal(completed, true, "Scroll helper should complete the fixture replay.");
+}
+if (!options.has("--remove-action-row")) {
+  assert(swipes.length >= 1, "The fake device recorded no scroll gesture.");
+}
 rows = rowsFrom(currentNodes);
 const alignedNext = rows.find(row => nameInRow(currentNodes, row) === expectedNextName);
 assert(alignedNext, `The next contact "${expectedNextName}" was not present after the simulated swipe.`);
@@ -422,13 +457,15 @@ if (options.has("--debug")) {
     logs,
   }, null, 2));
 }
-assert(
-  Math.abs(alignedNext.bounds[1] - expectedTop) <= alignmentTolerance,
-  `Next contact landed at y=${alignedNext.bounds[1]}, expected top y=${expectedTop}.`,
-);
+if (!options.has("--expect-settle-failure")) {
+  assert(
+    Math.abs(alignedNext.bounds[1] - expectedTop) <= alignmentTolerance,
+    `Next contact landed at y=${alignedNext.bounds[1]}, expected top y=${expectedTop}.`,
+  );
+}
 
 console.log(JSON.stringify({
-  result: "PASS",
+  result: completed ? "PASS" : "UNSETTLED",
   mode: regressionFixture
     ? "logged 4th-add regression fixture with pre-action alignment"
     : imagePath
@@ -442,6 +479,7 @@ console.log(JSON.stringify({
   actualTop: alignedNext.bounds[1],
   preActionAlignment: alignedBeforeAction,
   simulatedMovementScale: movementScale,
+  postActionSwipes: swipes.slice(swipesBeforePostAction),
   ...(options.has("--return-screen")
     ? { nodes: currentNodes.map(({ replayId: _replayId, ...node }) => node), afterActionNodes }
     : {}),

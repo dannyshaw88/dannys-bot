@@ -287,6 +287,25 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     });
     return { addButtons, candidates };
   };
+  const contactNameForRow = (nodes: UiNode[], row: UiNode): string => {
+    const nameNode = nodes.find(node =>
+      shortResourceId(node) === "result-title" &&
+      node.bounds[0] >= row.bounds[0] &&
+      node.bounds[1] >= row.bounds[1] &&
+      node.bounds[2] <= row.bounds[2] &&
+      node.bounds[3] <= row.bounds[3],
+    );
+    return nameNode?.text.trim() || nameNode?.desc.trim() || "";
+  };
+  const nextContactNameAfter = (nodes: UiNode[], friendName: string): string | undefined => {
+    const rows = findFriendsRows(nodes);
+    const currentIndex = rows.findIndex(row =>
+      normalizeFriendDisplayName(contactNameForRow(nodes, row)) === normalizeFriendDisplayName(friendName),
+    );
+    if (currentIndex < 0) return undefined;
+    const nextRow = rows[currentIndex + 1];
+    return nextRow ? contactNameForRow(nodes, nextRow) || undefined : undefined;
+  };
   const positionFriendForAction = async (
     state: { nodes: UiNode[] },
     selectedFriend: { friendName: string; friendKey: string },
@@ -351,8 +370,8 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     state = positioned.state;
     selectedFriend = positioned.selected;
     const { friendName, row } = selectedFriend;
-    const previousCenterY = center(row).y;
     const previousTopY = row.bounds[1];
+    const expectedNextName = nextContactNameAfter(state.nodes, friendName);
     const rowBounds = row.bounds;
     const addButtonCenterY = center(selectedFriend.candidate).y;
     const addButtonHeight = selectedFriend.candidate.bounds[3] - selectedFriend.candidate.bounds[1];
@@ -394,10 +413,13 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         screenHeight,
         friendName,
         `skipping a suggestion matched by ${matchDescription}`,
-        previousCenterY,
-        rowBounds[3] - rowBounds[1],
+        undefined,
+        expectedNextName,
+        previousTopY,
       )) {
-        context.onLog("Add Friends: could not scroll past the matched suggestion; continuing with currently visible candidates.");
+        context.onLog("Add Friends: could not confirm the next contact after Skip; stopping this tool before another row can be selected.");
+        await context.onAddFriendsStepComplete?.({ action: "skip", friendName });
+        return false;
       }
       await context.onAddFriendsStepComplete?.({ action: "skip", friendName });
       return !context.isAborted();
@@ -469,8 +491,10 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     )) {
       context.onLog(
         `Add Friends: could not align the first remaining contact after dismissing ${friendName}; ` +
-        `continuing with currently visible candidates.`,
+        `stopping this tool before another row can be selected.`,
       );
+      await context.onAddFriendsStepComplete?.({ action: "dismiss", friendName });
+      return false;
     }
     await context.onAddFriendsStepComplete?.({ action: "dismiss", friendName });
     return !context.isAborted();
@@ -533,8 +557,8 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     state = positioned.state;
     selected = positioned.selected;
     const currentCandidate = selected.candidate;
-    const previousCenterY = center(selected.row).y;
-    const previousRowHeight = selected.row.bounds[3] - selected.row.bounds[1];
+    const expectedNextName = nextContactNameAfter(state.nodes, selected.friendName);
+    const expectedTargetTop = selected.row.bounds[1];
     if (context.isAborted()) break;
     let reservationKey: string | null = null;
     if (skipAdded) {
@@ -608,10 +632,13 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       screenHeight,
       friendName,
       "adding",
-      previousCenterY,
-      previousRowHeight,
+      undefined,
+      expectedNextName,
+      expectedTargetTop,
     )) {
-      context.onLog("Add Friends: could not scroll after this Add; continuing with currently visible candidates.");
+      context.onLog("Add Friends: could not confirm the next contact after Add; stopping this tool before another row can be selected.");
+      await context.onAddFriendsStepComplete?.({ action: "add", friendName });
+      break;
     }
     // Consume this Add's delay here, before examining another contact. Deferring
     // it until the next Add lets intervening dismissals inherit the pending wait.

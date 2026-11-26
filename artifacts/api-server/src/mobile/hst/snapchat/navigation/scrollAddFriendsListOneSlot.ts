@@ -3,12 +3,6 @@ import type { SnapchatContext, UiNode, UiState } from "../context";
 import { center, dump, shortResourceId } from "../runtime";
 
 export type AddFriendsScrollReplayIO = {
-  captureScreenPixels: (serial: string) => Promise<{
-    width: number;
-    height: number;
-    channels: number;
-    pixels: Buffer;
-  } | null>;
   dump: (serial: string) => Promise<UiState>;
   swipe: (
     serial: string,
@@ -22,7 +16,6 @@ export type AddFriendsScrollReplayIO = {
 };
 
 const realReplayIO: AddFriendsScrollReplayIO = {
-  captureScreenPixels: android.captureScreenPixels,
   dump,
   swipe: android.swipe,
 };
@@ -58,6 +51,14 @@ function recordForwardScrollRatio(
   observedForwardScrollRatioBySerial.set(
     serial,
     Math.max(0.2, Math.min(3, contentTravel / fingerTravel)),
+  );
+}
+
+function recordForwardSwipePace(serial: string, fingerTravel: number, durationMs: number): void {
+  if (fingerTravel <= 0 || durationMs <= 0) return;
+  observedForwardSwipeMsPerPixelBySerial.set(
+    serial,
+    Math.max(0.1, Math.min(20, durationMs / fingerTravel)),
   );
 }
 
@@ -177,10 +178,7 @@ export async function revealAddFriendsSuggestions(
     const measuredContentMovement = previousTop - movedAnchor.bounds[1];
     recordForwardScrollRatio(context.serial, previousTop, movedAnchor.bounds[1], gesture.distance);
     if (measuredContentMovement > 8) {
-      observedForwardSwipeMsPerPixelBySerial.set(
-        context.serial,
-        Math.max(0.1, Math.min(20, durationMs / gesture.distance)),
-      );
+      recordForwardSwipePace(context.serial, gesture.distance, durationMs);
     }
     context.onLog(
       `Add Friends: ${anchorName} moved ${Math.round(measuredContentMovement)}px ` +
@@ -212,71 +210,6 @@ function contactNameInRow(nodes: UiNode[], row: UiNode): string {
     node.bounds[3] <= row.bounds[3],
   );
   return name?.text.trim() || name?.desc.trim() || "";
-}
-
-function findHorizontalDividerYs(
-  screen: { width: number; height: number; channels: number; pixels: Buffer },
-  rows: UiNode[],
-): number[] {
-  if (rows.length === 0 || screen.channels < 3) return [];
-  const x1 = Math.max(0, Math.round(screen.width * 0.04), Math.min(...rows.map(row => row.bounds[0])) + 6);
-  const x2 = Math.min(screen.width - 1, Math.round(screen.width * 0.96), Math.max(...rows.map(row => row.bounds[2])) - 6);
-  if (x2 <= x1) return [];
-
-  const scanTop = Math.max(0, Math.floor(rows[0].bounds[1] - 12));
-  const scanBottom = Math.min(screen.height - 1, Math.ceil(rows[rows.length - 1].bounds[3] + 12));
-  const samplesPerRow = Math.floor((x2 - x1) / 2) + 1;
-  const minimumNeutralPixels = Math.max(12, Math.ceil(samplesPerRow * 0.28));
-  const rawYs: number[] = [];
-
-  for (let y = scanTop; y <= scanBottom; y++) {
-    let neutralGrayPixels = 0;
-    for (let x = x1; x <= x2; x += 2) {
-      const index = (y * screen.width + x) * screen.channels;
-      const r = screen.pixels[index];
-      const g = screen.pixels[index + 1];
-      const b = screen.pixels[index + 2];
-      const luminance = (r + g + b) / 3;
-      if (
-        Math.max(r, g, b) - Math.min(r, g, b) <= 22 &&
-        luminance >= 40 &&
-        luminance <= 255
-      ) neutralGrayPixels++;
-    }
-    if (neutralGrayPixels >= minimumNeutralPixels) rawYs.push(y);
-  }
-
-  const runs: number[][] = [];
-  for (const y of rawYs) {
-    const run = runs[runs.length - 1];
-    if (!run || y - run[run.length - 1] > 2) runs.push([y]);
-    else run.push(y);
-  }
-  return runs
-    .filter(run => run.length <= 5)
-    .map(run => Math.round(run.reduce((sum, y) => sum + y, 0) / run.length));
-}
-
-function measureContactDivider(
-  rows: UiNode[],
-  screen: { width: number; height: number; channels: number; pixels: Buffer },
-  row: UiNode,
-  dividerYs = findHorizontalDividerYs(screen, rows),
-): { distance: number; upperY: number; lowerY: number; row: UiNode } | null {
-  if (dividerYs.length < 2) return null;
-  const centerY = (row.bounds[1] + row.bounds[3]) / 2;
-  const upperY = dividerYs.filter(y => y <= centerY).at(-1);
-  const lowerY = dividerYs.find(y => y > centerY);
-  if (upperY === undefined || lowerY === undefined) return null;
-  const distance = lowerY - upperY;
-  const lineMargin = Math.max(12, Math.round((row.bounds[3] - row.bounds[1]) * 0.15));
-  if (
-    distance < 20 ||
-    distance > screen.height * 0.2 ||
-    upperY < row.bounds[1] - lineMargin ||
-    lowerY > row.bounds[3] + lineMargin
-  ) return null;
-  return { distance, upperY, lowerY, row };
 }
 
 function blankRowLane(
@@ -434,9 +367,9 @@ export async function scrollAddFriendsListOneSlot(
   screenHeight: number,
   friendName: string,
   actionLabel = "adding",
-  previousCenterY?: number,
-  previousRowHeight?: number,
   replayIO: AddFriendsScrollReplayIO = realReplayIO,
+  expectedNextContactName?: string,
+  expectedTargetTop?: number,
 ): Promise<boolean> {
   let activeNodes = nodes;
   let initialRows = findFriendsRows(activeNodes);
@@ -474,97 +407,64 @@ export async function scrollAddFriendsListOneSlot(
     );
   }
   if (!title || visibleRows.length === 0) {
-    const rowHeight = Number.isFinite(previousRowHeight) && previousRowHeight! > 0
-      ? Math.round(previousRowHeight!)
-      : minimumCorrectionTravel;
-    const anchorY = previousCenterY ?? Math.round((safeTop + safeBottom) / 2);
-    const gesture = fitVerticalGesture(
-      anchorY,
-      -Math.max(rowHeight, minimumCorrectionTravel),
-      safeTop,
-      safeBottom,
-    );
-    const fallbackX = Math.max(2, Math.min(screenWidth - 2, Math.round(screenWidth * 0.02)));
     context.onLog(
       `Add Friends: list rows stayed unavailable after three refreshes following ${actionLabel} ${friendName}; ` +
-      `sending a per-contact fallback scroll of ${gesture.distance}px at x=${fallbackX}.`,
+      `refusing an unverified fallback scroll.`,
     );
-    if (context.isAborted()) return false;
-    await replayIO.swipe(context.serial, fallbackX, gesture.startY, fallbackX, gesture.endY, 300, false);
-    await context.sleep(750, "exact");
-    return true;
+    return false;
   }
   const normalizedFriendName = normalizeContactName(friendName);
   const matchingRows = visibleRows.filter(row =>
     normalizeContactName(contactNameInRow(activeNodes, row)) === normalizedFriendName,
   );
-  const targetRow = (matchingRows.length > 0
-    ? [...matchingRows].sort((a, b) =>
-      Math.abs(center(a).y - (previousCenterY ?? center(a).y)) -
-      Math.abs(center(b).y - (previousCenterY ?? center(b).y)),
-    )[0]
-    : previousCenterY === undefined
-      ? visibleRows[0]
-      : [...visibleRows].sort((a, b) =>
-        Math.abs(center(a).y - previousCenterY) - Math.abs(center(b).y - previousCenterY),
-      )[0]) ?? visibleRows[0];
-  const targetNameStillVisible = matchingRows.includes(targetRow);
-  const targetRowIndex = initialRows.indexOf(targetRow);
-  const expectedNextRow = initialRows[targetRowIndex + 1];
-  const expectedNextName = expectedNextRow ? contactNameInRow(activeNodes, expectedNextRow) : "";
-  const expectedNextTop = visibleRows[0].bounds[1];
-  if (!targetNameStillVisible) {
+  const targetRow = matchingRows[0];
+  const targetRowIndex = targetRow ? initialRows.indexOf(targetRow) : -1;
+  const followingRow = targetRowIndex >= 0 ? initialRows[targetRowIndex + 1] : undefined;
+  const expectedNextName = expectedNextContactName?.trim() ||
+    (followingRow ? contactNameInRow(activeNodes, followingRow) : "");
+  const expectedNextRow = expectedNextName
+    ? initialRows.find(row =>
+      normalizeContactName(contactNameInRow(activeNodes, row)) === normalizeContactName(expectedNextName),
+    )
+    : undefined;
+  if (!expectedNextName || !expectedNextRow) {
     context.onLog(
-      `Add Friends: ${friendName}'s card changed or disappeared after ${actionLabel}; ` +
-      `measuring the live card now occupying its previous position.`,
+      `Add Friends: could not verify the next contact after ${friendName} ${actionLabel}; ` +
+      `refusing to guess from the row container height.`,
     );
+    return false;
   }
-  const screenshot = await replayIO.captureScreenPixels(context.serial);
-  const hasMatchingScreenshot = screenshot &&
-    screenshot.width === screenWidth &&
-    screenshot.height === screenHeight;
-  const dividerYs = hasMatchingScreenshot
-    ? findHorizontalDividerYs(screenshot, initialRows)
-    : [];
-  const measurement = hasMatchingScreenshot
-    ? measureContactDivider(initialRows, screenshot, targetRow, dividerYs)
-    : null;
-  const liveRowHeight = targetRow.bounds[3] - targetRow.bounds[1];
-  const distanceBasis = measurement && measurement.distance > 0
-    ? "grey-divider"
-    : "live-row-bounds";
-  const measuredDistance = distanceBasis === "grey-divider"
-    ? measurement!.distance
-    : liveRowHeight;
-  if (!Number.isFinite(measuredDistance) || measuredDistance <= 0) {
+  const expectedNextTop = Number.isFinite(expectedTargetTop)
+    ? expectedTargetTop!
+    : visibleRows[0].bounds[1];
+  const preSwipeAlignmentError = expectedNextRow.bounds[1] - expectedNextTop;
+  if (Math.abs(preSwipeAlignmentError) <= alignmentTolerance) {
     context.onLog(
-      `Add Friends: ${friendName}'s live card bounds were not usable after ${actionLabel}; ` +
-      `using the list's visible row height as the per-contact fallback.`,
+      `Add Friends: after ${actionLabel} ${friendName}, ${expectedNextName} is already at the prior top position ` +
+      `(y=${expectedNextRow.bounds[1]}, target=${expectedNextTop}); no scroll needed.`,
     );
+    return true;
   }
-  const targetDistance = Math.max(
-    minimumCorrectionTravel,
-    Math.round(Number.isFinite(measuredDistance) && measuredDistance > 0 ? measuredDistance : minimumCorrectionTravel),
-  );
+  if (preSwipeAlignmentError < -alignmentTolerance) {
+    context.onLog(
+      `Add Friends: after ${actionLabel} ${friendName}, ${expectedNextName} is already ` +
+      `${Math.abs(preSwipeAlignmentError)}px above the prior top position; refusing a backward swipe.`,
+    );
+    return false;
+  }
+  const targetDistance = Math.round(preSwipeAlignmentError);
   const swipeDistance = calibratedForwardDistance(context.serial, targetDistance);
-  if (distanceBasis !== "grey-divider") {
+  if (swipeDistance < minimumCorrectionTravel) {
     context.onLog(
-      `Add Friends: after ${actionLabel} ${friendName}, divider measurement was unavailable ` +
-      `(candidates=${dividerYs.length}; card bounds=${targetRow.bounds.join(",")}; ` +
-      `screenshot=${hasMatchingScreenshot ? "matched" : "unavailable"}); ` +
-      `using this contact's live row height ${Math.max(0, liveRowHeight)}px, then scrolling ${targetDistance}px.`,
+      `Add Friends: after ${actionLabel} ${friendName}, ${expectedNextName} needs a ` +
+      `${swipeDistance}px move, below the safe minimum; no swipe sent.`,
     );
-  } else if (targetDistance !== Math.round(measuredDistance)) {
-    context.onLog(
-      `Add Friends: measured this contact's divider gap at ${Math.round(measuredDistance)}px; ` +
-      `using ${targetDistance}px to keep the vertical drag above Android's contact-hold threshold.`,
-    );
+    return false;
   }
-  const rowForAnchor = measurement?.row ?? targetRow;
   const minimumLaneWidth = Math.max(8, Math.round(screenWidth * 0.01));
   const swipeLane = blankRowLane(
     activeNodes,
-    rowForAnchor,
+    expectedNextRow,
     screenWidth,
     minimumLaneWidth,
   );
@@ -576,7 +476,7 @@ export async function scrollAddFriendsListOneSlot(
     );
   }
   const swipeX = swipeLane.x;
-  const anchorY = center(rowForAnchor).y;
+  const anchorY = center(expectedNextRow).y;
   const gesture = fitVerticalGesture(
     anchorY,
     -swipeDistance,
@@ -584,65 +484,47 @@ export async function scrollAddFriendsListOneSlot(
     safeBottom,
   );
   const { startY, endY } = gesture;
+  const durationMs = calibratedForwardSwipeDuration(context.serial, gesture.distance);
   if (context.isAborted()) return false;
-  const measuredName = targetNameStillVisible ? friendName : contactNameInRow(activeNodes, targetRow) || "the replacement contact";
-  context.onLog(distanceBasis === "grey-divider"
-    ? `Add Friends: after ${actionLabel} ${friendName}, measured ${measuredName}'s card at ` +
-      `${measurement!.distance.toFixed(1)}px between grey dividers y=${measurement!.upperY} and ` +
-      `y=${measurement!.lowerY}; sending a ${gesture.distance}px swipe.`
-    : `Add Friends: after ${actionLabel} ${friendName}, using this contact's live row height ` +
-      `(${Math.max(0, liveRowHeight)}px) as the per-contact scroll distance; sending a ${gesture.distance}px swipe.`,
+  context.onLog(
+    `Add Friends: after ${actionLabel} ${friendName}, moving ${expectedNextName} ` +
+      `${Math.round(preSwipeAlignmentError)}px to the prior contact's top ` +
+    `(row top=${expectedNextRow.bounds[1]}, target=${expectedNextTop}); ` +
+    `sending ${gesture.distance}px/${durationMs}ms in blank lane x=${swipeX}.`,
   );
-  await replayIO.swipe(context.serial, swipeX, startY, swipeX, endY, 300, false);
+  await replayIO.swipe(context.serial, swipeX, startY, swipeX, endY, durationMs, false);
+  recordForwardSwipePace(context.serial, gesture.distance, durationMs);
   await context.sleep(750, "exact");
   if (context.isAborted()) return false;
 
   let afterSwipeNodes = (await replayIO.dump(context.serial)).nodes;
   let afterSwipeRows = findFriendsRows(afterSwipeNodes);
-  let nextRowAfterSwipe = (expectedNextName ? closestNamedRow(
+  let nextRowAfterSwipe = closestNamedRow(
     afterSwipeNodes,
     afterSwipeRows,
     expectedNextName,
-    expectedNextRow?.bounds[1] ?? expectedNextTop,
-  ) : undefined) ?? closestVisibleRow(
-    afterSwipeRows,
     expectedNextTop,
-    listTop,
-    safeTop,
-    safeBottom,
   );
   if (!nextRowAfterSwipe) {
     context.onLog(
-      `Add Friends: the swipe was sent; waiting for the next contact row to settle before alignment.`,
+      `Add Friends: ${expectedNextName} was not exposed after the swipe; refusing to act on another row.`,
     );
     await context.sleep(500, "exact");
     afterSwipeNodes = (await replayIO.dump(context.serial)).nodes;
     afterSwipeRows = findFriendsRows(afterSwipeNodes);
-    nextRowAfterSwipe = (expectedNextName ? closestNamedRow(
+    nextRowAfterSwipe = closestNamedRow(
       afterSwipeNodes,
       afterSwipeRows,
       expectedNextName,
-      expectedNextRow?.bounds[1] ?? expectedNextTop,
-    ) : undefined) ?? closestVisibleRow(
-      afterSwipeRows,
       expectedNextTop,
-      listTop,
-      safeTop,
-      safeBottom,
     );
   }
 
   let currentNodes = afterSwipeNodes;
-  let currentNextRow = nextRowAfterSwipe ?? closestVisibleRow(
-    afterSwipeRows,
-    expectedNextTop,
-    listTop,
-    safeTop,
-    safeBottom,
-  );
-  if (!currentNextRow) return true;
-  let currentNextName = expectedNextName || contactNameInRow(currentNodes, currentNextRow) || "next visible contact";
-  let previousNextTop = expectedNextRow?.bounds[1] ?? expectedNextTop;
+  let currentNextRow = nextRowAfterSwipe;
+  if (!currentNextRow) return false;
+  let currentNextName = expectedNextName;
+  let previousNextTop = expectedNextRow.bounds[1];
   let previousGestureDistance = gesture.distance;
   const maxSafeCorrection = Math.max(targetDistance * 3, Math.round(screenHeight * 0.25));
   if (expectedNextName && contactNameInRow(currentNodes, currentNextRow) === expectedNextName) {
@@ -659,14 +541,6 @@ export async function scrollAddFriendsListOneSlot(
       `Add Friends: ${currentNextName} overshot the top by ${Math.abs(initialAlignmentError)}px; ` +
       `refusing a backward swipe.`,
     );
-    if (expectedNextName && contactNameInRow(currentNodes, currentNextRow) === expectedNextName) {
-      recordForwardScrollRatio(
-        context.serial,
-        previousNextTop,
-        currentNextRow.bounds[1],
-        gesture.distance,
-      );
-    }
     return false;
   }
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -721,10 +595,15 @@ export async function scrollAddFriendsListOneSlot(
       safeBottom,
     );
     const { startY: correctionStartY, endY: correctionEndY } = correctionGesture;
+    const correctionDurationMs = calibratedForwardSwipeDuration(
+      context.serial,
+      correctionGesture.distance,
+    );
 
     context.onLog(
       `Add Friends: the previous ${previousGestureDistance}px swipe moved content ${measuredContentMovement}px; ` +
-      `sending correction ${attempt} of 3 for ${correctionGesture.distance}px to move ${currentNextName} to the top.`,
+      `sending correction ${attempt} of 3 for ${correctionGesture.distance}px/${correctionDurationMs}ms ` +
+      `to move ${currentNextName} to the top.`,
     );
     await replayIO.swipe(
       context.serial,
@@ -732,27 +611,27 @@ export async function scrollAddFriendsListOneSlot(
       correctionStartY,
       correctionX,
       correctionEndY,
-      300,
+      correctionDurationMs,
       false,
     );
+    recordForwardSwipePace(context.serial, correctionGesture.distance, correctionDurationMs);
     await context.sleep(750, "exact");
     if (context.isAborted()) return false;
     const afterCorrectionState = await replayIO.dump(context.serial);
     const afterCorrectionNodes = afterCorrectionState.nodes;
     const correctedRows = findFriendsRows(afterCorrectionNodes);
-    const alignedNextRow = (expectedNextName ? closestNamedRow(
+    const alignedNextRow = closestNamedRow(
       afterCorrectionNodes,
       correctedRows,
       expectedNextName,
       expectedNextTop,
-    ) : undefined) ?? closestVisibleRow(
-      correctedRows,
-      expectedNextTop,
-      listTop,
-      safeTop,
-      safeBottom,
     );
-    if (!alignedNextRow) break;
+    if (!alignedNextRow) {
+      context.onLog(
+        `Add Friends: ${expectedNextName} disappeared during correction; refusing to substitute another contact.`,
+      );
+      return false;
+    }
     if (expectedNextName && contactNameInRow(afterCorrectionNodes, alignedNextRow) === expectedNextName) {
       recordForwardScrollRatio(
         context.serial,
@@ -765,7 +644,7 @@ export async function scrollAddFriendsListOneSlot(
     previousGestureDistance = correctionGesture.distance;
     currentNextRow = alignedNextRow;
     currentNodes = afterCorrectionNodes;
-    currentNextName = expectedNextName || contactNameInRow(currentNodes, currentNextRow) || currentNextName;
+    currentNextName = expectedNextName;
   }
   const finalError = currentNextRow.bounds[1] - expectedNextTop;
   context.onLog(
@@ -869,9 +748,10 @@ export async function alignAddFriendsContactToTop(
       Math.max(listTop + 6, safeTop),
       safeBottom,
     );
+    const durationMs = calibratedForwardSwipeDuration(context.serial, gesture.distance);
     context.onLog(
       `Add Friends: positioning ${friendName} at the first contact position before its action ` +
-      `(row y=${target.bounds[1]}, target y=${targetTop}, swipe ${gesture.distance}px at x=${lane.x}, ` +
+      `(row y=${target.bounds[1]}, target y=${targetTop}, swipe ${gesture.distance}px/${durationMs}ms at x=${lane.x}, ` +
       `y=${gesture.startY}→${gesture.endY}).`,
     );
     if (context.isAborted()) return false;
@@ -881,9 +761,10 @@ export async function alignAddFriendsContactToTop(
       gesture.startY,
       lane.x,
       gesture.endY,
-      300,
+      durationMs,
       false,
     );
+    recordForwardSwipePace(context.serial, gesture.distance, durationMs);
     previousTargetTop = target.bounds[1];
     previousGestureDistance = gesture.distance;
     await context.sleep(750, "exact");
@@ -1033,6 +914,7 @@ export async function alignFirstAddFriendsContactToTop(
       Math.max(listTop + 6, safeTop),
       safeBottom,
     );
+    const durationMs = calibratedForwardSwipeDuration(context.serial, gesture.distance);
     const { startY, endY } = gesture;
     if (context.isAborted()) return false;
 
@@ -1041,10 +923,11 @@ export async function alignFirstAddFriendsContactToTop(
       : `movement-scaled correction ${swipeNumber} of 3`;
     context.onLog(
       `Add Friends: after ${actionLabel}, ${gestureLabel} for ${nextName}: ` +
-      `${gesture.distance}px in blank lane x=${swipeX}, y=${startY}→${endY}; ` +
+      `${gesture.distance}px/${durationMs}ms in blank lane x=${swipeX}, y=${startY}→${endY}; ` +
       `row top=${currentRow.bounds[1]}, target=${expectedTop}.`,
     );
-    await replayIO.swipe(context.serial, swipeX, startY, swipeX, endY, 300, false);
+    await replayIO.swipe(context.serial, swipeX, startY, swipeX, endY, durationMs, false);
+    recordForwardSwipePace(context.serial, gesture.distance, durationMs);
     previousTop = currentRow.bounds[1];
     previousGestureDistance = distance;
     await context.sleep(750, "exact");

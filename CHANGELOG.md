@@ -1,3 +1,14 @@
+## [1.2.685] — 2026-11-26
+
+### Fixed
+
+- After Add or Skip, track the exact next contact and move it to the prior top position using live row spacing and the device's measured swipe speed.
+- Stop the Snapchat Add Friends tool if it cannot verify that next contact, rather than continuing with a later visible row.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.685`.
+
 ## [1.2.684] — 2026-11-26
 
 ### Fixed
