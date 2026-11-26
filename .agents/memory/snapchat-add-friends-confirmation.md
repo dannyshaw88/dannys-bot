@@ -25,6 +25,12 @@ The Settings replay must execute the actual current Add Friends tool, not a sepa
 
 **How to apply:** Replace only device input/output and storage boundaries; keep the tool entrypoint, filters, taps, reads, measurement, and scrolling code real. Stream the resulting device inputs and screen states automatically. Do not precompute a successful result, force the next contact's position, or require a second preview-only button to apply a completed scroll. Keep replay history isolated from the farm-wide list. Preserve contact names and each row's reported height, and allow another real step or reset.
 
+The replay UI must not expose a user-selected scroll amount or movement scale. Production gestures are calculated from the imported device's live screen dimensions and row positions, then adjusted from observed movement; replay scaling belongs only in regression tests.
+
+**Why:** The user requires per-device, on-the-fly positioning and rejected a replay control that implied scroll travel was a configurable setting.
+
+**How to apply:** Keep the Settings replay focused on importing an Inspect dump and running the current tool. Do not infer real touch response from a static dump; only a live device swipe and fresh UI read can measure that device's movement.
+
 ### Preserve real card states in replay
 
 The configured Min/Max delay in seconds applies only between Add attempts, not Skip or Dismiss actions. Keep it distinct from the fixed post-action settle before measuring and scrolling.
