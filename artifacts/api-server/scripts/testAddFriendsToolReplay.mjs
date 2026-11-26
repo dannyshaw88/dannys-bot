@@ -138,7 +138,7 @@ try {
   );
   console.log("PASS: an Added Me section is revealed once; the following Add stays on the exact next contact.");
 
-  const slow = await execute(mixed, "azou", "add", { movementScale: 0.55 });
+  const slow = await execute(mixed, "azou", "add", { movementScale: 0.55, requestedCount: 2 });
   assert.equal(slow.done.completedStep.friendName, "azou");
   assert(slow.done.swipes.length > 1, "Under-travel must invoke real correction gestures.");
   assert(slow.done.logs.some(line => /correction/.test(line)));
