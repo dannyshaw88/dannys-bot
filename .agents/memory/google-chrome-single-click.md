@@ -46,3 +46,9 @@ Use a documented international name source for broad coverage rather than adding
 **Why:** The user repeated that the women's-name list was too narrow and explicitly asked to broaden it, suggesting Forebears if needed.
 
 **How to apply:** Bundle licensed name facts for offline use, preserve accepted examples and other eligibility gates, and keep source/license attribution in packaged distributions. When expanding embedded-name matching, prefer leading/longest matches so overlapping fragments do not invalidate an accepted joined name.
+
+Treat Alkaline and Belcalis as accepted names, allow a dot between first and surname, and recognise Miss as a title before a name. Lívia and Nicole must remain eligible.
+
+**Why:** The user explicitly corrected these screenshot rejections and confirmed all five targets.
+
+**How to apply:** Strip the title and normalise name-separating dots only for eligibility checks; retain original display names for recipient verification. Titles/dots must not bypass picture, numeric, male-name, business or two-name limits.

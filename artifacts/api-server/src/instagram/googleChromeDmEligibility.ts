@@ -110,6 +110,7 @@ wilhelmina wilma winifred ximena yara yetunde yewande
 yoko yvette yumi yumiko zainab zainabu zelda zinnia
 aditi aiko akiko anushka ayako adesuwa adunni folake
 emiko lakshmi parvati
+alkaline belcalis
 анна аннастаcия анастасия елена ольга наталья наталия мария ирина татьяна
 екатерина юлия светлана дарья полина софия алина валентина виктория
 فاطمة فاطمه عائشة عايشة مريم خديجة سارة ساره زينب ليلى سلمى ياسمين
@@ -177,7 +178,11 @@ export function hasGoogleChromeDmPhoto(url?: string): boolean {
 }
 
 export function googleChromeGirlsOnlyRejection(candidate: { name: string; photoUrl?: string }): string | null {
-  const name = candidate.name.trim();
+  // "Miss" is a title, not a name part. Dots between letters can separate
+  // first/surnames; leading/trailing dots and repeated punctuation still fail.
+  const name = candidate.name.trim()
+    .replace(/^miss\.?\s+/iu, "")
+    .replace(/(?<=[\p{L}\p{M}])\.(?=\p{L})/gu, " ");
   // Whitespace defines name parts; apostrophes/hyphens within a part are allowed.
   const parts = name.split(/\s+/u);
   if (parts.length < 1 || parts.length > 2 ||

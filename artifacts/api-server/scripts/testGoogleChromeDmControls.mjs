@@ -51,18 +51,31 @@ for (const picture of [undefined, "", "https://example.test/default-avatar.png",
 }
 for (const name of [
   "KELLIHATYOFF", "kellinyattof", "LinaVale", "linavale", "Bellapetricia",
-  "Anaispiesdecanela", "lovelyemily", "Gabriella", "Christina", "Eva",
+  "Anaispiesdecanela", "lovelyemily", "Gabriella", "Christina", "Eva", "Lina.Vale",
 ]) {
   assert.equal(reject({ name, photoUrl }), null, `allowed name/username: ${name}`);
   assert(reject({ name }), `username still needs a picture: ${name}`);
 }
 for (const name of [
-  "L1NAVAL3", "KE11I", "Kelli123", "Lina_Vale", "Lina.Vale", "Kelli💗",
+  "L1NAVAL3", "KE11I", "Kelli123", "Lina_Vale", "Kelli💗",
   "banana", "Unknownusername", "LinaSebastian", "SebastianLina",
   "Mariano", "Julien", "MariaOfficial", "KelliShop", "Bellaboutique", "Modellero",
   "Unknown Lina", "Unknown Kelli", "Kellihat Yoff", "Lina Vale Extra",
 ]) assert(reject({ name, photoUrl }), `rejected username: ${name}`);
 console.log("PASS: joined names and letters-only female-name usernames; digits, symbols, business fragments, known male names and missing photos remain blocked.");
+for (const name of [
+  "Lívia Monteiro", "Nicole Misfit", "Alkaline Atropos", "Laura.Flores",
+  "miss belcalis", "MISS BELCALIS", "Miss. Belcalis", "Miss Laura Flores",
+]) {
+  assert.equal(reject({ name, photoUrl }), null, `user-confirmed profile format: ${name}`);
+  assert(reject({ name }), `confirmed profile still requires a photo: ${name}`);
+}
+for (const name of [
+  "Miss", "Miss John", "Miss Sebastián", "Miss Belcalis123", "Miss Beauty Studio",
+  "Miss Belcalis Shop", "Miss Laura Flores Extra", "Laura..Flores", ".Laura",
+  "Laura.", "Laura.Flores.Extra", "Laura.John", "L4ura.Flores", "Atech.Dev",
+]) assert(reject({ name, photoUrl }), `title/dot handling must not bypass guards: ${name}`);
+console.log("PASS: all five accepted screenshot targets, Miss titles and dotted names; photo, male-name, numeric, business and name-count guards preserved.");
 for (const name of [
   "Luna Zamorano", "Bambi", "Anya Sweete", "Freya", "Poppy", "Elsie", "Bonnie",
   "Alessandra", "Chiara", "Vittoria", "Alejandra", "Ximena", "Rocío",
@@ -377,6 +390,20 @@ const international = await runGoogleChromeDm(10_000_000, {
 assert.equal(international.sent, 2);
 assert.equal(international.skipped, 2);
 assert.deepEqual(international.sentUrls, [301, 302].map(id => `https://www.facebook.com/profile.php?id=${id}`));
+fixtureCandidates = [
+  "Lívia Monteiro", "Nicole Misfit", "Alkaline Atropos", "Laura.Flores", "miss belcalis",
+  "Andrea Patricia Borja", "Miss John", "Miss Beauty Studio",
+].map((name, index) => ({ name, photoUrl, url: `https://www.facebook.com/profile.php?id=${401 + index}` }));
+events.length = 0; waits = 0;
+const approvedFormats = await runGoogleChromeDm(10_000_000, {
+  url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+  message: "Local fixture only", amount: 10, girlsOnly: true,
+  delayMinSeconds: 0, delayMaxSeconds: 0,
+});
+assert.equal(approvedFormats.sent, 5);
+assert.equal(approvedFormats.skipped, 3);
+assert.deepEqual(approvedFormats.sentUrls, [401, 402, 403, 404, 405].map(id => `https://www.facebook.com/profile.php?id=${id}`));
+console.log("PASS: production dispatcher targets all five user-confirmed profiles and excludes three-part, male-name and business variants.");
 await assert.rejects(() => runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/", message: "Fixture", delayMinSeconds: 4, delayMaxSeconds: 1,
 }), /valid minimum and maximum/);
