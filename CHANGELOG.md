@@ -1,3 +1,13 @@
+## [1.2.687] — 2026-11-26
+
+### Fixed
+
+- Stop after the requested Add count is reached; do not scroll or position another contact after the final Add.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.687`.
+
 ## [1.2.686] — 2026-11-26
 
 ### Fixed

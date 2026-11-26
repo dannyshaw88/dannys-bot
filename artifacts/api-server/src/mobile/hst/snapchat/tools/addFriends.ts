@@ -632,6 +632,14 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     context.onLog(`Add Friends: added ${friendName}; saved the display name to the farm-wide list.`);
     await context.sleep(3000, "exact");
     if (context.isAborted()) break;
+    if (added >= requested) {
+      context.onLog(
+        `Add Friends: reached the requested Add total (${added}/${requested}); ` +
+        `no further contact positioning or action is needed.`,
+      );
+      await context.onAddFriendsStepComplete?.({ action: "add", friendName });
+      break;
+    }
     const afterAdd = await dump(context.serial);
     if (!await scrollAddFriendsListOneSlot(
       context,

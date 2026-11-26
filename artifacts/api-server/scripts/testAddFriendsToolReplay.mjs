@@ -95,6 +95,17 @@ try {
       "Only a completed Add may consume the configured delay, before the next contact is considered.");
     console.log(`PASS: actual runAddFriends ${action} path, streamed inputs and final device position.`);
   }
+  const singleRequestedAdd = await execute(contacts, "Entourage Mike Hunt", "add", {
+    requestedCount: 1, stopAfterSteps: 1,
+  });
+  assert.deepEqual(singleRequestedAdd.done.actions.map(action => action.name), ["Entourage Mike Hunt"]);
+  assert.equal(singleRequestedAdd.done.swipes.length, 0,
+    "Once the requested Add total is reached, do not scroll or position another contact.");
+  assert(singleRequestedAdd.done.logs.some(line => /reached the requested Add total \(1\/1\)/.test(line)));
+  assert(!singleRequestedAdd.done.logs.some(line => line.includes("after adding Entourage Mike Hunt")),
+    "The final Add must not begin post-action next-contact positioning.");
+  console.log("PASS: a one-Add run stops after its requested contact without scrolling to another.");
+
   const consecutiveAdds = await execute(contacts, "Entourage Mike Hunt", "add", {
     requestedCount: 2, stopAfterSteps: 2,
   });
