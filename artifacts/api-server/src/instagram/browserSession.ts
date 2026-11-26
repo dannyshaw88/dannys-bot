@@ -14,7 +14,7 @@ import { instagramApiCalls } from "../shared/schema";
 import { storage } from "../storage";
 import { generateEbFingerprint } from "./browserFingerprint";
 import { LEAKS_PAGE_HTML } from "./leaksPage";
-import { findGoogleChromeDmControl } from "./googleChromeDmControls";
+import { findGoogleChromeDmControl, findGoogleChromeDmMessageButton } from "./googleChromeDmControls";
 import { waitForGoogleChromeDmDelay } from "./googleChromeDmDelay";
 import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
 import { waitForGoogleChromeDmFollowers } from "./googleChromeDmFollowers";
@@ -5320,36 +5320,50 @@ export async function runGoogleChromeDm(
       }
       await profileReady.dispose();
 
-      const messageButtonHandle = await session.page.evaluateHandle((expectedName: string) => {
-        const doc = (globalThis as any).document;
-        const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
-        const visible = (element: any) => {
-          const rect = element.getBoundingClientRect();
-          const style = getStyle(element);
-          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-        };
-        const normalize = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
-        const main = doc.querySelector("main,[role='main']");
-        if (!main) return null;
-        if (!normalize(main.innerText || "").includes(normalize(expectedName))) return null;
-        const buttons = (Array.from(main.querySelectorAll("button,[role='button']")) as any[])
-          .filter(button => {
-            if (!visible(button)) return false;
-            const labels = [button.getAttribute("aria-label"), button.getAttribute("title"), button.innerText]
-              .filter(Boolean).map((label: string) => label.replace(/\s+/g, " ").trim());
-            return labels.some(label => /^message$/i.test(label));
-          });
-        return buttons.length === 1 ? buttons[0] : null;
-      }, candidate.name);
-      const messageButton = messageButtonHandle.asElement();
-      if (!messageButton) {
-        await messageButtonHandle.dispose();
-        result.failed++;
-        emit("No unambiguous Message button was found on the selected user's profile.");
-        continue;
+      let messageButtonClicked = false;
+      let messageButtonFailure = "";
+      for (let clickAttempt = 1; clickAttempt <= 2; clickAttempt++) {
+        if (isStopped()) {
+          result.stopped = true;
+          break;
+        }
+        if (profileKey(session.page.url()) !== expectedProfileKey) {
+          messageButtonFailure = "The selected profile changed before the Message click.";
+          break;
+        }
+
+        let buttonHandle: any;
+        try {
+          buttonHandle = await session.page.waitForFunction(
+            findGoogleChromeDmMessageButton, { timeout: 2_500, polling: 100 }, candidate.name,
+          );
+          const messageButton = buttonHandle.asElement();
+          if (!messageButton) {
+            messageButtonFailure = "The current Message control was not a live element.";
+            break;
+          }
+          await messageButton.click();
+          messageButtonClicked = true;
+          break;
+        } catch (error: any) {
+          messageButtonFailure = String(error?.message ?? error ?? "browser click failed").slice(0, 180);
+          const detached = /node is detached from document|not attached to the dom/i.test(messageButtonFailure);
+          if (clickAttempt < 2 && detached) {
+            log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control detached before click; re-resolving it once`, "browser");
+            await new Promise(resolve => setTimeout(resolve, 150));
+          } else {
+            break;
+          }
+        } finally {
+          await buttonHandle?.dispose().catch(() => {});
+        }
       }
-      await messageButton.click();
-      await messageButtonHandle.dispose();
+      if (result.stopped) break;
+      if (!messageButtonClicked) {
+        result.failed++;
+        emit(`The Message button could not be pressed reliably; stopping at this profile. No message was entered. ${messageButtonFailure}`, "fail");
+        break;
+      }
       log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control clicked; waiting for the recipient's composer`, "browser");
       if (isStopped()) {
         result.stopped = true;

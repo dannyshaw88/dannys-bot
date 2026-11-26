@@ -7,7 +7,7 @@ import path from "node:path";
 
 const source = await fs.readFile(new URL("../src/instagram/googleChromeDmControls.ts", import.meta.url), "utf8");
 const { code } = await transform(source, { loader: "ts", format: "esm" });
-const { findGoogleChromeDmControl: find } = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
+const { findGoogleChromeDmControl: find, findGoogleChromeDmMessageButton: findMessageButton } = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
 const delaySource = await fs.readFile(new URL("../src/instagram/googleChromeDmDelay.ts", import.meta.url), "utf8");
 const delayCode = await transform(delaySource, { loader: "ts", format: "esm" });
 const { waitForGoogleChromeDmDelay } = await import(`data:text/javascript;base64,${Buffer.from(delayCode.code).toString("base64")}`);
@@ -256,6 +256,24 @@ globalThis.getComputedStyle = node => node.style;
   globalThis.document = oldDocument;
   console.log("PASS: composer diagnostics report only selector counts and recipient-match booleans.");
 }
+{
+  const oldDocument = globalThis.document;
+  const button = {
+    innerText: "Message",
+    style: { visibility: "visible", display: "block" },
+    getBoundingClientRect: () => ({ width: 60, height: 24 }),
+    getAttribute: () => null,
+  };
+  const main = {
+    innerText: "LinaVale 9 followers 10 following Digital creator",
+    querySelectorAll: () => [button],
+  };
+  globalThis.document = { querySelector: () => main };
+  assert.equal(findMessageButton("LinaVale"), button);
+  assert.equal(findMessageButton("Different profile"), false, "do not reuse a button after profile identity changes");
+  globalThis.document = oldDocument;
+  console.log("PASS: resolve the unique visible Message button from the currently rendered matching profile.");
+}
 
 for (const label of ["Send", "Press Enter to send", "Send message", "Send (Enter)"]) {
   const editor = new Node("editor");
@@ -366,7 +384,16 @@ const wrap = value => ({
   jsonValue: async () => value,
   dispose: async () => {},
 });
-const message = { click: async () => { events.push("message"); editor.isConnected = true; } };
+let detachNextMessageClick = false;
+const message = { click: async () => {
+  if (detachNextMessageClick) {
+    detachNextMessageClick = false;
+    events.push("message-detached");
+    throw new Error("Node is detached from document");
+  }
+  events.push("message");
+  editor.isConnected = true;
+} };
 let waits = 0;
 let location = "";
 let historyVerdict = "empty";
@@ -395,6 +422,7 @@ const page = {
   },
   evaluateHandle: async () => wrap(message),
   waitForFunction: async (fn, _options, ...args) => {
+    if (fn === findMessageButton) return wrap(message);
     if (globalThis.__chromeDmFixture.composerUnavailable &&
         fn === globalThis.__chromeDmFixture.composerModule.findGoogleChromeDmComposer) {
       throw new Error("Composer fixture did not render");
@@ -425,6 +453,7 @@ globalThis.__chromeDmFixture = {
   historyModule, historyDirectory, path,
   composerModule,
   page, find: (_handle, action) => find(editor, action),
+  findMessageButton,
   composerUnavailable: false, browserLogs: [],
   reject,
   wait: async (seconds, stopped) => {
@@ -439,6 +468,7 @@ const waitForGoogleChromeDmFollowers = (read, stopped) => globalThis.__chromeDmF
 const setTimeout = callback => globalThis.setTimeout(callback, 0);
 const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
 const { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } = globalThis.__chromeDmFixture.composerModule;
+const { findGoogleChromeDmMessageButton } = globalThis.__chromeDmFixture;
 const COOKIES_DIR = globalThis.__chromeDmFixture.historyDirectory;
 const path = globalThis.__chromeDmFixture.path;
 const GOOGLE_CHROME_BROWSER_PROFILE_ID = 10000000;
@@ -461,6 +491,18 @@ assert.equal(result.failed, 0);
 assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "close"]);
 assert.equal(editor.isConnected, false);
 assert.equal(gaps.length, 0, "no delay before first or after last recipient");
+{
+  events.length = 0; waits = 0;
+  detachNextMessageClick = true;
+  const retried = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 1,
+  });
+  assert.equal(retried.sent, 1, "re-resolve a detached Message button and use one fresh native click");
+  assert.deepEqual(events, [
+    "navigate", "navigate", "message-detached", "message", "composer", "send", "close",
+  ]);
+}
 {
   globalThis.__chromeDmFixture.composerUnavailable = true;
   globalThis.__chromeDmFixture.browserLogs.length = 0;
