@@ -1663,7 +1663,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
                                 Girls Only
                               </label>
                               <span className="text-xs text-muted-foreground">
-                                1–2 name parts, recognised female first name and profile picture. Unknown names are skipped.
+                                1–2 name parts and a profile picture. Letters-only single-word usernames can contain a recognised female name.
                               </span>
                             </div>
                             <div className="flex items-center gap-3">

@@ -28,6 +28,20 @@ for (const picture of [undefined, "", "https://example.test/default-avatar.png",
   "https://www.facebook.com/rsrc.php/default.jpg", "data:image/png;base64,AAA"]) {
   assert(reject({ name: "Haven rose", photoUrl: picture }), `missing/default picture: ${picture}`);
 }
+for (const name of [
+  "KELLIHATYOFF", "kellinyattof", "LinaVale", "linavale", "Bellapetricia",
+  "Anaispiesdecanela", "lovelyemily", "Gabriella", "Christina", "Eva",
+]) {
+  assert.equal(reject({ name, photoUrl }), null, `allowed name/username: ${name}`);
+  assert(reject({ name }), `username still needs a picture: ${name}`);
+}
+for (const name of [
+  "L1NAVAL3", "KE11I", "Kelli123", "Lina_Vale", "Lina.Vale", "Kelli💗",
+  "banana", "Unknownusername", "LinaSebastian", "SebastianLina",
+  "Mariano", "Julien", "MariaOfficial", "KelliShop", "Bellaboutique", "Modellero",
+  "Unknown Lina", "Unknown Kelli", "Kellihat Yoff", "Lina Vale Extra",
+]) assert(reject({ name, photoUrl }), `rejected username: ${name}`);
+console.log("PASS: joined names and letters-only female-name usernames; digits, symbols, business fragments, known male names and missing photos remain blocked.");
 console.log("PASS: strict positive-name match, one/two name parts, male/ambiguous and unknown-name rejection, multilingual names and required non-placeholder photo.");
 
 class Node {
@@ -274,6 +288,26 @@ const disabled = await runGoogleChromeDm(10_000_000, {
 });
 assert.equal(disabled.sent, 1, "unchecked Girls Only preserves ordinary targeting");
 assert.deepEqual(disabled.sentUrls, ["https://www.facebook.com/profile.php?id=456"]);
+fixtureCandidates = [
+  { url: "https://www.facebook.com/profile.php?id=101", name: "KELLIHATYOFF", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=102", name: "LinaVale", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=103", name: "L1NAVAL3", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=104", name: "KE11I", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=105", name: "Kellinyattof" },
+  { url: "https://www.facebook.com/profile.php?id=106", name: "KelliShop", photoUrl },
+];
+events.length = 0; waits = 0;
+const usernames = await runGoogleChromeDm(10_000_000, {
+  url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+  message: "Local fixture only", amount: 10, girlsOnly: true,
+  delayMinSeconds: 0, delayMaxSeconds: 0,
+});
+assert.equal(usernames.sent, 2);
+assert.equal(usernames.skipped, 4);
+assert.deepEqual(usernames.sentUrls, [
+  "https://www.facebook.com/profile.php?id=101", "https://www.facebook.com/profile.php?id=102",
+]);
+console.log("PASS: real Girls Only dispatcher accepts the two letters-only username examples and never targets their numeric, missing-picture or shop variants.");
 await assert.rejects(() => runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/", message: "Fixture", delayMinSeconds: 4, delayMaxSeconds: 1,
 }), /valid minimum and maximum/);

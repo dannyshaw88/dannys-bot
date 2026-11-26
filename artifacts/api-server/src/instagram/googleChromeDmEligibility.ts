@@ -18,11 +18,11 @@ imran isaac ismail ivan jack jacob jake james jared jason jean jeffrey jeremy
 jesse joao joaquin joe joel johan johann johannes john jonathan jorge jose
 joseph joshua juan julian justin kareem karl keith kenneth kevin khalid
 kyle lawrence leo liam logan louis lucas luca luigi luis luke lukas malik manuel
-marc marco marcos marcus mario mark martin mason mateo mathieu matteo matthew
+marc marco marcos marcus mario marian mariano mark martin mason mateo mathieu matteo matthew
 max maxim maximilian mehmet michael michel miguel mikhail milan mohamed mohammad
 mohammed muhammad murat musa mustafa nathan nathaniel neil nicholas nicolas nikita
 nikolai nikolas noah omar oliver oscar osman owen pablo patrick paul paulo pedro
-peter philip philippe pierre piotr rafael rahul raj rajesh rakesh ramon raymond
+peter philip philippe pierre piotr julien juliano rafael rahul raj rajesh rakesh ramon raymond
 ricardo richard robert roberto rodrigo roman ronald ryan samir samuel santiago
 scott sean sebastian sebastien sergei sergey sergio seth shane simon stefan stephen
 steve steven stuart taha tariq thomas timothy tomas tony tyler umar victor vincent
@@ -34,7 +34,7 @@ vladimir walter wayne william wojciech wyatt xavier yusuf yuri yury zachary zain
 const femaleNames = new Set(words(`
 abigail ada adela adelaide adele adriana agata agnes aisha aishah aissatou
 alessia alexandra alexandria alice alicia alina alisa alison aliyah alyssa
-amanda amelia amelie amina amy ana anabel anastasia anastasiya angela angelica
+amanda amelia amelie amina amy ana anais anabel anastasia anastasiya angela angelica
 angelina anita anjali anna annabelle anne annette anouk antonia anya ariana
 arianna arina asha ashley audrey aurelia aurora ava ayesha aylin aziza
 barbara beatrice beatriz bella bernadette beth bethany bianca blanca brenda
@@ -52,7 +52,7 @@ heloise henrietta holly ida ines ingrid irene iris isabel isabella isabelle
 isadora isla ivy jacqueline jade jamila jane janet janice jasmine jennifer
 jenny jessica jill joanna joanne jocelyn josephine joy joyce juana judith
 julia juliana julie juliet juliette june justine kalina kamila karina
-karolina katarina katherine kathleen kathryn katie katrina kayla keira
+karolina katarina katherine kathleen kathryn katie katrina kayla keira kelli kelly
 khadija kiara kirsten kristen kristina lana laura lauren layla leah leila
 lena leonie leticia lila lilian liliana lillian lily lina linda lisa liv
 livia lola lorena louisa louise lucia luciana lucie lucille lucy luisa
@@ -82,8 +82,30 @@ restaurant cafe mechanic mecanique motors auto cars fitness clothing jewellery
 jewelry beauty cosmetics photography realty realestate estate travel hotel
 entertainment music band records news media marketing onlyfans promo promotions
 sonorense sierreno
-ltd limited inc llc company corporation corp group team
+ltd limited inc llc company corporation corp group team model manager brand
 `));
+
+/** Embedded matches need at least four letters: short fragments such as
+ * "ana" in "banana" are not useful evidence. Exact short names still work.
+ */
+function matchesFemaleUsername(value: string): boolean {
+  const username = normalize(value);
+  if ([...businessWords].some(word => word.length >= 4 && username.includes(word))) return false;
+  const matches = [...femaleNames]
+    .filter(name => name.length >= 4 && username.includes(name));
+  if (!matches.length) return false;
+  // Do not let a joined known male name bypass the existing male-name gate.
+  for (const name of matches) {
+    let offset = username.indexOf(name);
+    while (offset >= 0) {
+      const before = username.slice(0, offset);
+      const after = username.slice(offset + name.length);
+      if (maleNames.has(before) || maleNames.has(after)) return false;
+      offset = username.indexOf(name, offset + 1);
+    }
+  }
+  return true;
+}
 
 export function hasGoogleChromeDmPhoto(url?: string): boolean {
   if (!url) return false;
@@ -106,7 +128,10 @@ export function googleChromeGirlsOnlyRejection(candidate: { name: string; photoU
   if (tokens.some(token => maleNames.has(token))) return "Known male or ambiguous name; skipped.";
   if (tokens.some(token => businessWords.has(token))) return "Business or promotional name; skipped.";
   const firstName = words(parts[0]);
-  if (!firstName.length || !firstName.every(token => femaleNames.has(token))) {
+  const recognisedFirstName = firstName.length > 0 && firstName.every(token => femaleNames.has(token));
+  const recognisedUsername = parts.length === 1 &&
+    /^[\p{L}\p{M}]+$/u.test(name) && matchesFemaleUsername(name);
+  if (!recognisedFirstName && !recognisedUsername) {
     return "First name is not positively recognised by the female-name rules; skipped.";
   }
   if (!hasGoogleChromeDmPhoto(candidate.photoUrl)) return "A loaded, non-placeholder profile picture is required.";

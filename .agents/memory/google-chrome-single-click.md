@@ -28,3 +28,9 @@ When Girls Only is ticked, the user requires exactly one or two name parts, a pr
 **Why:** The user reported that men and business/non-person accounts were being messaged, and explicitly specified stronger requirements for the existing filter.
 
 **How to apply:** Use positive recognised female first-name matching and reject unknown first names, known male/ambiguous name tokens, and missing pictures. Names/pictures cannot prove gender or authenticity; do not claim exhaustive recognition across every language.
+
+Allow single-word, letters-only usernames containing a recognised female name, including joined first/surnames. Do not convert digit lookalikes into letters or allow numeric usernames.
+
+**Why:** The user explicitly confirmed that real recipients can use made-up usernames containing a female name rather than a spaced personal name.
+
+**How to apply:** Keep the photo requirement and male/business exclusions. Use at least four letters for embedded name matches to avoid accidental short fragments; exact recognised short names remain valid. This exception applies only to one-word usernames.
