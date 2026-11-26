@@ -17,6 +17,12 @@ After confirming the profile, resolve the Message button from the live DOM immed
 
 **How to apply:** Use a recipient/name-scoped live button lookup, preserve one native ElementHandle click per resolved node, log and retry transient node failures once, and stop at that profile if the fresh click also fails.
 
+Facebook profile controls can appear well after `domcontentloaded`. After navigation, keep polling the verified profile for up to 30 seconds for its unique visible Message button; distinguish navigation timing from button-render timing in logs, and stop on timeout rather than hopping to another profile.
+
+**Why:** The user observed a profile taking about 30 seconds to load, while the earlier implementation gave the CTA only a short readiness window.
+
+**How to apply:** Poll in short bounded intervals so Stop remains responsive. Log navigation and button-ready durations plus privacy-safe diagnostics (`readyState`, matching-name boolean, visible Message-button count); never repeat a click after it succeeds.
+
 Match Facebook's Send accessibility label variants, including “Press Enter to send,” within the verified composer's conversation. After confirmed sending, close that same chat once and verify closure before advancing. Never search a shared multi-chat container or use an Enter fallback after an uncertain send.
 
 **Why:** Exact “Send”-only matching can leave typed text unsent on Facebook variants, and sending alone does not close a chat. The user reported both an unsent draft and an unclosed chat.

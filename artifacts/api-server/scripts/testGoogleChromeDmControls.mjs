@@ -386,6 +386,8 @@ const wrap = value => ({
 });
 let detachNextMessageClick = false;
 let notClickableNextMessageClick = false;
+let delayedMessageButtonWaits = 0;
+let messageButtonAvailableAfterTimeouts = 0;
 const message = { click: async () => {
   if (notClickableNextMessageClick) {
     notClickableNextMessageClick = false;
@@ -421,6 +423,9 @@ const page = {
         recipientLabelEditors: 0, visibleCloseControls: 1, recipientHeaderMatched: true,
       };
     }
+    if (text.includes("domContentLoadedEventEnd") && text.includes("readyState")) {
+      return { readyState: "interactive", domContentLoadedMs: 100, loadEventMs: null };
+    }
     if (text.includes("scrollHeight")) return 1000;
     if (text.includes("scrollTo")) return;
     if (collectFixture) return collectFixture();
@@ -428,19 +433,32 @@ const page = {
   },
   evaluateHandle: async () => wrap(message),
   waitForFunction: async (fn, _options, ...args) => {
-    if (fn === findMessageButton) return wrap(message);
+    if (fn === findMessageButton) {
+      if (delayedMessageButtonWaits < messageButtonAvailableAfterTimeouts) {
+        delayedMessageButtonWaits++;
+        const error = new Error("Waiting failed: timeout exceeded");
+        error.name = "TimeoutError";
+        throw error;
+      }
+      return wrap(message);
+    }
     if (globalThis.__chromeDmFixture.composerUnavailable &&
         fn === globalThis.__chromeDmFixture.composerModule.findGoogleChromeDmComposer) {
       throw new Error("Composer fixture did not render");
     }
+    if (fn === globalThis.__chromeDmFixture.composerModule.findGoogleChromeDmComposer) return wrap(editor);
     if (fn === historyModule.inspectGoogleChromeDmHistory) {
       const verdict = typeof historyVerdict === "function" ? historyVerdict(location) : historyVerdict;
       if (!verdict) throw new Error("History loading timeout");
       return wrap(verdict);
     }
+    if (fn === globalThis.__chromeDmFixture.find) return wrap(fn(editor, args[1]));
     if (fn.toString().includes("=> !element.isConnected")) {
       waits += 3; // Skip the normal send/confirmation steps when closing a skipped chat.
       return wrap(!editor.isConnected);
+    }
+    if (fn.toString().includes("normalizeName") && fn.toString().includes("expectedName")) {
+      return wrap(editor.innerText === "");
     }
     waits++;
     if (waits === 1) return wrap(true); // Followers loaded.
@@ -520,6 +538,18 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.deepEqual(events, [
     "navigate", "navigate", "message-not-clickable", "message", "composer", "send", "close",
   ]);
+}
+{
+  events.length = 0; waits = 0; delayedMessageButtonWaits = 0;
+  messageButtonAvailableAfterTimeouts = 4;
+  const delayed = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 1,
+  });
+  assert.equal(delayed.sent, 1, "continue looking for the profile Message control after repeated timeouts");
+  assert.equal(delayedMessageButtonWaits, 4);
+  assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "close"]);
+  messageButtonAvailableAfterTimeouts = 0;
 }
 {
   globalThis.__chromeDmFixture.composerUnavailable = true;
