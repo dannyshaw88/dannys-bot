@@ -95,6 +95,16 @@ try {
       "Only a completed Add may consume the configured delay, before the next contact is considered.");
     console.log(`PASS: actual runAddFriends ${action} path, streamed inputs and final device position.`);
   }
+  const retainedDismissal = await execute(contacts, "Entourage Mike Hunt", "dismiss", {
+    requestedCount: 2, retainDismissedTitle: true,
+  });
+  assert.deepEqual(retainedDismissal.done.completedStep, { action: "dismiss", friendName: "Entourage Mike Hunt" });
+  assert.equal(model.contactsFrom(retainedDismissal.done.nodes).find(card => card.name === "Yes 119").top, 506);
+  assert(retainedDismissal.done.swipes.length > 0,
+    "A retained dismissed title must not suppress positioning of the exact next contact.");
+  assert(retainedDismissal.done.logs.some(line => /moving Yes 119/.test(line)));
+  console.log("PASS: Dismiss ignores a retained old title and positions the exact next contact.");
+
   const singleRequestedAdd = await execute(contacts, "Entourage Mike Hunt", "add", {
     requestedCount: 1, stopAfterSteps: 1,
   });

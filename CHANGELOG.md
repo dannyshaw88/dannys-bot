@@ -1,3 +1,10 @@
+## [1.2.689] — 2026-11-26
+
+### Fixed
+
+- After Dismiss, position the exact next contact captured before the action using live header-aware measurements. A retained name on the dismissed feedback card can no longer be accepted as the next contact.
+- Stop without a guessed scroll if the next contact cannot be identified.
+
 ## [1.2.688] — 2026-11-26
 
 ### Fixed

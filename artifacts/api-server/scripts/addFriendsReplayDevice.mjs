@@ -2,7 +2,7 @@ import sharp from "sharp";
 
 /** Only emulates Android/Snapchat responses. Tool decisions live in runAddFriends. */
 export class AddFriendsReplayDevice {
-  constructor({ model, nodes, width, height, emit, movementScale = 1, omitDismissFor, moveSectionHeadings = false }) {
+  constructor({ model, nodes, width, height, emit, movementScale = 1, omitDismissFor, moveSectionHeadings = false, retainDismissedTitle = false }) {
     this.model = model;
     this.nodes = nodes;
     this.width = width;
@@ -13,6 +13,7 @@ export class AddFriendsReplayDevice {
     this.swipes = [];
     this.omitDismissFor = omitDismissFor;
     this.moveSectionHeadings = moveSectionHeadings;
+    this.retainDismissedTitle = retainDismissedTitle;
     this.operations = 0;
   }
   scene() { return { nodes: this.nodes, width: this.width, height: this.height }; }
@@ -69,7 +70,18 @@ export class AddFriendsReplayDevice {
     const title = group.children.find(node => this.model.shortId(node) === "result-title");
     const name = title?.text || title?.desc;
     const action = this.model.shortId(hit) === "friend-cell-dismiss" ? "dismiss" : "add";
-    if (action === "dismiss") this.nodes = this.model.dismissReplayContact(this.nodes, name, this.width);
+    if (action === "dismiss") {
+      this.nodes = this.model.dismissReplayContact(this.nodes, name, this.width);
+      // Some accessibility snapshots retain the old title on a feedback card.
+      // It must never be mistaken for the next unprocessed contact.
+      if (this.retainDismissedTitle && title) {
+        const feedbackRowIndex = this.nodes.findIndex(node =>
+          this.model.shortId(node) === "scu_search_friend_cell" &&
+          node.bounds[1] === group.row.bounds[1],
+        );
+        if (feedbackRowIndex >= 0) this.nodes.splice(feedbackRowIndex + 1, 0, { ...title, bounds: [...title.bounds] });
+      }
+    }
     else {
       this.nodes = this.nodes.map((node, index) => index >= group.index && index < group.end &&
         this.model.shortId(node) === "scu_search_action_button" ? { ...node, text: "Snap", desc: "Snap" } : node);

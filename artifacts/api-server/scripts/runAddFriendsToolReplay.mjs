@@ -76,6 +76,7 @@ try {
     movementScale: input.movementScale ?? 1,
     omitDismissFor: input.action === "skip" ? input.friendName : undefined,
     moveSectionHeadings: input.moveSectionHeadings === true,
+    retainDismissedTitle: input.retainDismissedTitle === true,
   });
   model.setDevice(device);
   let completedStep = null;

@@ -6,7 +6,6 @@ import { hasSnapchatChatComposer, openAddFriendsForSuggestions } from "../naviga
 import { handleFriendRequestLimit } from "../navigation/handleFriendRequestCooldown";
 import {
   alignAddFriendsContactToTop,
-  alignFirstAddFriendsContactToTop,
   scrollAddFriendsListOneSlot,
   findFriendsRows,
   revealAddFriendsSuggestions,
@@ -487,14 +486,22 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       `Add Friends: dismissed ${friendName} (${matchDescription}); aligning the first remaining contact ` +
       `to the dismissed contact's former top position.`,
     );
-    if (!await alignFirstAddFriendsContactToTop(
+    if (!expectedNextName) {
+      context.onLog("Add Friends: next contact was not identifiable before Dismiss; stopping without an unverified scroll.");
+      await context.onAddFriendsStepComplete?.({ action: "dismiss", friendName });
+      return false;
+    }
+    if (!await scrollAddFriendsListOneSlot(
       context,
       afterDismiss.nodes,
       screenWidth,
       screenHeight,
+      friendName,
+      "dismissing",
+      undefined,
+      expectedNextName,
       previousTopY,
-      `dismissing ${friendName}`,
-      rowBounds[3] - rowBounds[1],
+      priorHeadingBottom,
     )) {
       context.onLog(
         `Add Friends: could not align the first remaining contact after dismissing ${friendName}; ` +

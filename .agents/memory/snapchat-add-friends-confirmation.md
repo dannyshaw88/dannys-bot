@@ -87,6 +87,12 @@ The saved previous contact top is relative to the visible Find Friends header, n
 
 **How to apply:** Capture the heading alongside the pre-action target, refresh both after each gesture, and test header movement independently from contact movement. Replay headings should pin once their simulated entry transition finishes, not scroll indefinitely with the cards.
 
+Dismiss must use the exact next contact captured before the tap, with the same header-aware positioning as Add/Skip, never a generic first-named-row lookup.
+
+**Why:** A second-device run accepted the dismissed contact itself as already aligned while its feedback card remained visible. Display names in a post-Dismiss snapshot cannot alone establish that a row is an unprocessed contact.
+
+**How to apply:** Preserve the next identity before Hide, resolve only that identity afterward, and stop if unavailable. Cover retained titles on feedback cards and moving headers in regression tests. The user confirmed the preceding implementation worked on the first test device; preserve that behavior while covering the second-device state.
+
 After moving past incoming “Added Me” requests, the first Find friends contact belongs at the top contact position. After each Add or Skip, the exact next contact must move to that same position; after Dismiss, align the first remaining contact to the dismissed row's saved top. All list movement must advance forward; never swipe backward to correct an overshoot. Calibrate finger travel from observed row movement and preserve its duration-per-pixel when applying the ratio to another distance. If the expected contact is missing, above target, or overshoots, do not select a later visible row or continue the tool on an unverified contact.
 
 **Why:** A real v1.2.684 run sent a 184px/300ms post-Add swipe after calibrating at about 2.8ms per pixel; it moved past Stitch. A v1.2.685 run then repeated section-level positioning after an Add, using the already-processed first row and a moved heading as its anchor; the second scroll passed the actual next contacts. Snapchat can reflow the list after Add, and row-container height is not necessarily the pitch to the next contact.

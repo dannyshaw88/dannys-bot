@@ -24,6 +24,7 @@ try {
     }],
   });
   const { scrollAddFriendsListOneSlot } = await import(pathToFileURL(outfile).href);
+  for (const actionLabel of ["adding", "dismissing"]) {
   for (const scale of [1, 1.5]) {
     const node = (id, text, top, bottom) => ({
       resourceId: id, text, desc: "", className: "", bounds: [20 * scale, top * scale, 700 * scale, bottom * scale],
@@ -38,9 +39,9 @@ try {
     let swipes = 0;
     const logs = [];
     const completed = await scrollAddFriendsListOneSlot({
-      serial: `MOVING-HEADER-${scale}`, isAborted: () => false,
+      serial: `MOVING-HEADER-${actionLabel}-${scale}`, isAborted: () => false,
       onLog: line => logs.push(line), sleep: async () => {},
-    }, nodes, 720 * scale, 1640 * scale, "Daniel", "adding", {
+    }, nodes, 720 * scale, 1640 * scale, "Daniel", actionLabel, {
       dump: async () => ({ nodes }),
       swipe: async (_serial, _x1, y1, _x2, y2) => {
         swipes++;
@@ -58,7 +59,8 @@ try {
     assert(Math.abs(row.bounds[1] - 463 * scale) <= 1, "Jake must align to the updated live header position.");
     assert(logs.some(line => line.includes("header moved")));
   }
-  console.log("PASS: Jake follows the live header target, not Daniel's stale top, at two resolutions.");
+  }
+  console.log("PASS: Add and Dismiss follow the live header target at two resolutions.");
 } finally {
   await fs.rm(dir, { recursive: true, force: true });
 }
