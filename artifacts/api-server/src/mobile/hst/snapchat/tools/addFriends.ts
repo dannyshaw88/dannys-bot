@@ -340,9 +340,13 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
     if (!positioned) {
       context.onLog(
         `Add Friends: could not bring ${selectedFriend.friendName} to the first contact position before dismissing it; ` +
-        `${requireDismissControl ? "stopping without adding it." : "skipping it and continuing."}`,
+        `skipping it without an Add tap${requireDismissControl ? " because it is already on the farm-wide list" : ""}; continuing.`,
       );
-      return !requireDismissControl;
+      // The contact was already marked attempted above. If a known farm-wide
+      // contact cannot be safely positioned for Hide, skip that row rather
+      // than ending the entire Add Friends tool; every later contact still
+      // goes through the same live-row positioning check before any Add tap.
+      return true;
     }
     state = positioned.state;
     selectedFriend = positioned.selected;
