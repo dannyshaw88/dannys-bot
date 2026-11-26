@@ -19,6 +19,7 @@ export function AddFriendsScrollReplayTab() {
   const [baseline, setBaseline] = useState(initial);
   const [dumpText, setDumpText] = useState(mixedDump);
   const [selected, setSelected] = useState(() => firstVisible(initial));
+  const [movementScale, setMovementScale] = useState("1.5");
   const [running, setRunning] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const [sourceHash, setSourceHash] = useState("");
@@ -50,7 +51,14 @@ export function AddFriendsScrollReplayTab() {
       const response = await fetch("/api/debug/add-friends-tool-replay", {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         signal: controller.current.signal,
-        body: JSON.stringify({ uiXml: serializeNodes(scene.nodes), screenWidth: scene.width, screenHeight: scene.height, friendName: name, action }),
+        body: JSON.stringify({
+          uiXml: serializeNodes(scene.nodes),
+          screenWidth: scene.width,
+          screenHeight: scene.height,
+          friendName: name,
+          action,
+          movementScale: Number(movementScale),
+        }),
       });
       if (!response.ok) throw new Error((await response.json()).error || "Could not start the tool.");
       if (!response.body) throw new Error("No live execution stream was returned.");
@@ -142,6 +150,16 @@ export function AddFriendsScrollReplayTab() {
         </div>
         <div className="space-y-3 border-t border-border pt-4">
           <h3 className="font-semibold">Run the current Add Friends code</h3>
+          <label className="block text-sm">Simulated scroll movement
+            <select value={movementScale} onChange={event => setMovementScale(event.target.value)}
+              data-testid="select-replay-movement-scale" disabled={running}
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2">
+              <option value="0.55">0.55× — under-travel</option>
+              <option value="1">1.0× — normal</option>
+              <option value="1.5">1.5× — over-travel</option>
+            </select>
+          </label>
+          <p className="text-xs text-muted-foreground">1.5× is a replay stress case, not a measurement from the Inspect dump. It only changes the simulated screen movement; no phone is touched.</p>
           <select value={selected} onChange={event => setSelected(event.target.value)} data-testid="select-add-friends-sim-contact"
             className="w-full rounded-md border border-input bg-background px-3 py-2" disabled>
             {contacts.filter(contact => contact.bottom > listTopFor(scene) && contact.top < scene.height * 0.94).map((contact, index) =>
