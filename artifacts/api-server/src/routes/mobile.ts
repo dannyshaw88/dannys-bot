@@ -7777,6 +7777,17 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       const secs = (totalSec % 60).toFixed(1);
       const elapsed = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
       const fullLine = `[${elapsed}] ${msg}`;
+      // The plain-text Windows export keeps the message but can omit Pino's
+      // structured fields. Mirror only account-navigation evidence already
+      // produced by the flow; never add phone reads or per-poll log traffic.
+      if (
+        configuredSlot?.platform === "snapchat" &&
+        /^Snapchat (?:account |tools not started:|tool dispatcher skipped)/.test(msg)
+      ) {
+        logger.info(
+          `[snapchat-account-evidence] serial=${serial} slotIdx=${incomingSlotIdx} cycleId=${incomingCycleId} ${fullLine}`,
+        );
+      }
       sendVideoLog(serial, fullLine);
       // Push into the rolling buffer BEFORE capturing so the composite always
       // includes the current line in the log panel on the right.
@@ -7822,7 +7833,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         probeMs: Date.now() - probeStartedAt,
         error: probeError,
       };
-      logger.info(details, "[mobile-screen-state] probe");
+      logger.info(details, `[mobile-screen-state] probe ${JSON.stringify(details)}`);
       tLog(`[SCREEN] ${phase} screen=${screenOn === null ? "unknown" : screenOn ? "ON" : "OFF"} adb=${adbState ?? "unknown"} foreground=${foreground ?? "unknown"} probe=${details.probeMs}ms`);
       return screenOn;
     };

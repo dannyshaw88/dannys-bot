@@ -6362,7 +6362,7 @@ export async function unlockScreen(serial: string): Promise<void> {
     durationMs,
     completed: true,
     path: "keyguard-bottom-edge-to-middle",
-  }, "[mobile-execution] keyguard unlock swipe command completed");
+  }, `[mobile-execution] keyguard unlock swipe command completed serial=${serial} keyguardBefore=${JSON.stringify(keyguardBefore)} keyguardAfter=${JSON.stringify(keyguardAfter)} durationMs=${durationMs}`);
 }
 
 /** Dismiss an Instagram story/highlight viewer with the inverse gesture. */

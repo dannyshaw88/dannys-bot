@@ -58,7 +58,9 @@ async function runSnapchatToolsInContext(context: SnapchatContext): Promise<void
     return;
   }
 
-  if (!await timeStartupPhase(context.serial, "snapchat-account-verification", () => ensureSnapchatAccount(context, startupPopupResult === "tapped"))) {
+  const accountConfirmed = await timeStartupPhase(context.serial, "snapchat-account-verification", () => ensureSnapchatAccount(context, startupPopupResult === "tapped"));
+  context.onLog(`Snapchat account verification result: ${accountConfirmed ? "confirmed" : "not-confirmed"}; target=@${context.targetUsername?.trim() || "missing"}.`);
+  if (!accountConfirmed) {
     context.onLog("Snapchat tool dispatcher skipped because the configured slot account was not confirmed.");
     return;
   }
