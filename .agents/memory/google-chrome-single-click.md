@@ -58,3 +58,9 @@ Skip Already Messaged must include existing Facebook conversations and survive W
 **Why:** The user reported a repeat message on Windows after the recipient had already replied. Local app history cannot cover manually sent messages or a run interrupted before its response.
 
 **How to apply:** Key records by sender account and recipient Facebook ID, reserve before clicking Send, and inspect only the verified recipient's conversation before typing. Unknown/loading history must fail closed. Do not mistake the introductory public-info notice above older messages for an empty conversation.
+
+Wait for actual collected follower rows, not merely Facebook's page shell or early links, and do not use unchanged document height as proof that follower discovery is finished.
+
+**Why:** Facebook can hydrate names and photos after its shell appears, and virtualised or nested lists can change their users without changing document height. Ignored readiness timeouts plus an unexplained empty result look like a stalled tool.
+
+**How to apply:** Bound the wait, preserve discovered identities across scrolling, support an exact visible Followers span when semantic headings are absent, and show an actionable error when no readable rows or no eligible recipients remain. Keep routine progress/success narration hidden.

@@ -22,6 +22,20 @@ const historyBuild = await build({
 });
 const historyModule = await import(`data:text/javascript;base64,${Buffer.from(historyBuild.outputFiles[0].text).toString("base64")}`);
 const historyDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "chrome-dm-history-"));
+const followersCode = await transform(await fs.readFile(
+  new URL("../src/instagram/googleChromeDmFollowers.ts", import.meta.url), "utf8",
+), { loader: "ts", format: "esm" });
+const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:text/javascript;base64,${Buffer.from(followersCode.code).toString("base64")}`);
+{
+  let reads = 0;
+  const rows = await waitFollowers(async () => ++reads < 4 ? [] : [{ name: "Loaded user" }],
+    () => false, 1000, async () => {});
+  assert.equal(reads, 4, "keep polling the actual collector through delayed follower rendering");
+  assert.equal(rows.length, 1);
+  await assert.rejects(() => waitFollowers(async () => [], () => false, 0), /no readable user rows/);
+  assert.deepEqual(await waitFollowers(async () => { throw new Error("must not read after Stop"); }, () => true), []);
+  console.log("PASS: actual follower-row readiness retries, bounded empty-page failure and responsive Stop.");
+}
 {
   const { googleChromeDmRecipientKey: key, readGoogleChromeDmContacts: readContacts,
     recordGoogleChromeDmContacts: recordContacts, inspectGoogleChromeDmHistory: inspect } = historyModule;
@@ -221,7 +235,7 @@ console.log("PASS: Facebook Send-label variants, matching chat Close, disabled/h
 // network request or message is used by this regression.
 const browserSource = await fs.readFile(new URL("../src/instagram/browserSession.ts", import.meta.url), "utf8");
 const collectStart = browserSource.indexOf("const collectEligibleProfiles = async () => session.page.evaluate");
-const collectEnd = browserSource.indexOf("\n    let candidates = await collectEligibleProfiles();", collectStart);
+const collectEnd = browserSource.indexOf("\n    let candidates = await waitForGoogleChromeDmFollowers(", collectStart);
 assert(collectStart > 0 && collectEnd > collectStart);
 const visibleNode = {
   style: { visibility: "visible", display: "block" },
@@ -244,7 +258,7 @@ const anchors = [
   anchor("456", "Sebastián", [svgPicture]), anchor("789", "Alice Smith"),
 ];
 const section = { querySelectorAll: () => anchors };
-const heading = { innerText: "Followers", parentElement: section, querySelectorAll: () => [] };
+const heading = { ...visibleNode, innerText: "Followers", parentElement: section, querySelectorAll: () => [] };
 globalThis.document = {
   location: { href: "https://www.facebook.com/test/followers" },
   querySelector: () => ({ querySelectorAll: () => [heading] }),
@@ -260,6 +274,8 @@ assert.equal(collected.find(candidate => candidate.name === "Sebastián").photoU
 assert.equal(collected.find(candidate => candidate.name === "Alice Smith").photoUrl, undefined);
 picture.complete = false;
 assert.equal((await collectEligibleProfiles()).find(candidate => candidate.name === "Haven rose").photoUrl, undefined);
+globalThis.document.querySelector = () => ({ querySelectorAll: selector => selector === "span" ? [heading] : [] });
+assert.equal((await collectEligibleProfiles()).length, 3, "a span-based Followers label remains scoped to the same follower list");
 delete globalThis.document;
 console.log("PASS: production follower collector pairs HTML/SVG photos by exact profile ID, never borrows a neighbour's image, and excludes unloaded pictures.");
 const start = browserSource.indexOf("export async function runGoogleChromeDm(");
@@ -292,6 +308,7 @@ let waits = 0;
 let location = "";
 let historyVerdict = "empty";
 let senderId = "42";
+let collectFixture = null;
 let fixtureCandidates = [
   { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
   { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
@@ -304,6 +321,7 @@ const page = {
     const text = fn.toString();
     if (text.includes("scrollHeight")) return 1000;
     if (text.includes("scrollTo")) return;
+    if (collectFixture) return collectFixture();
     return fixtureCandidates;
   },
   evaluateHandle: async () => wrap(message),
@@ -330,6 +348,7 @@ const page = {
 };
 const gaps = [];
 globalThis.__chromeDmFixture = {
+  waitFollowers,
   historyModule, historyDirectory, path,
   page, find: (_handle, action) => find(editor, action),
   reject,
@@ -341,6 +360,8 @@ globalThis.__chromeDmFixture = {
   },
 };
 const prelude = `
+const waitForGoogleChromeDmFollowers = (read, stopped) => globalThis.__chromeDmFixture.waitFollowers(read, stopped, 1000, async () => {});
+const setTimeout = callback => globalThis.setTimeout(callback, 0);
 const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
 const COOKIES_DIR = globalThis.__chromeDmFixture.historyDirectory;
 const path = globalThis.__chromeDmFixture.path;
@@ -545,6 +566,37 @@ console.log("PASS: production dispatcher targets all five user-confirmed profile
   assert.deepEqual(skipThenSend.sentUrls, ["https://facebook.com/profile.php?id=606"]);
   historyVerdict = "empty";
   console.log("PASS: production skip flow handles existing replies, repeated runs, URL aliases, unknown history, imported history, account isolation and interrupted sends.");
+}
+{
+  const options = {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Fixture only", amount: 1, skipAlreadyMessaged: true,
+    delayMinSeconds: 0, delayMaxSeconds: 0,
+  };
+  let reads = 0;
+  collectFixture = () => ++reads < 4 ? [] : [{
+    url: "https://www.facebook.com/profile.php?id=702", name: "Luna", photoUrl,
+  }];
+  events.length = 0; waits = 0;
+  const delayed = await runGoogleChromeDm(10_000_000, options);
+  assert.equal(delayed.sent, 1, "late-rendered followers proceed to messaging rather than a silent empty scan");
+  assert.equal(reads, 4);
+  reads = 0;
+  collectFixture = () => [{
+    url: `https://www.facebook.com/profile.php?id=${++reads === 1 ? 702 : 703}`, name: "Luna", photoUrl,
+  }];
+  events.length = 0; waits = 0;
+  const moreRows = await runGoogleChromeDm(10_000_000, options);
+  assert.equal(moreRows.sent, 1, "all-known first rows do not prevent scanning the next loaded rows");
+  assert.deepEqual(moreRows.sentUrls, ["https://www.facebook.com/profile.php?id=703"]);
+  collectFixture = null;
+  fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=704", name: "Sebastián", photoUrl }];
+  events.length = 0; waits = 0;
+  const excluded = await runGoogleChromeDm(10_000_000, { ...options, girlsOnly: true });
+  assert.equal(excluded.sent, 0);
+  assert.match(excluded.notice, /No unmessaged users matched/);
+  assert(!events.includes("message"));
+  console.log("PASS: production dispatcher resumes after delayed rows, continues past known recipients and explains an entirely filtered list.");
 }
 await assert.rejects(() => runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/", message: "Fixture", delayMinSeconds: 4, delayMaxSeconds: 1,

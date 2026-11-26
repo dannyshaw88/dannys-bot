@@ -17,6 +17,7 @@ import { LEAKS_PAGE_HTML } from "./leaksPage";
 import { findGoogleChromeDmControl } from "./googleChromeDmControls";
 import { waitForGoogleChromeDmDelay } from "./googleChromeDmDelay";
 import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
+import { waitForGoogleChromeDmFollowers } from "./googleChromeDmFollowers";
 import { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } from "./googleChromeDmHistory";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
@@ -4961,6 +4962,7 @@ type GoogleChromeDmOptions = {
 };
 
 type GoogleChromeDmResult = {
+  notice?: string;
   totalEligible: number;
   attempted: number;
   sent: number;
@@ -5101,19 +5103,12 @@ export async function runGoogleChromeDm(
     emit(`Opening configured page: ${targetUrl.href}`);
     session.navProtectedUntil = Date.now() + 35_000;
     await session.page.goto(targetUrl.href, { waitUntil: "domcontentloaded", timeout: 25_000 });
-    await session.page.waitForFunction(() => {
+    const mainReady = await session.page.waitForFunction(() => {
       const doc = (globalThis as any).document;
-      const main = doc.querySelector("main,[role='main']");
-      if (!main) return false;
-      const heading = Array.from(main.querySelectorAll("h1,h2,h3,h4,[role='heading']") as any[])
-        .find(element => /^followers$/i.test((element.innerText || element.textContent || "").trim()));
-      if (!heading) return false;
-      let section: any = heading;
-      for (let depth = 0; section && depth < 8; depth++, section = section.parentElement) {
-        if (section.querySelector("a[href*='profile.php?id='],a[href*='/people/']")) return true;
-      }
-      return false;
-    }, { timeout: 10_000, polling: 200 }).catch(() => null);
+      return !!doc.querySelector("main,[role='main']");
+    }, { timeout: 15_000, polling: 200 }).catch(() => null);
+    if (!mainReady) throw new Error("The Facebook page did not become ready. No messages were sent.");
+    await mainReady.dispose();
 
     const collectEligibleProfiles = async () => session.page.evaluate(() => {
       const doc = (globalThis as any).document;
@@ -5144,7 +5139,9 @@ export async function runGoogleChromeDm(
       const main = doc.querySelector("main,[role='main']");
       if (!main) return [];
       const heading = Array.from(main.querySelectorAll("h1,h2,h3,h4,[role='heading']") as any[])
-        .find(element => /^followers$/i.test((element.innerText || element.textContent || "").trim()));
+        .find(element => /^followers$/i.test((element.innerText || element.textContent || "").trim()))
+        ?? (Array.from(main.querySelectorAll("span")) as any[]).reverse().find(element =>
+          visibleCheck(element) && /^followers$/i.test((element.innerText || element.textContent || "").trim()));
       if (!heading) return [];
 
       let section: any = heading;
@@ -5190,29 +5187,51 @@ export async function runGoogleChromeDm(
       }));
     });
 
-    let candidates = await collectEligibleProfiles();
-    let previousHeight = -1;
+    let candidates = await waitForGoogleChromeDmFollowers(collectEligibleProfiles, isStopped);
+    const discovered = new Map(candidates.map(candidate => [profileKey(candidate.url), candidate]));
+    let previousSnapshot = "";
+    let unchangedScans = 0;
     const needed = Math.min(amount, userLimit);
     for (let scan = 0; scan < 10; scan++) {
       if (isStopped()) break;
       const allowed = allowedCandidates(candidates);
       if (allowed.length >= needed) break;
-      const height = await session.page.evaluate(() => {
-        const doc = (globalThis as any).document;
-        return doc.scrollingElement?.scrollHeight ?? doc.documentElement.scrollHeight;
-      });
-      if (height === previousHeight) break;
-      previousHeight = height;
+      const snapshot = candidates.map(candidate => `${profileKey(candidate.url)}:${candidate.photoUrl ?? ""}`).join("|");
+      unchangedScans = snapshot === previousSnapshot ? unchangedScans + 1 : 0;
+      previousSnapshot = snapshot;
+      if (unchangedScans >= 4) break;
       await session.page.evaluate(() => {
         const win = (globalThis as any).window;
-        win.scrollTo(0, (globalThis as any).document.documentElement.scrollHeight);
+        const doc = (globalThis as any).document;
+        const main = doc.querySelector("main,[role='main']");
+        const headings = main ? Array.from(main.querySelectorAll("h1,h2,h3,h4,[role='heading'],span")) as any[] : [];
+        let container = headings.reverse().find(element => /^followers$/i.test((element.innerText || "").trim()))?.parentElement;
+        while (container && container !== doc.body) {
+          const style = (globalThis as any).getComputedStyle(container);
+          if (container.scrollHeight > container.clientHeight + 4 && /auto|scroll/.test(style.overflowY)) {
+            container.scrollTo(0, container.scrollHeight);
+            return;
+          }
+          container = container.parentElement;
+        }
+        win.scrollTo(0, doc.scrollingElement?.scrollHeight ?? doc.documentElement.scrollHeight);
       });
-      await new Promise(resolve => setTimeout(resolve, 250));
-      candidates = await collectEligibleProfiles();
+      await new Promise(resolve => setTimeout(resolve, 500));
+      for (const candidate of await collectEligibleProfiles()) {
+        const key = profileKey(candidate.url);
+        const prior = discovered.get(key);
+        discovered.set(key, { ...candidate, photoUrl: candidate.photoUrl ?? prior?.photoUrl });
+      }
+      candidates = [...discovered.values()];
     }
     const filtered = allowedCandidates(candidates);
     result.skipped = candidates.length - filtered.length;
     result.totalEligible = filtered.length;
+    if (!filtered.length && !isStopped()) {
+      result.notice = candidates.length
+        ? "No unmessaged users matched the current filters in the loaded Followers list."
+        : "No readable users were available in the Followers list.";
+    }
     const startIndex = filtered.length > 0 ? result.nextIndex % filtered.length : 0;
     // Existing threads may only be discovered after opening the recipient's
     // chat. Those skips must not consume the requested number of messages.

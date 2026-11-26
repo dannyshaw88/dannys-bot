@@ -983,6 +983,9 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       if (!response.ok || data.ok !== true) {
         throw new Error(data.error ?? `Send DMs failed (${response.status})`);
       }
+      if (typeof data.notice === "string" && data.notice) {
+        appendLog(`Send DMs: ${data.notice}`, "fail");
+      }
       const newMessagedUrls = Array.isArray(data.sentUrls)
         ? data.sentUrls.filter((value: unknown): value is string => typeof value === "string")
         : [];
