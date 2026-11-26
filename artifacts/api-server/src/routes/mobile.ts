@@ -1579,6 +1579,8 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       let running = true;
       let frameCount = 0;
       let screenOffStreak = 0; // consecutive 0-byte frames
+      let lastFrameCompletedAt = 0;
+      let lastSlowCaptureDiagnosticAt = 0;
 
       // Helper: fire-and-forget ADB shell command (non-blocking)
       const adbShell = (...args: string[]) =>
@@ -1630,16 +1632,24 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         while (running) {
           try {
             await new Promise<void>((resolve) => {
+              const captureStartedAt = Date.now();
               const child = spawn(adbPath, ["-s", serial, "exec-out", "screencap", "-p"]);
               const chunks: Buffer[] = [];
               let stderrOut = "";
               child.stdout.on("data", (d: Buffer) => chunks.push(d));
-              child.stderr?.on("data", (d: Buffer) => { stderrOut += d.toString(); });
+              child.stderr?.on("data", (d: Buffer) => { stderrOut = `${stderrOut}${d.toString()}`.slice(-2000); });
               child.on("error", (err) => {
-                logger.error({ serial, err }, "[mobile-ws] spawn error for screencap");
+                logger.error(
+                  { serial, err, captureDurationMs: Date.now() - captureStartedAt },
+                  `[mobile-ws] spawn error for screencap serial=${serial} error=${JSON.stringify(err.message)}`,
+                );
                 resolve();
               });
               child.on("close", (code) => {
+                const completedAt = Date.now();
+                const captureDurationMs = completedAt - captureStartedAt;
+                const interFrameMs = lastFrameCompletedAt ? completedAt - lastFrameCompletedAt : null;
+                lastFrameCompletedAt = completedAt;
                 let frame = Buffer.concat(chunks);
                 const rawLen = frame.length;
                 const first4 = frame.length >= 4
@@ -1650,13 +1660,23 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   frame = stripCrlf(frame);
                 }
                 const validPng = isPng(frame);
+                const slowCaptureSampleDue = captureDurationMs >= 500
+                  && completedAt - lastSlowCaptureDiagnosticAt >= 5_000;
 
-                if (frameCount === 0 || frameCount % 20 === 0) {
-                  // Log every 20th frame to avoid flooding — always log the first
-                  logger.info({
+                if (frameCount === 0 || frameCount % 20 === 0 || slowCaptureSampleDue || !validPng) {
+                  // Always log the first/every 20th frame, sample sustained
+                  // slow captures, and log every invalid frame.
+                  if (slowCaptureSampleDue) lastSlowCaptureDiagnosticAt = completedAt;
+                  const frameDiagnostic = {
                     serial, frameCount, code, rawLen, frameLen: frame.length,
                     first4bytes: first4, validPng, stderr: stderrOut.trim() || null,
-                  }, "[mobile-ws] screencap frame");
+                    captureDurationMs, interFrameMs, automationActive: automationCycleInProgress.has(serial),
+                    screenOffStreak,
+                  };
+                  logger.info(
+                    frameDiagnostic,
+                    `[mobile-ws] screencap frame ${JSON.stringify(frameDiagnostic)}`,
+                  );
                 }
                 frameCount++;
 
@@ -1681,7 +1701,13 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
                   } else {
                     screenOffStreak = 0;
                     const msg = `screencap returned ${rawLen} bytes but not a valid PNG (first bytes: ${first4}) — ${stderrOut.trim() || "no stderr"}`;
-                    logger.warn({ serial, rawLen, first4, stderrOut: stderrOut.trim() }, `[mobile-ws] ${msg}`);
+                    const invalidFrameDiagnostic = {
+                      serial, rawLen, first4, stderr: stderrOut.trim() || null, captureDurationMs, interFrameMs,
+                    };
+                    logger.warn(
+                      invalidFrameDiagnostic,
+                      `[mobile-ws] ${msg} ${JSON.stringify(invalidFrameDiagnostic)}`,
+                    );
                     ws.send(JSON.stringify({ error: msg }));
                   }
                 }
@@ -1821,8 +1847,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     const summary = Object.entries(details)
       .map(([key, value]) => `${key}=${JSON.stringify(value) ?? String(value)}`)
       .join(" ");
+    const diagnostic = { serial, event, ...details };
     sendVideoLog(serial, `[mirror] ${event}${summary ? ` — ${summary}` : ""}`);
-    logger.info({ ...details, serial, event }, "[mobile-video] diagnostic");
+    // The Windows log export keeps Pino's human-readable message but may
+    // omit structured fields. Include the diagnostic payload in the message
+    // itself so a downloaded aura-farming-debug.log retains the evidence.
+    logger.info(diagnostic, `[mobile-video] diagnostic ${JSON.stringify(diagnostic)}`);
   };
 
   httpServer.on("upgrade", (request, socket, head) => {
@@ -2382,7 +2412,10 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           if (line && sessionStderrInfoCount < 8) {
             sessionStderrInfoCount++;
             reportStderr = true;
-            logger.info({ serial, line, stderrLine: sessionStderrInfoCount }, "[mobile-video] screenrecord stderr");
+            logger.info(
+              { serial, line, stderrLine: sessionStderrInfoCount },
+              `[mobile-video] screenrecord stderr serial=${serial} line=${JSON.stringify(line)}`,
+            );
           } else if (
             line &&
             sessionStderrWarningCount < 4 &&
@@ -2390,7 +2423,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
           ) {
             sessionStderrWarningCount++;
             reportStderr = true;
-            logger.warn({ serial, line: line.slice(0, 1200) }, "[mobile-video] screenrecord stderr warning");
+            const warningLine = line.slice(0, 1200);
+            logger.warn(
+              { serial, line: warningLine },
+              `[mobile-video] screenrecord stderr warning serial=${serial} line=${JSON.stringify(warningLine)}`,
+            );
           }
           if (reportStderr && ws.readyState === 1) {
             ws.send(JSON.stringify({ info: `[screenrecord] ${line.slice(0, 1200)}` }));
