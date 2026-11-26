@@ -18,7 +18,7 @@ import { findGoogleChromeDmControl } from "./googleChromeDmControls";
 import { waitForGoogleChromeDmDelay } from "./googleChromeDmDelay";
 import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
 import { waitForGoogleChromeDmFollowers } from "./googleChromeDmFollowers";
-import { findGoogleChromeDmComposer } from "./googleChromeDmComposer";
+import { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } from "./googleChromeDmComposer";
 import { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } from "./googleChromeDmHistory";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
@@ -5350,6 +5350,7 @@ export async function runGoogleChromeDm(
       }
       await messageButton.click();
       await messageButtonHandle.dispose();
+      log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control clicked; waiting for the recipient's composer`, "browser");
       if (isStopped()) {
         result.stopped = true;
         break;
@@ -5362,8 +5363,13 @@ export async function runGoogleChromeDm(
         );
       } catch {
         result.failed++;
-        emit("The selected user's message field did not finish rendering; no text was entered.");
-        continue;
+        const diagnostics = await session.page.evaluate(diagnoseGoogleChromeDmComposer, candidate.name)
+          .catch(() => null);
+        const detail = diagnostics
+          ? ` [composer diagnostics: path=${diagnostics.path || "unknown"}, visibleEditors=${diagnostics.visibleEditors}, supportedEditors=${diagnostics.supportedEditors}, recipientLabelEditors=${diagnostics.recipientLabelEditors}, visibleCloseControls=${diagnostics.visibleCloseControls}, recipientHeaderMatched=${diagnostics.recipientHeaderMatched}]`
+          : " [composer diagnostics unavailable]";
+        emit(`The selected user's message field did not finish rendering; no text was entered. Stopping to avoid opening more chats.${detail}`, "fail");
+        break;
       }
       if (isStopped()) {
         result.stopped = true;
@@ -5390,8 +5396,10 @@ export async function runGoogleChromeDm(
               recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
               alreadyMessaged.add(googleChromeDmRecipientKey(candidate.url)!);
               result.skipped++;
+              log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: existing conversation confirmed; closing and skipping`, "browser");
             } else {
               result.failed++;
+              log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation history unknown; no message entered`, "browser");
               emit("Conversation history could not be confirmed empty; no message was entered.");
             }
             const close = await composer.evaluateHandle(findGoogleChromeDmControl, "close");

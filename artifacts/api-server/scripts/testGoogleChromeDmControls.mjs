@@ -26,6 +26,7 @@ const composerBuild = await build({
   bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
 });
 const composerModule = await import(`data:text/javascript;base64,${Buffer.from(composerBuild.outputFiles[0].text).toString("base64")}`);
+const diagnoseComposer = composerModule.diagnoseGoogleChromeDmComposer;
 const historyDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "chrome-dm-history-"));
 const followersCode = await transform(await fs.readFile(
   new URL("../src/instagram/googleChromeDmFollowers.ts", import.meta.url), "utf8",
@@ -223,6 +224,38 @@ globalThis.getComputedStyle = node => node.style;
   globalThis.document = oldDocument;
   console.log("PASS: composer matched by exact conversation header when Facebook omits the recipient-specific input label; wrong and ambiguous chats rejected.");
 }
+{
+  const oldDocument = globalThis.document;
+  const editor = {
+    tagName: "DIV", style: { visibility: "visible", display: "block" },
+    getBoundingClientRect: () => ({ width: 20, height: 20 }),
+    getAttribute: name => name === "role" ? "textbox"
+      : name === "aria-label" ? "Write to Haven rose" : null,
+    matches: selector => selector.includes("[contenteditable='true'][role='textbox']"),
+  };
+  const close = {
+    innerText: "", style: { visibility: "visible", display: "block" },
+    getBoundingClientRect: () => ({ width: 20, height: 20 }),
+    getAttribute: name => name === "aria-label" ? "Close chat" : null,
+  };
+  const heading = {
+    innerText: "Haven rose", textContent: "Haven rose",
+    style: { visibility: "visible", display: "block" },
+    getBoundingClientRect: () => ({ width: 20, height: 20 }),
+    getAttribute: () => null,
+  };
+  globalThis.document = {
+    location: { pathname: "/profile.php" },
+    querySelectorAll: selector => selector.startsWith("[contenteditable")
+      ? [editor] : selector === "button,[role='button']" ? [close] : [heading],
+  };
+  assert.deepEqual(diagnoseComposer("Haven rose"), {
+    path: "/profile.php", visibleEditors: 1, supportedEditors: 1,
+    recipientLabelEditors: 1, visibleCloseControls: 1, recipientHeaderMatched: true,
+  }, "diagnostics expose readiness signals without returning profile or message text");
+  globalThis.document = oldDocument;
+  console.log("PASS: composer diagnostics report only selector counts and recipient-match booleans.");
+}
 
 for (const label of ["Send", "Press Enter to send", "Send message", "Send (Enter)"]) {
   const editor = new Node("editor");
@@ -349,6 +382,12 @@ const page = {
   url: () => location,
   evaluate: async fn => {
     const text = fn.toString();
+    if (text.includes("visibleEditors") && text.includes("recipientHeaderMatched")) {
+      return {
+        path: "/profile.php", visibleEditors: 0, supportedEditors: 0,
+        recipientLabelEditors: 0, visibleCloseControls: 1, recipientHeaderMatched: true,
+      };
+    }
     if (text.includes("scrollHeight")) return 1000;
     if (text.includes("scrollTo")) return;
     if (collectFixture) return collectFixture();
@@ -356,6 +395,10 @@ const page = {
   },
   evaluateHandle: async () => wrap(message),
   waitForFunction: async (fn, _options, ...args) => {
+    if (globalThis.__chromeDmFixture.composerUnavailable &&
+        fn === globalThis.__chromeDmFixture.composerModule.findGoogleChromeDmComposer) {
+      throw new Error("Composer fixture did not render");
+    }
     if (fn === historyModule.inspectGoogleChromeDmHistory) {
       const verdict = typeof historyVerdict === "function" ? historyVerdict(location) : historyVerdict;
       if (!verdict) throw new Error("History loading timeout");
@@ -382,6 +425,7 @@ globalThis.__chromeDmFixture = {
   historyModule, historyDirectory, path,
   composerModule,
   page, find: (_handle, action) => find(editor, action),
+  composerUnavailable: false, browserLogs: [],
   reject,
   wait: async (seconds, stopped) => {
     const started = Date.now();
@@ -394,7 +438,7 @@ const prelude = `
 const waitForGoogleChromeDmFollowers = (read, stopped) => globalThis.__chromeDmFixture.waitFollowers(read, stopped, 1000, async () => {});
 const setTimeout = callback => globalThis.setTimeout(callback, 0);
 const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
-const { findGoogleChromeDmComposer } = globalThis.__chromeDmFixture.composerModule;
+const { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } = globalThis.__chromeDmFixture.composerModule;
 const COOKIES_DIR = globalThis.__chromeDmFixture.historyDirectory;
 const path = globalThis.__chromeDmFixture.path;
 const GOOGLE_CHROME_BROWSER_PROFILE_ID = 10000000;
@@ -404,7 +448,7 @@ const findGoogleChromeDmControl = globalThis.__chromeDmFixture.find;
 const waitForGoogleChromeDmDelay = globalThis.__chromeDmFixture.wait;
 const googleChromeGirlsOnlyRejection = globalThis.__chromeDmFixture.reject;
 const wsWrite = () => {};
-const log = () => {};
+const log = message => globalThis.__chromeDmFixture.browserLogs.push(message);
 `;
 const flow = await transform(prelude + browserSource.slice(start, end), { loader: "ts", format: "esm" });
 const { runGoogleChromeDm } = await import(`data:text/javascript;base64,${Buffer.from(flow.code).toString("base64")}`);
@@ -417,6 +461,23 @@ assert.equal(result.failed, 0);
 assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "close"]);
 assert.equal(editor.isConnected, false);
 assert.equal(gaps.length, 0, "no delay before first or after last recipient");
+{
+  globalThis.__chromeDmFixture.composerUnavailable = true;
+  globalThis.__chromeDmFixture.browserLogs.length = 0;
+  events.length = 0; waits = 0;
+  const noComposer = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 2,
+  });
+  assert.equal(noComposer.attempted, 1, "stop after the first composer timeout instead of opening the remaining chats");
+  assert.equal(noComposer.failed, 1);
+  assert.deepEqual(events, ["navigate", "navigate", "message"]);
+  assert(globalThis.__chromeDmFixture.browserLogs.some(line =>
+    line.includes("Stopping to avoid opening more chats") &&
+    line.includes("visibleEditors=0") && line.includes("visibleCloseControls=1")),
+  "record actionable composer diagnostics without exposing message text or recipient names");
+  globalThis.__chromeDmFixture.composerUnavailable = false;
+}
 events.length = 0;
 waits = 0;
 const two = await runGoogleChromeDm(10_000_000, {
