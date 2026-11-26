@@ -27,6 +27,31 @@ const realReplayIO: AddFriendsScrollReplayIO = {
   swipe: android.swipe,
 };
 
+const observedForwardScrollRatioBySerial = new Map<string, number>();
+
+function forwardScrollRatio(serial: string): number {
+  return observedForwardScrollRatioBySerial.get(serial) ?? 1;
+}
+
+function calibratedForwardDistance(serial: string, desiredContentTravel: number): number {
+  const knownRatio = observedForwardScrollRatioBySerial.get(serial);
+  return Math.round(desiredContentTravel / (knownRatio ?? 1));
+}
+
+function recordForwardScrollRatio(
+  serial: string,
+  rowTopBefore: number,
+  rowTopAfter: number,
+  fingerTravel: number,
+): void {
+  const contentTravel = rowTopBefore - rowTopAfter;
+  if (contentTravel <= 8 || fingerTravel <= 0) return;
+  observedForwardScrollRatioBySerial.set(
+    serial,
+    Math.max(0.2, Math.min(3, contentTravel / fingerTravel)),
+  );
+}
+
 export function findFriendsRows(nodes: UiNode[]): UiNode[] {
   const titleIndex = nodes.findIndex(node =>
     shortResourceId(node) === "section-title" &&
@@ -69,6 +94,8 @@ export async function revealAddFriendsSuggestions(
     if (!suggestions || suggestions.bounds[1] <= destination + 12) return current;
     const row = findFriendsRows(current).find(row => row.bounds[3] > row.bounds[1]);
     if (!row) return [];
+    const anchorName = contactNameInRow(current, row);
+    const anchorTop = row.bounds[1];
     const lane = blankRowLane(current, row, screenWidth, Math.max(8, Math.round(screenWidth * 0.01)));
     const distance = Math.min(
       suggestions.bounds[1] - destination,
@@ -82,6 +109,14 @@ export async function revealAddFriendsSuggestions(
     await replayIO.swipe(context.serial, lane.x, gesture.startY, lane.x, gesture.endY, 300, false);
     await context.sleep(750, "exact");
     current = (await replayIO.dump(context.serial)).nodes;
+    if (anchorName) {
+      const movedAnchor = findFriendsRows(current).find(candidate =>
+        normalizeContactName(contactNameInRow(current, candidate)) === normalizeContactName(anchorName),
+      );
+      if (movedAnchor) {
+        recordForwardScrollRatio(context.serial, anchorTop, movedAnchor.bounds[1], gesture.distance);
+      }
+    }
     suggestions = heading(current, /^find friends$/i);
   }
   if (suggestions && suggestions.bounds[1] <= destination + 12) return current;
@@ -441,6 +476,7 @@ export async function scrollAddFriendsListOneSlot(
     minimumCorrectionTravel,
     Math.round(Number.isFinite(measuredDistance) && measuredDistance > 0 ? measuredDistance : minimumCorrectionTravel),
   );
+  const swipeDistance = calibratedForwardDistance(context.serial, targetDistance);
   if (distanceBasis !== "grey-divider") {
     context.onLog(
       `Add Friends: after ${actionLabel} ${friendName}, divider measurement was unavailable ` +
@@ -471,10 +507,9 @@ export async function scrollAddFriendsListOneSlot(
   }
   const swipeX = swipeLane.x;
   const anchorY = center(rowForAnchor).y;
-  const fingerDelta = -targetDistance;
   const gesture = fitVerticalGesture(
     anchorY,
-    fingerDelta,
+    -swipeDistance,
     Math.max(listTop + 6, safeTop),
     safeBottom,
   );
@@ -540,6 +575,30 @@ export async function scrollAddFriendsListOneSlot(
   let previousNextTop = expectedNextRow?.bounds[1] ?? expectedNextTop;
   let previousGestureDistance = gesture.distance;
   const maxSafeCorrection = Math.max(targetDistance * 3, Math.round(screenHeight * 0.25));
+  if (expectedNextName && contactNameInRow(currentNodes, currentNextRow) === expectedNextName) {
+    recordForwardScrollRatio(
+      context.serial,
+      previousNextTop,
+      currentNextRow.bounds[1],
+      gesture.distance,
+    );
+  }
+  const initialAlignmentError = currentNextRow.bounds[1] - expectedNextTop;
+  if (initialAlignmentError < -alignmentTolerance) {
+    context.onLog(
+      `Add Friends: ${currentNextName} overshot the top by ${Math.abs(initialAlignmentError)}px; ` +
+      `refusing a backward swipe.`,
+    );
+    if (expectedNextName && contactNameInRow(currentNodes, currentNextRow) === expectedNextName) {
+      recordForwardScrollRatio(
+        context.serial,
+        previousNextTop,
+        currentNextRow.bounds[1],
+        gesture.distance,
+      );
+    }
+    return false;
+  }
   for (let attempt = 1; attempt <= 3; attempt++) {
     const alignmentError = currentNextRow.bounds[1] - expectedNextTop;
     if (Math.abs(alignmentError) <= alignmentTolerance) {
@@ -549,15 +608,26 @@ export async function scrollAddFriendsListOneSlot(
       );
       return true;
     }
+    if (alignmentError < -alignmentTolerance) {
+      context.onLog(
+        `Add Friends: ${currentNextName} overshot the top by ${Math.abs(alignmentError)}px; ` +
+        `refusing a backward correction.`,
+      );
+      return false;
+    }
 
     const measuredContentMovement = previousNextTop - currentNextRow.bounds[1];
-    const movementRatio = Math.abs(measuredContentMovement) > 8
-      ? Math.abs(measuredContentMovement) / previousGestureDistance
-      : 0.5;
-    const requestedCorrectionDistance = Math.max(
-      minimumCorrectionTravel,
-      Math.round(Math.abs(alignmentError) / movementRatio),
-    );
+    const movementRatio = measuredContentMovement > 8
+      ? measuredContentMovement / previousGestureDistance
+      : forwardScrollRatio(context.serial);
+    const requestedCorrectionDistance = Math.round(alignmentError / movementRatio);
+    if (requestedCorrectionDistance < minimumCorrectionTravel) {
+      context.onLog(
+        `Add Friends: ${currentNextName} is close to the top but needs a ` +
+        `${requestedCorrectionDistance}px correction; refusing a short or backward swipe.`,
+      );
+      return false;
+    }
     const correctionDistance = Math.min(requestedCorrectionDistance, maxSafeCorrection);
     const correctionLane = blankRowLane(
       currentNodes,
@@ -573,7 +643,7 @@ export async function scrollAddFriendsListOneSlot(
       );
     }
     const correctionAnchorY = center(currentNextRow).y;
-    const correctionFingerDelta = -Math.sign(alignmentError) * correctionDistance;
+    const correctionFingerDelta = -correctionDistance;
     const correctionGesture = fitVerticalGesture(
       correctionAnchorY,
       correctionFingerDelta,
@@ -613,6 +683,14 @@ export async function scrollAddFriendsListOneSlot(
       safeBottom,
     );
     if (!alignedNextRow) break;
+    if (expectedNextName && contactNameInRow(afterCorrectionNodes, alignedNextRow) === expectedNextName) {
+      recordForwardScrollRatio(
+        context.serial,
+        currentNextRow.bounds[1],
+        alignedNextRow.bounds[1],
+        correctionGesture.distance,
+      );
+    }
     previousNextTop = currentNextRow.bounds[1];
     previousGestureDistance = correctionGesture.distance;
     currentNextRow = alignedNextRow;
@@ -623,10 +701,10 @@ export async function scrollAddFriendsListOneSlot(
   context.onLog(
     Math.abs(finalError) <= 8
       ? `Add Friends: ${currentNextName} reached the top contact position.`
-      : `Add Friends: after three movement-scaled corrections, ${currentNextName} is still at y=${currentNextRow.bounds[1]} ` +
-        `(target y=${expectedNextTop}; residual ${finalError}px).`,
+      : `Add Friends: ${currentNextName} is still at y=${currentNextRow.bounds[1]} ` +
+        `(target y=${expectedNextTop}; residual ${finalError}px); no backward swipe was sent.`,
   );
-  return true;
+  return Math.abs(finalError) <= alignmentTolerance;
 }
 
 export async function alignAddFriendsContactToTop(
@@ -688,17 +766,33 @@ export async function alignAddFriendsContactToTop(
       );
       return true;
     }
+    if (alignmentError < -tolerance) {
+      context.onLog(
+        `Add Friends: ${friendName} is already ${Math.abs(alignmentError)}px above the first contact position; ` +
+        `refusing a backward swipe.`,
+      );
+      return false;
+    }
     const observedMovement = previousTargetTop - target.bounds[1];
-    const movementRatio = previousGestureDistance > 0 && Math.abs(observedMovement) > 8
-      ? Math.abs(observedMovement) / previousGestureDistance
-      : 1;
-    const requestedTravel = Math.max(
-      minimumTravel,
-      Math.round(Math.abs(alignmentError) / movementRatio),
+    const movementRatio = previousGestureDistance > 0 && observedMovement > 8
+      ? observedMovement / previousGestureDistance
+      : forwardScrollRatio(context.serial);
+    const requestedTravel = Math.round(alignmentError / movementRatio);
+    const isFirstUncalibratedSwipe =
+      attempt === 0 && observedForwardScrollRatioBySerial.get(context.serial) === undefined;
+    const gestureDistance = Math.min(
+      isFirstUncalibratedSwipe ? Math.round(requestedTravel * 0.65) : requestedTravel,
+      maximumTravel,
     );
-    const gestureDistance = Math.min(requestedTravel, maximumTravel);
+    if (gestureDistance < minimumTravel) {
+      context.onLog(
+        `Add Friends: ${friendName} is close to the first position but needs a ${gestureDistance}px correction; ` +
+        `refusing a short or backward swipe.`,
+      );
+      return false;
+    }
     const lane = blankRowLane(currentNodes, target, screenWidth, minimumLaneWidth);
-    const fingerDelta = -Math.sign(alignmentError) * gestureDistance;
+    const fingerDelta = -gestureDistance;
     const gesture = fitVerticalGesture(
       center(target).y,
       fingerDelta,
@@ -730,6 +824,12 @@ export async function alignAddFriendsContactToTop(
       context.onLog(`Add Friends: ${friendName} was not exposed after its positioning swipe.`);
       return false;
     }
+    recordForwardScrollRatio(
+      context.serial,
+      previousTargetTop,
+      target.bounds[1],
+      gesture.distance,
+    );
   }
 
   context.onLog(
@@ -756,8 +856,8 @@ export async function alignFirstAddFriendsContactToTop(
   const safeTop = Math.ceil(screenHeight * 0.12);
   const safeBottom = Math.floor(screenHeight * 0.82);
   const listTop = title?.bounds[3] ?? 0;
-  const alignmentTolerance = Math.max(18, Math.round(screenHeight * 0.012));
   const minimumSwipeTravel = Math.max(36, Math.round(screenHeight * 0.025));
+  const alignmentTolerance = Math.max(18, Math.round(screenHeight * 0.012));
   const getFirstVisibleNamedRow = (currentNodes: UiNode[]) =>
     closestVisibleRow(
       // A dismissed feedback card retains scu_search_friend_cell, but has
@@ -815,6 +915,13 @@ export async function alignFirstAddFriendsContactToTop(
       );
       return true;
     }
+    if (alignmentError < -alignmentTolerance) {
+      context.onLog(
+        `Add Friends: after ${actionLabel}, ${nextName} is already ${Math.abs(alignmentError)}px above ` +
+        `the target; refusing a backward swipe.`,
+      );
+      return false;
+    }
 
     const swipeLane = blankRowLane(currentNodes, currentRow, screenWidth, minimumBlankLaneWidth);
     const swipeX = swipeLane.x;
@@ -825,15 +932,30 @@ export async function alignFirstAddFriendsContactToTop(
       );
     }
     const measuredMovement = previousTop - currentRow.bounds[1];
-    const movementRatio = Math.abs(measuredMovement) > 8
-      ? Math.abs(measuredMovement) / previousGestureDistance
-      : 0.5;
-    const requestedDistance = swipeNumber === 0
-      ? Math.max(Math.abs(alignmentError), minimumSwipeTravel)
-      : Math.max(minimumSwipeTravel, Math.round(Math.abs(alignmentError) / movementRatio));
+    const movementRatio = previousGestureDistance > 0 && measuredMovement > 8
+      ? measuredMovement / previousGestureDistance
+      : forwardScrollRatio(context.serial);
+    const requestedDistance = Math.round(alignmentError / movementRatio);
+    if (requestedDistance < minimumSwipeTravel) {
+      context.onLog(
+        `Add Friends: after ${actionLabel}, ${nextName} is close to the target but needs a ` +
+        `${requestedDistance}px correction; refusing a short or backward swipe.`,
+      );
+      return false;
+    }
     const maxCorrectionDistance = Math.max(maxSafeDistance, previousGestureDistance * 3);
-    const distance = Math.min(requestedDistance, swipeNumber === 0 ? maxSafeDistance : maxCorrectionDistance);
-    const fingerDelta = -Math.sign(alignmentError) * distance;
+    const distance = Math.min(
+      requestedDistance,
+      swipeNumber === 0 ? maxSafeDistance : maxCorrectionDistance,
+    );
+    if (distance < minimumSwipeTravel) {
+      context.onLog(
+        `Add Friends: after ${actionLabel}, ${nextName} would need a ${distance}px first swipe; ` +
+        `refusing a short or backward swipe.`,
+      );
+      return false;
+    }
+    const fingerDelta = -distance;
     const anchorY = center(currentRow).y;
     const gesture = fitVerticalGesture(
       anchorY,
@@ -859,6 +981,7 @@ export async function alignFirstAddFriendsContactToTop(
     if (context.isAborted()) return false;
     const afterSwipeState = await replayIO.dump(context.serial);
     currentNodes = afterSwipeState.nodes;
+    const previousRowTop = previousTop;
     const refreshedRows = findFriendsRows(currentNodes)
       .filter(row => Boolean(contactNameInRow(currentNodes, row)));
     const refreshedRow = closestNamedRow(
@@ -878,6 +1001,12 @@ export async function alignFirstAddFriendsContactToTop(
       continue;
     }
     currentRow = refreshedRow;
+    recordForwardScrollRatio(
+      context.serial,
+      previousRowTop,
+      currentRow.bounds[1],
+      gesture.distance,
+    );
   }
 
   const residual = currentRow.bounds[1] - expectedTop;
@@ -885,5 +1014,5 @@ export async function alignFirstAddFriendsContactToTop(
     `Add Friends: after ${actionLabel}, ${nextName} is at y=${currentRow.bounds[1]} ` +
     `(target y=${expectedTop}; residual ${residual}px) after three corrections.`,
   );
-  return true;
+  return Math.abs(residual) <= alignmentTolerance;
 }

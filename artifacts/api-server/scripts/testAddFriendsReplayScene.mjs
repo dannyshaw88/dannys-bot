@@ -75,6 +75,17 @@ try {
   assert.equal(contactsFrom(replay.nodes)[0].bottom, 506);
   assert(replay.logs.some(line => /dismissing/.test(line)), "Must use the actual Dismiss alignment path.");
   console.log("PASS: exact imported row heights, blank/mutual/contact subtitles, original viewport, real 151px feedback structure, 14px reflow, after-action snapshot, and real Dismiss scroll helper.");
+
+  const forwardOnly = await promisify(execFile)(process.execPath, [
+    path.join(apiRoot, "scripts/replayAddFriendsScroll.mjs"), "--regression-fixture",
+  ], { cwd: apiRoot, maxBuffer: 4 * 1024 * 1024 });
+  const forwardOnlyReplay = JSON.parse(forwardOnly.stdout);
+  assert.equal(forwardOnlyReplay.result, "PASS");
+  assert(
+    forwardOnlyReplay.swipes.every(swipe => swipe.y2 < swipe.y1),
+    "Add Friends positioning and post-action settling must never send a backward swipe.",
+  );
+  console.log("PASS: 1.5x scroll over-travel is calibrated; positioning and next-row settling use forward-only swipes.");
 } finally {
   await fs.rm(temp, { recursive: true, force: true });
 }

@@ -1,3 +1,14 @@
+## [1.2.682] — 2026-11-26
+
+### Fixed
+
+- Keep Snapchat Add Friends row positioning forward-only. Measure actual scroll travel, compensate for device scroll speed, and never reverse after overshooting; refuse an unsafe row rather than tapping the wrong contact.
+- Skip an unpositionable farm-wide duplicate and continue with later candidates instead of stopping the Add Friends tool.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.682`.
+
 ## [1.2.679] — 2026-11-07
 
 ### Fixed

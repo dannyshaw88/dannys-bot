@@ -74,8 +74,12 @@ try {
   assert.equal(slow.done.completedStep.friendName, "azou");
   assert(slow.done.swipes.length > 1, "Under-travel must invoke real correction gestures.");
   assert(slow.done.logs.some(line => /correction/.test(line)));
+  assert(
+    slow.done.swipes.every(swipe => swipe.y2 < swipe.y1),
+    "Add Friends under-travel corrections must keep moving forward, never swipe backward.",
+  );
   assert(slow.events.filter(event => event.type === "frame" && event.kind === "swipe").length === slow.done.swipes.length);
-  console.log("PASS: reduced content travel triggered actual correction code, not a forced final position.");
+  console.log("PASS: reduced content travel triggers forward-only corrections, not reverse swipes.");
   const unavailable = { ...contacts, nodes: contacts.nodes.map(node =>
     node.resourceId === "scu_search_action_button" ? { ...node, text: "Requested", desc: "Requested" } : node) };
   const empty = await execute(unavailable, "Entourage Mike Hunt", "add");
