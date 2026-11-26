@@ -2,7 +2,7 @@ import sharp from "sharp";
 
 /** Only emulates Android/Snapchat responses. Tool decisions live in runAddFriends. */
 export class AddFriendsReplayDevice {
-  constructor({ model, nodes, width, height, emit, movementScale = 1, omitDismissFor }) {
+  constructor({ model, nodes, width, height, emit, movementScale = 1, omitDismissFor, moveSectionHeadings = false }) {
     this.model = model;
     this.nodes = nodes;
     this.width = width;
@@ -12,6 +12,7 @@ export class AddFriendsReplayDevice {
     this.actions = [];
     this.swipes = [];
     this.omitDismissFor = omitDismissFor;
+    this.moveSectionHeadings = moveSectionHeadings;
     this.operations = 0;
   }
   scene() { return { nodes: this.nodes, width: this.width, height: this.height }; }
@@ -36,8 +37,17 @@ export class AddFriendsReplayDevice {
         }
       }
     }
-    return this.model.serializeNodes(this.nodes.filter((node, index) =>
-      !hidden.has(index) && node.bounds[1] >= 0 && node.bounds[3] <= this.height));
+    return this.model.serializeNodes(this.nodes.filter((node, index) => {
+      const sectionContextNode = this.moveSectionHeadings && (
+        this.model.shortId(node) === "section-description" ||
+        (this.model.shortId(node) === "section-title" &&
+          ["added me", "find friends"].some(label =>
+            [node.text, node.desc].some(value => value.trim().toLowerCase() === label)))
+      );
+      return !hidden.has(index) && (
+        sectionContextNode || (node.bounds[1] >= 0 && node.bounds[3] <= this.height)
+      );
+    }));
   }
   async getScreenSizeAsync() { return { w: this.width, h: this.height }; }
   loadNavigationCalibrationMap() { return null; }
@@ -74,7 +84,15 @@ export class AddFriendsReplayDevice {
     for (const group of this.model.rowGroups(this.nodes)) {
       for (let index = group.index; index < group.end; index++) members.add(index);
     }
-    this.nodes = this.nodes.map((node, index) => members.has(index) ? {
+    this.nodes = this.nodes.map((node, index) => (
+      members.has(index) ||
+      (this.moveSectionHeadings && (
+        this.model.shortId(node) === "section-description" ||
+        (this.model.shortId(node) === "section-title" &&
+          ["added me", "find friends"].some(label =>
+            [node.text, node.desc].some(value => value.trim().toLowerCase() === label)))
+      ))
+    ) ? {
       ...node, bounds: [node.bounds[0], node.bounds[1] + dy, node.bounds[2], node.bounds[3] + dy],
     } : node);
     const gesture = { x1, y1, x2, y2, durationMs, contentMovement: dy };

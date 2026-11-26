@@ -75,9 +75,12 @@ try {
     model, nodes, width: input.screenWidth, height: input.screenHeight, emit,
     movementScale: input.movementScale ?? 1,
     omitDismissFor: input.action === "skip" ? input.friendName : undefined,
+    moveSectionHeadings: input.moveSectionHeadings === true,
   });
   model.setDevice(device);
   let completedStep = null;
+  const completedSteps = [];
+  const stopAfterSteps = Math.max(1, Number(input.stopAfterSteps) || 1);
   const stop = new Error("REPLAY_STEP_COMPLETE");
   const logs = [];
   const context = {
@@ -98,14 +101,18 @@ try {
     isAborted: () => false, effectiveTypingProfile: () => ({}),
     // Preserve the real post-action settling period in the visible replay.
     sleep: async ms => new Promise(resolve => setTimeout(resolve, ms === 3000 ? ms : Math.min(ms, 220))),
-    onAddFriendsStepComplete: async step => { completedStep = step; throw stop; },
+    onAddFriendsStepComplete: async step => {
+      completedStep = step;
+      completedSteps.push(step);
+      if (completedSteps.length >= stopAfterSteps) throw stop;
+    },
   };
   let result;
   try { result = await model.withSnapchatContext(context, () => model.runAddFriends(context)); }
   catch (error) { if (error !== stop) throw error; }
   const named = model.contactsFrom(device.nodes).find(card => !card.dismissed && card.top >= model.listTopFor(device.scene()) - 1);
   emit({ type: "done", engine: "runAddFriends", completedStep, returned: result ?? null,
-    nodes: device.nodes, actions: device.actions, swipes: device.swipes, logs,
+    completedSteps, nodes: device.nodes, actions: device.actions, swipes: device.swipes, logs,
     nextVisibleContact: named?.name ?? null,
     message: completedStep ? `Real tool finished its ${completedStep.action} step for ${completedStep.friendName}.`
       : "The live tool returned without completing a contact action. Inspect its actual logs." });

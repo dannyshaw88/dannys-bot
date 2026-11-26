@@ -1,3 +1,13 @@
+## [1.2.686] — 2026-11-26
+
+### Fixed
+
+- Reveal the Find friends section only when entering the list; after each action, keep scrolling anchored to the exact next contact instead of re-anchoring to a previously processed row.
+
+### Release
+
+- Bumped the root application and Electron package versions to `1.2.686`.
+
 ## [1.2.685] — 2026-11-26
 
 ### Fixed

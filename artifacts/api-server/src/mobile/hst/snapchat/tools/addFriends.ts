@@ -220,6 +220,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
   const { w: screenWidth, h: screenHeight } = await android.getScreenSizeAsync(context.serial);
   let added = 0;
   let noMoreAvailable = false;
+  let needsSuggestionSectionReveal = true;
   const attemptedFriends = new Set<string>();
   const recoveryAttempts = new Map<string, number>();
   const skipAdded = context.tools.addFriends.skipAdded === true;
@@ -508,9 +509,15 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
       logAction(context, `${added} of ${requested} friends added; paused by Snapchat's friend-request limit`);
       return cooldownResult;
     }
-    state = { ...state, nodes: await revealAddFriendsSuggestions(
-      context, state.nodes, screenWidth, screenHeight,
-    ) };
+    // Reveal the section only on entry. After a processed contact, the exact
+    // next-row measurement owns the scroll; re-anchoring to a prior pending row
+    // and a moved section heading can scroll past the next candidates.
+    if (needsSuggestionSectionReveal) {
+      state = { ...state, nodes: await revealAddFriendsSuggestions(
+        context, state.nodes, screenWidth, screenHeight,
+      ) };
+      needsSuggestionSectionReveal = false;
+    }
     let { addButtons, candidates } = findAddCandidates(state.nodes);
     let selected = candidates.find(({ friendKey }) => !attemptedFriends.has(friendKey));
     const candidate = selected?.candidate;
@@ -601,6 +608,7 @@ export async function runAddFriends(context: SnapchatContext): Promise<boolean |
         context.onLog("Add Friends: could not recover from the chat; ending this tool.");
         break;
       }
+      needsSuggestionSectionReveal = true;
       if (recoveries >= 3) {
         attemptedFriends.add(friendKey);
         context.onLog(`Add Friends: skipping ${friendName} after three interrupted attempts and continuing with other available friends.`);

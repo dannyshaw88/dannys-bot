@@ -19,6 +19,31 @@ try {
   const model = await import(pathToFileURL(modelPath).href);
   const contacts = model.prepareScene(await fs.readFile(path.resolve(apiRoot,
     "../../attached_assets/equinox-inspect-dump-1795563594602_1795563612145.txt"), "utf8"));
+  const findHeadingIndex = contacts.nodes.findIndex(node =>
+    model.shortId(node) === "section-title" &&
+    [node.text, node.desc].some(value => /^find friends$/i.test(value.trim())),
+  );
+  assert(findHeadingIndex >= 0);
+  const shiftNode = (node, amount) => ({
+    ...node,
+    bounds: [node.bounds[0], node.bounds[1] + amount, node.bounds[2], node.bounds[3] + amount],
+  });
+  const testNode = (id, text, bounds, className) => ({
+    text, desc: text, resourceId: `com.snapchat.android:id/${id}`, className,
+    packageName: "com.snapchat.android", clickable: false, focusable: false,
+    focused: false, selected: false, bounds,
+  });
+  const addedMeWithSuggestions = {
+    ...contacts,
+    nodes: [
+      ...contacts.nodes.slice(0, findHeadingIndex),
+      testNode("section-title", "Added Me", [32, 300, 215, 340], "android.widget.TextView"),
+      testNode("scu_search_friend_cell", "", [0, 340, 720, 440], "android.view.View"),
+      testNode("result-title", "Incoming Request", [152, 350, 443, 390], "android.widget.TextView"),
+      testNode("scu_search_action_button", "Accept", [455, 356, 632, 416], "android.widget.Button"),
+      ...contacts.nodes.slice(findHeadingIndex).map(node => shiftNode(node, 324)),
+    ],
+  };
   const mixed = model.prepareScene(await fs.readFile(path.resolve(apiRoot,
     "../../attached_assets/equinox-inspect-dump-1795563512708_1795563527991.txt"), "utf8"));
   let run = 0;
@@ -70,6 +95,38 @@ try {
       "Only a completed Add may consume the configured delay, before the next contact is considered.");
     console.log(`PASS: actual runAddFriends ${action} path, streamed inputs and final device position.`);
   }
+  const consecutiveAdds = await execute(contacts, "Entourage Mike Hunt", "add", {
+    requestedCount: 2, stopAfterSteps: 2,
+  });
+  assert.deepEqual(consecutiveAdds.done.completedSteps, [
+    { action: "add", friendName: "Entourage Mike Hunt" },
+    { action: "add", friendName: "Yes 119" },
+  ], "After the first Add, the next live contact must receive the next action.");
+  assert.deepEqual(consecutiveAdds.done.actions.map(action => action.name), [
+    "Entourage Mike Hunt",
+    "Yes 119",
+  ]);
+  console.log("PASS: consecutive Add actions advance to the measured next contact.");
+  const incomingSectionAdds = await execute(addedMeWithSuggestions, "Entourage Mike Hunt", "add", {
+    requestedCount: 2, stopAfterSteps: 2, moveSectionHeadings: true,
+  });
+  assert.deepEqual(incomingSectionAdds.done.actions.map(action => action.name), [
+    "Entourage Mike Hunt",
+    "Yes 119",
+  ], "A persistent Added Me section must not cause the completed first row to be re-anchored.");
+  const firstTapIndex = incomingSectionAdds.events.findIndex(event =>
+    event.type === "frame" && event.kind === "tap",
+  );
+  assert(firstTapIndex >= 0);
+  assert.equal(
+    incomingSectionAdds.events.slice(firstTapIndex + 1).filter(event =>
+      event.type === "log" && event.message.includes("positioning first Find friends contact"),
+    ).length,
+    0,
+    "The section-level reveal must not run again after a contact action.",
+  );
+  console.log("PASS: an Added Me section is revealed once; the following Add stays on the exact next contact.");
+
   const slow = await execute(mixed, "azou", "add", { movementScale: 0.55 });
   assert.equal(slow.done.completedStep.friendName, "azou");
   assert(slow.done.swipes.length > 1, "Under-travel must invoke real correction gestures.");
