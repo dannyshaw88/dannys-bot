@@ -12,7 +12,7 @@ const eligibilitySource = await fs.readFile(new URL("../src/instagram/googleChro
 const eligibilityCode = await transform(eligibilitySource, { loader: "ts", format: "esm" });
 const { googleChromeGirlsOnlyRejection: reject } = await import(`data:text/javascript;base64,${Buffer.from(eligibilityCode.code).toString("base64")}`);
 const photoUrl = "https://images.example.test/personal-picture.jpg";
-for (const name of ["Haven rose", "Alice", "María García", "Anne-Marie Smith", "عائشة حسن", "Анна Иванова"]) {
+for (const name of ["Haven rose", "Alice", "Luna Zamorano", "Luna", "Bambi", "Anya Sweete", "María García", "Anne-Marie Smith", "عائشة حسن", "Анна Иванова"]) {
   // The Arabic surname حسن is also a known male name and must fail the user's
   // any-name-token rule, even when it can legitimately be someone's surname.
   if (name === "عائشة حسن") { assert(reject({ name, photoUrl })); continue; }
@@ -42,6 +42,20 @@ for (const name of [
   "Unknown Lina", "Unknown Kelli", "Kellihat Yoff", "Lina Vale Extra",
 ]) assert(reject({ name, photoUrl }), `rejected username: ${name}`);
 console.log("PASS: joined names and letters-only female-name usernames; digits, symbols, business fragments, known male names and missing photos remain blocked.");
+for (const name of [
+  "Luna Zamorano", "Bambi", "Anya Sweete", "Freya", "Poppy", "Elsie", "Bonnie",
+  "Alessandra", "Chiara", "Vittoria", "Alejandra", "Ximena", "Rocío",
+  "Luana", "Fernanda", "Darya", "Ksenia", "Amira", "Zainab", "Priya",
+  "Deepika", "Anushka", "Chioma", "Wanjiku", "Aiko", "Keiko",
+]) {
+  // Amira was not covered by the original small list either.
+  assert.equal(reject({ name, photoUrl }), null, `broader female-name coverage: ${name}`);
+  assert(reject({ name }), `broader names still require a picture: ${name}`);
+}
+for (const name of ["Luna Beauty Studio", "BambiShop", "Bambi123", "Florin", "Florian", "Sebastián"]) {
+  assert(reject({ name, photoUrl }), `coverage must not weaken exclusions: ${name}`);
+}
+console.log("PASS: Luna, Bambi and Anya plus broader international female-name coverage; picture and male/business exclusions preserved.");
 console.log("PASS: strict positive-name match, one/two name parts, male/ambiguous and unknown-name rejection, multilingual names and required non-placeholder photo.");
 
 class Node {
@@ -308,6 +322,25 @@ assert.deepEqual(usernames.sentUrls, [
   "https://www.facebook.com/profile.php?id=101", "https://www.facebook.com/profile.php?id=102",
 ]);
 console.log("PASS: real Girls Only dispatcher accepts the two letters-only username examples and never targets their numeric, missing-picture or shop variants.");
+fixtureCandidates = [
+  { url: "https://www.facebook.com/profile.php?id=201", name: "Luna Zamorano", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=202", name: "Bambi", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=203", name: "Anya Sweete", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=204", name: "Anna the swedish girl", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=205", name: "breadboy667", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=206", name: "Kristal Beauty Studio", photoUrl },
+  { url: "https://www.facebook.com/profile.php?id=207", name: "Rpro gaming", photoUrl },
+];
+events.length = 0; waits = 0;
+const correctedNames = await runGoogleChromeDm(10_000_000, {
+  url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+  message: "Local fixture only", amount: 10, girlsOnly: true,
+  delayMinSeconds: 0, delayMaxSeconds: 0,
+});
+assert.equal(correctedNames.sent, 3);
+assert.equal(correctedNames.skipped, 4);
+assert.deepEqual(correctedNames.sentUrls, [201, 202, 203].map(id => `https://www.facebook.com/profile.php?id=${id}`));
+console.log("PASS: production dispatcher selects Luna, Bambi and Anya while preserving the screenshot's word-count, numeric and business exclusions.");
 await assert.rejects(() => runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/", message: "Fixture", delayMinSeconds: 4, delayMaxSeconds: 1,
 }), /valid minimum and maximum/);

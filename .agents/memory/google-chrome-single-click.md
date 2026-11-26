@@ -34,3 +34,9 @@ Allow single-word, letters-only usernames containing a recognised female name, i
 **Why:** The user explicitly confirmed that real recipients can use made-up usernames containing a female name rather than a spaced personal name.
 
 **How to apply:** Keep the photo requirement and male/business exclusions. Use at least four letters for embedded name matches to avoid accidental short fragments; exact recognised short names remain valid. This exception applies only to one-word usernames.
+
+Female-name coverage must include Luna and Bambi; the user also confirmed Anya as eligible. Do not treat these examples as unknown names.
+
+**Why:** The user explicitly corrected their rejection and said the recognised women's-name list was too narrow.
+
+**How to apply:** Broaden coverage rather than treating a small list as comprehensive, while preserving the other eligibility requirements.

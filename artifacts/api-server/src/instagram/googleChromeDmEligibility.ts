@@ -12,7 +12,7 @@ anthony anton antonio arjun arthur asif austin ayaan aziz bailey ben benjamin bi
 blake bradley brandon brian bruce caleb cameron carl carlos charles charlie chris
 christian christopher cody colin connor craig daniel david diego dmitri dmitry
 dylan eduardo edward elijah elliot elliott emmanuel enrique eric ethan eugene
-evan faisal farhan frank francois francisco gabriel gary gavin george georgios
+evan faisal farhan florin florian frank francois francisco gabriel gary gavin george georgios
 gerard gregory guillermo gustavo hamza hassan harry henry hugo ibrahim igor
 imran isaac ismail ivan jack jacob jake james jared jason jean jeffrey jeremy
 jesse joao joaquin joe joel johan johann johannes john jonathan jorge jose
@@ -71,6 +71,43 @@ susie suzanne sylvia sylvie tabitha tamara tania tara tatiana teresa
 theresa tiffany valentina valeria vanessa vera veronica victoria viola
 violet virginia vivian viviana vivienne wendy yasmin yasmine yelena
 yolanda yulia yvonne zahra zara zeynep zoe zoey
+abby abi abbie adeline adrienne alessandra alejandra allie
+amandine amira anaelle ananya anja annalise anneliese annie annika apolline
+april araceli astrid autumn avani avni axelle ayako
+bambi basma belinda benedetta bernice bessie betsy betty birgit bonnie bruna
+capucine carissa carly carmel carmela carmelita carol carole carolyn
+catalina caterina chantelle charlene chelsea cherie chiara chiamaka chioma
+ciara clarice cora dahlia daniella darya deepika delphine
+divya dolores doris eduarda effie elodie elora elsie
+emmanuelle esmeralda estefania ethel etta evangeline evie faiza
+faye federica fernanda flor freya frida funke galina georgie
+ginevra giuliana gladys gretchen gwendolyn hailey haley
+heike helga henriette hilda huda ifeoma ijeoma ilaria imogen
+india indira inga iolanda ishita itzel ivette janelle janine
+jeanette jeanine jemima jenna jess jessie jimena jolene josefina
+josie judy julieta kaia kaitlin kaitlyn kara katja katya
+kavya keiko kiera ksenia kseniya kumiko lacey lais
+larisa larissa latoya leann leanne leilani lenora leonora
+lilia lilith lisette lois lorelei loretta lorna
+lourdes luana ludmila ludovica luna lyla lyndsey lyudmila
+mabel mae maelle maeva maggie marcela marcia marguerite maribel
+mariko marissa maritza martha may mayara meera mercedes meredith
+milagros millie mira miyuki moira montse montserrat muriel
+nanami natsumi neha nell nellie neve nia nisha
+njeri nneka nyambura oceane odette oksana ophelia orla
+paloma patsy pearl peggy pilar polly pooja poppy portia
+priya prudence queenie radha raffaella rania reem
+rhonda rhiannon rima riya rocio rosalind rosanna rosie roxanne
+sadie sakshi sakura saanvi savanna sayuri seema selma shreya
+shruti sienna sita sneha solene soledad sonia sonja stacey
+stacy suki summer sumaya sumayya sunita supriya sushma suzette
+swati tainara tallulah tammy tanya tatiane tess tessa thais
+thalia thandiwe thea tilly tricia trisha trudy ursula
+valerie veronika vitoria vittoria wambui wanjiku wanjiru
+wilhelmina wilma winifred ximena yara yetunde yewande
+yoko yvette yumi yumiko zainab zainabu zelda zinnia
+aditi aiko akiko anushka ayako adesuwa adunni folake
+emiko lakshmi parvati
 анна аннастаcия анастасия елена ольга наталья наталия мария ирина татьяна
 екатерина юлия светлана дарья полина софия алина валентина виктория
 فاطمة فاطمه عائشة عايشة مريم خديجة سارة ساره زينب ليلى سلمى ياسمين
