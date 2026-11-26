@@ -32,9 +32,6 @@ const GhostBrowserTabContent = lazy(() =>
 const GoogleChromeTabContent = lazy(() =>
   import("@/pages/GoogleChromePage").then((module) => ({ default: module.GoogleChromeTabContent })),
 );
-const AddFriendsScrollReplayTab = lazy(() =>
-  import("@/components/tools/AddFriendsScrollReplayTab").then((module) => ({ default: module.AddFriendsScrollReplayTab })),
-);
 
 function SettingsTabLoading() {
   return (
@@ -61,7 +58,6 @@ const SETTINGS_TABS = [
   { label: "Data", icon: HardDrive },
   { label: "Ghost Browser", icon: Ghost },
   { label: "Google Chrome", icon: Globe },
-  ...(import.meta.env.DEV ? [{ label: "Scroll Replay", icon: ScrollText }] : []),
 ] as const;
 
 // ─── Jarvee parser helpers ───────────────────────────────────────────────────
@@ -708,13 +704,8 @@ export function SettingsPage() {
           <GoogleChromeTabContent />
         </Suspense>
       )}
-      {settingsTab === "scroll replay" && import.meta.env.DEV && (
-        <Suspense fallback={<SettingsTabLoading />}>
-          <AddFriendsScrollReplayTab />
-        </Suspense>
-      )}
 
-      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import/export", "prompt test", "ghost browser", "google chrome", "scroll replay"].includes(settingsTab) ? "hidden" : ""}`}>
+      <div className={`space-y-4 w-full ${["my account", "trust scores", "fix images", "import/export", "prompt test", "ghost browser", "google chrome"].includes(settingsTab) ? "hidden" : ""}`}>
 
         {/* Talk to Equinox Bot shortcut */}
         <button
