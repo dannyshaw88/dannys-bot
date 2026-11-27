@@ -5016,6 +5016,10 @@ type GoogleChromeDmResult = {
 
 const activeGoogleChromeDmRuns = new Map<number, { stopped: boolean }>();
 
+async function waitForGoogleChromeDmCheckpoint(seconds: number, isStopped: () => boolean): Promise<void> {
+  await waitForGoogleChromeDmDelay(seconds, isStopped);
+}
+
 export function stopGoogleChromeDmRun(profileId: number): boolean {
   const run = activeGoogleChromeDmRuns.get(profileId);
   if (!run) return false;
@@ -5121,6 +5125,11 @@ export async function runGoogleChromeDm(
     : Number.POSITIVE_INFINITY;
 
   const isStopped = () => run.stopped || Date.now() >= stopAt;
+  const waitAtFixedCheckpoint = async (seconds: number, stage: string) => {
+    emit(`Waiting ${seconds} seconds ${stage}.`);
+    await waitForGoogleChromeDmCheckpoint(seconds, isStopped);
+    if (isStopped()) result.stopped = true;
+  };
   const profileKey = (value: string) => {
     try {
       const url = new URL(value);
@@ -5148,6 +5157,8 @@ export async function runGoogleChromeDm(
     emit(`Opening configured page: ${targetUrl.href}`);
     session.navProtectedUntil = Date.now() + 35_000;
     await session.page.goto(targetUrl.href, { waitUntil: "domcontentloaded", timeout: 25_000 });
+    await waitAtFixedCheckpoint(30, "after the configured URL loads");
+    if (isStopped()) return result;
     const mainReady = await session.page.waitForFunction(() => {
       const doc = (globalThis as any).document;
       return !!doc.querySelector("main,[role='main']");
@@ -5288,6 +5299,19 @@ export async function runGoogleChromeDm(
       const image = await captureRenderedViewport();
       return { rows, screenshotBytes: image.byteLength };
     };
+    const returnToFollowersViewport = async (profileName: string) => {
+      if (isFollowersPage()) return;
+      log(`[googleChromeDm:${profileId}] Returning from ${profileName} to the configured Followers URL`, "browser");
+      await session.page.goBack({ waitUntil: "domcontentloaded", timeout: 30_000 });
+      if (!isFollowersPage()) {
+        throw new Error("Browser Back did not restore the configured Followers page.");
+      }
+      await waitAtFixedCheckpoint(60, "after returning to the configured Followers URL");
+      if (isStopped()) return;
+      const restored = await loadSettledViewport();
+      candidates = restored.rows;
+      emit("Followers viewport restored, settled, and screenshot-captured before continuing.");
+    };
     const initialImage = await captureRenderedViewport();
     emit(`Followers viewport rendered and captured (${candidates.length} visible profiles, ${initialImage.byteLength} screenshot bytes).`);
 
@@ -5317,6 +5341,11 @@ export async function runGoogleChromeDm(
       }
 
       if (!candidate) {
+        if (!isFollowersPage()) {
+          result.failed++;
+          emit("Refusing to scroll because the configured Followers URL is not active.", "fail");
+          break;
+        }
         const scrollState = await session.page.evaluate(scrollGoogleChromeDmFollowers);
         if (!scrollState.scrolled) {
           log(
@@ -5327,6 +5356,8 @@ export async function runGoogleChromeDm(
           break;
         }
         scrollPasses++;
+        await waitAtFixedCheckpoint(30, "after scrolling the configured Followers page");
+        if (isStopped()) break;
         const settled = await loadSettledViewport();
         candidates = settled.rows;
         log(
@@ -5403,6 +5434,8 @@ export async function runGoogleChromeDm(
         };
       }).catch(() => null);
       log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: profile navigation returned after ${navigationElapsed}ms; timing=${JSON.stringify(navigationTiming)}${navigationFailure ? "; navigation timed out but URL matched" : ""}`, "browser");
+      await waitAtFixedCheckpoint(60, "after the selected profile loads");
+      if (isStopped()) break;
 
       let messageButtonClicked = false;
       let messageButtonFailure = "";
@@ -5451,6 +5484,8 @@ export async function runGoogleChromeDm(
           await messageButton.click();
           messageButtonClicked = true;
           log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control clicked after ${Date.now() - messageButtonWaitStartedAt}ms (${messageButtonAttempts} lookup attempt${messageButtonAttempts === 1 ? "" : "s"})`, "browser");
+          await waitAtFixedCheckpoint(30, "after clicking Message");
+          if (isStopped()) break;
         } catch (error: any) {
           messageButtonFailure = String(error?.message ?? error ?? "browser click failed").slice(0, 180);
           const transientNode = /node is detached from document|not attached to the dom|node is either not clickable or not an element/i.test(messageButtonFailure);
@@ -5580,7 +5615,8 @@ export async function runGoogleChromeDm(
             if (!closed) { result.failed++; break; }
             await closed.dispose();
           } finally { await close.dispose(); }
-          continue;
+          await returnToFollowersViewport(candidate.name);
+          break;
         }
         if (screenshotHistory === "unknown" ||
             (screenshotHistory === "empty" && history !== "empty")) {
@@ -5782,14 +5818,8 @@ export async function runGoogleChromeDm(
       if (result.failed > failuresBeforeCandidate) break;
       if (!isFollowersPage()) {
         try {
-          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: returning to the Followers viewport before continuing`, "browser");
-          await session.page.goBack({ waitUntil: "domcontentloaded", timeout: 30_000 });
-          if (!isFollowersPage()) {
-            throw new Error("Browser Back did not restore the configured Followers page.");
-          }
-          const restored = await loadSettledViewport();
-          candidates = restored.rows;
-          emit(`Followers viewport restored, settled, and screenshot-captured before the next profile.`);
+          await returnToFollowersViewport(candidate.name);
+          if (isStopped()) break;
         } catch (error: any) {
           result.failed++;
           emit(

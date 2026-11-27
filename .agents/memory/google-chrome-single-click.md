@@ -130,3 +130,15 @@ For profile readiness, require screenshot OCR to confirm the selected profile na
 **Why:** Facebook rendered a valid profile and one visible Message button, but OCR could not read the button label and incorrectly stopped before clicking.
 
 **How to apply:** Use screenshots for visible identity and chat text; use live, recipient-scoped DOM checks for controls. Keep the stricter exact-text screenshot check for the chat message after sending.
+
+Every path leaving a profile—including an existing-chat skip—must restore the exact configured Followers page before the next scroll. Refuse to scroll whenever the active URL is not that configured page.
+
+**Why:** A skip branch continued past the shared return logic, so Send DMs scrolled the recipient’s profile instead of the configured Followers list.
+
+**How to apply:** Route successful sends and skips through the same return-and-settle step; test that a skipped chat restores the original URL before any scroll call.
+
+For Google Chrome Send DMs, wait 30 seconds after loading the configured URL, after every actual scroll, and after each Message click; wait 60 seconds after each profile load and after returning to the configured Followers URL.
+
+**Why:** The user explicitly required these fixed delays because page and chat content was advancing before it rendered visibly.
+
+**How to apply:** Keep the waits hard-coded and Stop-responsive. Do not shorten them just because the DOM appears ready early.

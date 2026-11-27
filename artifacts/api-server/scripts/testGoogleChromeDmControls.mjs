@@ -541,6 +541,7 @@ let followersReturnCount = 0;
 let lastSentRecipientId = "";
 let scrollPasses = 0;
 let scrollPages = [];
+const scrollLocations = [];
 let historyVerdict = "empty";
 let screenshotHistoryOverride = "";
 let hideSentTextInScreenshot = false;
@@ -660,6 +661,7 @@ const dispatcherScreenshotModule = {
   },
 };
 const scrollFixture = () => {
+  scrollLocations.push(location);
   if (!scrollPages.length) return { scrolled: false, atBottom: true };
   const nextViewport = scrollPages.shift();
   scrollPasses++;
@@ -667,6 +669,7 @@ const scrollFixture = () => {
   return { scrolled: true, atBottom: false };
 };
 const gaps = [];
+const checkpointWaits = [];
 globalThis.__chromeDmFixture = {
   waitFollowers,
   historyModule, historyDirectory, path,
@@ -678,6 +681,9 @@ globalThis.__chromeDmFixture = {
   findMessageButton, findGoogleChromeDmMessageButton: findMessageButton,
   composerUnavailable: false, browserLogs: [],
   scroll: scrollFixture,
+  checkpoint: async (seconds, stopped) => {
+    if (!stopped()) checkpointWaits.push(seconds);
+  },
   reject,
   wait: async (seconds, stopped) => {
     const started = Date.now();
@@ -703,6 +709,7 @@ const activeGoogleChromeDmRuns = new Map();
 const sessions = new Map([[10000000, {page: globalThis.__chromeDmFixture.page}]]);
 const findGoogleChromeDmControl = globalThis.__chromeDmFixture.find;
 const waitForGoogleChromeDmDelay = globalThis.__chromeDmFixture.wait;
+const waitForGoogleChromeDmCheckpoint = globalThis.__chromeDmFixture.checkpoint;
 const googleChromeGirlsOnlyRejection = globalThis.__chromeDmFixture.reject;
 const wsWrite = () => {};
 const log = message => globalThis.__chromeDmFixture.browserLogs.push(message);
@@ -712,6 +719,7 @@ const { runGoogleChromeDm } = await import(`data:text/javascript;base64,${Buffer
 const viewportScreenshotsBefore = viewportScreenshotCount;
 const chatScreenshotsBefore = chatScreenshotCount;
 const followersReturnsBefore = followersReturnCount;
+checkpointWaits.length = 0;
 const result = await runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/profile.php?id=999&sk=followers",
   message: "Local fixture only", amount: 1,
@@ -722,6 +730,7 @@ assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send",
 assert(viewportScreenshotCount - viewportScreenshotsBefore >= 3, "capture list, profile, and restored-list screenshots");
 assert.equal(chatScreenshotCount - chatScreenshotsBefore, 2, "capture the chat before and after sending");
 assert.equal(followersReturnCount - followersReturnsBefore, 1, "restore the follower page before ending the run");
+assert.deepEqual(checkpointWaits, [30, 60, 30, 60], "wait the requested fixed intervals at URL, profile, Message, and return checkpoints");
 assert.equal(editor.isConnected, false);
 assert.equal(gaps.length, 0, "no delay before first or after last recipient");
 {
@@ -729,6 +738,9 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   screenshotHistoryOverride = "existing";
   historyVerdict = "empty";
   events.length = 0; waits = 0;
+  checkpointWaits.length = 0;
+  const returnsBeforeSkip = followersReturnCount;
+  const scrollLocationsBeforeSkip = scrollLocations.length;
   const screenshotExisting = await runGoogleChromeDm(10_000_000, {
     url: "https://www.facebook.com/profile.php?id=999&sk=followers",
     message: "Local fixture only", amount: 1, skipAlreadyMessaged: true,
@@ -736,6 +748,13 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(screenshotExisting.sent, 0);
   assert.equal(screenshotExisting.skipped, 1, "screenshot-visible chat text wins even when DOM history claims empty");
   assert(!events.includes("send"), "visible existing chat text prevents Send");
+  assert.equal(
+    followersReturnCount - returnsBeforeSkip,
+    1,
+    `return from a skipped chat to the original Followers URL: ${JSON.stringify({ screenshotExisting, events, checkpointWaits, followersLocation, location, browserLogs: globalThis.__chromeDmFixture.browserLogs.slice(-8) })}`,
+  );
+  assert.equal(scrollLocations[scrollLocationsBeforeSkip], followersLocation, "never scroll the profile after skipping a chat");
+  assert.deepEqual(checkpointWaits, [30, 60, 30, 60], "retain the fixed waits when a chat is skipped");
   screenshotHistoryOverride = "";
   fixtureCandidates = [
     { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
@@ -800,6 +819,8 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   collectFixture = null;
   scrollPages = [[{ url: "https://www.facebook.com/profile.php?id=911", name: "Second Scroll User" }]];
   scrollPasses = 0;
+  scrollLocations.length = 0;
+  checkpointWaits.length = 0;
   sendScrollPasses.length = 0;
   events.length = 0; waits = 0;
   const incremental = await runGoogleChromeDm(10_000_000, {
@@ -809,6 +830,9 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(incremental.sent, 2);
   assert.deepEqual(sendScrollPasses, [0, 1], "send from the current viewport before scrolling for the next user");
   assert.equal(scrollPasses, 1, "scroll exactly once between the two users");
+  assert.deepEqual(checkpointWaits, [30, 60, 30, 60, 30, 60, 30, 60],
+    "wait after the configured URL, each profile, each Message click, the scroll, and each return");
+  assert(scrollLocations.every(url => url === followersLocation), "scroll only while the configured Followers URL is active");
   assert(incremental.attemptedUrls[0].endsWith("id=910"));
   assert(incremental.attemptedUrls[1].endsWith("id=911"));
   fixtureCandidates = [
