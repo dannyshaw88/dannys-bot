@@ -931,7 +931,6 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
       appendLog("Send DMs: enter a non-empty message in Browser settings.", "fail");
       return;
     }
-    const message = messageOptions[Math.floor(Math.random() * messageOptions.length)];
     const amount = sendDmAmountEnabled && amountMin !== null && amountMax !== null
       ? Math.floor(amountMin + Math.random() * (amountMax - amountMin + 1))
       : undefined;
@@ -967,7 +966,7 @@ export function BrowserPanel({ profileId, userAgent, username, embedded, streamU
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: parsedUrl.href,
-          message,
+          messages: messageOptions,
           amount,
           delayMinSeconds,
           delayMaxSeconds,

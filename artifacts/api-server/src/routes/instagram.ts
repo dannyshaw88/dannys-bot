@@ -4803,6 +4803,9 @@ export async function registerInstagramRoutes(
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
       const message = typeof body.message === "string" ? body.message : "";
+      const messages = Array.isArray(body.messages)
+        ? body.messages.filter((value): value is string => typeof value === "string").slice(0, 200)
+        : undefined;
       const url = typeof body.url === "string" ? body.url : "";
       const numberOrUndefined = (value: unknown) => {
         if (value === null || value === undefined || value === "") return undefined;
@@ -4812,6 +4815,7 @@ export async function registerInstagramRoutes(
       const result = await runGoogleChromeDm(profileId, {
         url,
         message,
+        messages,
         amount: numberOrUndefined(body.amount),
         delayMinSeconds: body.delayMinSeconds === undefined ? undefined : Number(body.delayMinSeconds),
         delayMaxSeconds: body.delayMaxSeconds === undefined ? undefined : Number(body.delayMaxSeconds),

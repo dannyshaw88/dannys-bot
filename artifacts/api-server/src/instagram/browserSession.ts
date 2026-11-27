@@ -20,6 +20,7 @@ import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
 import { waitForGoogleChromeDmFollowers } from "./googleChromeDmFollowers";
 import { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } from "./googleChromeDmComposer";
 import { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } from "./googleChromeDmHistory";
+import { personalizeGoogleChromeDmMessage } from "./googleChromeDmPersonalization";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
 // ── Electron native EB mode ───────────────────────────────────────────────────
@@ -4969,7 +4970,9 @@ async function browserApiThrottle(profileId: number): Promise<void> {
 
 type GoogleChromeDmOptions = {
   url: string;
-  message: string;
+  messages?: string[];
+  /** Legacy clients may still send one message string. */
+  message?: string;
   amount?: number;
   delayMinSeconds?: number;
   delayMaxSeconds?: number;
@@ -5033,7 +5036,10 @@ export async function runGoogleChromeDm(
   if (!["http:", "https:"].includes(targetUrl.protocol)) {
     throw new Error("The configured page must use HTTP or HTTPS");
   }
-  if (!options.message?.trim()) {
+  const messages = (options.messages?.length ? options.messages : [options.message ?? ""])
+    .map(message => message.trim())
+    .filter(Boolean);
+  if (!messages.length) {
     throw new Error("Turn on Message to DM and enter a message before starting");
   }
   const delayMin = options.delayMinSeconds ?? 30;
@@ -5472,12 +5478,15 @@ export async function runGoogleChromeDm(
             continue;
           }
         }
+        const messageIndex = Math.floor(Math.random() * messages.length);
+        const message = personalizeGoogleChromeDmMessage(messages[messageIndex], candidate.name);
+        log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: selected message option ${messageIndex + 1} of ${messages.length}`, "browser");
         await composer.click();
-        await composer.type(options.message.trim(), { delay: 0 });
+        await composer.type(message, { delay: 0 });
         const typedText = await composer.evaluate((element: any) =>
           String(element.innerText || element.textContent || element.value || "").replace(/\u200b/g, "").replace(/\r\n/g, "\n").trim(),
         );
-        if (typedText !== options.message.trim()) {
+        if (typedText !== message) {
           result.failed++;
           emit("Typed text did not match the configured message; it was not sent.");
           break;

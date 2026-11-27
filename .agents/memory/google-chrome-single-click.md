@@ -77,6 +77,18 @@ Skip Already Messaged must include existing Facebook conversations and survive W
 
 **How to apply:** Key records by sender account and recipient Facebook ID, reserve before clicking Send, and inspect only the nearest chat panel uniquely owning the verified composer and close control. Check that panel's message rows (including media-only and older rows); do not use generic page-level “Messages” regions as evidence. The public-info notice can establish an empty thread only after settling and only when that panel has no message rows. Unknown/loading history must fail closed.
 
+When multiple Send DMs message options are configured, send the full option list to the API and select an option separately for each recipient immediately before typing. Do not choose one option once per run and reuse it for every recipient.
+
+**Why:** Choosing once in the UI before starting a run made every recipient receive the same selected option.
+
+**How to apply:** Keep option parsing in the UI, but make the per-recipient send path choose and verify the selected text; retain compatibility with older clients that send one string.
+
+In Send DMs messages, replace each `[FIRSTNAME]` token with the first word of the Facebook display name for that recipient. If the display name is one word, use that entire word.
+
+**Why:** The user requested recipient-personalized Facebook messages using this exact token.
+
+**How to apply:** Expand the token after choosing the recipient's message option and before typing, then verify the expanded text in the composer.
+
 Wait for actual collected follower rows, not merely Facebook's page shell or early links, and do not use unchanged document height as proof that follower discovery is finished.
 
 **Why:** Facebook can hydrate names and photos after its shell appears, and virtualised or nested lists can change their users without changing document height. Ignored readiness timeouts plus an unexplained empty result look like a stalled tool.
