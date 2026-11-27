@@ -5446,6 +5446,20 @@ export async function runGoogleChromeDm(
         await composerHandle.dispose();
         break;
       }
+      // Facebook can swap the page's JS execution context after the composer is
+      // first found, leaving this handle in a different world ("Argument should
+      // belong to the same JavaScript world"). Resolve a handle in the current
+      // context right before it is used.
+      await composerHandle.dispose().catch(() => {});
+      try {
+        composerHandle = await session.page.waitForFunction(
+          findGoogleChromeDmComposer, { timeout: 15_000, polling: 200 }, candidate.name,
+        );
+      } catch {
+        result.failed++;
+        emit("The selected user's message field could not be confirmed; no text was entered.");
+        continue;
+      }
       const composer = composerHandle.asElement();
       if (!composer) {
         await composerHandle.dispose();
