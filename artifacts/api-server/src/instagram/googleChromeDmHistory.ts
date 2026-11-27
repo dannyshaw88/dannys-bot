@@ -66,55 +66,50 @@ export function inspectGoogleChromeDmHistory(element: any): "existing" | "empty"
     const style = (globalThis as any).getComputedStyle(node);
     return !!rect.width && !!rect.height && style.display !== "none" && style.visibility !== "hidden";
   };
+  let chatPanel: any = null;
   let container = element.parentElement;
   for (let depth = 0; container && depth < 12; depth++, container = container.parentElement) {
-    if (Array.from(container.querySelectorAll("[contenteditable='true'][role='textbox'],textarea"))
-      .some((editor: any) => editor !== element && visible(editor))) return false;
+    const editors = Array.from(container.querySelectorAll("[contenteditable='true'][role='textbox'],textarea"))
+      .filter(visible);
+    if (editors.length !== 1 || editors[0] !== element) continue;
     const closeButtons = Array.from(container.querySelectorAll("button,[role='button']"))
       .filter((button: any) => visible(button) && [
         button.getAttribute("aria-label"), button.getAttribute("title"), button.innerText,
       ].some(label => /^close (?:chat|conversation)(?: with .+)?$/i.test(String(label ?? "").trim())));
-    if (!closeButtons.length) continue;
-    if (closeButtons.length !== 1) return false;
-    // Facebook exposes message rows inside this chat's message log/grid.
-    // Include media-only messages and old rows above the current viewport.
-    const rows = Array.from(container.querySelectorAll(
-      "[role='row'],[data-message-id],[data-messageid],[data-testid='message-container']",
-    ));
-    if (rows.some((row: any) => {
-      if (row.contains(element)) return false;
-      const text = String(row.innerText || row.textContent || "").replace(/\s+/g, " ").trim();
-      if (/when you send a message,?\s+.+?\s+(?:will|can) see your public info/i.test(text)) return false;
-      return text || row.querySelector("img,image,video,audio,[role='img']");
-    })) return "existing";
-    const messageRegion = Array.from(container.querySelectorAll(
-      "[role='log'],[role='grid'],[role='feed'],[aria-label*='Messages'],[data-pagelet*='ChatTab']",
-    )).find(visible);
-    if (messageRegion && String(messageRegion.innerText || messageRegion.textContent || "")
-      .replace(/\s+/g, " ").trim()) return "existing";
-    if (Array.from(container.querySelectorAll("[aria-busy='true'],[role='progressbar']"))
-      .some(visible)) { delete element.__auraDmEmptySince; return false; }
-    // Do not infer an empty thread merely from an empty textbox or missing rows.
-    // Require Facebook's explicit new-conversation notice, settled across polls.
-    const text = String(container.innerText || container.textContent || "").replace(/\s+/g, " ");
-    const notice = text.match(/when you send a message,?\s+.+?\s+(?:will|can) see your public info/i);
-    if (notice) {
-      // The introductory notice can remain above old messages. Unrecognised
-      // content after it must never be treated as an empty thread just because
-      // this Facebook variant omitted semantic message-row attributes.
-      const tail = text.slice((notice.index ?? 0) + notice[0].length).replace(/^[.\s]+/, "").trim();
-      if (tail && !/^(?:Aa|Message(?:\.{3}|…)?|Write a message(?:\.{3}|…)?|Press Enter to send)$/i.test(tail)) {
-        // The new-chat notice remains visible in some FB layouts even above
-        // message history. Any additional rendered conversation content means
-        // this is not a fresh thread; skip it rather than retrying a DM.
-        delete element.__auraDmEmptySince;
-        return "existing";
-      }
-      element.__auraDmEmptySince ??= Date.now();
-      return Date.now() - element.__auraDmEmptySince >= 2000 ? "empty" : false;
+    if (closeButtons.length === 1) {
+      chatPanel = container;
+      break;
     }
-    delete element.__auraDmEmptySince;
-    return false;
   }
+  if (!chatPanel) return false;
+
+  // Facebook exposes message rows inside this chat's message log/grid.
+  // Inspect only the nearest panel uniquely owning this composer and close
+  // control; generic "Messages" regions elsewhere on the page can contain
+  // unrelated inbox text and must not mark this conversation as existing.
+  const rows = Array.from(chatPanel.querySelectorAll(
+    "[role='row'],[data-message-id],[data-messageid],[data-testid='message-container']",
+  ));
+  if (rows.some((row: any) => {
+    if (row.contains(element)) return false;
+    const text = String(row.innerText || row.textContent || "").replace(/\s+/g, " ").trim();
+    if (/when you send a message,?\s+.+?\s+(?:will|can) see your public info/i.test(text)) return false;
+    return text || row.querySelector("img,image,video,audio,[role='img']");
+  })) return "existing";
+  if (Array.from(chatPanel.querySelectorAll("[aria-busy='true'],[role='progressbar']"))
+    .some(visible)) { delete element.__auraDmEmptySince; return false; }
+
+  // Do not infer an empty thread merely from an empty textbox or missing rows.
+  // Require Facebook's explicit new-conversation notice, settled across polls.
+  const text = String(chatPanel.innerText || chatPanel.textContent || "").replace(/\s+/g, " ");
+  const notice = text.match(/when you send a message,?\s+.+?\s+(?:will|can) see your public info/i);
+  if (notice) {
+    // The notice may remain above older messages; those are checked in this
+    // chat's rows above. Ignore text from broad page-level message regions and
+    // use the notice only after the selected panel has settled.
+    element.__auraDmEmptySince ??= Date.now();
+    return Date.now() - element.__auraDmEmptySince >= 2000 ? "empty" : false;
+  }
+  delete element.__auraDmEmptySince;
   return false;
 }

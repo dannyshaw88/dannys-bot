@@ -75,7 +75,7 @@ Skip Already Messaged must include existing Facebook conversations and survive W
 
 **Why:** The user reported a repeat message on Windows after the recipient had already replied. Local app history cannot cover manually sent messages or a run interrupted before its response.
 
-**How to apply:** Key records by sender account and recipient Facebook ID, reserve before clicking Send, and inspect only the verified recipient's conversation before typing. Unknown/loading history must fail closed. Do not mistake the introductory public-info notice above older messages for an empty conversation.
+**How to apply:** Key records by sender account and recipient Facebook ID, reserve before clicking Send, and inspect only the nearest chat panel uniquely owning the verified composer and close control. Check that panel's message rows (including media-only and older rows); do not use generic page-level “Messages” regions as evidence. The public-info notice can establish an empty thread only after settling and only when that panel has no message rows. Unknown/loading history must fail closed.
 
 Wait for actual collected follower rows, not merely Facebook's page shell or early links, and do not use unchanged document height as proof that follower discovery is finished.
 
