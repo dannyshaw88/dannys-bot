@@ -81,6 +81,33 @@ export async function selectSnapchatAccountFromCarousel(
     context.onLog("Snapchat account switch: saved-account carousel was not confirmed.");
     return false;
   }
+
+  // Snapchat can return from logout to a one-account landing screen that has
+  // a live "Switch Account" control, rather than directly to the full saved
+  // account list. Treat that as a transition control, not proof that the
+  // carousel is ready. Only open it when the exact requested username is not
+  // already exposed, and only tap the exact live clickable label.
+  const targetAlreadyVisible = exactSavedAccountUsername(state, target);
+  const switchAccountControl = state.nodes.find(node =>
+    node.clickable && exactLabel(node, "Switch Account"),
+  );
+  if (!targetAlreadyVisible && switchAccountControl) {
+    context.onLog(
+      "Snapchat account switch: exact target is not on the current picker; opening its visible Switch Account control.",
+    );
+    if (!await tapNode(context, switchAccountControl, "open saved Snapchat account list", 500, true)) {
+      context.onLog("Snapchat account switch: Switch Account did not open the saved-account list.");
+      return false;
+    }
+    state = await dump(context.serial);
+    if (!isSavedSnapchatAccountPicker(state)) {
+      context.onLog(
+        "Snapchat account switch: Switch Account led to an unconfirmed screen; stopping without a guessed tap.",
+      );
+      return false;
+    }
+  }
+
   const slotLabel = typeof context.slotIdx === "number"
     ? `Account Slot ${context.slotIdx + 1}`
     : "the configured account slot";
