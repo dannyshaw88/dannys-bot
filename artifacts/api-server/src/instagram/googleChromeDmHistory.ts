@@ -13,14 +13,21 @@ export function googleChromeDmRecipientKey(value: string): string | null {
   } catch { return null; }
 }
 
-type History = { version: 1; accounts: Record<string, Record<string, string>> };
+type History = {
+  version: 1;
+  accounts: Record<string, Record<string, string>>;
+  pendingAccounts?: Record<string, Record<string, string>>;
+};
 function read(file: string): History {
   try {
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    const validAccounts = (accounts: unknown) => !!accounts && typeof accounts === "object" &&
+      !Array.isArray(accounts) && !Object.values(accounts as object).some(account =>
+        !account || typeof account !== "object" || Array.isArray(account) ||
+        Object.entries(account).some(([key, at]) => !/^id:\d+$/.test(key) || typeof at !== "string"));
     if (data.version !== 1 || !data.accounts || typeof data.accounts !== "object" ||
-        Array.isArray(data.accounts) || Object.values(data.accounts).some(account =>
-          !account || typeof account !== "object" || Array.isArray(account) ||
-          Object.entries(account).some(([key, at]) => !/^id:\d+$/.test(key) || typeof at !== "string"))) {
+        !validAccounts(data.accounts) ||
+        (data.pendingAccounts !== undefined && !validAccounts(data.pendingAccounts))) {
       throw new Error("Invalid contact history format");
     }
     return data;
@@ -30,22 +37,7 @@ function read(file: string): History {
   }
 }
 
-export function readGoogleChromeDmContacts(file: string, account: string): Set<string> {
-  return new Set(Object.keys(read(file).accounts[account] ?? {}));
-}
-
-/** Record before clicking Send, including attempts whose final outcome is unknown. */
-export function recordGoogleChromeDmContacts(file: string, account: string, urls: string[]): void {
-  if (!/^\d+$/.test(account)) throw new Error("Cannot save contact history without a verified Facebook account.");
-  const data = read(file);
-  const contacts = data.accounts[account] ??= {};
-  let changed = false;
-  for (const url of urls) {
-    const key = googleChromeDmRecipientKey(url);
-    if (!key) throw new Error("Cannot record an unverified Facebook recipient.");
-    if (!contacts[key]) { contacts[key] = new Date().toISOString(); changed = true; }
-  }
-  if (!changed) return;
+function write(file: string, data: History): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.tmp`;
   try {
@@ -56,11 +48,71 @@ export function recordGoogleChromeDmContacts(file: string, account: string, urls
   }
 }
 
+export function readGoogleChromeDmContacts(file: string, account: string): Set<string> {
+  return new Set(Object.keys(read(file).accounts[account] ?? {}));
+}
+
+/** Pending recipients are rechecked against Facebook's live conversation before any retry. */
+export function readGoogleChromeDmPendingContacts(file: string, account: string): Set<string> {
+  return new Set(Object.keys(read(file).pendingAccounts?.[account] ?? {}));
+}
+
+/** Reserve before clicking Send so an interrupted attempt cannot be blindly repeated. */
+export function recordGoogleChromeDmPendingContacts(file: string, account: string, urls: string[]): void {
+  if (!/^\d+$/.test(account)) throw new Error("Cannot save contact history without a verified Facebook account.");
+  const data = read(file);
+  const contacts = data.pendingAccounts ??= {};
+  const pending = contacts[account] ??= {};
+  let changed = false;
+  for (const url of urls) {
+    const key = googleChromeDmRecipientKey(url);
+    if (!key) throw new Error("Cannot record an unverified Facebook recipient.");
+    if (data.accounts[account]?.[key]) continue;
+    if (!pending[key]) { pending[key] = new Date().toISOString(); changed = true; }
+  }
+  if (changed) write(file, data);
+}
+
+/** Confirmed sends and existing conversations move from pending into saved history. */
+export function recordGoogleChromeDmContacts(file: string, account: string, urls: string[]): void {
+  if (!/^\d+$/.test(account)) throw new Error("Cannot save contact history without a verified Facebook account.");
+  const data = read(file);
+  const contacts = data.accounts[account] ??= {};
+  let changed = false;
+  for (const url of urls) {
+    const key = googleChromeDmRecipientKey(url);
+    if (!key) throw new Error("Cannot record an unverified Facebook recipient.");
+    if (!contacts[key]) { contacts[key] = new Date().toISOString(); changed = true; }
+    if (data.pendingAccounts?.[account]?.[key]) {
+      delete data.pendingAccounts[account][key];
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  write(file, data);
+}
+
+/** Remove a pending marker only after Facebook confirms the thread is still empty. */
+export function clearGoogleChromeDmPendingContacts(file: string, account: string, urls: string[]): void {
+  const data = read(file);
+  const pending = data.pendingAccounts?.[account];
+  if (!pending) return;
+  let changed = false;
+  for (const url of urls) {
+    const key = googleChromeDmRecipientKey(url);
+    if (key && pending[key]) {
+      delete pending[key];
+      changed = true;
+    }
+  }
+  if (changed) write(file, data);
+}
+
 /**
  * Browser-side only. Inspect the verified composer's chat, never a sibling chat.
  * False means "still unknown"; waitForFunction must time out rather than send.
  */
-export function inspectGoogleChromeDmHistory(element: any): "existing" | "empty" | false {
+export function inspectGoogleChromeDmHistory(element: any, expectedName = ""): "existing" | "empty" | false {
   const visible = (node: any) => {
     const rect = node.getBoundingClientRect();
     const style = (globalThis as any).getComputedStyle(node);
@@ -104,9 +156,17 @@ export function inspectGoogleChromeDmHistory(element: any): "existing" | "empty"
   const text = String(chatPanel.innerText || chatPanel.textContent || "").replace(/\s+/g, " ");
   const notice = text.match(/when you send a message,?\s+.+?\s+(?:will|can) see your public info/i);
   if (notice) {
-    // The notice may remain above older messages; those are checked in this
-    // chat's rows above. Ignore text from broad page-level message regions and
-    // use the notice only after the selected panel has settled.
+    // A new-thread notice is only proof of an empty conversation if nothing else
+    // in this owned panel looks like message content. Unknown extra text must not
+    // be treated as empty during reconciliation of an interrupted send.
+    const otherText = text.replace(notice[0], "")
+      .replace(new RegExp(expectedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "")
+      .replace(/\b(?:active now|available|close chat|send|more options|aa)\b/ig, "")
+      .replace(/[\s:·•.,!?-]+/g, "").trim();
+    if (otherText) {
+      delete element.__auraDmEmptySince;
+      return false;
+    }
     element.__auraDmEmptySince ??= Date.now();
     return Date.now() - element.__auraDmEmptySince >= 2000 ? "empty" : false;
   }

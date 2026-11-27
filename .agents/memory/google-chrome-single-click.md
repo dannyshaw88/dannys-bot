@@ -112,3 +112,9 @@ Finding no eligible profiles in the current batch is not proof that the Follower
 **Why:** An unchanged candidate snapshot caused Send DMs to stop after eight scans, even though the user expected it to keep scrolling for profiles that might pass the active filters.
 
 **How to apply:** Do not use a fixed count of unchanged IDs as the end condition. Scroll the Followers panel and page, preserve profiles across virtualized rows, and confirm stable end-of-list before reporting that no candidates remain.
+
+Do not treat an emptied composer as proof a message was sent. Wait for the exact outgoing text to appear in a visible message row in that same conversation before counting the send or closing the chat. Keep uncertain attempts pending and reconcile the live conversation before retrying.
+
+**Why:** The latest run cleared the composer and immediately closed the chat, then logged a successful send even though the user could not see the message render.
+
+**How to apply:** Confirm the composer is empty and the matching message row is visibly rendered in the verified chat; otherwise leave the chat open, stop the run, and check the conversation history on the next run before sending again.

@@ -19,7 +19,16 @@ import { waitForGoogleChromeDmDelay } from "./googleChromeDmDelay";
 import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
 import { scrollGoogleChromeDmFollowers, waitForGoogleChromeDmFollowers } from "./googleChromeDmFollowers";
 import { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } from "./googleChromeDmComposer";
-import { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } from "./googleChromeDmHistory";
+import {
+  clearGoogleChromeDmPendingContacts,
+  googleChromeDmRecipientKey,
+  readGoogleChromeDmContacts,
+  readGoogleChromeDmPendingContacts,
+  recordGoogleChromeDmContacts,
+  recordGoogleChromeDmPendingContacts,
+  inspectGoogleChromeDmHistory,
+} from "./googleChromeDmHistory";
+import { inspectGoogleChromeDmSentMessage } from "./googleChromeDmSent";
 import { personalizeGoogleChromeDmMessage } from "./googleChromeDmPersonalization";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
@@ -5072,6 +5081,7 @@ export async function runGoogleChromeDm(
   const alreadyMessaged = new Set(
     (options.alreadyMessagedUrls ?? []).map(value => googleChromeDmRecipientKey(value)).filter((value): value is string => !!value),
   );
+  const pendingContacts = new Set<string>();
   const historyFile = path.join(COOKIES_DIR, "google-chrome-dm-history.json");
   let senderAccount = "";
   const excludedNameTokens = new Set(
@@ -5130,6 +5140,7 @@ export async function runGoogleChromeDm(
       throw new Error("The signed-in Facebook account could not be verified; no messages were sent.");
     }
     for (const key of readGoogleChromeDmContacts(historyFile, senderAccount)) alreadyMessaged.add(key);
+    for (const key of readGoogleChromeDmPendingContacts(historyFile, senderAccount)) pendingContacts.add(key);
     const importedUrls = (options.alreadyMessagedUrls ?? []).filter(value => googleChromeDmRecipientKey(value));
     recordGoogleChromeDmContacts(historyFile, senderAccount, importedUrls);
     emit(`Opening configured page: ${targetUrl.href}`);
@@ -5492,24 +5503,37 @@ export async function runGoogleChromeDm(
       }
       log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient-specific composer confirmed`, "browser");
 
+      let sendMayHaveBeenTriggered = false;
       try {
-        if (options.skipAlreadyMessaged) {
+        const recipientKey = googleChromeDmRecipientKey(candidate.url);
+        const pendingAttempt = !!recipientKey && pendingContacts.has(recipientKey);
+        if (options.skipAlreadyMessaged || pendingAttempt) {
           const historyHandle = await session.page.waitForFunction(
-            inspectGoogleChromeDmHistory, { timeout: 12_000, polling: 200 }, composer,
+            inspectGoogleChromeDmHistory, { timeout: 12_000, polling: 200 }, composer, candidate.name,
           ).catch(() => null);
           const history = await historyHandle?.jsonValue().catch(() => false);
           await historyHandle?.dispose();
-          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation history=${history ?? "unknown"}; Skip Already Messaged is enabled`, "browser");
+          log(
+            `[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation history=${history ?? "unknown"}; ` +
+            `${pendingAttempt ? "an earlier send needs reconciliation" : "Skip Already Messaged is enabled"}`,
+            "browser",
+          );
           if (history !== "empty") {
             if (history === "existing") {
               recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
               alreadyMessaged.add(googleChromeDmRecipientKey(candidate.url)!);
+              pendingContacts.delete(googleChromeDmRecipientKey(candidate.url)!);
               result.skipped++;
               log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: existing conversation; closing without typing or sending`, "browser");
             } else {
               result.failed++;
               log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation history unknown; no message entered`, "browser");
-              emit("Conversation history could not be confirmed empty; no message was entered.");
+              emit(
+                pendingAttempt
+                  ? "A previous send is still unconfirmed and the conversation history is unavailable. Leaving this chat open and stopping; no retry was made."
+                  : "Conversation history could not be confirmed empty; no message was entered.",
+              );
+              if (pendingAttempt) break;
             }
             const close = await composer.evaluateHandle(findGoogleChromeDmControl, "close");
             try {
@@ -5522,6 +5546,11 @@ export async function runGoogleChromeDm(
               await closed.dispose();
             } finally { await close.dispose(); }
             continue;
+          }
+          if (pendingAttempt) {
+            clearGoogleChromeDmPendingContacts(historyFile, senderAccount, [candidate.url]);
+            pendingContacts.delete(recipientKey!);
+            log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: the earlier attempt is not present in the settled conversation; retry is safe`, "browser");
           }
         }
         const messageIndex = Math.floor(Math.random() * messages.length);
@@ -5590,38 +5619,44 @@ export async function runGoogleChromeDm(
           await sendButtonHandle!.dispose();
           throw new Error("The Facebook account changed during this run; sending was stopped.");
         }
+        recordGoogleChromeDmPendingContacts(historyFile, senderAccount, [candidate.url]);
+        if (recipientKey) pendingContacts.add(recipientKey);
         log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: clicking Send in the matching conversation`, "browser");
-        recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
-        alreadyMessaged.add(googleChromeDmRecipientKey(candidate.url)!);
+        sendMayHaveBeenTriggered = true;
         await sendElement.click();
         await sendButtonHandle!.dispose();
 
-        const confirmationHandle = await session.page.waitForFunction((expectedName: string) => {
-          const doc = (globalThis as any).document;
-          const getStyle = (globalThis as any).getComputedStyle as (element: any) => any;
-          const visible = (element: any) => {
-            const rect = element.getBoundingClientRect();
-            const style = getStyle(element);
-            return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
-          };
-          const normalizeName = (value: string) => value.normalize("NFKD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
-          const composer = Array.from(doc.querySelectorAll("[contenteditable='true'][role='textbox'],textarea") as any[])
-            .find(element => {
-              if (!visible(element)) return false;
-              const label = `${element.getAttribute("aria-label") ?? ""} ${element.getAttribute("placeholder") ?? ""} ${element.getAttribute("data-placeholder") ?? ""}`.trim();
-              const recipient = label.match(/^write to\s+(.+)$/i)?.[1];
-              return !!recipient && normalizeName(recipient) === normalizeName(expectedName);
-            });
-          return !!composer && !(composer.innerText || composer.textContent || composer.value || "").trim();
-        }, { timeout: 8_000, polling: 200 }, candidate.name).catch(() => null);
+        log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: waiting for the exact outgoing message to render in the conversation`, "browser");
+        const renderDeadline = Date.now() + 20_000;
+        let confirmationHandle: any = null;
+        while (!confirmationHandle && !isStopped() && Date.now() < renderDeadline) {
+          const remainingMs = renderDeadline - Date.now();
+          confirmationHandle = await session.page.waitForFunction(
+            inspectGoogleChromeDmSentMessage,
+            { timeout: Math.min(1_000, remainingMs), polling: 200 },
+            composer,
+            message,
+          ).catch(() => null);
+        }
+        if (isStopped()) {
+          result.stopped = true;
+          emit("Stopped while waiting for the outgoing message to render. The chat remains open and the recipient will be rechecked before any retry.");
+          break;
+        }
         const confirmed = confirmationHandle
           ? await confirmationHandle.jsonValue().then((value: unknown) => value === true).catch(() => false)
           : false;
         if (confirmationHandle) await confirmationHandle.dispose().catch(() => {});
         if (confirmed) {
+          recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
+          if (recipientKey) {
+            pendingContacts.delete(recipientKey);
+            alreadyMessaged.add(recipientKey);
+          }
           result.sent++;
           needsMessageDelay = true;
           result.sentUrls.push(cleanUrl(candidate.url));
+          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: exact outgoing message is visible in the matching conversation`, "browser");
           emit(`Message sent to ${candidate.name}.`, "ok");
           const closeHandle = await composer.evaluateHandle(findGoogleChromeDmControl, "close");
           try {
@@ -5650,11 +5685,23 @@ export async function runGoogleChromeDm(
           }
         } else {
           result.failed++;
-          emit("Message send was not confirmed; stopping to avoid a duplicate attempt.");
+          emit(
+            "Send was clicked, but the exact outgoing message did not render in this conversation within 20 seconds. " +
+            "Leaving the chat open and stopping; the recipient will be rechecked before any retry.",
+            "fail",
+          );
           break;
         }
       } catch (error: any) {
         result.failed++;
+        if (sendMayHaveBeenTriggered) {
+          emit(
+            `Send may have been attempted but was not verified (${error?.message ?? "browser interaction failed"}). ` +
+            "Leaving the chat open and stopping; the recipient will be rechecked before any retry.",
+            "fail",
+          );
+          break;
+        }
         emit(`Message attempt failed: ${error?.message ?? "browser interaction failed"}`);
       } finally {
         await composerHandle.dispose().catch(() => {});

@@ -21,6 +21,22 @@ const historyBuild = await build({
   bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
 });
 const historyModule = await import(`data:text/javascript;base64,${Buffer.from(historyBuild.outputFiles[0].text).toString("base64")}`);
+const readContactsFromHistory = historyModule.readGoogleChromeDmContacts;
+const readPendingContacts = historyModule.readGoogleChromeDmPendingContacts;
+const sentBuild = await build({
+  entryPoints: [fileURLToPath(new URL("../src/instagram/googleChromeDmSent.ts", import.meta.url))],
+  bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
+});
+const { inspectGoogleChromeDmSentMessage: inspectSent } = await import(
+  `data:text/javascript;base64,${Buffer.from(sentBuild.outputFiles[0].text).toString("base64")}`,
+);
+const personalizationSource = await fs.readFile(
+  new URL("../src/instagram/googleChromeDmPersonalization.ts", import.meta.url), "utf8",
+);
+const personalizationCode = await transform(personalizationSource, { loader: "ts", format: "esm" });
+const personalizationModule = await import(
+  `data:text/javascript;base64,${Buffer.from(personalizationCode.code).toString("base64")}`,
+);
 const composerBuild = await build({
   entryPoints: [fileURLToPath(new URL("../src/instagram/googleChromeDmComposer.ts", import.meta.url))],
   bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
@@ -44,13 +60,20 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
 }
 {
   const { googleChromeDmRecipientKey: key, readGoogleChromeDmContacts: readContacts,
-    recordGoogleChromeDmContacts: recordContacts, inspectGoogleChromeDmHistory: inspect } = historyModule;
+    readGoogleChromeDmPendingContacts: readPending, recordGoogleChromeDmContacts: recordContacts,
+    recordGoogleChromeDmPendingContacts: recordPending, inspectGoogleChromeDmHistory: inspect } = historyModule;
   assert.equal(key("https://www.facebook.com/profile.php?id=600&sk=about#x"), "id:600");
   assert.equal(key("https://m.facebook.com/people/Someone/600/"), "id:600");
   assert.equal(key("https://facebook.com.evil.test/profile.php?id=600"), null);
   const file = path.join(historyDirectory, "ledger-test.json");
   recordContacts(file, "1", ["https://facebook.com/profile.php?id=600"]);
   assert(readContacts(file, "1").has("id:600"), "reload persisted contacts from disk");
+  recordPending(file, "1", ["https://facebook.com/profile.php?id=601"]);
+  assert(readPending(file, "1").has("id:601"), "an uncertain send is reserved separately");
+  assert(!readContacts(file, "1").has("id:601"), "pending attempts are not misreported as sent");
+  recordContacts(file, "1", ["https://facebook.com/profile.php?id=601"]);
+  assert(!readPending(file, "1").has("id:601"), "confirmed sends clear their pending marker");
+  assert(readContacts(file, "1").has("id:601"), "confirmed sends become durable history");
   assert.equal(readContacts(file, "2").size, 0, "sender accounts have independent histories");
   await fs.writeFile(file, "{broken");
   assert.throws(() => readContacts(file, "1"), /could not be read/);
@@ -60,7 +83,11 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
     style: { display: "block", visibility: "visible" },
     getAttribute: attr => attr === "aria-label" ? "Close chat" : null,
   };
-  const composer = {};
+  const composer = {
+    style: { visibility: "visible", display: "block" },
+    getBoundingClientRect: () => ({ width: 10, height: 10 }),
+    getAttribute: () => null,
+  };
   let rows = [], busy = [], otherEditors = [];
   const panel = {
     innerText: "",
@@ -75,27 +102,67 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   const oldStyle = globalThis.getComputedStyle;
   globalThis.getComputedStyle = node => node.style;
   rows = [row("You sent: Hi, do you sell content?")];
-  assert.equal(inspect(composer), "existing", "detect old outgoing message before typing");
+  assert.equal(inspect(composer, "Haven rose"), "existing", "detect old outgoing message before typing");
   rows = [row("I'm only just working with onlyfans")];
-  assert.equal(inspect(composer), "existing", "detect existing incoming reply");
+  assert.equal(inspect(composer, "Haven rose"), "existing", "detect existing incoming reply");
   rows = [row("", true)];
-  assert.equal(inspect(composer), "existing", "media-only history is not a new conversation");
+  assert.equal(inspect(composer, "Haven rose"), "existing", "media-only history is not a new conversation");
   rows = [];
-  assert.equal(inspect(composer), false, "missing rows do not prove a new thread");
+  assert.equal(inspect(composer, "Haven rose"), false, "missing rows do not prove a new thread");
   panel.innerText = "When you send a message, Haven rose will see your public info.";
-  assert.equal(inspect(composer), false, "new-thread notice must settle");
+  assert.equal(inspect(composer, "Haven rose"), false, "new-thread notice must settle");
   composer.__auraDmEmptySince = Date.now() - 2500;
-  assert.equal(inspect(composer), "empty");
+  assert.equal(inspect(composer, "Haven rose"), "empty");
   panel.innerText += " Previous message without row attributes";
-  assert.equal(inspect(composer), "existing", "an introductory notice above unclassified history still means this thread has history");
+  assert.equal(inspect(composer, "Haven rose"), false, "unclassified text beside a new-thread notice stays unknown, not empty");
   panel.innerText = "When you send a message, Haven rose will see your public info.";
   busy = [close];
-  assert.equal(inspect(composer), false, "loading history must never pass as empty");
+  assert.equal(inspect(composer, "Haven rose"), false, "loading history must never pass as empty");
   busy = [];
   otherEditors = [close];
-  assert.equal(inspect(composer), false, "never inspect a shared multi-chat ancestor");
+  assert.equal(inspect(composer, "Haven rose"), false, "never inspect a shared multi-chat ancestor");
   globalThis.getComputedStyle = oldStyle;
   console.log("PASS: canonical IDs, account-scoped disk history, corrupt-history fail-closed handling, old text/media and unknown/loading chat guards.");
+}
+{
+  const oldStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = node => node.style;
+  const rect = { left: 20, top: 20, right: 320, bottom: 80, width: 300, height: 60 };
+  const style = { visibility: "visible", display: "block" };
+  const close = {
+    innerText: "", style, getBoundingClientRect: () => rect,
+    getAttribute: name => name === "aria-label" ? "Close chat" : null,
+  };
+  const editor = {
+    isConnected: true, innerText: "Hello there!", textContent: "", value: "",
+    style, getBoundingClientRect: () => rect,
+  };
+  let rows = [];
+  const panel = {
+    querySelectorAll: selector => selector.includes("contenteditable") ? [editor]
+      : selector === "button,[role='button']" ? [close]
+      : selector.includes("[role='row']") ? rows : [],
+  };
+  editor.parentElement = panel;
+  globalThis.document = { documentElement: { clientWidth: 800, clientHeight: 600 } };
+  const row = text => ({
+    innerText: text, textContent: text, style, getBoundingClientRect: () => rect,
+    contains: () => false,
+  });
+  assert.equal(inspectSent(editor, "Hello there!"), false, "a matching draft alone is not a sent message");
+  editor.innerText = "";
+  assert.equal(inspectSent(editor, "Hello there!"), false, "an empty composer alone is not delivery proof");
+  rows = [row("You sent: Hello there!")];
+  assert.equal(inspectSent(editor, "Hello there!"), true, "require the exact text in a visible row of this chat");
+  rows = [row("You sent: Something else")];
+  assert.equal(inspectSent(editor, "Hello there!"), false, "a different message is not delivery proof");
+  rows = [row("You sent: Hello there!")];
+  const offscreen = { ...rect, top: 900, bottom: 960 };
+  rows[0].getBoundingClientRect = () => offscreen;
+  assert.equal(inspectSent(editor, "Hello there!"), false, "offscreen content is not visibly rendered");
+  globalThis.document = undefined;
+  globalThis.getComputedStyle = oldStyle;
+  console.log("PASS: sent confirmation requires a cleared composer and exact message text in a visible row of that same conversation.");
 }
 const photoUrl = "https://images.example.test/personal-picture.jpg";
 const internationalNames = JSON.parse(await fs.readFile(
@@ -368,8 +435,14 @@ editor.isConnected = true;
 editor.innerText = "";
 editor.click = async () => events.push("composer");
 editor.type = async text => { editor.innerText = text; };
+let messageRendered = true;
+let renderMessageOnSend = true;
 const send = new Node("button", "Press Enter to send");
-send.click = async () => { events.push("send"); editor.innerText = ""; };
+send.click = async () => {
+  events.push("send");
+  editor.innerText = "";
+  messageRendered = renderMessageOnSend;
+};
 const close = new Node("button", "Close chat");
 close.click = async () => { events.push("close"); editor.isConnected = false; };
 new Node("container", "", [close, new Node("container", "", [editor, send])]);
@@ -447,28 +520,28 @@ const page = {
       throw new Error("Composer fixture did not render");
     }
     if (fn === globalThis.__chromeDmFixture.composerModule.findGoogleChromeDmComposer) return wrap(editor);
+    if (fn === inspectSent) {
+      events.push("render");
+      return wrap(messageRendered && editor.innerText === "");
+    }
     if (fn === historyModule.inspectGoogleChromeDmHistory) {
       const verdict = typeof historyVerdict === "function" ? historyVerdict(location) : historyVerdict;
       if (!verdict) throw new Error("History loading timeout");
       return wrap(verdict);
     }
     if (fn === globalThis.__chromeDmFixture.find) return wrap(fn(editor, args[1]));
+    if (fn.toString().includes("const focused = doc.activeElement")) return wrap(true);
+    if (fn.toString().includes("const actual = String(element.innerText")) {
+      return wrap(editor.innerText === args[1]);
+    }
     if (fn.toString().includes("=> !element.isConnected")) {
       waits += 3; // Skip the normal send/confirmation steps when closing a skipped chat.
       return wrap(!editor.isConnected);
     }
-    if (fn.toString().includes("normalizeName") && fn.toString().includes("expectedName")) {
-      return wrap(editor.innerText === "");
+    if (fn.toString().includes("if (!element.isConnected) return true")) {
+      return wrap(!editor.isConnected);
     }
-    waits++;
-    if (waits === 1) return wrap(true); // Followers loaded.
-    const step = (waits - 2) % 5;
-    if (step === 0) return wrap(true); // Verified profile.
-    if (step === 1) return wrap(editor); // Recipient-specific composer.
-    if (step === 2) return wrap(fn(editor, "send"));
-    if (step === 3) return wrap(editor.innerText === ""); // Sent-text confirmation.
-    if (step === 4) return wrap(fn(editor)); // Close confirmation.
-    throw new Error("Unexpected browser wait");
+    return wrap(true); // Verified profile identity.
   },
 };
 const gaps = [];
@@ -476,6 +549,8 @@ globalThis.__chromeDmFixture = {
   waitFollowers,
   historyModule, historyDirectory, path,
   composerModule,
+  sentModule: { inspectGoogleChromeDmSentMessage: inspectSent },
+  personalizationModule,
   page, find: (_handle, action) => find(editor, action),
   findMessageButton, findGoogleChromeDmMessageButton: findMessageButton,
   composerUnavailable: false, browserLogs: [],
@@ -490,9 +565,12 @@ globalThis.__chromeDmFixture = {
 const prelude = `
 const waitForGoogleChromeDmFollowers = (read, stopped) => globalThis.__chromeDmFixture.waitFollowers(read, stopped, 1000, async () => {});
 const setTimeout = callback => globalThis.setTimeout(callback, 0);
-const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
+const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, readGoogleChromeDmPendingContacts, recordGoogleChromeDmContacts, recordGoogleChromeDmPendingContacts, clearGoogleChromeDmPendingContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
 const { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } = globalThis.__chromeDmFixture.composerModule;
+const { inspectGoogleChromeDmSentMessage } = globalThis.__chromeDmFixture.sentModule;
+const { personalizeGoogleChromeDmMessage } = globalThis.__chromeDmFixture.personalizationModule;
 const { findGoogleChromeDmMessageButton } = globalThis.__chromeDmFixture;
+const scrollGoogleChromeDmFollowers = () => ({ scrolled: false });
 const COOKIES_DIR = globalThis.__chromeDmFixture.historyDirectory;
 const path = globalThis.__chromeDmFixture.path;
 const GOOGLE_CHROME_BROWSER_PROFILE_ID = 10000000;
@@ -512,9 +590,42 @@ const result = await runGoogleChromeDm(10_000_000, {
 });
 assert.equal(result.sent, 1, JSON.stringify({ result, events, logs: globalThis.__chromeDmFixture.browserLogs }));
 assert.equal(result.failed, 0);
-assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "close"]);
+assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "render", "close"]);
 assert.equal(editor.isConnected, false);
 assert.equal(gaps.length, 0, "no delay before first or after last recipient");
+{
+  fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=777", name: "Unrendered Recipient" }];
+  renderMessageOnSend = false;
+  events.length = 0; waits = 0;
+  const unrendered = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 2,
+  });
+  assert.equal(unrendered.sent, 0, "an emptied composer without a rendered message is not counted as sent");
+  assert.equal(unrendered.failed, 1);
+  assert.equal(unrendered.attempted, 1, "stop after the first unconfirmed Send click");
+  assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "render"]);
+  assert.equal(readPendingContacts(path.join(historyDirectory, "google-chrome-dm-history.json"), senderId).has("id:777"), true,
+    "keep an uncertain attempt pending for conversation reconciliation");
+  assert.equal(readContactsFromHistory(path.join(historyDirectory, "google-chrome-dm-history.json"), senderId).has("id:777"), false,
+    "do not report an unrendered attempt as a sent contact");
+
+  renderMessageOnSend = true;
+  historyVerdict = "empty";
+  events.length = 0; waits = 0;
+  const retry = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 1, skipAlreadyMessaged: true,
+  });
+  assert.equal(retry.sent, 1, "an empty conversation safely clears the pending marker and retries");
+  assert.equal(readPendingContacts(path.join(historyDirectory, "google-chrome-dm-history.json"), senderId).has("id:777"), false);
+  assert.equal(readContactsFromHistory(path.join(historyDirectory, "google-chrome-dm-history.json"), senderId).has("id:777"), true);
+  fixtureCandidates = [
+    { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
+    { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
+  ];
+  console.log("PASS: a cleared composer without a visible outgoing message stays unconfirmed, keeps its chat open and reconciles safely on retry.");
+}
 {
   events.length = 0; waits = 0;
   detachNextMessageClick = true;
@@ -524,7 +635,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   });
   assert.equal(retried.sent, 1, "re-resolve a detached Message button and use one fresh native click");
   assert.deepEqual(events, [
-    "navigate", "navigate", "message-detached", "message", "composer", "send", "close",
+    "navigate", "navigate", "message-detached", "message", "composer", "send", "render", "close",
   ]);
 }
 {
@@ -536,7 +647,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   });
   assert.equal(retried.sent, 1, "re-resolve and retry a Message control with no clickable point");
   assert.deepEqual(events, [
-    "navigate", "navigate", "message-not-clickable", "message", "composer", "send", "close",
+    "navigate", "navigate", "message-not-clickable", "message", "composer", "send", "render", "close",
   ]);
 }
 {
@@ -548,7 +659,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   });
   assert.equal(delayed.sent, 1, "continue looking for the profile Message control after repeated timeouts");
   assert.equal(delayedMessageButtonWaits, 4);
-  assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "close"]);
+  assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "render", "close"]);
   messageButtonAvailableAfterTimeouts = 0;
 }
 {
@@ -579,8 +690,8 @@ assert.equal(gaps.length, 1, "one random gap between two successful messages");
 assert(gaps[0].seconds >= 0.03 && gaps[0].seconds <= 0.05);
 assert(gaps[0].elapsed >= 29);
 assert.deepEqual(events, [
-  "navigate", "navigate", "message", "composer", "send", "close",
-  "delay", "navigate", "message", "composer", "send", "close",
+  "navigate", "navigate", "message", "composer", "send", "render", "close",
+  "delay", "navigate", "message", "composer", "send", "render", "close",
 ]);
 fixtureCandidates = [
   { url: "https://www.facebook.com/profile.php?id=123", name: "Haven rose", photoUrl },
@@ -728,17 +839,18 @@ console.log("PASS: production dispatcher targets all five user-confirmed profile
     ...options, alreadyMessagedUrls: ["https://facebook.com/people/Someone/603/?tracking=old"],
   });
   assert.equal(imported.sent, 0, "legacy frontend history is imported and ID-normalised");
-  // Reserve before native Send: an exception during the click cannot erase the
-  // recipient and allow an uncertain attempt to be sent again on the next run.
+  // Keep a pending attempt after a click exception; inspect the live conversation
+  // before deciding whether a retry would duplicate an already accepted message.
   const originalSend = send.click;
   send.click = async () => { events.push("send"); throw new Error("Browser disconnected during Send"); };
   const uncertain = await runWith(604, "empty");
   assert.equal(uncertain.sent, 0);
   assert.equal(uncertain.failed, 1);
   send.click = originalSend;
-  const retry = await runWith(604, "empty");
+  const retry = await runWith(604, "existing");
   assert.equal(retry.sent, 0);
-  assert(!events.includes("message"), "interrupted send remains blocked from a duplicate attempt");
+  assert.equal(retry.skipped, 1, "pending attempt with a rendered history becomes confirmed without resending");
+  assert(!events.includes("send"), "an interrupted send with existing chat history is not repeated");
   fixtureCandidates = [605, 606].map(id => ({
     url: `https://facebook.com/profile.php?id=${id}`, name: "Haven rose", photoUrl,
   }));
@@ -763,7 +875,7 @@ console.log("PASS: production dispatcher targets all five user-confirmed profile
   events.length = 0; waits = 0;
   const delayed = await runGoogleChromeDm(10_000_000, options);
   assert.equal(delayed.sent, 1, "late-rendered followers proceed to messaging rather than a silent empty scan");
-  assert.equal(reads, 4);
+  assert(reads >= 4, "continue collecting after the first late-rendered row while checking for replacement recipients");
   reads = 0;
   collectFixture = () => [{
     url: `https://www.facebook.com/profile.php?id=${++reads === 1 ? 702 : 703}`, name: "Luna", photoUrl,
@@ -777,7 +889,7 @@ console.log("PASS: production dispatcher targets all five user-confirmed profile
   events.length = 0; waits = 0;
   const excluded = await runGoogleChromeDm(10_000_000, { ...options, girlsOnly: true });
   assert.equal(excluded.sent, 0);
-  assert.match(excluded.notice, /No unmessaged users matched/);
+  assert.match(excluded.notice, /Send target not reached/);
   assert(!events.includes("message"));
   console.log("PASS: production dispatcher resumes after delayed rows, continues past known recipients and explains an entirely filtered list.");
 }
