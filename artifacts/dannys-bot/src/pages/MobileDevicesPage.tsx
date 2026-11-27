@@ -18,7 +18,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LiveActivityTicker } from "@/components/layout/LiveActivityTicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, Trash2, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, ChevronLeft, ChevronRight, Check, Sun, Search, LayoutGrid } from "lucide-react";
+import { Loader2, Usb, Plus, Wifi, WifiOff, AlertTriangle, RefreshCw, Palette, Power, X, ImagePlus, BookOpen, Clapperboard, BarChart2, Activity, MessageCircle, Upload, Shuffle, CheckCircle2, UserPlus, RotateCcw, Download, ChevronDown, ChevronLeft, ChevronRight, Check, Sun, Search, LayoutGrid } from "lucide-react";
 import { FaInstagram, FaSnapchatGhost } from "react-icons/fa";
 import { pickLocalWallpaper } from "@/pages/mobileShared";
 import { writeUiSpeedLog } from "@/lib/uiSpeedLog";
@@ -905,21 +905,6 @@ async function registerDevice(phone: UsbPhone): Promise<FarmDevice> {
   return d.device;
 }
 
-async function removeDevice(slotIndex: number): Promise<void> {
-  const deviceResponse = await fetch("/api/mobile/farm-devices");
-  const deviceData = deviceResponse.ok ? await deviceResponse.json().catch(() => null) : null;
-  const device = (deviceData?.devices ?? []).find((entry: FarmDevice) => entry.slotIndex === slotIndex);
-  if (device?.serial) {
-    const stateResponse = await fetch(
-      `/api/mobile/devices/${encodeURIComponent(device.serial)}/account-state`,
-      { method: "DELETE" },
-    );
-    if (!stateResponse.ok) throw new Error("Failed to clear removed device account state");
-  }
-  const response = await fetch(`/api/mobile/farm-devices/${slotIndex}`, { method: "DELETE" });
-  if (!response.ok) throw new Error("Failed to remove device");
-}
-
 // ─── Add Device Panel ─────────────────────────────────────────────────────────
 
 function AddDevicePanel({
@@ -1145,7 +1130,6 @@ function DeviceCard({
   onClick,
   onPower,
   powered,
-  onRemove,
   custom,
   onCustomize,
   compact = false,
@@ -1163,7 +1147,6 @@ function DeviceCard({
   onClick:     () => void;
   onPower:     () => void;
   powered:     boolean;
-  onRemove:    () => void;
   custom:      SlotCustomization;
   onCustomize: (c: SlotCustomization) => void;
   compact?:    boolean;
@@ -1444,14 +1427,6 @@ function DeviceCard({
           className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary/10 hover:border-primary/40 hover:text-primary text-muted-foreground"
         >
           <Palette className="w-3 h-3" />
-        </button>
-        <button
-          onClick={e => { e.stopPropagation(); onRemove(); }}
-          title="Remove device from farm"
-          aria-label="Remove device from farm"
-          className="w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive text-muted-foreground"
-        >
-          <Trash2 className="w-3 h-3" />
         </button>
       </div>
 
@@ -1752,12 +1727,6 @@ export function MobileDevicesPage() {
   const slotMap = new Map<number, FarmDevice>();
   for (const d of devices) slotMap.set(d.slotIndex, d);
 
-  const handleRemove = async (slotIndex: number) => {
-    await removeDevice(slotIndex).catch(() => {});
-    setDevices(prev => prev.filter(d => d.slotIndex !== slotIndex));
-    if (addingSlot === slotIndex) setAddingSlot(null);
-  };
-
   const handleAdded = (device: FarmDevice) => {
     setDevices(prev => {
       const without = prev.filter(d => d.slotIndex !== device.slotIndex);
@@ -1829,10 +1798,9 @@ export function MobileDevicesPage() {
                       currentTool={currentTools.get(device.serial) ?? null}
                       accountSlotCounts={accountSlotCounts[device.serial] ?? { instagram: 0, snapchat: 0 }}
                       activeHstSlotCounts={activeHstSlotCounts[device.serial] ?? { instagram: 0, snapchat: 0 }}
-                       onClick={() => void openDeviceMirror(device)}
-                       powered={manualPowerSerials.has(device.serial) || streamingSerials.has(device.serial)}
-                       onPower={() => void toggleDevicePower(device.serial)}
-                      onRemove={() => handleRemove(device.slotIndex)}
+                      onClick={() => void openDeviceMirror(device)}
+                      powered={manualPowerSerials.has(device.serial) || streamingSerials.has(device.serial)}
+                      onPower={() => void toggleDevicePower(device.serial)}
                       custom={slotCustom[device.slotIndex] ?? DEFAULT_SLOT_CUSTOM}
                       onCustomize={c => setSlotCustom(prev => ({ ...prev, [device.slotIndex]: c }))}
                       compact={devicesPerPage >= 16}

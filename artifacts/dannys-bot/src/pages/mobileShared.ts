@@ -50,6 +50,30 @@ export async function pickLocalWallpaper(): Promise<string | null> {
   return normalizeWallpaperDataUrl(sourceDataUrl);
 }
 
+/** Remove a registered farm device after clearing account-owned state for its serial. */
+export async function removeFarmDevice(slotIndex: number, serial: string): Promise<void> {
+  if (!Number.isSafeInteger(slotIndex) || slotIndex < 1) {
+    throw new Error("This device does not have a valid Phone Farm slot.");
+  }
+  const cleanSerial = serial.trim();
+  if (!cleanSerial) throw new Error("The device serial could not be confirmed.");
+
+  const stateResponse = await fetch(
+    `/api/mobile/devices/${encodeURIComponent(cleanSerial)}/account-state`,
+    { method: "DELETE" },
+  );
+  const stateData = await stateResponse.json().catch(() => null);
+  if (!stateResponse.ok || stateData?.ok !== true) {
+    throw new Error(stateData?.error ?? "Failed to clear this device's account state.");
+  }
+
+  const response = await fetch(`/api/mobile/farm-devices/${slotIndex}`, { method: "DELETE" });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.ok !== true || data?.deleted !== true) {
+    throw new Error(data?.error ?? "Failed to remove this device from Phone Farm.");
+  }
+}
+
 async function normalizeWallpaperDataUrl(sourceDataUrl: string): Promise<string> {
   try {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {

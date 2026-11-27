@@ -75,6 +75,7 @@ import {
   TRUST_SCORE_SLOT_OWNED_FIELDS,
   COPYABLE_ACCOUNT_SPECIFIC_FIELDS,
   pickLocalWallpaper,
+  removeFarmDevice,
 } from "@/pages/mobileShared";
 
 declare const __API_PORT__: string;
@@ -12056,12 +12057,16 @@ function AccountSettingsPanel({ phone, addLog, onSlotChange, initialSlot, onAnyE
 
 function PhoneSettingsPanel({
   serial,
+  slotIndex,
   online,
   showProxy,
+  onDeleteDevice,
 }: {
   serial: string | null;
+  slotIndex: number | null;
   online: boolean;
   showProxy: boolean;
+  onDeleteDevice: () => Promise<void>;
 }) {
   interface BatteryScheduleConfig { enabled: boolean; unplugMinutes: number; cycleHours: number; spoofLevel: number; }
   interface BatteryInfo {
@@ -12077,6 +12082,22 @@ function PhoneSettingsPanel({
   const [battError,     setBattError]     = React.useState<string | null>(null);
   const [probing,       setProbing]       = React.useState(false);
   const [probeMsg,      setProbeMsg]      = React.useState<string | null>(null);
+  const [confirmDeleteDevice, setConfirmDeleteDevice] = React.useState(false);
+  const [deletingDevice, setDeletingDevice] = React.useState(false);
+  const [deleteDeviceError, setDeleteDeviceError] = React.useState<string | null>(null);
+
+  const handleDeleteDevice = async () => {
+    setDeletingDevice(true);
+    setDeleteDeviceError(null);
+    try {
+      await onDeleteDevice();
+      setConfirmDeleteDevice(false);
+    } catch (error: any) {
+      setDeleteDeviceError(error?.message ?? "Failed to remove this device.");
+    } finally {
+      setDeletingDevice(false);
+    }
+  };
 
   // Stop Charging schedule form
   const [enabled,       setEnabled]       = React.useState(false);
@@ -12964,6 +12985,60 @@ function PhoneSettingsPanel({
           </>
         )}
       </div>
+
+      {serial && slotIndex !== null && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Delete this device</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Remove this phone from Phone Farm and clear its saved account and automation state.
+            </p>
+          </div>
+          {deleteDeviceError && <p className="text-xs text-destructive">{deleteDeviceError}</p>}
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => {
+              setDeleteDeviceError(null);
+              setConfirmDeleteDevice(true);
+            }}
+            disabled={deletingDevice}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete this device
+          </Button>
+        </div>
+      )}
+
+      <AlertDialog
+        open={confirmDeleteDevice}
+        onOpenChange={open => {
+          if (!deletingDevice) setConfirmDeleteDevice(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this device?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the device from Phone Farm and clears its saved account slots and automation state. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteDeviceError && <p className="text-sm text-destructive">{deleteDeviceError}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingDevice}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingDevice || !serial || slotIndex === null}
+              onClick={event => {
+                event.preventDefault();
+                void handleDeleteDevice();
+              }}
+            >
+              {deletingDevice ? "Deleting…" : "Delete device"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -14298,8 +14373,16 @@ export function MobilePage() {
                   <PhoneSettingsPanel
                     key={deviceSettingsSerial ?? "no-device"}
                     serial={deviceSettingsSerial}
+                    slotIndex={targetSerial ? farmSlotIndex : null}
                     online={deviceSettingsOnline}
                     showProxy={deviceDetailView}
+                    onDeleteDevice={async () => {
+                      if (!deviceSettingsSerial || farmSlotIndex === null) {
+                        throw new Error("This device is no longer registered in Phone Farm.");
+                      }
+                      await removeFarmDevice(farmSlotIndex, deviceSettingsSerial);
+                      setLocation("/mobile");
+                    }}
                   />
                 )}
                 {activeTab === "actionlog" && (
