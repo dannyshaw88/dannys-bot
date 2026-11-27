@@ -45,10 +45,6 @@ confirmed Snapchat logout and the next account selection.
   ignored by the keyguard with no visible motion. Unlock must use a dedicated
   touchscreen gesture from the bottom-edge system-gesture region with a
   normal drag duration, and log keyguard state before/after.
-- Check `isScreenOn` after wake and after unlock before launching the app.
-  `KEYCODE_WAKEUP` and the unlock-swipe command can both return successfully
-  while the physical display remains off; make one bounded wake/unlock retry,
-  then stop before any app/account action if the display is still off.
 
 - Graceful reboot must use a bounded cycle-drain period and then force the ADB
   reboot if the worker is still registered. A synchronous/in-flight device I/O
