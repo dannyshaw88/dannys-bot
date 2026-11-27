@@ -17,7 +17,7 @@ import { LEAKS_PAGE_HTML } from "./leaksPage";
 import { findGoogleChromeDmControl, findGoogleChromeDmMessageButton } from "./googleChromeDmControls";
 import { waitForGoogleChromeDmDelay } from "./googleChromeDmDelay";
 import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
-import { waitForGoogleChromeDmFollowers } from "./googleChromeDmFollowers";
+import { scrollGoogleChromeDmFollowers, waitForGoogleChromeDmFollowers } from "./googleChromeDmFollowers";
 import { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } from "./googleChromeDmComposer";
 import { googleChromeDmRecipientKey, readGoogleChromeDmContacts, recordGoogleChromeDmContacts, inspectGoogleChromeDmHistory } from "./googleChromeDmHistory";
 import { personalizeGoogleChromeDmMessage } from "./googleChromeDmPersonalization";
@@ -5221,45 +5221,49 @@ export async function runGoogleChromeDm(
 
     let candidates = await waitForGoogleChromeDmFollowers(collectEligibleProfiles, isStopped);
     const discovered = new Map(candidates.map(candidate => [profileKey(candidate.url), candidate]));
-    let previousSnapshot = "";
-    let unchangedScans = 0;
     const targetSends = Math.min(amount, userLimit);
     // History can only be inspected after opening a chat, so gather extra
     // eligible candidates to replace those late-discovered existing threads.
     const discoveryTarget = Number.isFinite(targetSends)
       ? Math.min(userLimit, targetSends + 10)
       : targetSends;
-    for (let scan = 0; scan < 30; scan++) {
+    let bottomStableScans = 0;
+    let scrollPasses = 0;
+    while (!isStopped()) {
       if (isStopped()) break;
       const allowed = allowedCandidates(candidates);
       if (allowed.length >= discoveryTarget) break;
-      const snapshot = candidates.map(candidate => `${profileKey(candidate.url)}:${candidate.photoUrl ?? ""}`).join("|");
-      unchangedScans = snapshot === previousSnapshot ? unchangedScans + 1 : 0;
-      previousSnapshot = snapshot;
-      if (unchangedScans >= 8) break;
-      await session.page.evaluate(() => {
-        const win = (globalThis as any).window;
-        const doc = (globalThis as any).document;
-        const main = doc.querySelector("main,[role='main']");
-        const headings = main ? Array.from(main.querySelectorAll("h1,h2,h3,h4,[role='heading'],span")) as any[] : [];
-        let container = headings.reverse().find(element => /^followers$/i.test((element.innerText || "").trim()))?.parentElement;
-        while (container && container !== doc.body) {
-          const style = (globalThis as any).getComputedStyle(container);
-          if (container.scrollHeight > container.clientHeight + 4 && /auto|scroll/.test(style.overflowY)) {
-            container.scrollBy(0, Math.max(300, Math.floor(container.clientHeight * 0.75)));
-            return;
-          }
-          container = container.parentElement;
-        }
-        win.scrollBy(0, Math.max(300, Math.floor(win.innerHeight * 0.75)));
-      });
-      await new Promise(resolve => setTimeout(resolve, 750));
+      const scrollState = await session.page.evaluate(scrollGoogleChromeDmFollowers);
+      if (scrollState.scrolled) {
+        scrollPasses++;
+        bottomStableScans = 0;
+        await new Promise(resolve => setTimeout(resolve, 750));
+      } else {
+        // Keep the run alive at the apparent end long enough for Facebook's
+        // lazy-loaded rows to arrive; unchanged profile IDs alone are not proof
+        // that the Followers list has been exhausted.
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+      }
+      const priorCount = candidates.length;
       for (const candidate of await collectEligibleProfiles()) {
         const key = profileKey(candidate.url);
         const prior = discovered.get(key);
         discovered.set(key, { ...candidate, photoUrl: candidate.photoUrl ?? prior?.photoUrl });
       }
       candidates = [...discovered.values()];
+      const reachedEnd = !scrollState.scrolled;
+      if (reachedEnd && candidates.length === priorCount) {
+        bottomStableScans++;
+      } else {
+        bottomStableScans = 0;
+      }
+      if (scrollPasses > 0 && scrollPasses % 10 === 0 && scrollState.scrolled) {
+        log(`[googleChromeDm:${profileId}] Follower discovery continues: ${scrollPasses} scrolls, ${candidates.length} profiles found, ${allowedCandidates(candidates).length} eligible so far`, "browser");
+      }
+      if (bottomStableScans >= 8) {
+        log(`[googleChromeDm:${profileId}] Followers list reached its end after ${scrollPasses} scrolls; ${candidates.length} profiles discovered`, "browser");
+        break;
+      }
     }
     const filtered = allowedCandidates(candidates);
     result.skipped = candidates.length - filtered.length;

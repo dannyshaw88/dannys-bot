@@ -99,10 +99,16 @@ The configured Send DMs amount is a successful-send target. Filtered profiles an
 
 **Why:** A run found one eligible profile after filtering 42 others and ended, although the user expects a configured minimum of three successful sends.
 
-**How to apply:** Count only confirmed sends toward the target, continue harvesting eligible candidates within bounded discovery, and report clearly when the target cannot be reached.
+**How to apply:** Count only confirmed sends toward the target, continue harvesting eligible candidates until the target is met, the Followers list is exhausted, or the user's configured stop limit is reached, and report clearly when the target cannot be reached.
 
 Wait for actual collected follower rows, not merely Facebook's page shell or early links, and do not use unchanged document height as proof that follower discovery is finished.
 
 **Why:** Facebook can hydrate names and photos after its shell appears, and virtualised or nested lists can change their users without changing document height. Ignored readiness timeouts plus an unexplained empty result look like a stalled tool.
 
 **How to apply:** Bound the wait, preserve discovered identities across scrolling, support an exact visible Followers span when semantic headings are absent, and show an actionable error when no readable rows or no eligible recipients remain. Keep routine progress/success narration hidden.
+
+Finding no eligible profiles in the current batch is not proof that the Followers list is exhausted. Continue scrolling when filters reject every discovered profile; stop only after the actual scroll surfaces reach their bottom and the list remains settled without new rows, or the successful-send target/configured stop limit is reached.
+
+**Why:** An unchanged candidate snapshot caused Send DMs to stop after eight scans, even though the user expected it to keep scrolling for profiles that might pass the active filters.
+
+**How to apply:** Do not use a fixed count of unchanged IDs as the end condition. Scroll the Followers panel and page, preserve profiles across virtualized rows, and confirm stable end-of-list before reporting that no candidates remain.
