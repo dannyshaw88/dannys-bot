@@ -11,6 +11,12 @@ Require the message composer to identify the same recipient (for example, `Write
 
 **How to apply:** Keep these recipient and composer checks limited to the synthetic Google Chrome Send DMs flow. Fail closed whenever the profile identity, unique Message control, recipient-specific composer, or typed text cannot be confirmed. Preserve existing click behavior for other browser sessions.
 
+Composer visibility alone is not proof that Facebook finished rendering it. Before typing, require the editable field to be writable, focused, and still attached; after typing, wait for the exact text to appear in that same field before enabling Send.
+
+**Why:** The user observed chats opening before their composer was ready, causing messages not to appear in the field.
+
+**How to apply:** Use bounded state-based waits for focus and exact text, then stop the run without sending if either state cannot be verified. Do not switch to another recipient after a composer readiness failure.
+
 After confirming the profile, resolve the Message button from the live DOM immediately before clicking it. If the handle is detached or Puppeteer reports no clickable point, re-resolve and retry once; never reuse the stale handle or synthesize a DOM click.
 
 **Why:** Windows logs showed both “Node is detached from document” and “Node is either not clickable or not an Element” before Message was pressed.

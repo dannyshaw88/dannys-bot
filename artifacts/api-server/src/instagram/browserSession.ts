@@ -5490,14 +5490,45 @@ export async function runGoogleChromeDm(
         const messageIndex = Math.floor(Math.random() * messages.length);
         const message = personalizeGoogleChromeDmMessage(messages[messageIndex], candidate.name);
         log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: selected message option ${messageIndex + 1} of ${messages.length}`, "browser");
+        log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: waiting for the composer to accept focus`, "browser");
         await composer.click();
-        await composer.type(message, { delay: 0 });
-        const typedText = await composer.evaluate((element: any) =>
-          String(element.innerText || element.textContent || element.value || "").replace(/\u200b/g, "").replace(/\r\n/g, "\n").trim(),
-        );
-        if (typedText !== message) {
+        const focusedHandle = await session.page.waitForFunction((element: any) => {
+          const doc = (globalThis as any).document;
+          const getStyle = (globalThis as any).getComputedStyle as (node: any) => any;
+          if (!element?.isConnected || element.disabled || element.readOnly ||
+              element.getAttribute("aria-disabled") === "true") return false;
+          const rect = element.getBoundingClientRect();
+          const style = getStyle(element);
+          if (!rect.width || !rect.height || style.display === "none" || style.visibility === "hidden") return false;
+          const focused = doc.activeElement === element || element.contains(doc.activeElement);
+          const editable = element.matches("[contenteditable='true'][role='textbox']")
+            ? element.isContentEditable
+            : element.tagName === "TEXTAREA" && !element.readOnly;
+          return focused && editable;
+        }, { timeout: 8_000, polling: 100 }, composer).catch(() => null);
+        const composerFocused = focusedHandle
+          ? await focusedHandle.jsonValue().then((value: unknown) => value === true).catch(() => false)
+          : false;
+        await focusedHandle?.dispose().catch(() => {});
+        if (!composerFocused) {
           result.failed++;
-          emit("Typed text did not match the configured message; it was not sent.");
+          emit("The message field opened but did not become writable and focused; no text was entered or sent. Stopping this run.");
+          break;
+        }
+        await composer.type(message, { delay: 0 });
+        const typedTextHandle = await session.page.waitForFunction((element: any, expectedText: string) => {
+          if (!element?.isConnected) return false;
+          const actual = String(element.innerText || element.textContent || element.value || "")
+            .replace(/\u200b/g, "").replace(/\r\n/g, "\n").trim();
+          return actual === expectedText;
+        }, { timeout: 5_000, polling: 100 }, composer, message).catch(() => null);
+        const typedTextMatches = typedTextHandle
+          ? await typedTextHandle.jsonValue().then((value: unknown) => value === true).catch(() => false)
+          : false;
+        await typedTextHandle?.dispose().catch(() => {});
+        if (!typedTextMatches) {
+          result.failed++;
+          emit("The message text did not finish rendering in the composer; nothing was sent. Stopping this run.");
           break;
         }
         log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: message text verified in the matching composer`, "browser");
