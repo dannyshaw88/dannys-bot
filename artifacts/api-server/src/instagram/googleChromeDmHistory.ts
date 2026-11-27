@@ -178,6 +178,8 @@ export function inspectGoogleChromeDmHistory(element: any, expectedName = ""): "
     // be treated as empty during reconciliation of an interrupted send.
     const otherText = text.replace(notice[0], "")
       .replace(new RegExp(expectedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "")
+      .replace(/\b\d+(?:[.,]\d+)?\s*[kmb]?\s+people follow this\b/ig, "")
+      .replace(/\bmodel\b/ig, "")
       .replace(/\b(?:active now|available|close chat|send|more options|aa)\b/ig, "")
       .replace(/[\s:·•.,!?-]+/g, "").trim();
     if (otherText) {

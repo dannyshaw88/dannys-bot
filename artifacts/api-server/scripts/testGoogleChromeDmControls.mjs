@@ -78,6 +78,22 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
     "any readable conversation text prevents a send",
   );
   assert.equal(
+    classify(
+      "Messenger Ele Meko 1.3K people follow this Model When you send a message, Ele Meko will see your public info. Aa Close chat",
+      "Ele Meko",
+    ),
+    "empty",
+    "Facebook's profile summary in a new-thread card is not prior conversation text",
+  );
+  assert.equal(
+    classify(
+      "Messenger Ele Meko 1.3K people follow this Model When you send a message, Ele Meko will see your public info. Hello there Aa",
+      "Ele Meko",
+    ),
+    "existing",
+    "actual message text beside the new-thread notice still prevents a send",
+  );
+  assert.equal(
     classify("Messenger Haven rose Aa Close chat", "Haven rose"),
     "unknown",
     "an unclear screenshot never gets treated as an empty conversation",
@@ -94,6 +110,22 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   );
   const screenshotOcr = await screenshotModule.recognizeGoogleChromeDmScreenshot(await sharp(svg).png().toBuffer());
   assert.equal(classify(screenshotOcr, "Haven rose"), "empty", `actual screenshot OCR failed: ${screenshotOcr}`);
+  const profileCardSvg = Buffer.from(
+    '<svg width="900" height="220" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect width="100%" height="100%" fill="white"/>' +
+    '<text x="20" y="45" font-family="DejaVu Sans" font-size="28" fill="black">Ele Meko</text>' +
+    '<text x="20" y="90" font-family="DejaVu Sans" font-size="24" fill="black">1.3K people follow this Model</text>' +
+    '<text x="20" y="140" font-family="DejaVu Sans" font-size="24" fill="black">' +
+    'When you send a message, Ele Meko will see your public info.</text></svg>',
+  );
+  const profileCardOcr = await screenshotModule.recognizeGoogleChromeDmScreenshot(
+    await sharp(profileCardSvg).png().toBuffer(),
+  );
+  assert.equal(
+    classify(profileCardOcr, "Ele Meko"),
+    "empty",
+    `Facebook's empty-thread profile card was misread as a conversation: ${profileCardOcr}`,
+  );
   const existingSvg = Buffer.from(
     '<svg width="900" height="180" xmlns="http://www.w3.org/2000/svg">' +
     '<rect width="100%" height="100%" fill="white"/>' +
@@ -158,13 +190,16 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   assert.equal(inspect(composer, "Haven rose"), "existing", "media-only history is not a new conversation");
   rows = [];
   assert.equal(inspect(composer, "Haven rose"), false, "missing rows do not prove a new thread");
-  panel.innerText = "When you send a message, Haven rose will see your public info.";
+  panel.innerText = "Haven rose 1.3K people follow this Model. When you send a message, Haven rose will see your public info.";
   assert.equal(inspect(composer, "Haven rose"), false, "new-thread notice must settle");
   composer.__auraDmEmptySince = Date.now() - 2500;
   assert.equal(inspect(composer, "Haven rose"), "empty");
   panel.innerText += " Previous message without row attributes";
   assert.equal(inspect(composer, "Haven rose"), false, "unclassified text beside a new-thread notice stays unknown, not empty");
-  panel.innerText = "When you send a message, Haven rose will see your public info.";
+  panel.innerText = "Haven rose 1.3K people follow this Model. When you send a message, Haven rose will see your public info.";
+  rows = [row("Model")];
+  assert.equal(inspect(composer, "Haven rose"), "existing", "a message row still wins over profile-card text");
+  rows = [];
   busy = [close];
   assert.equal(inspect(composer, "Haven rose"), false, "loading history must never pass as empty");
   busy = [];

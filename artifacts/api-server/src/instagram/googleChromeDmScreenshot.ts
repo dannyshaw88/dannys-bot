@@ -65,7 +65,10 @@ export function classifyGoogleChromeDmHistoryScreenshot(
   const notice = /when you send a message.{0,100}public info/;
   const noticeMatch = text.match(notice);
   const withoutNotice = text.replace(notice, " ");
-  const withoutName = withoutNotice.replace(name, " ");
+  const withoutName = withoutNotice.split(name).join(" ");
+  const withoutProfileSummary = withoutName
+    .replace(/\b\d+(?:[.,]\d+)?\s*[kmb]?\s+people follow this\b/gi, " ")
+    .replace(/\bmodel\b/gi, " ");
   const knownChromeLabels = new Set([
     "messenger", "active", "now", "available", "close", "chat", "conversation", "more",
     "options", "minimize", "video", "audio", "call", "search", "profile", "view",
@@ -74,7 +77,7 @@ export function classifyGoogleChromeDmHistoryScreenshot(
     "emoji", "thumbs", "up", "public", "info", "when", "you", "will", "can", "see",
     "the", "to", "contact", "business", "account", "tap", "for", "more", "actions",
   ]);
-  const unrecognizedWords = withoutName.split(" ").filter(word =>
+  const unrecognizedWords = withoutProfileSummary.split(" ").filter(word =>
     word.length > 1 && !knownChromeLabels.has(word) && !/^\d{1,4}$/.test(word),
   );
   if (unrecognizedWords.length) return "existing";

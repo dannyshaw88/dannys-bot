@@ -5343,9 +5343,12 @@ export async function runGoogleChromeDm(
     const isFollowersPage = () => {
       try {
         const current = new URL(session.page.url());
-        return /(^|\.)facebook\.com$/i.test(current.hostname) &&
-          current.pathname === followersUrl.pathname &&
-          current.searchParams.get("sk") === followersUrl.searchParams.get("sk");
+        if (!/(^|\.)facebook\.com$/i.test(current.hostname) ||
+            current.pathname !== followersUrl.pathname) return false;
+        for (const [key, value] of followersUrl.searchParams) {
+          if (current.searchParams.get(key) !== value) return false;
+        }
+        return true;
       } catch { return false; }
     };
     const settlePaint = async () => {
@@ -5396,12 +5399,26 @@ export async function runGoogleChromeDm(
     const returnToFollowersViewport = async (profileName: string) => {
       if (isFollowersPage()) return;
       log(`[googleChromeDm:${profileId}] Returning from ${profileName} to the configured Followers URL`, "browser");
-      await session.page.goBack({ waitUntil: "domcontentloaded", timeout: 30_000 });
-      if (!isFollowersPage()) {
-        throw new Error("Browser Back did not restore the configured Followers page.");
+      try {
+        await session.page.goBack({ waitUntil: "domcontentloaded", timeout: 30_000 });
+      } catch (error: any) {
+        log(
+          `[googleChromeDm:${profileId}] Browser Back did not finish (${String(error?.message ?? error).slice(0, 120)}); reloading the configured Followers URL`,
+          "browser",
+        );
       }
+      if (!isFollowersPage()) {
+        await session.page.goto(targetUrl.href, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      }
+      if (!isFollowersPage()) {
+        throw new Error("The configured Followers URL could not be restored.");
+      }
+      log(`[googleChromeDm:${profileId}] Configured Followers URL restored before the return wait`, "browser");
       await waitAtFixedCheckpoint(60, "after returning to the configured Followers URL");
-      if (isStopped()) return;
+      if (isStopped()) {
+        log(`[googleChromeDm:${profileId}] Stop requested during the return wait; browser remains on the configured Followers URL`, "browser");
+        return;
+      }
       const restored = await loadSettledViewport();
       candidates = restored.rows;
       emit("Followers viewport restored, settled, and screenshot-captured before continuing.");
@@ -5739,7 +5756,7 @@ export async function runGoogleChromeDm(
           `history wait=${historyWaitMs}ms, pending=${pendingAttempt}, saved=${alreadyMessaged.has(recipientKey ?? "")}`,
           "browser",
         );
-        if (screenshotHistory === "existing") {
+        if (screenshotHistory === "existing" || history === "existing") {
           recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
           if (recipientKey) {
             alreadyMessaged.add(recipientKey);
