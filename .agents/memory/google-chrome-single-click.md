@@ -154,3 +154,9 @@ Puppeteer `Page` listener cleanup in this runtime uses `off()`, not necessarily 
 **Why:** A diagnostics guard requiring `removeListener()` silently disabled network tracing even though `Page.on()` worked.
 
 **How to apply:** Feature-detect `off()` first and fall back to `removeListener()` when attaching temporary page listeners.
+
+Facebook's empty-thread panel can include a profile preview such as “1.3K people follow this” and “Model” above its new-message notice. Treat those known preview labels as metadata, not conversation text; actual message rows still take precedence. On return, verify every query parameter from the configured Followers URL, then navigate directly to that exact URL if browser Back lands elsewhere.
+
+**Why:** The latest chat showed Facebook's empty-thread notice but OCR treated its profile preview as an old conversation and skipped without typing; a broad URL check could also accept another profile's Followers page.
+
+**How to apply:** Strip only the known profile-preview text around the explicit new-thread notice, require settled DOM history to confirm emptiness, keep real message rows as “existing,” and log the confirmed return URL before the fixed wait.
