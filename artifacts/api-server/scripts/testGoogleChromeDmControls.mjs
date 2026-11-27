@@ -30,6 +30,13 @@ const sentBuild = await build({
 const { inspectGoogleChromeDmSentMessage: inspectSent } = await import(
   `data:text/javascript;base64,${Buffer.from(sentBuild.outputFiles[0].text).toString("base64")}`,
 );
+const screenshotBuild = await build({
+  entryPoints: [fileURLToPath(new URL("../src/instagram/googleChromeDmScreenshot.ts", import.meta.url))],
+  bundle: true, write: false, platform: "node", format: "esm", logLevel: "silent",
+});
+const screenshotModule = await import(
+  `data:text/javascript;base64,${Buffer.from(screenshotBuild.outputFiles[0].text).toString("base64")}`,
+);
 const personalizationSource = await fs.readFile(
   new URL("../src/instagram/googleChromeDmPersonalization.ts", import.meta.url), "utf8",
 );
@@ -52,16 +59,56 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   let reads = 0;
   const rows = await waitFollowers(async () => ++reads < 4 ? [] : [{ name: "Loaded user" }],
     () => false, 1000, async () => {});
-  assert.equal(reads, 4, "keep polling the actual collector through delayed follower rendering");
+  assert.equal(reads, 6, "wait for three identical follower snapshots after delayed rows arrive");
   assert.equal(rows.length, 1);
   await assert.rejects(() => waitFollowers(async () => [], () => false, 0), /no readable user rows/);
   assert.deepEqual(await waitFollowers(async () => { throw new Error("must not read after Stop"); }, () => true), []);
   console.log("PASS: actual follower-row readiness retries, bounded empty-page failure and responsive Stop.");
 }
 {
+  const { classifyGoogleChromeDmHistoryScreenshot: classify, googleChromeDmScreenshotContainsText: contains } = screenshotModule;
+  assert.equal(
+    classify("Messenger Haven rose When you send a message, Haven rose will see your public info. Aa Close chat", "Haven rose"),
+    "empty",
+    "only a clearly rendered new-thread screenshot proves an empty conversation",
+  );
+  assert.equal(
+    classify("Messenger Haven rose When you send a message, Haven rose will see your public info. Hello there Aa", "Haven rose"),
+    "existing",
+    "any readable conversation text prevents a send",
+  );
+  assert.equal(
+    classify("Messenger Haven rose Aa Close chat", "Haven rose"),
+    "unknown",
+    "an unclear screenshot never gets treated as an empty conversation",
+  );
+  assert.equal(contains("Hello, Haven Rose!", "Haven Rose"), true);
+  assert.equal(contains("Hello, Haven Rose!", "Unrelated"), false);
+  const sharp = (await import("sharp")).default;
+  const svg = Buffer.from(
+    '<svg width="900" height="180" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect width="100%" height="100%" fill="white"/>' +
+    '<text x="20" y="55" font-family="DejaVu Sans" font-size="28" fill="black">' +
+    'Messenger Haven rose</text><text x="20" y="105" font-family="DejaVu Sans" font-size="24" fill="black">' +
+    'When you send a message, Haven rose will see your public info.</text></svg>',
+  );
+  const screenshotOcr = await screenshotModule.recognizeGoogleChromeDmScreenshot(await sharp(svg).png().toBuffer());
+  assert.equal(classify(screenshotOcr, "Haven rose"), "empty", `actual screenshot OCR failed: ${screenshotOcr}`);
+  const existingSvg = Buffer.from(
+    '<svg width="900" height="180" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect width="100%" height="100%" fill="white"/>' +
+    '<text x="20" y="65" font-family="DejaVu Sans" font-size="30" fill="black">' +
+    'Messenger Haven rose Hello there, are you available?</text></svg>',
+  );
+  const existingOcr = await screenshotModule.recognizeGoogleChromeDmScreenshot(await sharp(existingSvg).png().toBuffer());
+  assert.equal(classify(existingOcr, "Haven rose"), "existing", `actual existing-message OCR failed: ${existingOcr}`);
+  console.log("PASS: screenshot OCR classifies existing, clearly empty, and unknown chats fail-closed.");
+}
+{
   const { googleChromeDmRecipientKey: key, readGoogleChromeDmContacts: readContacts,
     readGoogleChromeDmPendingContacts: readPending, recordGoogleChromeDmContacts: recordContacts,
-    recordGoogleChromeDmPendingContacts: recordPending, inspectGoogleChromeDmHistory: inspect } = historyModule;
+    recordGoogleChromeDmPendingContacts: recordPending, clearGoogleChromeDmContacts: clearContacts,
+    inspectGoogleChromeDmHistory: inspect } = historyModule;
   assert.equal(key("https://www.facebook.com/profile.php?id=600&sk=about#x"), "id:600");
   assert.equal(key("https://m.facebook.com/people/Someone/600/"), "id:600");
   assert.equal(key("https://facebook.com.evil.test/profile.php?id=600"), null);
@@ -74,6 +121,8 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   recordContacts(file, "1", ["https://facebook.com/profile.php?id=601"]);
   assert(!readPending(file, "1").has("id:601"), "confirmed sends clear their pending marker");
   assert(readContacts(file, "1").has("id:601"), "confirmed sends become durable history");
+  clearContacts(file, "1", ["https://facebook.com/profile.php?id=601"]);
+  assert(!readContacts(file, "1").has("id:601"), "a screenshot-confirmed empty conversation clears stale send history");
   assert.equal(readContacts(file, "2").size, 0, "sender accounts have independent histories");
   await fs.writeFile(file, "{broken");
   assert.throws(() => readContacts(file, "1"), /could not be read/);
@@ -383,11 +432,11 @@ console.log("PASS: Facebook Send-label variants, matching chat Close, disabled/h
 // network request or message is used by this regression.
 const browserSource = await fs.readFile(new URL("../src/instagram/browserSession.ts", import.meta.url), "utf8");
 const collectStart = browserSource.indexOf("const collectEligibleProfiles = async () => session.page.evaluate");
-const collectEnd = browserSource.indexOf("\n    let candidates = await waitForGoogleChromeDmFollowers(", collectStart);
+const collectEnd = browserSource.indexOf("\n    const targetSends = Math.min(amount, userLimit);", collectStart);
 assert(collectStart > 0 && collectEnd > collectStart);
 const visibleNode = {
   style: { visibility: "visible", display: "block" },
-  getBoundingClientRect: () => ({ width: 50, height: 50 }),
+  getBoundingClientRect: () => ({ width: 50, height: 50, left: 0, top: 0, right: 50, bottom: 50 }),
 };
 const picture = {
   ...visibleNode, tagName: "IMG", complete: true, naturalWidth: 50, currentSrc: photoUrl,
@@ -399,7 +448,8 @@ const svgPicture = {
 };
 const anchor = (id, name, images = []) => ({
   ...visibleNode, href: `https://www.facebook.com/profile.php?id=${id}`, innerText: name,
-  getAttribute: () => null, querySelectorAll: () => images,
+  getAttribute: () => null,
+  querySelectorAll: selector => selector === "img" ? images.filter(image => image.tagName === "IMG") : images,
 });
 const anchors = [
   anchor("123", "Haven rose"), anchor("123", "", [picture]),
@@ -421,7 +471,8 @@ assert.equal(collected.find(candidate => candidate.name === "Haven rose").photoU
 assert.equal(collected.find(candidate => candidate.name === "Sebastián").photoUrl, "https://images.example.test/sebastian.jpg");
 assert.equal(collected.find(candidate => candidate.name === "Alice Smith").photoUrl, undefined);
 picture.complete = false;
-assert.equal((await collectEligibleProfiles()).find(candidate => candidate.name === "Haven rose").photoUrl, undefined);
+assert.equal((await collectEligibleProfiles()).length, 0, "do not process or scroll past visible users while their photos are loading");
+picture.complete = true;
 globalThis.document.querySelector = () => ({ querySelectorAll: selector => selector === "span" ? [heading] : [] });
 assert.equal((await collectEligibleProfiles()).length, 3, "a span-based Followers label remains scoped to the same follower list");
 delete globalThis.document;
@@ -437,9 +488,14 @@ editor.click = async () => events.push("composer");
 editor.type = async text => { editor.innerText = text; };
 let messageRendered = true;
 let renderMessageOnSend = true;
+let sentMessageText = "";
+const sendScrollPasses = [];
 const send = new Node("button", "Press Enter to send");
 send.click = async () => {
   events.push("send");
+  sendScrollPasses.push(scrollPasses);
+  sentMessageText = editor.innerText;
+  lastSentRecipientId = new URL(location).searchParams.get("id") ?? "";
   editor.innerText = "";
   messageRendered = renderMessageOnSend;
 };
@@ -477,19 +533,46 @@ const message = { click: async () => {
 } };
 let waits = 0;
 let location = "";
+let followersLocation = "";
+let latestCandidates = [];
+let viewportScreenshotCount = 0;
+let chatScreenshotCount = 0;
+let followersReturnCount = 0;
+let lastSentRecipientId = "";
+let scrollPasses = 0;
+let scrollPages = [];
 let historyVerdict = "empty";
+let screenshotHistoryOverride = "";
+let hideSentTextInScreenshot = false;
 let senderId = "42";
 let collectFixture = null;
 let fixtureCandidates = [
   { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
   { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
 ];
+latestCandidates = fixtureCandidates;
 const page = {
   cookies: async () => [{ name: "c_user", value: senderId }],
-  goto: async url => { location = url; events.push("navigate"); },
+  goto: async url => {
+    location = url;
+    if (!url.includes("sk=followers")) lastSentRecipientId = "";
+    if (url.includes("sk=followers")) followersLocation = url;
+    events.push("navigate");
+  },
+  goBack: async () => { location = followersLocation; followersReturnCount++; },
   url: () => location,
+  screenshot: async options => {
+    if (options?.clip) chatScreenshotCount++;
+    else viewportScreenshotCount++;
+    return Buffer.from(options?.clip ? "chat-screenshot" : "viewport-screenshot");
+  },
   evaluate: async fn => {
     const text = fn.toString();
+    if (text.includes("__chromeDmFixture.scroll()")) return globalThis.__chromeDmFixture.scroll();
+    if (text.includes("closePattern") && text.includes("editorSelector")) {
+      return { x: 0, y: 0, width: 320, height: 500 };
+    }
+    if (text.includes("requestAnimationFrame")) return;
     if (text.includes("visibleEditors") && text.includes("recipientHeaderMatched")) {
       return {
         path: "/profile.php", visibleEditors: 0, supportedEditors: 0,
@@ -501,7 +584,11 @@ const page = {
     }
     if (text.includes("scrollHeight")) return 1000;
     if (text.includes("scrollTo")) return;
-    if (collectFixture) return collectFixture();
+    if (collectFixture) {
+      latestCandidates = collectFixture();
+      return latestCandidates;
+    }
+    latestCandidates = fixtureCandidates;
     return fixtureCandidates;
   },
   evaluateHandle: async () => wrap(message),
@@ -544,16 +631,53 @@ const page = {
     return wrap(true); // Verified profile identity.
   },
 };
+const dispatcherScreenshotModule = {
+  ...screenshotModule,
+  recognizeGoogleChromeDmScreenshot: async image => {
+    const kind = Buffer.from(image).toString();
+    const id = new URL(location).searchParams.get("id") ?? "";
+    const current = latestCandidates.find(candidate =>
+      new URL(candidate.url).searchParams.get("id") === id,
+    ) ?? fixtureCandidates.find(candidate =>
+      new URL(candidate.url).searchParams.get("id") === id,
+    );
+    const name = current?.name ?? "Haven rose";
+    if (kind === "viewport-screenshot") return `${name} Message`;
+    if (screenshotHistoryOverride === "existing") {
+      return `${name} Screenshot-visible previous message Aa Close chat`;
+    }
+    if (screenshotHistoryOverride === "empty") {
+      return `${name} When you send a message, ${name} will see your public info. Aa Close chat`;
+    }
+    const verdict = typeof historyVerdict === "function" ? historyVerdict(location) : historyVerdict;
+    if (lastSentRecipientId === id && messageRendered && sentMessageText) {
+      if (hideSentTextInScreenshot) return `${name} Aa Close chat`;
+      return `${name} ${sentMessageText} Aa Close chat`;
+    }
+    if (verdict === "existing") return `${name} Previous conversation message Aa Close chat`;
+    if (verdict === "empty") return `${name} When you send a message, ${name} will see your public info. Aa Close chat`;
+    return `${name} Aa Close chat`;
+  },
+};
+const scrollFixture = () => {
+  if (!scrollPages.length) return { scrolled: false, atBottom: true };
+  const nextViewport = scrollPages.shift();
+  scrollPasses++;
+  collectFixture = () => nextViewport;
+  return { scrolled: true, atBottom: false };
+};
 const gaps = [];
 globalThis.__chromeDmFixture = {
   waitFollowers,
   historyModule, historyDirectory, path,
   composerModule,
   sentModule: { inspectGoogleChromeDmSentMessage: inspectSent },
+  screenshotModule: dispatcherScreenshotModule,
   personalizationModule,
   page, find: (_handle, action) => find(editor, action),
   findMessageButton, findGoogleChromeDmMessageButton: findMessageButton,
   composerUnavailable: false, browserLogs: [],
+  scroll: scrollFixture,
   reject,
   wait: async (seconds, stopped) => {
     const started = Date.now();
@@ -565,12 +689,13 @@ globalThis.__chromeDmFixture = {
 const prelude = `
 const waitForGoogleChromeDmFollowers = (read, stopped) => globalThis.__chromeDmFixture.waitFollowers(read, stopped, 1000, async () => {});
 const setTimeout = callback => globalThis.setTimeout(callback, 0);
-const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, readGoogleChromeDmPendingContacts, recordGoogleChromeDmContacts, recordGoogleChromeDmPendingContacts, clearGoogleChromeDmPendingContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
+const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, readGoogleChromeDmPendingContacts, recordGoogleChromeDmContacts, recordGoogleChromeDmPendingContacts, clearGoogleChromeDmContacts, clearGoogleChromeDmPendingContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
 const { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } = globalThis.__chromeDmFixture.composerModule;
 const { inspectGoogleChromeDmSentMessage } = globalThis.__chromeDmFixture.sentModule;
+const { classifyGoogleChromeDmHistoryScreenshot, getGoogleChromeDmChatScreenshotBounds, googleChromeDmScreenshotContainsText, recognizeGoogleChromeDmScreenshot } = globalThis.__chromeDmFixture.screenshotModule;
 const { personalizeGoogleChromeDmMessage } = globalThis.__chromeDmFixture.personalizationModule;
 const { findGoogleChromeDmMessageButton } = globalThis.__chromeDmFixture;
-const scrollGoogleChromeDmFollowers = () => ({ scrolled: false });
+const scrollGoogleChromeDmFollowers = () => globalThis.__chromeDmFixture.scroll();
 const COOKIES_DIR = globalThis.__chromeDmFixture.historyDirectory;
 const path = globalThis.__chromeDmFixture.path;
 const GOOGLE_CHROME_BROWSER_PROFILE_ID = 10000000;
@@ -584,6 +709,9 @@ const log = message => globalThis.__chromeDmFixture.browserLogs.push(message);
 `;
 const flow = await transform(prelude + browserSource.slice(start, end), { loader: "ts", format: "esm" });
 const { runGoogleChromeDm } = await import(`data:text/javascript;base64,${Buffer.from(flow.code).toString("base64")}`);
+const viewportScreenshotsBefore = viewportScreenshotCount;
+const chatScreenshotsBefore = chatScreenshotCount;
+const followersReturnsBefore = followersReturnCount;
 const result = await runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/profile.php?id=999&sk=followers",
   message: "Local fixture only", amount: 1,
@@ -591,8 +719,29 @@ const result = await runGoogleChromeDm(10_000_000, {
 assert.equal(result.sent, 1, JSON.stringify({ result, events, logs: globalThis.__chromeDmFixture.browserLogs }));
 assert.equal(result.failed, 0);
 assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "render", "close"]);
+assert(viewportScreenshotCount - viewportScreenshotsBefore >= 3, "capture list, profile, and restored-list screenshots");
+assert.equal(chatScreenshotCount - chatScreenshotsBefore, 2, "capture the chat before and after sending");
+assert.equal(followersReturnCount - followersReturnsBefore, 1, "restore the follower page before ending the run");
 assert.equal(editor.isConnected, false);
 assert.equal(gaps.length, 0, "no delay before first or after last recipient");
+{
+  fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=913", name: "Screenshot Existing" }];
+  screenshotHistoryOverride = "existing";
+  historyVerdict = "empty";
+  events.length = 0; waits = 0;
+  const screenshotExisting = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 1, skipAlreadyMessaged: true,
+  });
+  assert.equal(screenshotExisting.sent, 0);
+  assert.equal(screenshotExisting.skipped, 1, "screenshot-visible chat text wins even when DOM history claims empty");
+  assert(!events.includes("send"), "visible existing chat text prevents Send");
+  screenshotHistoryOverride = "";
+  fixtureCandidates = [
+    { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
+    { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
+  ];
+}
 {
   fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=777", name: "Unrendered Recipient" }];
   renderMessageOnSend = false;
@@ -625,6 +774,51 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
     { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
   ];
   console.log("PASS: a cleared composer without a visible outgoing message stays unconfirmed, keeps its chat open and reconciles safely on retry.");
+}
+{
+  fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=912", name: "Screenshot Missing Send" }];
+  historyVerdict = "empty";
+  hideSentTextInScreenshot = true;
+  renderMessageOnSend = true;
+  events.length = 0; waits = 0;
+  const screenshotUnconfirmed = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 1,
+  });
+  assert.equal(screenshotUnconfirmed.sent, 0);
+  assert.equal(screenshotUnconfirmed.failed, 1, "DOM-only visible text is not enough without screenshot OCR");
+  assert(events.includes("send") && !events.includes("close"), "keep the chat open when screenshot OCR cannot see the message");
+  hideSentTextInScreenshot = false;
+  fixtureCandidates = [
+    { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
+    { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
+  ];
+  console.log("PASS: neither history nor sent state advances without screenshot-confirmed visible text.");
+}
+{
+  fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=910", name: "First Scroll User" }];
+  collectFixture = null;
+  scrollPages = [[{ url: "https://www.facebook.com/profile.php?id=911", name: "Second Scroll User" }]];
+  scrollPasses = 0;
+  sendScrollPasses.length = 0;
+  events.length = 0; waits = 0;
+  const incremental = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 2, delayMinSeconds: 0, delayMaxSeconds: 0,
+  });
+  assert.equal(incremental.sent, 2);
+  assert.deepEqual(sendScrollPasses, [0, 1], "send from the current viewport before scrolling for the next user");
+  assert.equal(scrollPasses, 1, "scroll exactly once between the two users");
+  assert(incremental.attemptedUrls[0].endsWith("id=910"));
+  assert(incremental.attemptedUrls[1].endsWith("id=911"));
+  fixtureCandidates = [
+    { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
+    { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
+  ];
+  collectFixture = null;
+  scrollPages = [];
+  scrollPasses = 0;
+  console.log("PASS: Send DMs now processes each stable, rendered follower viewport before the next scroll.");
 }
 {
   events.length = 0; waits = 0;
@@ -681,6 +875,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
 }
 events.length = 0;
 waits = 0;
+gaps.length = 0;
 const two = await runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/profile.php?id=999&sk=followers",
   message: "Local fixture only", amount: 2, delayMinSeconds: 0.03, delayMaxSeconds: 0.05,
@@ -814,27 +1009,30 @@ console.log("PASS: production dispatcher targets all five user-confirmed profile
   assert.equal(oldThread.sent, 0);
   assert.equal(oldThread.skipped, 1);
   assert.deepEqual(events, ["navigate", "navigate", "message", "close"], "existing conversation is closed without typing or sending");
-  const persisted = await runWith(600, "empty");
+  const persisted = await runWith(600, "existing");
   assert.equal(persisted.sent, 0);
-  assert(!events.includes("message"), "later run skips disk-recorded recipient before opening chat");
+  assert(events.includes("message") && !events.includes("send"),
+    "disk history is still confirmed against a screenshot before skipping");
   fixtureCandidates = [{ url: "https://m.facebook.com/people/Haven/600/?ref=followers", name: "Haven rose", photoUrl }];
   events.length = 0; waits = 0;
   assert.equal((await runGoogleChromeDm(10_000_000, options)).sent, 0);
-  assert(!events.includes("message"), "different profile URL for the same ID is still skipped");
+  assert(events.includes("message") && !events.includes("send"),
+    "URL aliases still open the chat and confirm existing text from the screenshot");
   const unknown = await runWith(601, false);
   assert.equal(unknown.sent, 0);
   assert.equal(unknown.failed, 1);
   assert(!events.includes("composer") && !events.includes("send"), "unknown history never types or sends");
   const newThread = await runWith(602, "empty");
   assert.equal(newThread.sent, 1);
-  const nextRun = await runWith(602, "empty");
-  assert.equal(nextRun.sent, 0, "successful contact survives a new run");
+  const nextRun = await runWith(602, "existing");
+  assert.equal(nextRun.sent, 0, "a later screenshot of the existing message prevents another send");
   senderId = "43";
-  const otherSender = await runWith(602, "empty");
+  const otherSender = await runWith(607, "empty");
   assert.equal(otherSender.sent, 1, "different sender is not incorrectly blocked by another account's record");
   senderId = "";
   await assert.rejects(() => runWith(603, "empty"), /account could not be verified/);
   senderId = "42";
+  historyVerdict = "existing";
   const imported = await runGoogleChromeDm(10_000_000, {
     ...options, alreadyMessagedUrls: ["https://facebook.com/people/Someone/603/?tracking=old"],
   });

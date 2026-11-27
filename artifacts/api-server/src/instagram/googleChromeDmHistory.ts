@@ -108,6 +108,23 @@ export function clearGoogleChromeDmPendingContacts(file: string, account: string
   if (changed) write(file, data);
 }
 
+/** Remove a stale "already sent" marker only after a live screenshot proves the thread is empty. */
+export function clearGoogleChromeDmContacts(file: string, account: string, urls: string[]): void {
+  if (!/^\d+$/.test(account)) throw new Error("Cannot clear contact history without a verified Facebook account.");
+  const data = read(file);
+  const contacts = data.accounts[account];
+  if (!contacts) return;
+  let changed = false;
+  for (const url of urls) {
+    const key = googleChromeDmRecipientKey(url);
+    if (key && contacts[key]) {
+      delete contacts[key];
+      changed = true;
+    }
+  }
+  if (changed) write(file, data);
+}
+
 /**
  * Browser-side only. Inspect the verified composer's chat, never a sibling chat.
  * False means "still unknown"; waitForFunction must time out rather than send.

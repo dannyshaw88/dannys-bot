@@ -20,6 +20,7 @@ import { googleChromeGirlsOnlyRejection } from "./googleChromeDmEligibility";
 import { scrollGoogleChromeDmFollowers, waitForGoogleChromeDmFollowers } from "./googleChromeDmFollowers";
 import { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } from "./googleChromeDmComposer";
 import {
+  clearGoogleChromeDmContacts,
   clearGoogleChromeDmPendingContacts,
   googleChromeDmRecipientKey,
   readGoogleChromeDmContacts,
@@ -29,6 +30,12 @@ import {
   inspectGoogleChromeDmHistory,
 } from "./googleChromeDmHistory";
 import { inspectGoogleChromeDmSentMessage } from "./googleChromeDmSent";
+import {
+  classifyGoogleChromeDmHistoryScreenshot,
+  getGoogleChromeDmChatScreenshotBounds,
+  googleChromeDmScreenshotContainsText,
+  recognizeGoogleChromeDmScreenshot,
+} from "./googleChromeDmScreenshot";
 import { personalizeGoogleChromeDmMessage } from "./googleChromeDmPersonalization";
 import { userAgents as UA_POOL } from "../shared/userAgents";
 
@@ -5097,16 +5104,11 @@ export async function runGoogleChromeDm(
   const strictGirlsOnly = options.girlsOnly === true ||
     (options.girlsOnly === undefined && excludedNameTokens.size > 0);
   const candidateFilterReason = (candidate: { url: string; name: string }):
-    "girlsOnly" | "excludedName" | "alreadyMessaged" | null => {
+    "girlsOnly" | "excludedName" | null => {
     if (strictGirlsOnly && googleChromeGirlsOnlyRejection(candidate) !== null) return "girlsOnly";
     if (shouldExcludeName(candidate.name)) return "excludedName";
-    if (options.skipAlreadyMessaged && alreadyMessaged.has(googleChromeDmRecipientKey(candidate.url) ?? "")) {
-      return "alreadyMessaged";
-    }
     return null;
   };
-  const allowedCandidates = (candidates: Array<{ url: string; name: string; photoUrl?: string }>) =>
-    candidates.filter(candidate => candidateFilterReason(candidate) === null);
   const startedAt = Date.now();
   const stopAt = Number.isFinite(options.stopAfterMinutes) && (options.stopAfterMinutes ?? 0) > 0
     ? startedAt + (options.stopAfterMinutes as number) * 60_000
@@ -5159,7 +5161,11 @@ export async function runGoogleChromeDm(
       const visibleCheck = (element: any) => {
         const rect = element.getBoundingClientRect();
         const style = getStyle(element);
-        return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+        const viewportWidth = doc.documentElement?.clientWidth ?? (globalThis as any).innerWidth ?? 0;
+        const viewportHeight = doc.documentElement?.clientHeight ?? (globalThis as any).innerHeight ?? 0;
+        return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 &&
+          (!viewportWidth || rect.left < viewportWidth) && (!viewportHeight || rect.top < viewportHeight) &&
+          style.visibility !== "hidden" && style.display !== "none";
       };
       const identity = (value: string) => {
         try {
@@ -5198,10 +5204,14 @@ export async function runGoogleChromeDm(
       const genericLabels = /^(sign up|log in|login|follow|message|view profile|profile|facebook)$/i;
       const candidates = new Map<string, { url: string; name: string; photoUrl?: string }>();
       const photos = new Map<string, string>();
+      let visibleImageLoading = false;
       for (const anchor of Array.from(section.querySelectorAll("a[href]")) as any[]) {
         if (!visibleCheck(anchor)) continue;
         const person = identity(anchor.href);
         if (!person) continue;
+        for (const image of Array.from(anchor.querySelectorAll("img")) as any[]) {
+          if (visibleCheck(image) && !image.complete) visibleImageLoading = true;
+        }
         // Facebook often places the avatar and name in separate links. Match
         // pictures by exact profile identity, never from a broad card ancestor.
         for (const image of Array.from(anchor.querySelectorAll("img,image")) as any[]) {
@@ -5225,96 +5235,114 @@ export async function runGoogleChromeDm(
           candidates.set(person.key, { url: person.url, name });
         }
       }
+      if (visibleImageLoading) return [];
       return [...candidates.entries()].map(([key, candidate]) => ({
         ...candidate, photoUrl: photos.get(key),
       }));
     });
 
-    let candidates = await waitForGoogleChromeDmFollowers(collectEligibleProfiles, isStopped);
-    const discovered = new Map(candidates.map(candidate => [profileKey(candidate.url), candidate]));
     const targetSends = Math.min(amount, userLimit);
-    // History can only be inspected after opening a chat, so gather extra
-    // eligible candidates to replace those late-discovered existing threads.
-    const discoveryTarget = Number.isFinite(targetSends)
-      ? Math.min(userLimit, targetSends + 10)
-      : targetSends;
-    let bottomStableScans = 0;
+    const discovered = new Map<string, { url: string; name: string; photoUrl?: string }>();
+    const processed = new Set<string>();
+    const filterCounts = { girlsOnly: 0, excludedName: 0, alreadyMessaged: 0 };
+    let candidates = await waitForGoogleChromeDmFollowers(collectEligibleProfiles, isStopped);
     let scrollPasses = 0;
-    while (!isStopped()) {
-      if (isStopped()) break;
-      const allowed = allowedCandidates(candidates);
-      if (allowed.length >= discoveryTarget) break;
-      const scrollState = await session.page.evaluate(scrollGoogleChromeDmFollowers);
-      if (scrollState.scrolled) {
-        scrollPasses++;
-        bottomStableScans = 0;
-        await new Promise(resolve => setTimeout(resolve, 750));
-      } else {
-        // Keep the run alive at the apparent end long enough for Facebook's
-        // lazy-loaded rows to arrive; unchanged profile IDs alone are not proof
-        // that the Followers list has been exhausted.
-        await new Promise(resolve => setTimeout(resolve, 1_000));
+    let needsMessageDelay = false;
+    const followersUrl = new URL(targetUrl.href);
+    const isFollowersPage = () => {
+      try {
+        const current = new URL(session.page.url());
+        return /(^|\.)facebook\.com$/i.test(current.hostname) &&
+          current.pathname === followersUrl.pathname &&
+          current.searchParams.get("sk") === followersUrl.searchParams.get("sk");
+      } catch { return false; }
+    };
+    const settlePaint = async () => {
+      await session.page.evaluate(async () => {
+        const doc = (globalThis as any).document;
+        await Promise.race([
+          doc?.fonts?.ready ?? Promise.resolve(),
+          new Promise(resolve => setTimeout(resolve, 1_500)),
+        ]);
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      });
+    };
+    const captureRenderedViewport = async () => {
+      await settlePaint();
+      const image = await session.page.screenshot({ type: "png" });
+      if (!image?.byteLength) throw new Error("A rendered-page screenshot could not be captured.");
+      return image;
+    };
+    const captureChatScreenshot = async (composer: any) => {
+      await settlePaint();
+      const bounds = await session.page.evaluate(getGoogleChromeDmChatScreenshotBounds, composer);
+      if (!bounds || !bounds.width || !bounds.height) {
+        throw new Error("The full conversation panel was not visible for screenshot confirmation.");
       }
-      const priorCount = candidates.length;
-      for (const candidate of await collectEligibleProfiles()) {
-        const key = profileKey(candidate.url);
-        const prior = discovered.get(key);
-        discovered.set(key, { ...candidate, photoUrl: candidate.photoUrl ?? prior?.photoUrl });
-      }
-      candidates = [...discovered.values()];
-      const reachedEnd = !scrollState.scrolled;
-      if (reachedEnd && candidates.length === priorCount) {
-        bottomStableScans++;
-      } else {
-        bottomStableScans = 0;
-      }
-      if (scrollPasses > 0 && scrollPasses % 10 === 0 && scrollState.scrolled) {
-        log(`[googleChromeDm:${profileId}] Follower discovery continues: ${scrollPasses} scrolls, ${candidates.length} profiles found, ${allowedCandidates(candidates).length} eligible so far`, "browser");
-      }
-      if (bottomStableScans >= 8) {
-        log(`[googleChromeDm:${profileId}] Followers list reached its end after ${scrollPasses} scrolls; ${candidates.length} profiles discovered`, "browser");
+      const image = await session.page.screenshot({ type: "png", clip: bounds, captureBeyondViewport: false });
+      if (!image?.byteLength) throw new Error("The conversation screenshot could not be captured.");
+      return { image, text: await recognizeGoogleChromeDmScreenshot(image) };
+    };
+    const loadSettledViewport = async () => {
+      const rows = await waitForGoogleChromeDmFollowers(collectEligibleProfiles, isStopped);
+      const image = await captureRenderedViewport();
+      return { rows, screenshotBytes: image.byteLength };
+    };
+    const initialImage = await captureRenderedViewport();
+    emit(`Followers viewport rendered and captured (${candidates.length} visible profiles, ${initialImage.byteLength} screenshot bytes).`);
+
+    // Work one unprocessed visible profile at a time. Return to the same settled
+    // follower viewport after each chat; scroll only when every visible row was handled.
+    while (!isStopped() && result.failed === 0 && result.sent < targetSends && result.attempted < userLimit) {
+      let candidate: { url: string; name: string; photoUrl?: string } | null = null;
+      for (const visibleCandidate of candidates) {
+        const key = profileKey(visibleCandidate.url);
+        if (!key) continue;
+        const previous = discovered.get(key);
+        discovered.set(key, {
+          ...visibleCandidate,
+          photoUrl: visibleCandidate.photoUrl ?? previous?.photoUrl,
+        });
+        if (processed.has(key)) continue;
+        const reason = candidateFilterReason(visibleCandidate);
+        processed.add(key);
+        if (reason) {
+          result.skipped++;
+          filterCounts[reason]++;
+          continue;
+        }
+        candidate = visibleCandidate;
+        result.totalEligible++;
         break;
       }
-    }
-    const filtered = allowedCandidates(candidates);
-    result.skipped = candidates.length - filtered.length;
-    result.totalEligible = filtered.length;
-    const filterCounts = { girlsOnly: 0, excludedName: 0, alreadyMessaged: 0 };
-    for (const candidate of candidates) {
-      const reason = candidateFilterReason(candidate);
-      if (reason) filterCounts[reason]++;
-    }
-    log(
-      `[googleChromeDm:${profileId}] Candidate filters: discovered=${candidates.length}, eligible=${filtered.length}, ` +
-      `Girls Only=${filterCounts.girlsOnly}, excluded-name=${filterCounts.excludedName}, ` +
-      `already-messaged=${filterCounts.alreadyMessaged}; settings: girlsOnly=${strictGirlsOnly}, ` +
-      `skipAlreadyMessaged=${options.skipAlreadyMessaged === true}`,
-      "browser",
-    );
-    if (!filtered.length && !isStopped()) {
-      result.notice = candidates.length
-        ? `No profiles were attempted: all ${candidates.length} discovered profiles were filtered out ` +
-          `(Girls Only: ${filterCounts.girlsOnly}; name exclusions: ${filterCounts.excludedName}; ` +
-          `already messaged: ${filterCounts.alreadyMessaged}).`
-        : "No readable users were available in the Followers list.";
-    }
-    if (Number.isFinite(targetSends) && filtered.length < targetSends && !isStopped()) {
-      log(`[googleChromeDm:${profileId}] Target is ${targetSends} successful sends; only ${filtered.length} eligible candidate${filtered.length === 1 ? "" : "s"} were found after filters.`, "browser");
-    }
-    const startIndex = filtered.length > 0 ? result.nextIndex % filtered.length : 0;
-    // Existing threads may only be discovered after opening the recipient's
-    // chat. Those skips must not consume the requested number of messages.
-    const orderedCandidates = [...filtered.slice(startIndex), ...filtered.slice(0, startIndex)];
-    const selected = orderedCandidates.slice(0, userLimit);
-    emit(`Found ${filtered.length} eligible user${filtered.length === 1 ? "" : "s"} after filters; aiming for ${Number.isFinite(targetSends) ? targetSends : "all available"} successful sends.`);
 
-    let needsMessageDelay = false;
-    for (const candidate of selected) {
-      if (result.sent >= amount) break;
-      if (options.skipAlreadyMessaged && alreadyMessaged.has(googleChromeDmRecipientKey(candidate.url) ?? "")) {
-        result.skipped++;
+      if (!candidate) {
+        const scrollState = await session.page.evaluate(scrollGoogleChromeDmFollowers);
+        if (!scrollState.scrolled) {
+          log(
+            `[googleChromeDm:${profileId}] Followers list reached its rendered end after ${scrollPasses} scrolls; ` +
+            `${discovered.size} profiles seen, ${result.totalEligible} eligible`,
+            "browser",
+          );
+          break;
+        }
+        scrollPasses++;
+        const settled = await loadSettledViewport();
+        candidates = settled.rows;
+        log(
+          `[googleChromeDm:${profileId}] Scroll ${scrollPasses} settled and screenshot-confirmed; ` +
+          `${candidates.length} profiles visible, ${result.totalEligible} eligible so far`,
+          "browser",
+        );
         continue;
       }
+
+      const failuresBeforeCandidate = result.failed;
+      let uncertainSend = false;
+      const selected = [candidate];
+      const startIndex = result.nextIndex;
+      for (const candidate of selected) {
+      if (result.sent >= amount) break;
       if (needsMessageDelay && !isStopped()) {
         await waitForGoogleChromeDmDelay(delayMin + Math.random() * (delayMax - delayMin), isStopped);
         needsMessageDelay = false;
@@ -5331,7 +5359,7 @@ export async function runGoogleChromeDm(
 
       result.attempted++;
       result.attemptedUrls.push(cleanUrl(candidate.url));
-      result.nextIndex = startIndex + result.attempted;
+      result.nextIndex = startIndex + 1;
 
       const expectedProfileKey = profileKey(candidate.url);
       if (!expectedProfileKey) {
@@ -5406,6 +5434,20 @@ export async function runGoogleChromeDm(
             messageButtonFailure = "The current Message control was not a live element.";
             await new Promise(resolve => setTimeout(resolve, Math.min(150, remainingMs)));
             continue;
+          }
+          const profileScreenshot = await captureRenderedViewport();
+          const profileOcr = await recognizeGoogleChromeDmScreenshot(profileScreenshot);
+          const profileScreenshotConfirmed =
+            googleChromeDmScreenshotContainsText(profileOcr, candidate.name) &&
+            /\bmessage\b/i.test(profileOcr);
+          log(
+            `[googleChromeDm:${profileId}] ${expectedProfileKey}: profile screenshot captured ` +
+            `(${profileScreenshot.byteLength} bytes); name-and-Message visible=${profileScreenshotConfirmed}`,
+            "browser",
+          );
+          if (!profileScreenshotConfirmed) {
+            messageButtonFailure = "The profile screenshot did not visibly confirm the selected name and Message control.";
+            break;
           }
           await messageButton.click();
           messageButtonClicked = true;
@@ -5507,51 +5549,61 @@ export async function runGoogleChromeDm(
       try {
         const recipientKey = googleChromeDmRecipientKey(candidate.url);
         const pendingAttempt = !!recipientKey && pendingContacts.has(recipientKey);
-        if (options.skipAlreadyMessaged || pendingAttempt) {
-          const historyHandle = await session.page.waitForFunction(
-            inspectGoogleChromeDmHistory, { timeout: 12_000, polling: 200 }, composer, candidate.name,
-          ).catch(() => null);
-          const history = await historyHandle?.jsonValue().catch(() => false);
-          await historyHandle?.dispose();
-          log(
-            `[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation history=${history ?? "unknown"}; ` +
-            `${pendingAttempt ? "an earlier send needs reconciliation" : "Skip Already Messaged is enabled"}`,
-            "browser",
+        const historyHandle = await session.page.waitForFunction(
+          inspectGoogleChromeDmHistory, { timeout: 15_000, polling: 200 }, composer, candidate.name,
+        ).catch(() => null);
+        const history = await historyHandle?.jsonValue().catch(() => false);
+        await historyHandle?.dispose();
+        const screenshot = await captureChatScreenshot(composer);
+        const screenshotHistory = classifyGoogleChromeDmHistoryScreenshot(screenshot.text, candidate.name);
+        log(
+          `[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation screenshot captured ` +
+          `(${screenshot.image.byteLength} bytes); OCR=${screenshotHistory}, DOM history=${history}; ` +
+          `pending=${pendingAttempt}, saved=${alreadyMessaged.has(recipientKey ?? "")}`,
+          "browser",
+        );
+        if (screenshotHistory === "existing") {
+          recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
+          if (recipientKey) {
+            alreadyMessaged.add(recipientKey);
+            pendingContacts.delete(recipientKey);
+          }
+          result.skipped++;
+          filterCounts.alreadyMessaged++;
+          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: screenshot shows existing conversation text; no message entered`, "browser");
+          const close = await composer.evaluateHandle(findGoogleChromeDmControl, "close");
+          try {
+            const button = close.asElement();
+            if (!button) { result.failed++; break; }
+            await button.click();
+            const closed = await session.page.waitForFunction((element: any) => !element.isConnected,
+              { timeout: 5_000, polling: 100 }, composer).catch(() => null);
+            if (!closed) { result.failed++; break; }
+            await closed.dispose();
+          } finally { await close.dispose(); }
+          continue;
+        }
+        if (screenshotHistory === "unknown" ||
+            (screenshotHistory === "empty" && history !== "empty")) {
+          result.failed++;
+          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: screenshot/history did not prove a rendered empty thread`, "browser");
+          emit(
+            pendingAttempt
+              ? "A prior send is unconfirmed and the chat screenshot does not prove the conversation is empty. Leaving it open and stopping; no retry was made."
+              : "The chat screenshot did not clearly prove an empty conversation. Leaving it open and stopping without sending.",
+            "fail",
           );
-          if (history !== "empty") {
-            if (history === "existing") {
-              recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
-              alreadyMessaged.add(googleChromeDmRecipientKey(candidate.url)!);
-              pendingContacts.delete(googleChromeDmRecipientKey(candidate.url)!);
-              result.skipped++;
-              log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: existing conversation; closing without typing or sending`, "browser");
-            } else {
-              result.failed++;
-              log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation history unknown; no message entered`, "browser");
-              emit(
-                pendingAttempt
-                  ? "A previous send is still unconfirmed and the conversation history is unavailable. Leaving this chat open and stopping; no retry was made."
-                  : "Conversation history could not be confirmed empty; no message was entered.",
-              );
-              if (pendingAttempt) break;
-            }
-            const close = await composer.evaluateHandle(findGoogleChromeDmControl, "close");
-            try {
-              const button = close.asElement();
-              if (!button) break;
-              await button.click();
-              const closed = await session.page.waitForFunction((element: any) => !element.isConnected,
-                { timeout: 5_000, polling: 100 }, composer).catch(() => null);
-              if (!closed) break;
-              await closed.dispose();
-            } finally { await close.dispose(); }
-            continue;
-          }
-          if (pendingAttempt) {
-            clearGoogleChromeDmPendingContacts(historyFile, senderAccount, [candidate.url]);
-            pendingContacts.delete(recipientKey!);
-            log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: the earlier attempt is not present in the settled conversation; retry is safe`, "browser");
-          }
+          break;
+        }
+        if (pendingAttempt) {
+          clearGoogleChromeDmPendingContacts(historyFile, senderAccount, [candidate.url]);
+          pendingContacts.delete(recipientKey!);
+          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: screenshot and settled history prove the earlier attempt is absent`, "browser");
+        }
+        if (recipientKey && alreadyMessaged.has(recipientKey)) {
+          clearGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
+          alreadyMessaged.delete(recipientKey);
+          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: cleared a stale saved-history marker because the screenshot showed an empty thread`, "browser");
         }
         const messageIndex = Math.floor(Math.random() * messages.length);
         const message = personalizeGoogleChromeDmMessage(messages[messageIndex], candidate.name);
@@ -5648,6 +5700,23 @@ export async function runGoogleChromeDm(
           : false;
         if (confirmationHandle) await confirmationHandle.dispose().catch(() => {});
         if (confirmed) {
+          const sentScreenshot = await captureChatScreenshot(composer);
+          const screenshotConfirmed = googleChromeDmScreenshotContainsText(sentScreenshot.text, message);
+          log(
+            `[googleChromeDm:${profileId}] ${expectedProfileKey}: post-send screenshot captured ` +
+            `(${sentScreenshot.image.byteLength} bytes); exact message OCR-visible=${screenshotConfirmed}`,
+            "browser",
+          );
+          if (!screenshotConfirmed) {
+            result.failed++;
+            emit(
+              "The message appeared in the page structure, but the screenshot did not visibly confirm its text. " +
+              "Leaving the chat open and stopping; the recipient will be rechecked before any retry.",
+              "fail",
+            );
+            uncertainSend = true;
+            break;
+          }
           recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
           if (recipientKey) {
             pendingContacts.delete(recipientKey);
@@ -5706,9 +5775,45 @@ export async function runGoogleChromeDm(
       } finally {
         await composerHandle.dispose().catch(() => {});
       }
+      if (isStopped()) {
+        result.stopped = true;
+        break;
+      }
+      if (uncertainSend) break;
+      if (result.failed > failuresBeforeCandidate) break;
+      if (!isFollowersPage()) {
+        try {
+          log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: returning to the Followers viewport before continuing`, "browser");
+          await session.page.goBack({ waitUntil: "domcontentloaded", timeout: 30_000 });
+          if (!isFollowersPage()) {
+            throw new Error("Browser Back did not restore the configured Followers page.");
+          }
+          const restored = await loadSettledViewport();
+          candidates = restored.rows;
+          emit(`Followers viewport restored, settled, and screenshot-captured before the next profile.`);
+        } catch (error: any) {
+          result.failed++;
+          emit(
+            `Could not restore and fully render the Followers list after ${candidate.name}. ` +
+            `Stopping without scrolling to another profile (${String(error?.message ?? error).slice(0, 160)}).`,
+            "fail",
+          );
+          break;
+        }
+      }
+    }
     }
 
     if (isStopped()) result.stopped = true;
+    log(
+      `[googleChromeDm:${profileId}] Run scan summary: ${discovered.size} profiles seen, ${result.totalEligible} eligible, ` +
+      `${filterCounts.girlsOnly} rejected by Girls Only, ${filterCounts.excludedName} excluded by name, ` +
+      `${filterCounts.alreadyMessaged} skipped from screenshot-confirmed conversation text`,
+      "browser",
+    );
+    if (!discovered.size && !isStopped()) {
+      result.notice = "No readable users were available in the Followers list.";
+    }
     if (Number.isFinite(targetSends) && result.sent < targetSends && !result.stopped) {
       result.notice = `Send target not reached: ${result.sent} of ${targetSends} successful messages. Filtered or skipped profiles do not count toward the target.`;
       emit(result.notice, "fail");

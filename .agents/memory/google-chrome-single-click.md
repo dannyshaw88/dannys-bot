@@ -118,3 +118,9 @@ Do not treat an emptied composer as proof a message was sent. Wait for the exact
 **Why:** The latest run cleared the composer and immediately closed the chat, then logged a successful send even though the user could not see the message render.
 
 **How to apply:** Confirm the composer is empty and the matching message row is visibly rendered in the verified chat; otherwise leave the chat open, stop the run, and check the conversation history on the next run before sending again.
+
+Send DMs must process one settled Followers viewport at a time: wait for its visible rows and photos to finish rendering, capture it, handle each user’s profile and chat, then return to that same viewport. Scroll only after all visible rows are handled. For Skip Already Messaged, screenshot text in the verified chat means skip. After Send, require both a visible outgoing row and screenshot OCR of the exact message before counting or closing.
+
+**Why:** The user observed rapid scrolling and chat openings with no visible messages, and explicitly required rendered pages, screenshots of chat text, and skipping any conversation containing prior text.
+
+**How to apply:** Keep the viewport stable through the profile/chat round trip, fail closed on unreadable screenshots or uncertain history, and never advance to another user after an unconfirmed send. Screenshot/OCR evidence is transient and must not be persisted.

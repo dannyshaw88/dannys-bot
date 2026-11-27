@@ -4,17 +4,33 @@ export async function waitForGoogleChromeDmFollowers<T>(
   stopped: () => boolean,
   timeoutMs = 30_000,
   pause: () => Promise<void> = () => new Promise(resolve => setTimeout(resolve, 500)),
+  stableSamplesRequired = 2,
 ): Promise<T[]> {
   const deadline = Date.now() + timeoutMs;
+  let previousSignature = "";
+  let stableSamples = 0;
+  let latestRows: T[] = [];
   while (!stopped()) {
     const rows = await collect();
-    if (rows.length) return rows;
+    latestRows = rows;
+    if (rows.length) {
+      const signature = JSON.stringify(rows);
+      if (signature === previousSignature) stableSamples++;
+      else stableSamples = 0;
+      previousSignature = signature;
+      if (stableSamples >= stableSamplesRequired) return rows;
+    } else {
+      previousSignature = "";
+      stableSamples = 0;
+    }
     if (Date.now() >= deadline) {
-      throw new Error("The Followers page opened, but no readable user rows became available. No messages were sent.");
+      throw new Error(rows.length
+        ? "The Followers rows did not finish rendering. No messages were sent."
+        : "The Followers page opened, but no readable user rows became available. No messages were sent.");
     }
     await pause();
   }
-  return [];
+  return latestRows;
 }
 
 /** Scroll the Followers list and report whether any relevant scroll surface moved. */
