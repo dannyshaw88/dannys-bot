@@ -5218,15 +5218,20 @@ export async function runGoogleChromeDm(
     const discovered = new Map(candidates.map(candidate => [profileKey(candidate.url), candidate]));
     let previousSnapshot = "";
     let unchangedScans = 0;
-    const needed = Math.min(amount, userLimit);
-    for (let scan = 0; scan < 10; scan++) {
+    const targetSends = Math.min(amount, userLimit);
+    // History can only be inspected after opening a chat, so gather extra
+    // eligible candidates to replace those late-discovered existing threads.
+    const discoveryTarget = Number.isFinite(targetSends)
+      ? Math.min(userLimit, targetSends + 10)
+      : targetSends;
+    for (let scan = 0; scan < 30; scan++) {
       if (isStopped()) break;
       const allowed = allowedCandidates(candidates);
-      if (allowed.length >= needed) break;
+      if (allowed.length >= discoveryTarget) break;
       const snapshot = candidates.map(candidate => `${profileKey(candidate.url)}:${candidate.photoUrl ?? ""}`).join("|");
       unchangedScans = snapshot === previousSnapshot ? unchangedScans + 1 : 0;
       previousSnapshot = snapshot;
-      if (unchangedScans >= 4) break;
+      if (unchangedScans >= 8) break;
       await session.page.evaluate(() => {
         const win = (globalThis as any).window;
         const doc = (globalThis as any).document;
@@ -5236,14 +5241,14 @@ export async function runGoogleChromeDm(
         while (container && container !== doc.body) {
           const style = (globalThis as any).getComputedStyle(container);
           if (container.scrollHeight > container.clientHeight + 4 && /auto|scroll/.test(style.overflowY)) {
-            container.scrollTo(0, container.scrollHeight);
+            container.scrollBy(0, Math.max(300, Math.floor(container.clientHeight * 0.75)));
             return;
           }
           container = container.parentElement;
         }
-        win.scrollTo(0, doc.scrollingElement?.scrollHeight ?? doc.documentElement.scrollHeight);
+        win.scrollBy(0, Math.max(300, Math.floor(win.innerHeight * 0.75)));
       });
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 750));
       for (const candidate of await collectEligibleProfiles()) {
         const key = profileKey(candidate.url);
         const prior = discovered.get(key);
@@ -5259,11 +5264,15 @@ export async function runGoogleChromeDm(
         ? "No unmessaged users matched the current filters in the loaded Followers list."
         : "No readable users were available in the Followers list.";
     }
+    if (Number.isFinite(targetSends) && filtered.length < targetSends && !isStopped()) {
+      log(`[googleChromeDm:${profileId}] Target is ${targetSends} successful sends; only ${filtered.length} eligible candidate${filtered.length === 1 ? "" : "s"} were found after filters.`, "browser");
+    }
     const startIndex = filtered.length > 0 ? result.nextIndex % filtered.length : 0;
     // Existing threads may only be discovered after opening the recipient's
     // chat. Those skips must not consume the requested number of messages.
-    const selected = filtered.slice(startIndex, startIndex + userLimit);
-    emit(`Found ${filtered.length} eligible user${filtered.length === 1 ? "" : "s"}; attempting up to ${selected.length}.`);
+    const orderedCandidates = [...filtered.slice(startIndex), ...filtered.slice(0, startIndex)];
+    const selected = orderedCandidates.slice(0, userLimit);
+    emit(`Found ${filtered.length} eligible user${filtered.length === 1 ? "" : "s"} after filters; aiming for ${Number.isFinite(targetSends) ? targetSends : "all available"} successful sends.`);
 
     let needsMessageDelay = false;
     for (const candidate of selected) {
@@ -5585,6 +5594,10 @@ export async function runGoogleChromeDm(
     }
 
     if (isStopped()) result.stopped = true;
+    if (Number.isFinite(targetSends) && result.sent < targetSends && !result.stopped) {
+      result.notice = `Send target not reached: ${result.sent} of ${targetSends} successful messages. Filtered or skipped profiles do not count toward the target.`;
+      emit(result.notice, "fail");
+    }
     emit(
       `Run finished: ${result.sent} sent, ${result.failed} failed, ${result.skipped} skipped out of ${result.attempted} attempts.`,
       result.failed ? "fail" : "ok",

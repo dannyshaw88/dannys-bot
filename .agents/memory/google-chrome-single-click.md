@@ -89,6 +89,12 @@ In Send DMs messages, replace each `[FIRSTNAME]` token with the first word of th
 
 **How to apply:** Expand the token after choosing the recipient's message option and before typing, then verify the expanded text in the composer.
 
+The configured Send DMs amount is a successful-send target. Filtered profiles and existing chats do not count toward it; keep discovering eligible profiles until the target is reached, discovery is exhausted, or the user's stop limit is hit.
+
+**Why:** A run found one eligible profile after filtering 42 others and ended, although the user expects a configured minimum of three successful sends.
+
+**How to apply:** Count only confirmed sends toward the target, continue harvesting eligible candidates within bounded discovery, and report clearly when the target cannot be reached.
+
 Wait for actual collected follower rows, not merely Facebook's page shell or early links, and do not use unchanged document height as proof that follower discovery is finished.
 
 **Why:** Facebook can hydrate names and photos after its shell appears, and virtualised or nested lists can change their users without changing document height. Ignored readiness timeouts plus an unexplained empty result look like a stalled tool.
