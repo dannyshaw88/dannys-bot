@@ -730,7 +730,7 @@ assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send",
 assert(viewportScreenshotCount - viewportScreenshotsBefore >= 3, "capture list, profile, and restored-list screenshots");
 assert.equal(chatScreenshotCount - chatScreenshotsBefore, 2, "capture the chat before and after sending");
 assert.equal(followersReturnCount - followersReturnsBefore, 1, "restore the follower page before ending the run");
-assert.deepEqual(checkpointWaits, [30, 60, 30, 60], "wait the requested fixed intervals at URL, profile, Message, and return checkpoints");
+assert.deepEqual(checkpointWaits, [30, 60, 30, 30, 60], "wait the requested fixed intervals, including the additional chat-load pause after Message");
 assert.equal(editor.isConnected, false);
 assert.equal(gaps.length, 0, "no delay before first or after last recipient");
 {
@@ -754,7 +754,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
     `return from a skipped chat to the original Followers URL: ${JSON.stringify({ screenshotExisting, events, checkpointWaits, followersLocation, location, browserLogs: globalThis.__chromeDmFixture.browserLogs.slice(-8) })}`,
   );
   assert.equal(scrollLocations[scrollLocationsBeforeSkip], followersLocation, "never scroll the profile after skipping a chat");
-  assert.deepEqual(checkpointWaits, [30, 60, 30, 60], "retain the fixed waits when a chat is skipped");
+  assert.deepEqual(checkpointWaits, [30, 60, 30, 30, 60], "retain the fixed waits when a chat is skipped");
   screenshotHistoryOverride = "";
   fixtureCandidates = [
     { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
@@ -830,7 +830,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(incremental.sent, 2);
   assert.deepEqual(sendScrollPasses, [0, 1], "send from the current viewport before scrolling for the next user");
   assert.equal(scrollPasses, 1, "scroll exactly once between the two users");
-  assert.deepEqual(checkpointWaits, [30, 60, 30, 60, 30, 60, 30, 60],
+  assert.deepEqual(checkpointWaits, [30, 60, 30, 30, 60, 30, 60, 30, 30, 60],
     "wait after the configured URL, each profile, each Message click, the scroll, and each return");
   assert(scrollLocations.every(url => url === followersLocation), "scroll only while the configured Followers URL is active");
   assert(incremental.attemptedUrls[0].endsWith("id=910"));

@@ -137,7 +137,7 @@ Every path leaving a profile—including an existing-chat skip—must restore th
 
 **How to apply:** Route successful sends and skips through the same return-and-settle step; test that a skipped chat restores the original URL before any scroll call.
 
-For Google Chrome Send DMs, wait 30 seconds after loading the configured URL, after every actual scroll, and after each Message click; wait 60 seconds after each profile load and after returning to the configured Followers URL.
+For Google Chrome Send DMs, wait 30 seconds after loading the configured URL and after every actual scroll; wait 60 seconds after each profile load and after returning to the configured Followers URL. After clicking Message, wait 30 seconds, then wait an additional 30 seconds before checking the chat.
 
 **Why:** The user explicitly required these fixed delays because page and chat content was advancing before it rendered visibly.
 
