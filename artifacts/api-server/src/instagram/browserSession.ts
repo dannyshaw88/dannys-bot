@@ -5486,6 +5486,8 @@ export async function runGoogleChromeDm(
           log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control clicked after ${Date.now() - messageButtonWaitStartedAt}ms (${messageButtonAttempts} lookup attempt${messageButtonAttempts === 1 ? "" : "s"})`, "browser");
           await waitAtFixedCheckpoint(30, "after clicking Message");
           if (isStopped()) break;
+          await waitAtFixedCheckpoint(30, "additional time for the Message chat to finish loading");
+          if (isStopped()) break;
         } catch (error: any) {
           messageButtonFailure = String(error?.message ?? error ?? "browser click failed").slice(0, 180);
           const transientNode = /node is detached from document|not attached to the dom|node is either not clickable or not an element/i.test(messageButtonFailure);
