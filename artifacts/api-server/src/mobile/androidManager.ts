@@ -6309,33 +6309,35 @@ export async function swipeUpFromBottom(serial: string): Promise<void> {
 }
 
 /**
- * Unlock the Android keyguard after an explicit wake.
- *
- * This is intentionally separate from swipeUpFromBottom(). The latter is
- * reused for Recents/app navigation, while keyguard unlock has stricter
- * requirements: the gesture must begin inside the bottom system-gesture
- * region and must last long enough for the keyguard to observe a real drag.
- * A 90%-to-50% 60ms swipe can exit successfully from ADB while producing no
- * visible movement on a physical phone.
+ * Dispatch the device's configured My Device swipe profile against Android's
+ * keyguard after an explicit wake. The caller resolves the profile path and
+ * timing; this function keeps touchscreen dispatch and keyguard diagnostics.
  */
-export async function unlockScreen(serial: string): Promise<void> {
-  const { w, h } = await getScreenSizeAsync(serial);
-  const x = Math.round(w / 2);
-  const y1 = Math.max(1, Math.round(h * 0.96));
-  const y2 = Math.round(h * 0.48);
-  const durationMs = 350;
+export async function unlockScreen(
+  serial: string,
+  gesture: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
+): Promise<void> {
+  const values = [gesture.x1, gesture.y1, gesture.x2, gesture.y2, gesture.durationMs];
+  if (!values.every(Number.isFinite) || gesture.durationMs <= 0) {
+    throw new Error("My Device Swipe Gesture Profile has an invalid unlock path");
+  }
+  const x1 = Math.round(gesture.x1);
+  const y1 = Math.round(gesture.y1);
+  const x2 = Math.round(gesture.x2);
+  const y2 = Math.round(gesture.y2);
+  const durationMs = Math.max(1, Math.round(gesture.durationMs));
 
   const keyguardBefore = await getKeyguardState(serial).catch(() => null);
   logger.info({
     serial,
     keyguardBefore,
-    requestedFrom: [x, y1],
-    requestedTo: [x, y2],
-    dispatchedFrom: [x, y1],
-    dispatchedTo: [x, y2],
+    requestedFrom: [gesture.x1, gesture.y1],
+    requestedTo: [gesture.x2, gesture.y2],
+    dispatchedFrom: [x1, y1],
+    dispatchedTo: [x2, y2],
     durationMs,
     source: "touchscreen",
-    path: "keyguard-bottom-edge-to-middle",
+    path: "my-device-swipe-profile",
   }, "[mobile-input] keyguard unlock swipe dispatched");
 
   await runInputShell(
@@ -6343,9 +6345,9 @@ export async function unlockScreen(serial: string): Promise<void> {
     [
       "touchscreen",
       "swipe",
-      String(x),
+      String(x1),
       String(y1),
-      String(x),
+      String(x2),
       String(y2),
       String(durationMs),
     ],
@@ -6357,11 +6359,11 @@ export async function unlockScreen(serial: string): Promise<void> {
     serial,
     keyguardBefore,
     keyguardAfter,
-    executedFrom: [x, y1],
-    executedTo: [x, y2],
+    executedFrom: [x1, y1],
+    executedTo: [x2, y2],
     durationMs,
     completed: true,
-    path: "keyguard-bottom-edge-to-middle",
+    path: "my-device-swipe-profile",
   }, `[mobile-execution] keyguard unlock swipe command completed serial=${serial} keyguardBefore=${JSON.stringify(keyguardBefore)} keyguardAfter=${JSON.stringify(keyguardAfter)} durationMs=${durationMs}`);
 }
 

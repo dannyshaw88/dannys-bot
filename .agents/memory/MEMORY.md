@@ -165,3 +165,4 @@
 - [Google Chrome browser click parity](google-chrome-single-click.md) — target profile-ID users from Followers, verify recipient and composer, and use one native click
 - [Google Chrome Send DMs status display](google-chrome-send-dms-status.md) — keep completion summaries and progress narration out of the toolbar and activity log
 - [Button overlay positioning](button-overlay-positioning.md) — position toolbar overlays through wrappers so shared Button elevation does not override their layout
+- [Keyguard unlock uses device swipe](keyguard-unlock-device-swipe.md) — all automation unlocks must use the saved My Device swipe profile, shared before platform-specific actions

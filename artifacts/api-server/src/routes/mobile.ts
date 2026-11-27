@@ -6349,11 +6349,12 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
 
   async function deviceProfileSwipe(
     serial: string,
-    fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number },
+    fallback: { x1: number; y1: number; x2: number; y2: number; durationMs: number } | null,
     source: string,
     personality?: "superSkim" | "skim" | "fast" | "quick" | "normal" | "slow" | "focused" | "tapDragRelease" | "back",
     opts?: { maxFromY?: number },
   ): Promise<{ x1: number; y1: number; x2: number; y2: number; durationMs: number; profile: boolean }> {
+    const isKeyguardUnlock = source === "unlock-screen";
     let configured: DevicePrefs["swipeGesture"] | undefined;
     try { configured = loadInstanceConfigs()[serial]?.devicePrefs?.swipeGesture; } catch { configured = undefined; }
     const size = getScreenSize(serial);
@@ -6385,10 +6386,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     };
     const snapchatSlot = isActiveSnapchatSlot(serial);
     const slot = snapchatSlot
+      || isKeyguardUnlock
       ? null
       : ensureSlotPersonality(serial, automationCycleActiveSlot.get(serial) ?? 0);
     const slotScale = slot ? [1.08, 1.04, 1, .96, .92][slot.attention] : 1;
-    const mother = snapchatSlot
+    const mother = snapchatSlot || isKeyguardUnlock
       ? { gestureScale: 1, pauseScale: 1, settleScale: 1, xBias: 0, yBias: 0 }
       : devicePersonality(serial);
     // The caller has already selected the duration for the requested
@@ -6399,9 +6401,9 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
     // by a 68–78ms swipe and arrive as a tap-like gesture.
     const profileDurationMin = Math.max(1, Math.min(configured.durationMinMs, configured.durationMaxMs));
     const profileDurationMax = Math.max(profileDurationMin, Math.max(configured.durationMinMs, configured.durationMaxMs));
-    const durationMs = snapchatSlot
+    const durationMs = snapchatSlot || isKeyguardUnlock
       ? Math.round(profileDurationMin + Math.random() * (profileDurationMax - profileDurationMin))
-      : Math.max(1, Math.round(fallback.durationMs * mother.gestureScale * slotScale));
+      : Math.max(1, Math.round((fallback?.durationMs ?? 350) * mother.gestureScale * slotScale));
     const pauseMin = Math.max(0, Math.min(configured.pauseMinMs ?? 0, configured.pauseMaxMs ?? 0));
     const pauseMax = Math.max(pauseMin, configured.pauseMaxMs ?? pauseMin);
     const settleMin = Math.max(0, Math.min(configured.settleMinMs ?? 0, configured.settleMaxMs ?? 0));
@@ -6439,11 +6441,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       },
       profilePauseRangeMs: [configured.pauseMinMs, configured.pauseMaxMs],
       profileSettleRangeMs: [configured.settleMinMs, configured.settleMaxMs],
-      requestedFallback: {
+      requestedFallback: fallback ? {
         from: [fallback.x1, fallback.y1],
         to: [fallback.x2, fallback.y2],
         durationMs: fallback.durationMs,
-      },
+      } : null,
       from: [path.x1, path.y1],
       to: [path.x2, path.y2],
       durationMs,
@@ -6470,7 +6472,11 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
         profilePathAfterOptionalGuards: path,
       } : {}),
     }, "[mobile-input] device-profile swipe resolved");
-    await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs, false);
+    if (isKeyguardUnlock) {
+      await android.unlockScreen(serial, path);
+    } else {
+      await android.swipe(serial, path.x1, path.y1, path.x2, path.y2, path.durationMs, false);
+    }
     if (settleMs > 0) await new Promise(resolve => setTimeout(resolve, settleMs));
     return { ...path, profile: true };
   }
@@ -8105,7 +8111,7 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       tLog("▶ Letting screen settle for 2.5 seconds before unlock…");
       await sleepOrAbort(serial, 2500, "navigation", "static");
       tLog("▶ Unlocking screen after wake settle…");
-      await timeStartupPhase(serial, "unlock-screen", () => android.unlockScreen(serial));
+      await timeStartupPhase(serial, "unlock-screen", () => deviceProfileSwipe(serial, null, "unlock-screen"));
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete
 
@@ -12495,7 +12501,7 @@ echo "capture_limit_reached_epoch=$(date +%s)" >> "$OUT"
       // any app-launch, wake, or unlock sequence before its contact tap/swipe.
       if (appId !== "sms") {
         await android.wakeScreen(serial);
-        await android.unlockScreen(serial);
+        await deviceProfileSwipe(serial, null, "unlock-screen");
       }
 
       let result: { ok: boolean; steps: string[]; error?: string; keepScreenOn?: boolean };
