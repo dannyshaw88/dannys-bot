@@ -5086,12 +5086,17 @@ export async function runGoogleChromeDm(
   // Keep those clients on the strict server rules as well.
   const strictGirlsOnly = options.girlsOnly === true ||
     (options.girlsOnly === undefined && excludedNameTokens.size > 0);
-  const allowedCandidates = (candidates: Array<{ url: string; name: string; photoUrl?: string }>) => candidates.filter(candidate =>
-    (!strictGirlsOnly || googleChromeGirlsOnlyRejection(candidate) === null)
-      &&
-    !shouldExcludeName(candidate.name)
-      && !(options.skipAlreadyMessaged && alreadyMessaged.has(googleChromeDmRecipientKey(candidate.url) ?? "")),
-  );
+  const candidateFilterReason = (candidate: { url: string; name: string }):
+    "girlsOnly" | "excludedName" | "alreadyMessaged" | null => {
+    if (strictGirlsOnly && googleChromeGirlsOnlyRejection(candidate) !== null) return "girlsOnly";
+    if (shouldExcludeName(candidate.name)) return "excludedName";
+    if (options.skipAlreadyMessaged && alreadyMessaged.has(googleChromeDmRecipientKey(candidate.url) ?? "")) {
+      return "alreadyMessaged";
+    }
+    return null;
+  };
+  const allowedCandidates = (candidates: Array<{ url: string; name: string; photoUrl?: string }>) =>
+    candidates.filter(candidate => candidateFilterReason(candidate) === null);
   const startedAt = Date.now();
   const stopAt = Number.isFinite(options.stopAfterMinutes) && (options.stopAfterMinutes ?? 0) > 0
     ? startedAt + (options.stopAfterMinutes as number) * 60_000
@@ -5259,9 +5264,23 @@ export async function runGoogleChromeDm(
     const filtered = allowedCandidates(candidates);
     result.skipped = candidates.length - filtered.length;
     result.totalEligible = filtered.length;
+    const filterCounts = { girlsOnly: 0, excludedName: 0, alreadyMessaged: 0 };
+    for (const candidate of candidates) {
+      const reason = candidateFilterReason(candidate);
+      if (reason) filterCounts[reason]++;
+    }
+    log(
+      `[googleChromeDm:${profileId}] Candidate filters: discovered=${candidates.length}, eligible=${filtered.length}, ` +
+      `Girls Only=${filterCounts.girlsOnly}, excluded-name=${filterCounts.excludedName}, ` +
+      `already-messaged=${filterCounts.alreadyMessaged}; settings: girlsOnly=${strictGirlsOnly}, ` +
+      `skipAlreadyMessaged=${options.skipAlreadyMessaged === true}`,
+      "browser",
+    );
     if (!filtered.length && !isStopped()) {
       result.notice = candidates.length
-        ? "No unmessaged users matched the current filters in the loaded Followers list."
+        ? `No profiles were attempted: all ${candidates.length} discovered profiles were filtered out ` +
+          `(Girls Only: ${filterCounts.girlsOnly}; name exclusions: ${filterCounts.excludedName}; ` +
+          `already messaged: ${filterCounts.alreadyMessaged}).`
         : "No readable users were available in the Followers list.";
     }
     if (Number.isFinite(targetSends) && filtered.length < targetSends && !isStopped()) {
