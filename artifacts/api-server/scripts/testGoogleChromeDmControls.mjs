@@ -489,6 +489,10 @@ editor.type = async text => { editor.innerText = text; };
 let messageRendered = true;
 let renderMessageOnSend = true;
 let sentMessageText = "";
+const pageListeners = new Map();
+const emitPageEvent = (event, ...args) => {
+  for (const listener of pageListeners.get(event) ?? []) listener(...args);
+};
 const sendScrollPasses = [];
 const send = new Node("button", "Press Enter to send");
 send.click = async () => {
@@ -530,6 +534,13 @@ const message = { click: async () => {
   }
   events.push("message");
   editor.isConnected = true;
+  const request = {
+    url: () => "https://www.facebook.com/api/graphql",
+    method: () => "POST",
+    resourceType: () => "xhr",
+  };
+  emitPageEvent("request", request);
+  emitPageEvent("response", { request: () => request, status: () => 200 });
 } };
 let waits = 0;
 let location = "";
@@ -553,6 +564,12 @@ let fixtureCandidates = [
 ];
 latestCandidates = fixtureCandidates;
 const page = {
+  on: (event, listener) => {
+    const listeners = pageListeners.get(event) ?? new Set();
+    listeners.add(listener);
+    pageListeners.set(event, listeners);
+  },
+  off: (event, listener) => pageListeners.get(event)?.delete(listener),
   cookies: async () => [{ name: "c_user", value: senderId }],
   goto: async url => {
     location = url;
@@ -728,6 +745,9 @@ const result = await runGoogleChromeDm(10_000_000, {
 });
 assert.equal(result.sent, 1, JSON.stringify({ result, events, logs: globalThis.__chromeDmFixture.browserLogs }));
 assert.equal(result.failed, 0);
+assert(globalThis.__chromeDmFixture.browserLogs.some(line =>
+  line.includes("Message chat network trace: 1 Facebook document/fetch/XHR responses, 0 failed, 0 still pending")),
+"record Facebook request timings after the Message click");
 assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "history", "composer", "send", "render", "chat-ocr", "close"]);
 assert(viewportScreenshotCount - viewportScreenshotsBefore >= 3, "capture list, profile, and restored-list screenshots");
 assert.equal(chatScreenshotCount - chatScreenshotsBefore, 2, "capture the chat before and after sending");

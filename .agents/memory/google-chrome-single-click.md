@@ -148,3 +148,9 @@ Capture the chat screenshot immediately after finding the recipient composer; do
 **Why:** The post-click trace showed the history check could consume its full 15-second timeout before the first chat screenshot, obscuring when the contact name and thread became visible.
 
 **How to apply:** Log elapsed time from the Message click through composer lookup, screenshot capture, OCR, and relevant Facebook request completion. Keep unknown screenshots fail-closed and use the screenshot alone to skip a visible existing conversation.
+
+Puppeteer `Page` listener cleanup in this runtime uses `off()`, not necessarily Node's `removeListener()`.
+
+**Why:** A diagnostics guard requiring `removeListener()` silently disabled network tracing even though `Page.on()` worked.
+
+**How to apply:** Feature-detect `off()` first and fall back to `removeListener()` when attaching temporary page listeners.

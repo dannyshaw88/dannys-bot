@@ -5138,7 +5138,10 @@ export async function runGoogleChromeDm(
   const activeChatTraceCleanups = new Set<() => void>();
   const startChatNetworkTrace = () => {
     const page = session.page as any;
-    if (typeof page.on !== "function" || typeof page.removeListener !== "function") return () => {};
+    const removePageListener = typeof page.off === "function"
+      ? page.off.bind(page)
+      : typeof page.removeListener === "function" ? page.removeListener.bind(page) : null;
+    if (typeof page.on !== "function" || !removePageListener) return () => {};
     const pending = new Map<any, { startedAt: number; method: string; type: string; category: string }>();
     const slow: Array<{ method: string; type: string; category: string; status: number | string; ms: number }> = [];
     let completed = 0;
@@ -5194,9 +5197,9 @@ export async function runGoogleChromeDm(
     const cleanup = () => {
       if (stopped) return;
       stopped = true;
-      page.removeListener("request", onRequest);
-      page.removeListener("response", onResponse);
-      page.removeListener("requestfailed", onRequestFailed);
+      removePageListener("request", onRequest);
+      removePageListener("response", onResponse);
+      removePageListener("requestfailed", onRequestFailed);
       activeChatTraceCleanups.delete(cleanup);
       log(
         `[googleChromeDm:${profileId}] Message chat network trace: ${completed} Facebook document/fetch/XHR responses, ` +
