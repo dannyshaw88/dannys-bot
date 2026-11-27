@@ -54,4 +54,6 @@ assert(runner.includes('if (!accountConfirmed) {'));
 assert(accountSelector.includes('node.clickable && exactLabel(node, "Switch Account")'));
 assert(accountSelector.includes('if (!targetAlreadyVisible && switchAccountControl)'));
 assert(accountSelector.includes('"open saved Snapchat account list", 500, true'));
+assert(accountSelector.includes("const newAccountRows = [...visibleAccountUsernames(openedState)]"));
+assert(accountSelector.includes("stopping before any carousel swipe"));
 console.log("PASS: message-only export retains account failures, screen and keyguard results; no extra device calls or verification calls");
