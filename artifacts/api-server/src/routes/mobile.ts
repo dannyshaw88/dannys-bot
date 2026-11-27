@@ -8104,10 +8104,38 @@ export function registerMobileRoutes(httpServer: http.Server, app: Express) {
       // arrive while the keyguard is still transitioning.
       tLog("▶ Letting screen settle for 2.5 seconds before unlock…");
       await sleepOrAbort(serial, 2500, "navigation", "static");
+      let screenOnBeforeUnlock = await android.isScreenOn(serial);
+      tLog(`[SCREEN] before unlock screen=${screenOnBeforeUnlock === null ? "unknown" : screenOnBeforeUnlock ? "ON" : "OFF"}`);
+      if (screenOnBeforeUnlock === false) {
+        tLog("  Screen is still OFF after wake; retrying wake and waiting for Android to confirm the display is on…");
+        await timeStartupPhase(serial, "wake-screen-retry", () => android.ensureScreenOn(serial, 3500));
+        screenOnBeforeUnlock = await android.isScreenOn(serial);
+        tLog(`[SCREEN] after wake retry screen=${screenOnBeforeUnlock === null ? "unknown" : screenOnBeforeUnlock ? "ON" : "OFF"}`);
+      }
+      if (screenOnBeforeUnlock === false) {
+        throw new Error("Android display remained OFF after the wake retry; Snapchat was not opened and no account logout was attempted.");
+      }
       tLog("▶ Unlocking screen after wake settle…");
       await timeStartupPhase(serial, "unlock-screen", () => android.unlockScreen(serial));
       steps.push("unlock-swipe");
       await sleepOrAbort(serial, 800); // let the keyguard animation complete
+      let screenOnAfterUnlock = await android.isScreenOn(serial);
+      tLog(`[SCREEN] after unlock screen=${screenOnAfterUnlock === null ? "unknown" : screenOnAfterUnlock ? "ON" : "OFF"}`);
+      if (screenOnAfterUnlock === false) {
+        tLog("  Screen went OFF during unlock; retrying wake, settle and unlock once before launching Snapchat…");
+        await timeStartupPhase(serial, "wake-screen-recovery", () => android.ensureScreenOn(serial, 3500));
+        screenOnAfterUnlock = await android.isScreenOn(serial);
+        if (screenOnAfterUnlock === true) {
+          await sleepOrAbort(serial, 1500, "navigation", "static");
+          await timeStartupPhase(serial, "unlock-screen-retry", () => android.unlockScreen(serial));
+          await sleepOrAbort(serial, 800);
+          screenOnAfterUnlock = await android.isScreenOn(serial);
+        }
+        tLog(`[SCREEN] after unlock recovery screen=${screenOnAfterUnlock === null ? "unknown" : screenOnAfterUnlock ? "ON" : "OFF"}`);
+      }
+      if (screenOnAfterUnlock === false) {
+        throw new Error("Android display remained OFF after wake/unlock recovery; Snapchat was not opened and no account logout was attempted.");
+      }
 
       // Diagnostics run after the critical wake→unlock sequence so they
       // cannot consume the short display-on window.

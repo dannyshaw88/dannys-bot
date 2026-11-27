@@ -44,18 +44,6 @@ function accountName(node: UiNode): string {
     .find(value => /^[a-z0-9._-]{2,32}$/i.test(value)) ?? "";
 }
 
-function visibleAccountUsernames(state: UiState): Set<string> {
-  const usernames = new Set<string>();
-  const usernamePattern = /^[a-z0-9._-]{2,32}$/i;
-  for (const node of state.nodes) {
-    for (const value of [node.text, node.desc]) {
-      const username = value.trim().replace(/^@/, "").toLowerCase();
-      if (usernamePattern.test(username)) usernames.add(username);
-    }
-  }
-  return usernames;
-}
-
 function exactSavedAccountUsername(state: UiState, username: string): UiNode | undefined {
   return state.nodes.find(node =>
     [node.text, node.desc].some(value => normalizedUsername(value) === username),
@@ -92,50 +80,6 @@ export async function selectSnapchatAccountFromCarousel(
   if (!isSavedSnapchatAccountPicker(state)) {
     context.onLog("Snapchat account switch: saved-account carousel was not confirmed.");
     return false;
-  }
-
-  // Snapchat can return from logout to a one-account landing screen that has
-  // a live "Switch Account" control, rather than directly to the full saved
-  // account list. Treat that as a transition control, not proof that the
-  // carousel is ready. Only open it when the exact requested username is not
-  // already exposed, and only tap the exact live clickable label.
-  const targetAlreadyVisible = exactSavedAccountUsername(state, target);
-  const switchAccountControl = state.nodes.find(node =>
-    node.clickable && exactLabel(node, "Switch Account"),
-  );
-  if (!targetAlreadyVisible && switchAccountControl) {
-    const namesBeforeSwitch = visibleAccountUsernames(state);
-    context.onLog(
-      "Snapchat account switch: exact target is not visible yet; opening the live Switch Account control to reveal the account list.",
-    );
-    if (!await tapNode(context, switchAccountControl, "open saved Snapchat account list", 500, true)) {
-      context.onLog("Snapchat account switch: Switch Account did not open the saved-account list.");
-      return false;
-    }
-    const openedState = await dump(context.serial);
-    const targetNowVisible = exactSavedAccountUsername(openedState, target);
-    const newAccountRows = [...visibleAccountUsernames(openedState)]
-      .some(username => !namesBeforeSwitch.has(username));
-    if (
-      !isSavedSnapchatAccountPicker(openedState) &&
-      !targetNowVisible &&
-      !newAccountRows
-    ) {
-      context.onLog(
-        "Snapchat account switch: Switch Account did not reveal a new account row; stopping before any carousel swipe.",
-      );
-      return false;
-    }
-    if (!targetNowVisible && !newAccountRows) {
-      context.onLog(
-        "Snapchat account switch: Switch Account left the same account-entry screen open; stopping before any carousel swipe.",
-      );
-      return false;
-    }
-    context.onLog(
-      `Snapchat account switch: account-list transition confirmed${targetNowVisible ? " with the exact target visible" : " with new account rows"}.`,
-    );
-    state = openedState;
   }
 
   const slotLabel = typeof context.slotIdx === "number"
