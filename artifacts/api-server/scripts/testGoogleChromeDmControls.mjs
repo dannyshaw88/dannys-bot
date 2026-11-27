@@ -642,7 +642,7 @@ const dispatcherScreenshotModule = {
       new URL(candidate.url).searchParams.get("id") === id,
     );
     const name = current?.name ?? "Haven rose";
-    if (kind === "viewport-screenshot") return `${name} Message`;
+    if (kind === "viewport-screenshot") return name;
     if (screenshotHistoryOverride === "existing") {
       return `${name} Screenshot-visible previous message Aa Close chat`;
     }

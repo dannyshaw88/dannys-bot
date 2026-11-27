@@ -124,3 +124,9 @@ Send DMs must process one settled Followers viewport at a time: wait for its vis
 **Why:** The user observed rapid scrolling and chat openings with no visible messages, and explicitly required rendered pages, screenshots of chat text, and skipping any conversation containing prior text.
 
 **How to apply:** Keep the viewport stable through the profile/chat round trip, fail closed on unreadable screenshots or uncertain history, and never advance to another user after an unconfirmed send. Screenshot/OCR evidence is transient and must not be persisted.
+
+For profile readiness, require screenshot OCR to confirm the selected profile name, but do not require OCR to read the Message button label. Confirm the unique visible Message control from the live DOM and click that element.
+
+**Why:** Facebook rendered a valid profile and one visible Message button, but OCR could not read the button label and incorrectly stopped before clicking.
+
+**How to apply:** Use screenshots for visible identity and chat text; use live, recipient-scoped DOM checks for controls. Keep the stricter exact-text screenshot check for the chat message after sending.
