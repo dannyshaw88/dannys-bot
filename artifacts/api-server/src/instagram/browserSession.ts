@@ -2399,8 +2399,28 @@ export async function getOrCreateSession(
     }
   }
 
-  const fullArgs = [...LAUNCH_ARGS, ...userDataArg, ...proxyArg];
+  // The standalone Google Chrome browser is one regular browsing session, not
+  // one of the many concurrent account browsers. The account-browser limits
+  // (single renderer, 256 MB JS heap, tiny caches, aggressive cache discard,
+  // and disabled background networking) can starve Facebook's JS-heavy page
+  // and Messenger UI. Keep those limits for account sessions, but let this
+  // browser use Chrome's normal renderer, heap, cache, and network behaviour.
+  const googleChromeResourceLimits = new Set([
+    "--disable-background-networking",
+    "--js-flags=--max-old-space-size=256",
+    "--renderer-process-limit=1",
+    "--disk-cache-size=8388608",
+    "--media-cache-size=1",
+    "--aggressive-cache-discard",
+  ]);
+  const launchArgs = profileId === GOOGLE_CHROME_BROWSER_PROFILE_ID
+    ? LAUNCH_ARGS.filter(argument => !googleChromeResourceLimits.has(argument))
+    : LAUNCH_ARGS;
+  const fullArgs = [...launchArgs, ...userDataArg, ...proxyArg];
   console.log(`[EB-DEBUG][browserSession] launching via ${puppeteerSource}, executablePath="${CHROMIUM_PATH}"`);
+  if (profileId === GOOGLE_CHROME_BROWSER_PROFILE_ID) {
+    log("Standalone Google Chrome: using Chrome's normal renderer, heap, cache, and background-network settings", "browser");
+  }
   console.log(`[EB-DEBUG][browserSession] launch args: ${fullArgs.join(" ")}`);
 
   let browser: Browser;
