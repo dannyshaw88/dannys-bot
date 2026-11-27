@@ -5437,16 +5437,15 @@ export async function runGoogleChromeDm(
           }
           const profileScreenshot = await captureRenderedViewport();
           const profileOcr = await recognizeGoogleChromeDmScreenshot(profileScreenshot);
-          const profileScreenshotConfirmed =
-            googleChromeDmScreenshotContainsText(profileOcr, candidate.name) &&
-            /\bmessage\b/i.test(profileOcr);
+          const profileNameVisible = googleChromeDmScreenshotContainsText(profileOcr, candidate.name);
           log(
             `[googleChromeDm:${profileId}] ${expectedProfileKey}: profile screenshot captured ` +
-            `(${profileScreenshot.byteLength} bytes); name-and-Message visible=${profileScreenshotConfirmed}`,
+            `(${profileScreenshot.byteLength} bytes); profile name visible=${profileNameVisible}; ` +
+            `live Message handle=${!!messageButton}`,
             "browser",
           );
-          if (!profileScreenshotConfirmed) {
-            messageButtonFailure = "The profile screenshot did not visibly confirm the selected name and Message control.";
+          if (!profileNameVisible) {
+            messageButtonFailure = "The profile screenshot did not visibly confirm the selected name.";
             break;
           }
           await messageButton.click();
