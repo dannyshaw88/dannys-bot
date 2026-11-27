@@ -584,6 +584,7 @@ let latestCandidates = [];
 let viewportScreenshotCount = 0;
 let chatScreenshotCount = 0;
 let followersReturnCount = 0;
+let backLocationOverride = "";
 let lastSentRecipientId = "";
 let scrollPasses = 0;
 let scrollPages = [];
@@ -612,7 +613,11 @@ const page = {
     if (url.includes("sk=followers")) followersLocation = url;
     events.push("navigate");
   },
-  goBack: async () => { location = followersLocation; followersReturnCount++; },
+  goBack: async () => {
+    location = backLocationOverride || followersLocation;
+    backLocationOverride = "";
+    followersReturnCount++;
+  },
   url: () => location,
   screenshot: async options => {
     if (options?.clip) chatScreenshotCount++;
@@ -798,8 +803,10 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   checkpointWaits.length = 0;
   const returnsBeforeSkip = followersReturnCount;
   const scrollLocationsBeforeSkip = scrollLocations.length;
+  const configuredUrl = "https://www.facebook.com/profile.php?id=999&sk=followers";
+  backLocationOverride = "https://www.facebook.com/profile.php?id=888&sk=followers";
   const screenshotExisting = await runGoogleChromeDm(10_000_000, {
-    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    url: configuredUrl,
     message: "Local fixture only", amount: 1, skipAlreadyMessaged: true,
   });
   assert.equal(screenshotExisting.sent, 0);
@@ -811,6 +818,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
     1,
     `return from a skipped chat to the original Followers URL: ${JSON.stringify({ screenshotExisting, events, checkpointWaits, followersLocation, location, browserLogs: globalThis.__chromeDmFixture.browserLogs.slice(-8) })}`,
   );
+  assert.equal(location, configuredUrl, "reload the exact configured Followers URL if browser Back returns to another profile");
   assert.equal(scrollLocations[scrollLocationsBeforeSkip], followersLocation, "never scroll the profile after skipping a chat");
   assert.deepEqual(checkpointWaits, [30, 60, 30, 30, 60], "retain the fixed waits when a chat is skipped");
   screenshotHistoryOverride = "";
