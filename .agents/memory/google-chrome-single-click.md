@@ -142,3 +142,9 @@ For Google Chrome Send DMs, wait 30 seconds after loading the configured URL and
 **Why:** The user explicitly required these fixed delays because page and chat content was advancing before it rendered visibly.
 
 **How to apply:** Keep the waits hard-coded and Stop-responsive. Do not shorten them just because the DOM appears ready early.
+
+Capture the chat screenshot immediately after finding the recipient composer; do not wait on DOM-history polling first. Query DOM history only after screenshot OCR proves the thread is empty.
+
+**Why:** The post-click trace showed the history check could consume its full 15-second timeout before the first chat screenshot, obscuring when the contact name and thread became visible.
+
+**How to apply:** Log elapsed time from the Message click through composer lookup, screenshot capture, OCR, and relevant Facebook request completion. Keep unknown screenshots fail-closed and use the screenshot alone to skip a visible existing conversation.

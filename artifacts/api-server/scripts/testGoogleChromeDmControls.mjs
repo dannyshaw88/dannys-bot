@@ -613,6 +613,7 @@ const page = {
       return wrap(messageRendered && editor.innerText === "");
     }
     if (fn === historyModule.inspectGoogleChromeDmHistory) {
+      events.push("history");
       const verdict = typeof historyVerdict === "function" ? historyVerdict(location) : historyVerdict;
       if (!verdict) throw new Error("History loading timeout");
       return wrap(verdict);
@@ -644,6 +645,7 @@ const dispatcherScreenshotModule = {
     );
     const name = current?.name ?? "Haven rose";
     if (kind === "viewport-screenshot") return name;
+    events.push("chat-ocr");
     if (screenshotHistoryOverride === "existing") {
       return `${name} Screenshot-visible previous message Aa Close chat`;
     }
@@ -726,7 +728,7 @@ const result = await runGoogleChromeDm(10_000_000, {
 });
 assert.equal(result.sent, 1, JSON.stringify({ result, events, logs: globalThis.__chromeDmFixture.browserLogs }));
 assert.equal(result.failed, 0);
-assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "render", "close"]);
+assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "history", "composer", "send", "render", "chat-ocr", "close"]);
 assert(viewportScreenshotCount - viewportScreenshotsBefore >= 3, "capture list, profile, and restored-list screenshots");
 assert.equal(chatScreenshotCount - chatScreenshotsBefore, 2, "capture the chat before and after sending");
 assert.equal(followersReturnCount - followersReturnsBefore, 1, "restore the follower page before ending the run");
@@ -748,6 +750,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(screenshotExisting.sent, 0);
   assert.equal(screenshotExisting.skipped, 1, "screenshot-visible chat text wins even when DOM history claims empty");
   assert(!events.includes("send"), "visible existing chat text prevents Send");
+  assert(!events.includes("history"), "capture the screenshot immediately instead of waiting on a slow DOM history query");
   assert.equal(
     followersReturnCount - returnsBeforeSkip,
     1,
@@ -772,7 +775,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(unrendered.sent, 0, "an emptied composer without a rendered message is not counted as sent");
   assert.equal(unrendered.failed, 1);
   assert.equal(unrendered.attempted, 1, "stop after the first unconfirmed Send click");
-  assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "render"]);
+  assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "history", "composer", "send", "render"]);
   assert.equal(readPendingContacts(path.join(historyDirectory, "google-chrome-dm-history.json"), senderId).has("id:777"), true,
     "keep an uncertain attempt pending for conversation reconciliation");
   assert.equal(readContactsFromHistory(path.join(historyDirectory, "google-chrome-dm-history.json"), senderId).has("id:777"), false,
@@ -853,7 +856,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   });
   assert.equal(retried.sent, 1, "re-resolve a detached Message button and use one fresh native click");
   assert.deepEqual(events, [
-    "navigate", "navigate", "message-detached", "message", "composer", "send", "render", "close",
+    "navigate", "navigate", "message-detached", "message", "chat-ocr", "history", "composer", "send", "render", "chat-ocr", "close",
   ]);
 }
 {
@@ -865,7 +868,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   });
   assert.equal(retried.sent, 1, "re-resolve and retry a Message control with no clickable point");
   assert.deepEqual(events, [
-    "navigate", "navigate", "message-not-clickable", "message", "composer", "send", "render", "close",
+    "navigate", "navigate", "message-not-clickable", "message", "chat-ocr", "history", "composer", "send", "render", "chat-ocr", "close",
   ]);
 }
 {
@@ -877,7 +880,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   });
   assert.equal(delayed.sent, 1, "continue looking for the profile Message control after repeated timeouts");
   assert.equal(delayedMessageButtonWaits, 4);
-  assert.deepEqual(events, ["navigate", "navigate", "message", "composer", "send", "render", "close"]);
+  assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "history", "composer", "send", "render", "chat-ocr", "close"]);
   messageButtonAvailableAfterTimeouts = 0;
 }
 {
@@ -909,8 +912,8 @@ assert.equal(gaps.length, 1, "one random gap between two successful messages");
 assert(gaps[0].seconds >= 0.03 && gaps[0].seconds <= 0.05);
 assert(gaps[0].elapsed >= 29);
 assert.deepEqual(events, [
-  "navigate", "navigate", "message", "composer", "send", "render", "close",
-  "delay", "navigate", "message", "composer", "send", "render", "close",
+  "navigate", "navigate", "message", "chat-ocr", "history", "composer", "send", "render", "chat-ocr", "close",
+  "delay", "navigate", "message", "chat-ocr", "history", "composer", "send", "render", "chat-ocr", "close",
 ]);
 fixtureCandidates = [
   { url: "https://www.facebook.com/profile.php?id=123", name: "Haven rose", photoUrl },
@@ -1032,7 +1035,7 @@ console.log("PASS: production dispatcher targets all five user-confirmed profile
   const oldThread = await runWith(600, "existing");
   assert.equal(oldThread.sent, 0);
   assert.equal(oldThread.skipped, 1);
-  assert.deepEqual(events, ["navigate", "navigate", "message", "close"], "existing conversation is closed without typing or sending");
+  assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "close"], "existing conversation is closed without typing or sending");
   const persisted = await runWith(600, "existing");
   assert.equal(persisted.sent, 0);
   assert(events.includes("message") && !events.includes("send"),

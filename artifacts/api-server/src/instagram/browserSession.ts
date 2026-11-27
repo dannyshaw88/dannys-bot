@@ -5127,8 +5127,85 @@ export async function runGoogleChromeDm(
   const isStopped = () => run.stopped || Date.now() >= stopAt;
   const waitAtFixedCheckpoint = async (seconds: number, stage: string) => {
     emit(`Waiting ${seconds} seconds ${stage}.`);
+    const waitStartedAt = Date.now();
     await waitForGoogleChromeDmCheckpoint(seconds, isStopped);
+    log(
+      `[googleChromeDm:${profileId}] Fixed wait ${stage} completed after ${Date.now() - waitStartedAt}ms.`,
+      "browser",
+    );
     if (isStopped()) result.stopped = true;
+  };
+  const activeChatTraceCleanups = new Set<() => void>();
+  const startChatNetworkTrace = () => {
+    const page = session.page as any;
+    if (typeof page.on !== "function" || typeof page.removeListener !== "function") return () => {};
+    const pending = new Map<any, { startedAt: number; method: string; type: string; category: string }>();
+    const slow: Array<{ method: string; type: string; category: string; status: number | string; ms: number }> = [];
+    let completed = 0;
+    let failed = 0;
+    const describe = (request: any) => {
+      try {
+        const url = new URL(request.url());
+        if (!/(^|\.)facebook\.com$|(^|\.)messenger\.com$|(^|\.)facebook\.net$/i.test(url.hostname)) return null;
+        const type = String(request.resourceType?.() ?? "unknown");
+        if (!["document", "fetch", "xhr"].includes(type)) return null;
+        const path = url.pathname.toLowerCase();
+        const category = /graphql/u.test(path) ? "graphql"
+          : /messenger|messages|mercury/u.test(path) ? "messenger"
+          : "facebook-api";
+        return { method: String(request.method?.() ?? "GET"), type, category };
+      } catch {
+        return null;
+      }
+    };
+    const onRequest = (request: any) => {
+      const info = describe(request);
+      if (info) pending.set(request, { ...info, startedAt: Date.now() });
+    };
+    const onResponse = (response: any) => {
+      const request = response.request?.();
+      const info = pending.get(request);
+      if (!info) return;
+      pending.delete(request);
+      completed++;
+      const ms = Date.now() - info.startedAt;
+      const status = Number(response.status?.() ?? 0);
+      if (ms >= 500 || status >= 400) {
+        slow.push({ method: info.method, type: info.type, category: info.category, status, ms });
+      }
+    };
+    const onRequestFailed = (request: any) => {
+      const info = pending.get(request);
+      if (!info) return;
+      pending.delete(request);
+      failed++;
+      slow.push({
+        method: info.method,
+        type: info.type,
+        category: info.category,
+        status: String(request.failure?.()?.errorText ?? "failed").slice(0, 80),
+        ms: Date.now() - info.startedAt,
+      });
+    };
+    page.on("request", onRequest);
+    page.on("response", onResponse);
+    page.on("requestfailed", onRequestFailed);
+    let stopped = false;
+    const cleanup = () => {
+      if (stopped) return;
+      stopped = true;
+      page.removeListener("request", onRequest);
+      page.removeListener("response", onResponse);
+      page.removeListener("requestfailed", onRequestFailed);
+      activeChatTraceCleanups.delete(cleanup);
+      log(
+        `[googleChromeDm:${profileId}] Message chat network trace: ${completed} Facebook document/fetch/XHR responses, ` +
+        `${failed} failed, ${pending.size} still pending; slow/errors=${JSON.stringify(slow.slice(0, 20))}`,
+        "browser",
+      );
+    };
+    activeChatTraceCleanups.add(cleanup);
+    return cleanup;
   };
   const profileKey = (value: string) => {
     try {
@@ -5285,14 +5362,28 @@ export async function runGoogleChromeDm(
       return image;
     };
     const captureChatScreenshot = async (composer: any) => {
+      const captureStartedAt = Date.now();
+      let stageStartedAt = captureStartedAt;
       await settlePaint();
+      const settleMs = Date.now() - stageStartedAt;
+      stageStartedAt = Date.now();
       const bounds = await session.page.evaluate(getGoogleChromeDmChatScreenshotBounds, composer);
       if (!bounds || !bounds.width || !bounds.height) {
         throw new Error("The full conversation panel was not visible for screenshot confirmation.");
       }
+      const boundsMs = Date.now() - stageStartedAt;
+      stageStartedAt = Date.now();
       const image = await session.page.screenshot({ type: "png", clip: bounds, captureBeyondViewport: false });
       if (!image?.byteLength) throw new Error("The conversation screenshot could not be captured.");
-      return { image, text: await recognizeGoogleChromeDmScreenshot(image) };
+      const screenshotMs = Date.now() - stageStartedAt;
+      stageStartedAt = Date.now();
+      const text = await recognizeGoogleChromeDmScreenshot(image);
+      log(
+        `[googleChromeDm:${profileId}] Chat screenshot timing: settle=${settleMs}ms, bounds=${boundsMs}ms, ` +
+        `capture=${screenshotMs}ms, OCR=${Date.now() - stageStartedAt}ms, total=${Date.now() - captureStartedAt}ms.`,
+        "browser",
+      );
+      return { image, text };
     };
     const loadSettledViewport = async () => {
       const rows = await waitForGoogleChromeDmFollowers(collectEligibleProfiles, isStopped);
@@ -5442,6 +5533,8 @@ export async function runGoogleChromeDm(
       let messageButtonAttempts = 0;
       const messageButtonWaitStartedAt = Date.now();
       const messageButtonDeadline = messageButtonWaitStartedAt + 30_000;
+      let messageClickedAt = 0;
+      let stopChatNetworkTrace: (() => void) | null = null;
       log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: locating the visible Message control for up to 30 seconds`, "browser");
       while (!messageButtonClicked && Date.now() < messageButtonDeadline) {
         if (isStopped()) {
@@ -5481,14 +5574,18 @@ export async function runGoogleChromeDm(
             messageButtonFailure = "The profile screenshot did not visibly confirm the selected name.";
             break;
           }
+          stopChatNetworkTrace ??= startChatNetworkTrace();
           await messageButton.click();
           messageButtonClicked = true;
+          messageClickedAt = Date.now();
           log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control clicked after ${Date.now() - messageButtonWaitStartedAt}ms (${messageButtonAttempts} lookup attempt${messageButtonAttempts === 1 ? "" : "s"})`, "browser");
           await waitAtFixedCheckpoint(30, "after clicking Message");
           if (isStopped()) break;
           await waitAtFixedCheckpoint(30, "additional time for the Message chat to finish loading");
           if (isStopped()) break;
         } catch (error: any) {
+          stopChatNetworkTrace?.();
+          stopChatNetworkTrace = null;
           messageButtonFailure = String(error?.message ?? error ?? "browser click failed").slice(0, 180);
           const transientNode = /node is detached from document|not attached to the dom|node is either not clickable or not an element/i.test(messageButtonFailure);
           if (transientNode) {
@@ -5503,8 +5600,12 @@ export async function runGoogleChromeDm(
           await buttonHandle?.dispose().catch(() => {});
         }
       }
-      if (result.stopped) break;
+      if (result.stopped) {
+        stopChatNetworkTrace?.();
+        break;
+      }
       if (!messageButtonClicked) {
+        stopChatNetworkTrace?.();
         const buttonDiagnostics = await session.page.evaluate((expectedName: string) => {
           const doc = (globalThis as any).document;
           const styleOf = (globalThis as any).getComputedStyle as (element: any) => any;
@@ -5539,12 +5640,20 @@ export async function runGoogleChromeDm(
       }
 
       let composerHandle: any;
+      const composerWaitStartedAt = Date.now();
       try {
         composerHandle = await session.page.waitForFunction(
           findGoogleChromeDmComposer, { timeout: 15_000, polling: 200 }, candidate.name,
         );
       } catch {
+        stopChatNetworkTrace?.();
         result.failed++;
+        log(
+          `[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient composer was not found ` +
+          `${Date.now() - composerWaitStartedAt}ms after lookup began ` +
+          `(${Date.now() - messageClickedAt}ms after Message click).`,
+          "browser",
+        );
         const diagnostics = await session.page.evaluate(diagnoseGoogleChromeDmComposer, candidate.name)
           .catch(() => null);
         const detail = diagnostics
@@ -5563,39 +5672,68 @@ export async function runGoogleChromeDm(
       // belong to the same JavaScript world"). Resolve a handle in the current
       // context right before it is used.
       await composerHandle.dispose().catch(() => {});
+      const composerRecheckStartedAt = Date.now();
       try {
         composerHandle = await session.page.waitForFunction(
           findGoogleChromeDmComposer, { timeout: 15_000, polling: 200 }, candidate.name,
         );
       } catch {
+        stopChatNetworkTrace?.();
         result.failed++;
+        log(
+          `[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient composer recheck failed ` +
+          `${Date.now() - composerRecheckStartedAt}ms after lookup began ` +
+          `(${Date.now() - messageClickedAt}ms after Message click).`,
+          "browser",
+        );
         emit("The selected user's message field could not be confirmed; no text was entered.");
         continue;
       }
       const composer = composerHandle.asElement();
       if (!composer) {
+        stopChatNetworkTrace?.();
         await composerHandle.dispose();
         result.failed++;
         emit("The selected user's message field could not be confirmed; no text was entered.");
         continue;
       }
-      log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient-specific composer confirmed`, "browser");
+      log(
+        `[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient-specific composer confirmed ` +
+        `${Date.now() - composerWaitStartedAt}ms after lookup began ` +
+        `(${Date.now() - messageClickedAt}ms after Message click).`,
+        "browser",
+      );
 
       let sendMayHaveBeenTriggered = false;
       try {
         const recipientKey = googleChromeDmRecipientKey(candidate.url);
         const pendingAttempt = !!recipientKey && pendingContacts.has(recipientKey);
-        const historyHandle = await session.page.waitForFunction(
-          inspectGoogleChromeDmHistory, { timeout: 15_000, polling: 200 }, composer, candidate.name,
-        ).catch(() => null);
-        const history = await historyHandle?.jsonValue().catch(() => false);
-        await historyHandle?.dispose();
+        const screenshotStartedAt = Date.now();
         const screenshot = await captureChatScreenshot(composer);
         const screenshotHistory = classifyGoogleChromeDmHistoryScreenshot(screenshot.text, candidate.name);
         log(
+          `[googleChromeDm:${profileId}] ${expectedProfileKey}: chat screenshot/OCR finished ` +
+          `${Date.now() - screenshotStartedAt}ms after capture began ` +
+          `(${Date.now() - messageClickedAt}ms after Message click).`,
+          "browser",
+        );
+        stopChatNetworkTrace?.();
+        stopChatNetworkTrace = null;
+        let history: "existing" | "empty" | false = false;
+        let historyWaitMs = 0;
+        if (screenshotHistory === "empty") {
+          const historyStartedAt = Date.now();
+          const historyHandle = await session.page.waitForFunction(
+            inspectGoogleChromeDmHistory, { timeout: 15_000, polling: 200 }, composer, candidate.name,
+          ).catch(() => null);
+          historyWaitMs = Date.now() - historyStartedAt;
+          history = await historyHandle?.jsonValue().catch(() => false) ?? false;
+          await historyHandle?.dispose();
+        }
+        log(
           `[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation screenshot captured ` +
           `(${screenshot.image.byteLength} bytes); OCR=${screenshotHistory}, DOM history=${history}; ` +
-          `pending=${pendingAttempt}, saved=${alreadyMessaged.has(recipientKey ?? "")}`,
+          `history wait=${historyWaitMs}ms, pending=${pendingAttempt}, saved=${alreadyMessaged.has(recipientKey ?? "")}`,
           "browser",
         );
         if (screenshotHistory === "existing") {
@@ -5859,6 +5997,7 @@ export async function runGoogleChromeDm(
     emit(`Run aborted: ${reason}`, "fail");
     throw error;
   } finally {
+    for (const cleanup of [...activeChatTraceCleanups]) cleanup();
     activeGoogleChromeDmRuns.delete(profileId);
   }
 }
