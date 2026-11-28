@@ -849,8 +849,11 @@ assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "histor
 assert(viewportScreenshotCount - viewportScreenshotsBefore >= 3, "capture list, profile, and restored-list screenshots");
 assert.equal(chatScreenshotCount - chatScreenshotsBefore, 2, "capture the chat before and after sending");
 assert.equal(followersReturnCount - followersReturnsBefore, 1, "restore the follower page before ending the run");
-assert.deepEqual(checkpointWaits, [30, 60, 30, 60],
-  "keep the initial 30-second Message pause, then poll readiness instead of idling for another 30 seconds");
+assert.equal(checkpointWaits[0], 30, "keep the initial configured-URL wait");
+assert(checkpointWaits[1] >= 10 && checkpointWaits[1] <= 15,
+  "wait 10–15 randomized seconds after the profile settles");
+assert.deepEqual(checkpointWaits.slice(2), [30, 60],
+  "keep the 30-second Message pause and configured-URL return wait unchanged");
 assert.equal(composerWaitTimeouts[0], 30_000,
   "poll for the recipient composer for at most 30 seconds after the initial pause");
 assert.equal(editor.isConnected, false);
@@ -1005,8 +1008,17 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(incremental.sent, 2);
   assert.deepEqual(sendScrollPasses, [0, 1], "send from the current viewport before scrolling for the next user");
   assert.equal(scrollPasses, 1, "scroll exactly once between the two users");
-  assert.deepEqual(checkpointWaits, [30, 60, 30, 60, 30, 60, 30, 60],
-    "keep the initial Message pause and profile/return timing while readiness polling replaces the second pause");
+  assert.equal(checkpointWaits[0], 30, "keep the initial configured-URL wait");
+  assert(checkpointWaits[1] >= 10 && checkpointWaits[1] <= 15,
+    "use the profile-settle range before the first Message click");
+  assert.deepEqual(checkpointWaits.slice(2, 4), [30, 60],
+    "keep the Message pause and Followers-return wait unchanged");
+  assert(checkpointWaits[4] >= 5 && checkpointWaits[4] <= 10,
+    "wait 5–10 randomized seconds after the Followers scroll");
+  assert(checkpointWaits[5] >= 10 && checkpointWaits[5] <= 15,
+    "use the profile-settle range before the second Message click");
+  assert.deepEqual(checkpointWaits.slice(6), [30, 60],
+    "keep the later Message pause and Followers-return wait unchanged");
   assert(scrollLocations.every(url => url === followersLocation), "scroll only while the configured Followers URL is active");
   assert(incremental.attemptedUrls[0].endsWith("id=910"));
   assert(incremental.attemptedUrls[1].endsWith("id=911"));

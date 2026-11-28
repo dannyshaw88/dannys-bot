@@ -5139,6 +5139,18 @@ export async function runGoogleChromeDm(
     );
     if (isStopped()) result.stopped = true;
   };
+  const waitAtRandomCheckpoint = async (minSeconds: number, maxSeconds: number, stage: string) => {
+    const seconds = minSeconds + Math.random() * (maxSeconds - minSeconds);
+    emit(`Waiting ${seconds.toFixed(1)} seconds ${stage} (randomized ${minSeconds}–${maxSeconds} seconds).`);
+    const waitStartedAt = Date.now();
+    await waitForGoogleChromeDmCheckpoint(seconds, isStopped);
+    log(
+      `[googleChromeDm:${profileId}] Random wait ${stage} completed after ${Date.now() - waitStartedAt}ms ` +
+      `(target=${seconds.toFixed(2)}s, range=${minSeconds}-${maxSeconds}s).`,
+      "browser",
+    );
+    if (isStopped()) result.stopped = true;
+  };
   const activeChatTraceCleanups = new Set<() => void>();
   const startChatNetworkTrace = (label = "Message chat") => {
     const page = session.page as any;
@@ -5555,7 +5567,7 @@ export async function runGoogleChromeDm(
           break;
         }
         scrollPasses++;
-        await waitAtFixedCheckpoint(30, "after scrolling the configured Followers page");
+        await waitAtRandomCheckpoint(5, 10, "after scrolling the configured Followers page");
         if (isStopped()) break;
         const settled = await loadSettledViewport();
         candidates = settled.rows;
@@ -5636,7 +5648,7 @@ export async function runGoogleChromeDm(
       }).catch(() => null);
       log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: profile navigation returned after ${navigationElapsed}ms; timing=${JSON.stringify(navigationTiming)}${navigationFailure ? "; navigation timed out but URL matched" : ""}`, "browser");
       await captureWorkflowProbe("profile-domcontentloaded");
-      await waitAtFixedCheckpoint(60, "after the selected profile loads");
+      await waitAtRandomCheckpoint(10, 15, "after the selected profile loads");
       if (isStopped()) break;
 
       let messageButtonClicked = false;
