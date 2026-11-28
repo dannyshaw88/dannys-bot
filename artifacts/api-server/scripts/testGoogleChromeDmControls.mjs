@@ -626,6 +626,7 @@ let historyVerdict = "empty";
 let screenshotHistoryOverride = "";
 let hideSentTextInScreenshot = false;
 let senderId = "42";
+let facebookCookieMissing = false;
 let collectFixture = null;
 let fixtureCandidates = [
   { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
@@ -643,7 +644,7 @@ const page = {
     pageListeners.set(event, listeners);
   },
   off: (event, listener) => pageListeners.get(event)?.delete(listener),
-  cookies: async () => [{ name: "c_user", value: senderId }],
+  cookies: async () => facebookCookieMissing ? [] : [{ name: "c_user", value: senderId }],
   goto: async url => {
     location = url;
     if (!url.includes("sk=followers")) lastSentRecipientId = "";
@@ -858,6 +859,22 @@ assert.equal(composerWaitTimeouts[0], 30_000,
   "poll for the recipient composer for at most 30 seconds after the initial pause");
 assert.equal(editor.isConnected, false);
 assert.equal(gaps.length, 0, "no delay before first or after last recipient");
+{
+  const configuredUrl = "https://www.facebook.com/profile.php?id=999&sk=followers";
+  facebookCookieMissing = true;
+  events.length = 0;
+  await assert.rejects(
+    () => runGoogleChromeDm(10_000_000, {
+      url: configuredUrl, message: "Local fixture only", amount: 1,
+    }),
+    /configured URL opened.*signed-in Facebook account could not be verified/,
+  );
+  assert.deepEqual(events, ["navigate"], "open the configured URL before refusing an unverified sender account");
+  assert.equal(location, configuredUrl, "leave the browser on the configured URL for inspection");
+  assert(!events.includes("message"), "never attempt messaging without a verified sender account");
+  facebookCookieMissing = false;
+  console.log("PASS: open the configured page before blocking an unverified Facebook account.");
+}
 {
   fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=913", name: "Screenshot Existing" }];
   screenshotHistoryOverride = "existing";

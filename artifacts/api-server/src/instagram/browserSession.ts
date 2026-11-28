@@ -5317,21 +5317,21 @@ export async function runGoogleChromeDm(
     }
   };
   try {
-    const facebookCookies = await session.page.cookies("https://www.facebook.com");
-    senderAccount = facebookCookies.find(cookie => cookie.name === "c_user")?.value ?? "";
-    if (!/^\d+$/.test(senderAccount)) {
-      throw new Error("The signed-in Facebook account could not be verified; no messages were sent.");
-    }
-    for (const key of readGoogleChromeDmContacts(historyFile, senderAccount)) alreadyMessaged.add(key);
-    for (const key of readGoogleChromeDmPendingContacts(historyFile, senderAccount)) pendingContacts.add(key);
-    const importedUrls = (options.alreadyMessagedUrls ?? []).filter(value => googleChromeDmRecipientKey(value));
-    recordGoogleChromeDmContacts(historyFile, senderAccount, importedUrls);
     startChatNetworkTrace("Full workflow");
     await captureWorkflowProbe("before-configured-url");
     emit(`Opening configured page: ${targetUrl.href}`);
     session.navProtectedUntil = Date.now() + 35_000;
     await session.page.goto(targetUrl.href, { waitUntil: "domcontentloaded", timeout: 25_000 });
     await captureWorkflowProbe("configured-url-domcontentloaded");
+    const facebookCookies = await session.page.cookies("https://www.facebook.com");
+    senderAccount = facebookCookies.find(cookie => cookie.name === "c_user")?.value ?? "";
+    if (!/^\d+$/.test(senderAccount)) {
+      throw new Error("The configured URL opened, but the signed-in Facebook account could not be verified; no messages were sent.");
+    }
+    for (const key of readGoogleChromeDmContacts(historyFile, senderAccount)) alreadyMessaged.add(key);
+    for (const key of readGoogleChromeDmPendingContacts(historyFile, senderAccount)) pendingContacts.add(key);
+    const importedUrls = (options.alreadyMessagedUrls ?? []).filter(value => googleChromeDmRecipientKey(value));
+    recordGoogleChromeDmContacts(historyFile, senderAccount, importedUrls);
     await waitAtFixedCheckpoint(30, "after the configured URL loads");
     if (isStopped()) return result;
     const mainReady = await session.page.waitForFunction(() => {
