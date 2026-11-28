@@ -5469,7 +5469,8 @@ export async function runGoogleChromeDm(
       const text = await recognizeGoogleChromeDmScreenshot(image);
       log(
         `[googleChromeDm:${profileId}] Chat screenshot timing: settle=${settleMs}ms, bounds=${boundsMs}ms, ` +
-        `capture=${screenshotMs}ms, OCR=${Date.now() - stageStartedAt}ms, total=${Date.now() - captureStartedAt}ms.`,
+        `panel=${bounds.width}x${bounds.height}, capture=${screenshotMs}ms, ` +
+        `OCR=${Date.now() - stageStartedAt}ms, total=${Date.now() - captureStartedAt}ms.`,
         "browser",
       );
       return { image, text };
@@ -5833,23 +5834,20 @@ export async function runGoogleChromeDm(
         stopChatNetworkTrace?.();
         stopChatNetworkTrace = null;
         let history: "existing" | "empty" | false = false;
-        let historyWaitMs = 0;
-        if (screenshotHistory === "empty") {
-          const historyStartedAt = Date.now();
-          const historyHandle = await session.page.waitForFunction(
-            inspectGoogleChromeDmHistory, { timeout: 15_000, polling: 200 }, composer, candidate.name,
-          ).catch(() => null);
-          historyWaitMs = Date.now() - historyStartedAt;
-          history = await historyHandle?.jsonValue().catch(() => false) ?? false;
-          await historyHandle?.dispose();
-        }
+        const historyStartedAt = Date.now();
+        const historyHandle = await session.page.waitForFunction(
+          inspectGoogleChromeDmHistory, { timeout: 3_000, polling: 200 }, composer, candidate.name,
+        ).catch(() => null);
+        const historyWaitMs = Date.now() - historyStartedAt;
+        history = await historyHandle?.jsonValue().catch(() => false) ?? false;
+        await historyHandle?.dispose();
         log(
           `[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation screenshot captured ` +
           `(${screenshot.image.byteLength} bytes); OCR=${screenshotHistory}, DOM history=${history}; ` +
           `history wait=${historyWaitMs}ms, pending=${pendingAttempt}, saved=${alreadyMessaged.has(recipientKey ?? "")}`,
           "browser",
         );
-        if (screenshotHistory === "existing" || history === "existing") {
+        if (screenshotHistory === "existing" && history === "existing") {
           recordGoogleChromeDmContacts(historyFile, senderAccount, [candidate.url]);
           if (recipientKey) {
             alreadyMessaged.add(recipientKey);
@@ -5869,6 +5867,32 @@ export async function runGoogleChromeDm(
             await closed.dispose();
           } finally { await close.dispose(); }
           await returnToFollowersViewport(candidate.name);
+          break;
+        }
+        if (screenshotHistory === "existing" && history !== "existing") {
+          result.failed++;
+          log(
+            `[googleChromeDm:${profileId}] ${expectedProfileKey}: chat-only screenshot and chat-panel history disagreed ` +
+            `(OCR=${screenshotHistory}, panel=${history || "unknown"}); refusing to mark previously messaged or type`,
+            "browser",
+          );
+          emit(
+            "The chat screenshot and this chat's message rows disagreed. Leaving it open without typing or marking the recipient as already messaged.",
+            "fail",
+          );
+          break;
+        }
+        if (history === "existing" && screenshotHistory !== "existing") {
+          result.failed++;
+          log(
+            `[googleChromeDm:${profileId}] ${expectedProfileKey}: chat-panel history was not confirmed by screenshot ` +
+            `(OCR=${screenshotHistory}); refusing to skip or type`,
+            "browser",
+          );
+          emit(
+            "This chat contains message rows, but the screenshot did not confirm their text. Leaving it open without typing or changing history.",
+            "fail",
+          );
           break;
         }
         if (screenshotHistory === "unknown" ||

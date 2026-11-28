@@ -77,11 +77,11 @@ Treat Alkaline and Belcalis as accepted names, allow a dot between first and sur
 
 **How to apply:** Strip the title and normalise name-separating dots only for eligibility checks; retain original display names for recipient verification. Titles/dots must not bypass picture, numeric, male-name, business or two-name limits.
 
-Skip Already Messaged must include existing Facebook conversations and survive Windows app restarts or interrupted sends; frontend URL history alone is insufficient.
+Skip Already Messaged must include existing Facebook conversations and survive Windows app restarts or interrupted sends; a recipient is marked existing only when chat-panel message rows and the screenshot of that same panel agree.
 
-**Why:** The user reported a repeat message on Windows after the recipient had already replied. Local app history cannot cover manually sent messages or a run interrupted before its response.
+**Why:** A recent empty-looking chat was falsely classified as existing by OCR alone, so the macro returned without focusing the composer or typing. Local app history cannot cover manually sent messages or a run interrupted before its response.
 
-**How to apply:** Key records by sender account and recipient Facebook ID, reserve before clicking Send, and inspect only the nearest chat panel uniquely owning the verified composer and close control. Check that panel's message rows (including media-only and older rows); do not use generic page-level “Messages” regions as evidence. The public-info notice can establish an empty thread only after settling and only when that panel has no message rows. Unknown/loading history must fail closed.
+**How to apply:** Key records by sender account and recipient Facebook ID, reserve before clicking Send, and inspect only the nearest chat panel uniquely owning the verified composer and close control. Check that panel's message rows (including media-only and older rows); do not use generic page-level “Messages” regions as evidence. Skip only when OCR of that panel and its scoped message rows both show existing text. If they disagree, leave the chat open without typing or marking history. The public-info notice can establish an empty thread only after settling and only when that panel has no message rows.
 
 When multiple Send DMs message options are configured, send the full option list to the API and select an option separately for each recipient immediately before typing. Do not choose one option once per run and reuse it for every recipient.
 

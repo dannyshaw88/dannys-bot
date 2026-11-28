@@ -825,18 +825,19 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
     message: "Local fixture only", amount: 1, skipAlreadyMessaged: true,
   });
   assert.equal(screenshotExisting.sent, 0);
-  assert.equal(screenshotExisting.skipped, 1, "screenshot-visible chat text wins even when DOM history claims empty");
-  assert(!events.includes("send"), "visible existing chat text prevents Send");
-  assert(!events.includes("history"), "capture the screenshot immediately instead of waiting on a slow DOM history query");
+  assert.equal(screenshotExisting.skipped, 0, "a screenshot OCR positive alone must not mark the recipient as previously messaged");
+  assert.equal(screenshotExisting.failed, 1, "a mismatch between the screenshot and this chat's message rows fails closed");
+  assert(!events.includes("send") && !events.includes("composer"),
+    "conflicting evidence leaves the chat untouched");
+  assert(events.includes("history"), "check message rows only in the panel owning the verified composer");
   assert.equal(
     followersReturnCount - returnsBeforeSkip,
-    1,
-    `return from a skipped chat to the original Followers URL: ${JSON.stringify({ screenshotExisting, events, checkpointWaits, followersLocation, location, browserLogs: globalThis.__chromeDmFixture.browserLogs.slice(-8) })}`,
+    0,
+    "leave a conflicting chat open for inspection instead of treating it as a confirmed skip",
   );
-  assert.equal(location, configuredUrl, "reload the exact configured Followers URL if browser Back returns to another profile");
-  assert.equal(scrollLocations[scrollLocationsBeforeSkip], followersLocation, "never scroll the profile after skipping a chat");
-  assert.deepEqual(checkpointWaits, [30, 60, 30, 30, 60], "retain the fixed waits when a chat is skipped");
+  assert.equal(scrollLocations.length, scrollLocationsBeforeSkip, "never scroll after conflicting chat evidence");
   screenshotHistoryOverride = "";
+  backLocationOverride = "";
   fixtureCandidates = [
     { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
     { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
@@ -1113,7 +1114,7 @@ console.log("PASS: production dispatcher targets all five user-confirmed profile
   const oldThread = await runWith(600, "existing");
   assert.equal(oldThread.sent, 0);
   assert.equal(oldThread.skipped, 1);
-  assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "close"], "existing conversation is closed without typing or sending");
+  assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "history", "close"], "existing conversation is closed without typing or sending");
   const persisted = await runWith(600, "existing");
   assert.equal(persisted.sent, 0);
   assert(events.includes("message") && !events.includes("send"),
