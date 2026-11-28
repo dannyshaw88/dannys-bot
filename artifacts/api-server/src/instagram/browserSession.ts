@@ -2193,6 +2193,7 @@ export async function getOrCreateSession(
   userAgentApi?: string | null,
 ): Promise<Session> {
   const isDeviceBrowser = profileId >= 1_000_000;
+  const isStandaloneGoogleChrome = profileId === GOOGLE_CHROME_BROWSER_PROFILE_ID;
   const launchStartedAt = Date.now();
   const logLaunchPhase = (phase: string) => {
     log(`[launch-timing:${profileId}] ${phase} (+${Date.now() - launchStartedAt}ms)`, "browser");
@@ -2277,10 +2278,16 @@ export async function getOrCreateSession(
   }
   // ── Puppeteer mode (dev / non-Electron) ───────────────────────────────────
   const newProxyKey = proxy ? `${proxy.type ?? "http"}://${proxy.host}:${proxy.port}` : "direct";
-  const existing = sessions.get(profileId);
+  let existing = sessions.get(profileId);
 
   // Fast-path: session already exists with the same proxy — return immediately.
-  if (existing?.proxyKey === newProxyKey) return existing;
+  if (existing?.proxyKey === newProxyKey) {
+    if (!isStandaloneGoogleChrome || (existing.browser.isConnected() && !existing.page.isClosed())) return existing;
+    log(`[getOrCreate:${profileId}] standalone Chrome window was closed — replacing its stale session`, "browser");
+    sessions.delete(profileId);
+    try { await existing.browser.close(); } catch {}
+    existing = undefined;
+  }
 
   // ── Concurrent-launch guard ───────────────────────────────────────────────
   // Multiple WS reconnects (e.g. Replit proxy bouncing) call this function
@@ -2434,10 +2441,33 @@ export async function getOrCreateSession(
   const launchArgs = profileId === GOOGLE_CHROME_BROWSER_PROFILE_ID
     ? LAUNCH_ARGS.filter(argument => !googleChromeResourceLimits.has(argument))
     : LAUNCH_ARGS;
-  const fullArgs = [...launchArgs, ...userDataArg, ...proxyArg];
-  console.log(`[EB-DEBUG][browserSession] launching via ${puppeteerSource}, executablePath="${CHROMIUM_PATH}"`);
+  const standaloneChromePath = isStandaloneGoogleChrome ? process.env.GOOGLE_CHROME_PATH : undefined;
+  const executablePath = isStandaloneGoogleChrome ? standaloneChromePath : CHROMIUM_PATH;
+  if (!executablePath) {
+    _launchingProfiles.delete(profileId);
+    throw new Error(
+      isStandaloneGoogleChrome
+        ? "Google Chrome was not found on this computer. Install Google Chrome and restart Aura Farming."
+        : "No browser found. Please install Google Chrome or Microsoft Edge, then restart Equinox.",
+    );
+  }
+  const standaloneChromeArgs = [
+    "--new-window",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--window-size=1280,800",
+    ...(process.platform === "linux" ? ["--no-sandbox"] : []),
+    ...userDataArg,
+  ];
+  const fullArgs = isStandaloneGoogleChrome
+    ? standaloneChromeArgs
+    : [...launchArgs, ...userDataArg, ...proxyArg];
+  console.log(`[EB-DEBUG][browserSession] launching via ${puppeteerSource}, executablePath="${executablePath}"`);
   if (profileId === GOOGLE_CHROME_BROWSER_PROFILE_ID) {
-    log("Standalone Google Chrome: using Chrome's normal renderer, heap, cache, and background-network settings", "browser");
+    log(
+      `Standalone Google Chrome: launching ${IS_ELECTRON_EB ? "a visible native Chrome window" : "headless Chrome"}`,
+      "browser",
+    );
   }
   console.log(`[EB-DEBUG][browserSession] launch args: ${fullArgs.join(" ")}`);
 
@@ -2445,8 +2475,8 @@ export async function getOrCreateSession(
   logLaunchPhase("before Chrome launch");
   try {
     browser = await puppeteerLib.launch({
-      headless: true,
-      executablePath: CHROMIUM_PATH,
+      headless: isStandaloneGoogleChrome ? !IS_ELECTRON_EB : true,
+      executablePath,
       args: fullArgs,
       ignoreHTTPSErrors: true,
     });
@@ -2461,8 +2491,10 @@ export async function getOrCreateSession(
   logLaunchPhase("Chrome launched");
 
   const [page] = await browser.pages();
-  const uaMeta = buildUAMetadata(userAgent);
-  await (uaMeta ? page.setUserAgent(userAgent, uaMeta as any) : page.setUserAgent(userAgent));
+  const uaMeta = isStandaloneGoogleChrome ? undefined : buildUAMetadata(userAgent);
+  if (!isStandaloneGoogleChrome && userAgent) {
+    await (uaMeta ? page.setUserAgent(userAgent, uaMeta as any) : page.setUserAgent(userAgent));
+  }
   // The EB canvas is always 1280×760.  Using viewportForUA() for mobile UAs would
   // produce screenshots at ~1082×2402 (412×915 @ 2.625x scale) which, when drawn
   // onto the 1280×760 canvas, cause severe stretching.  Force desktop dimensions so
@@ -2513,10 +2545,14 @@ export async function getOrCreateSession(
   }
 
   // Stealth: spoof all common headless-Chrome fingerprints that Instagram checks
-  await applyStealthScripts(page, userAgent, resolvedTZ, userAgentApi);
+  if (!isStandaloneGoogleChrome) {
+    await applyStealthScripts(page, userAgent, resolvedTZ, userAgentApi);
+  }
   // Inject locale-matched Accept-Language — headless Chrome omits it by default
   // (a bot tell). Use the proxy's detected country for the correct regional value.
-  await page.setExtraHTTPHeaders({ "Accept-Language": resolvedAcceptLang });
+  if (!isStandaloneGoogleChrome) {
+    await page.setExtraHTTPHeaders({ "Accept-Language": resolvedAcceptLang });
+  }
   logLaunchPhase("stealth and headers ready");
 
   // ── Request filtering via CDP Fetch (replaces setRequestInterception) ─────────
@@ -5020,6 +5056,22 @@ type GoogleChromeDmResult = {
 
 const activeGoogleChromeDmRuns = new Map<number, { stopped: boolean }>();
 
+export function reserveGoogleChromeDmRun(profileId: number): { stopped: boolean } {
+  if (profileId !== GOOGLE_CHROME_BROWSER_PROFILE_ID) {
+    throw new Error("Send DMs is only available in the standalone Google Chrome browser");
+  }
+  if (activeGoogleChromeDmRuns.has(profileId)) {
+    throw new Error("A Send DMs run is already active");
+  }
+  const run = { stopped: false };
+  activeGoogleChromeDmRuns.set(profileId, run);
+  return run;
+}
+
+export function releaseGoogleChromeDmRun(profileId: number, run: { stopped: boolean }): void {
+  if (activeGoogleChromeDmRuns.get(profileId) === run) activeGoogleChromeDmRuns.delete(profileId);
+}
+
 async function waitForGoogleChromeDmCheckpoint(seconds: number, isStopped: () => boolean): Promise<void> {
   await waitForGoogleChromeDmDelay(seconds, isStopped);
 }
@@ -5040,11 +5092,12 @@ export function stopGoogleChromeDmRun(profileId: number): boolean {
 export async function runGoogleChromeDm(
   profileId: number,
   options: GoogleChromeDmOptions,
+  reservation?: { stopped: boolean },
 ): Promise<GoogleChromeDmResult> {
   if (profileId !== GOOGLE_CHROME_BROWSER_PROFILE_ID) {
     throw new Error("Send DMs is only available in the standalone Google Chrome browser");
   }
-  if (activeGoogleChromeDmRuns.has(profileId)) {
+  if (activeGoogleChromeDmRuns.has(profileId) && activeGoogleChromeDmRuns.get(profileId) !== reservation) {
     throw new Error("A Send DMs run is already active");
   }
 
@@ -5072,7 +5125,7 @@ export async function runGoogleChromeDm(
     throw new Error("Enter a valid minimum and maximum message delay in seconds");
   }
 
-  const run = { stopped: false };
+  const run = reservation ?? { stopped: false };
   activeGoogleChromeDmRuns.set(profileId, run);
   const emit = (message: string, kind: "step" | "ok" | "fail" = "step") => {
     wsWrite(session.ws, { type: "googleChromeDmStatus", message, kind });
@@ -6258,7 +6311,7 @@ export async function browserSendDM(
 }
 
 export async function closeSession(profileId: number, opts?: { skipCookieSave?: boolean }) {
-  if (IS_ELECTRON_EB) {
+  if (IS_ELECTRON_EB && profileId < 1_000_000) {
     const s = electronSessions.get(profileId);
     if (s) {
       if (s.ws && s.ws.readyState === WebSocket.OPEN) try { s.ws.close(); } catch {}

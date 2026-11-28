@@ -271,6 +271,25 @@ function findChromiumPath(): string {
     || "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
 }
 
+function findGoogleChromePath(): string {
+  const home = os.homedir();
+  const candidates = process.platform === "win32"
+    ? [
+        path.join(process.env.ProgramFiles || "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"),
+        path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Google", "Chrome", "Application", "chrome.exe"),
+        path.join(process.env.LOCALAPPDATA || "", "Google", "Chrome", "Application", "chrome.exe"),
+      ]
+    : process.platform === "darwin"
+      ? [
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+          path.join(home, "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        ]
+      : ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"];
+  return candidates.find(candidate => {
+    try { return fs.existsSync(candidate); } catch { return false; }
+  }) ?? "";
+}
+
 function rotateLogs(logPath: string): void {
   // Keep up to 3 previous sessions: logs → logs.1 → logs.2 → logs.3 (oldest dropped)
   try {
@@ -292,6 +311,7 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
   const dbPath = path.join(getUserDataPath(), "database.db");
   const frontendPath = getFrontendPath();
   const chromiumPath = findChromiumPath();
+  const googleChromePath = findGoogleChromePath();
 
   // With asar:false all files live under resources/app/, so node_modules is a real directory
   // that plain Node.js (ELECTRON_RUN_AS_NODE=1) can resolve packages from.
@@ -322,6 +342,7 @@ function startServer(port: number, logPath: string, ebIpcPort = 0): void {
       NODE_TLS_REJECT_UNAUTHORIZED: "0",
       ...(nodeModulesPath ? { NODE_PATH: nodeModulesPath } : {}),
       ...(chromiumPath ? { CHROMIUM_PATH: chromiumPath } : {}),
+      ...(googleChromePath ? { GOOGLE_CHROME_PATH: googleChromePath } : {}),
       ...(ebIpcPort   ? { EB_IPC_PORT: String(ebIpcPort) } : {}),
       IDEVICE_BIN_DIR: app.isPackaged
         ? path.join(process.resourcesPath, "bin", "win32")

@@ -62,6 +62,8 @@ import {
   browserForward,
   browserReload,
   browserSetFiles,
+  reserveGoogleChromeDmRun,
+  releaseGoogleChromeDmRun,
   runGoogleChromeDm,
   stopGoogleChromeDmRun,
   browserNewTab,
@@ -4800,25 +4802,70 @@ export async function registerInstagramRoutes(
       res.status(404).json({ ok: false, error: "Send DMs is only available in the standalone Google Chrome browser" });
       return;
     }
+    let runReservation: { stopped: boolean } | undefined;
     try {
+      if (!process.env.EB_IPC_PORT) {
+        res.status(400).json({
+          ok: false,
+          error: "The detached Google Chrome window can only be opened from the Aura Farming desktop app.",
+        });
+        return;
+      }
       const body = (req.body ?? {}) as Record<string, unknown>;
       const message = typeof body.message === "string" ? body.message : "";
       const messages = Array.isArray(body.messages)
         ? body.messages.filter((value): value is string => typeof value === "string").slice(0, 200)
         : undefined;
       const url = typeof body.url === "string" ? body.url : "";
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        throw new Error("Enter a valid URL in Browser settings");
+      }
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        throw new Error("The configured page must use HTTP or HTTPS");
+      }
+      if (!(messages?.length || message.trim())) {
+        throw new Error("Turn on Message to DM and enter a message before starting");
+      }
+      const delayMinSeconds = body.delayMinSeconds === undefined ? 30 : Number(body.delayMinSeconds);
+      const delayMaxSeconds = body.delayMaxSeconds === undefined ? 60 : Number(body.delayMaxSeconds);
+      if (!Number.isFinite(delayMinSeconds) || !Number.isFinite(delayMaxSeconds) ||
+        delayMinSeconds < 0 || delayMaxSeconds < delayMinSeconds) {
+        throw new Error("Enter a valid minimum and maximum message delay in seconds");
+      }
       const numberOrUndefined = (value: unknown) => {
         if (value === null || value === undefined || value === "") return undefined;
         const parsed = Number(value);
         return Number.isFinite(parsed) ? Math.max(0, parsed) : undefined;
       };
+      runReservation = reserveGoogleChromeDmRun(profileId);
+      const chromeSession = await getOrCreateSession(profileId, "", undefined);
+      await chromeSession.page.bringToFront();
+      if (runReservation.stopped) {
+        res.json({
+          ok: true,
+          totalEligible: 0,
+          attempted: 0,
+          sent: 0,
+          skipped: 0,
+          failed: 0,
+          attemptedUrls: [],
+          sentUrls: [],
+          nextIndex: numberOrUndefined(body.startIndex) ?? 0,
+          stopped: true,
+          notice: "Stopped before the browser run began.",
+        });
+        return;
+      }
       const result = await runGoogleChromeDm(profileId, {
         url,
         message,
         messages,
         amount: numberOrUndefined(body.amount),
-        delayMinSeconds: body.delayMinSeconds === undefined ? undefined : Number(body.delayMinSeconds),
-        delayMaxSeconds: body.delayMaxSeconds === undefined ? undefined : Number(body.delayMaxSeconds),
+        delayMinSeconds,
+        delayMaxSeconds,
         maxUsers: numberOrUndefined(body.maxUsers),
         stopAfterMinutes: numberOrUndefined(body.stopAfterMinutes),
         skipAlreadyMessaged: body.skipAlreadyMessaged === true,
@@ -4830,15 +4877,17 @@ export async function registerInstagramRoutes(
           ? body.excludedNameTokens.filter((value): value is string => typeof value === "string").slice(0, 500)
           : [],
         startIndex: numberOrUndefined(body.startIndex),
-      });
+      }, runReservation);
       res.json({ ok: true, ...result });
     } catch (err: any) {
       const message = err?.message ?? "Send DMs run failed";
       console.error(`[googleChromeDm:${profileId}] run aborted: ${message}`);
-      const status = /already active|open the Google Chrome browser|valid URL|valid minimum and maximum message delay|HTTP or HTTPS|enter a message|only available/i.test(message)
+      const status = /already active|open the Google Chrome browser|valid URL|valid minimum and maximum message delay|HTTP or HTTPS|enter a message|only available|Google Chrome was not found/i.test(message)
         ? 400
         : 500;
       res.status(status).json({ ok: false, error: message });
+    } finally {
+      if (runReservation) releaseGoogleChromeDmRun(profileId, runReservation);
     }
   });
 
