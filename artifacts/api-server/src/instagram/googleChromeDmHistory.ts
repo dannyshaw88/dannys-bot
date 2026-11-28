@@ -162,8 +162,19 @@ export function inspectGoogleChromeDmHistory(element: any, expectedName = ""): "
   if (rows.some((row: any) => {
     if (row.contains(element)) return false;
     const text = String(row.innerText || row.textContent || "").replace(/\s+/g, " ").trim();
-    if (/when you send a message,?\s+.+?\s+(?:will|can) see your public info/i.test(text)) return false;
-    return text || row.querySelector("img,image,video,audio,[role='img']");
+    const defaultProfileCard = /people follow this|when you send a message,?\s+.+?\s+(?:will|can) see your public info/i
+      .test(text);
+    const messageText = defaultProfileCard
+      ? text
+        .replace(/when you send a message,?\s+.+?\s+(?:will|can) see your public info/ig, " ")
+        .replace(new RegExp(expectedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), " ")
+        .replace(/\b\d+(?:[.,]\d+)?\s*[kmb]?\s+people follow this\b/ig, " ")
+        .replace(/\bmodel\b/ig, " ")
+        .replace(/\b(?:active now|available|close chat|send|more options|aa)\b/ig, " ")
+        .replace(/[\s:·•.,!?-]+/g, "").trim()
+      : text;
+    const hasMedia = !!row.querySelector("img,image,video,audio,[role='img']");
+    return !!messageText || (hasMedia && !defaultProfileCard);
   })) return "existing";
   if (Array.from(chatPanel.querySelectorAll("[aria-busy='true'],[role='progressbar']"))
     .some(visible)) { delete element.__auraDmEmptySince; return false; }

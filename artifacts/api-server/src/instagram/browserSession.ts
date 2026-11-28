@@ -33,6 +33,7 @@ import { inspectGoogleChromeDmSentMessage } from "./googleChromeDmSent";
 import {
   classifyGoogleChromeDmHistoryScreenshot,
   getGoogleChromeDmChatScreenshotBounds,
+  googleChromeDmScreenshotContainsConfiguredMessage,
   googleChromeDmScreenshotContainsText,
   recognizeGoogleChromeDmScreenshot,
 } from "./googleChromeDmScreenshot";
@@ -5834,7 +5835,10 @@ export async function runGoogleChromeDm(
         const pendingAttempt = !!recipientKey && pendingContacts.has(recipientKey);
         const screenshotStartedAt = Date.now();
         const screenshot = await captureChatScreenshot(composer);
-        const screenshotHistory = classifyGoogleChromeDmHistoryScreenshot(screenshot.text, candidate.name);
+        const configuredMessageVisible = googleChromeDmScreenshotContainsConfiguredMessage(
+          screenshot.text, candidate.name, messages,
+        );
+        let screenshotHistory = classifyGoogleChromeDmHistoryScreenshot(screenshot.text, candidate.name);
         await captureWorkflowProbe("chat-screenshot-completed");
         log(
           `[googleChromeDm:${profileId}] ${expectedProfileKey}: chat screenshot/OCR finished ` +
@@ -5852,9 +5856,12 @@ export async function runGoogleChromeDm(
         const historyWaitMs = Date.now() - historyStartedAt;
         history = await historyHandle?.jsonValue().catch(() => false) ?? false;
         await historyHandle?.dispose();
+        const configuredMessageConfirmed = configuredMessageVisible && history === "existing";
+        if (configuredMessageConfirmed) screenshotHistory = "existing";
         log(
           `[googleChromeDm:${profileId}] ${expectedProfileKey}: conversation screenshot captured ` +
-          `(${screenshot.image.byteLength} bytes); OCR=${screenshotHistory}, DOM history=${history}; ` +
+          `(${screenshot.image.byteLength} bytes); OCR=${screenshotHistory}, ` +
+          `configured message confirmed in message rows=${configuredMessageConfirmed}, DOM history=${history}; ` +
           `history wait=${historyWaitMs}ms, pending=${pendingAttempt}, saved=${alreadyMessaged.has(recipientKey ?? "")}`,
           "browser",
         );

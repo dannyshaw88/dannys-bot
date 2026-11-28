@@ -167,4 +167,4 @@
 - [Button overlay positioning](button-overlay-positioning.md) — position toolbar overlays through wrappers so shared Button elevation does not override their layout
 - [Keyguard unlock uses device swipe](keyguard-unlock-device-swipe.md) — all automation unlocks must use the saved My Device swipe profile, shared before platform-specific actions
 - [Standalone Chrome resource profile](google-chrome-resource-profile.md) — keep mass-account renderer, heap, and cache limits off the single-user Google Chrome browser
-- [Facebook new-thread OCR](google-chrome-new-thread-ocr.md) — upscale chat-panel OCR and ignore composer-toolbar noise below the explicit empty-thread notice
+- [Facebook chat-history detection](google-chrome-new-thread-ocr.md) — separate default profile-card text from message rows and only match configured phrases inside confirmed history

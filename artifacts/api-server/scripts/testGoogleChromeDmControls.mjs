@@ -66,7 +66,11 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   console.log("PASS: actual follower-row readiness retries, bounded empty-page failure and responsive Stop.");
 }
 {
-  const { classifyGoogleChromeDmHistoryScreenshot: classify, googleChromeDmScreenshotContainsText: contains } = screenshotModule;
+  const {
+    classifyGoogleChromeDmHistoryScreenshot: classify,
+    googleChromeDmScreenshotContainsConfiguredMessage: containsConfiguredMessage,
+    googleChromeDmScreenshotContainsText: contains,
+  } = screenshotModule;
   assert.equal(
     classify("Messenger Haven rose When you send a message, Haven rose will see your public info. Aa Close chat", "Haven rose"),
     "empty",
@@ -108,6 +112,16 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   );
   assert.equal(contains("Hello, Haven Rose!", "Haven Rose"), true);
   assert.equal(contains("Hello, Haven Rose!", "Unrelated"), false);
+  assert.equal(
+    containsConfiguredMessage("Hello, Haven!", "Haven Rose", ["First [FIRSTNAME]", "Hello [FIRSTNAME]!"]),
+    true,
+    "match a visible outgoing message against the configured choices after first-name personalization",
+  );
+  assert.equal(
+    containsConfiguredMessage("Ele Meko 1.3K people follow this Model When you send a message, Ele Meko will see your public info.", "Ele Meko", ["Hello [FIRSTNAME]", "How are you?"]),
+    false,
+    "Facebook's default profile information does not match configured message choices",
+  );
   const sharp = (await import("sharp")).default;
   const svg = Buffer.from(
     '<svg width="900" height="180" xmlns="http://www.w3.org/2000/svg">' +
@@ -205,6 +219,15 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   panel.innerText += " Previous message without row attributes";
   assert.equal(inspect(composer, "Haven rose"), false, "unclassified text beside a new-thread notice stays unknown, not empty");
   panel.innerText = "Haven rose 1.3K people follow this Model. When you send a message, Haven rose will see your public info.";
+  rows = [row(
+    "Haven rose 1.3K people follow this Model. When you send a message, Haven rose will see your public info.",
+    true,
+  )];
+  assert.equal(inspect(composer, "Haven rose"), false,
+    "a profile-information card inside a generic row is not message history");
+  rows = [row("You sent: Hello there")];
+  assert.equal(inspect(composer, "Haven rose"), "existing",
+    "actual message text in a row still wins over the nearby profile card");
   rows = [row("Model")];
   assert.equal(inspect(composer, "Haven rose"), "existing", "a message row still wins over profile-card text");
   rows = [];
@@ -723,6 +746,9 @@ const dispatcherScreenshotModule = {
       screenshotHistoryOverride = "";
       return `${name} When you send a message, ${name} will see your public info. Aa Close chat`;
     }
+    if (screenshotHistoryOverride === "configured-message") {
+      return `${name} Model Aa Close chat`;
+    }
     if (screenshotHistoryOverride === "existing") {
       return `${name} Screenshot-visible previous message Aa Close chat`;
     }
@@ -777,7 +803,7 @@ const setTimeout = callback => globalThis.setTimeout(callback, 0);
 const { googleChromeDmRecipientKey, readGoogleChromeDmContacts, readGoogleChromeDmPendingContacts, recordGoogleChromeDmContacts, recordGoogleChromeDmPendingContacts, clearGoogleChromeDmContacts, clearGoogleChromeDmPendingContacts, inspectGoogleChromeDmHistory } = globalThis.__chromeDmFixture.historyModule;
 const { findGoogleChromeDmComposer, diagnoseGoogleChromeDmComposer } = globalThis.__chromeDmFixture.composerModule;
 const { inspectGoogleChromeDmSentMessage } = globalThis.__chromeDmFixture.sentModule;
-const { classifyGoogleChromeDmHistoryScreenshot, getGoogleChromeDmChatScreenshotBounds, googleChromeDmScreenshotContainsText, recognizeGoogleChromeDmScreenshot } = globalThis.__chromeDmFixture.screenshotModule;
+const { classifyGoogleChromeDmHistoryScreenshot, getGoogleChromeDmChatScreenshotBounds, googleChromeDmScreenshotContainsConfiguredMessage, googleChromeDmScreenshotContainsText, recognizeGoogleChromeDmScreenshot } = globalThis.__chromeDmFixture.screenshotModule;
 const { personalizeGoogleChromeDmMessage } = globalThis.__chromeDmFixture.personalizationModule;
 const { findGoogleChromeDmMessageButton } = globalThis.__chromeDmFixture;
 const scrollGoogleChromeDmFollowers = () => globalThis.__chromeDmFixture.scroll();
@@ -888,6 +914,20 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
     "DOM-confirmed message rows still block sending when the screenshot looks empty");
   assert(!events.includes("composer") && !events.includes("send"),
     "never type into or send from a conversation with existing message rows");
+
+  fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=916", name: "Template Match" }];
+  screenshotHistoryOverride = "configured-message";
+  historyVerdict = "existing";
+  events.length = 0; waits = 0;
+  const configuredMessage = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    messages: ["Hello [FIRSTNAME]", "Model"], amount: 1,
+  });
+  assert.equal(configuredMessage.sent, 0);
+  assert.equal(configuredMessage.skipped, 1,
+    "a screenshot match to a configured Message to DM phrase plus actual message rows confirms an existing chat");
+  assert(!events.includes("composer") && !events.includes("send"),
+    "a previous configured message is not sent twice");
 
   screenshotHistoryOverride = "";
   historyVerdict = "empty";

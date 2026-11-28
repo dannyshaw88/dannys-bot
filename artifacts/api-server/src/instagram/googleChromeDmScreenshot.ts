@@ -81,6 +81,20 @@ export function googleChromeDmScreenshotContainsText(screenshotText: string, exp
   return !!expected && screenshot.includes(expected);
 }
 
+/** Compare visible chat text with one of the configured, already-split DM choices. */
+export function googleChromeDmScreenshotContainsConfiguredMessage(
+  screenshotText: string,
+  expectedName: string,
+  messages: string[],
+): boolean {
+  const firstName = expectedName.trim().split(/\s+/u)[0] ?? "";
+  if (!firstName) return false;
+  return messages.some(message => {
+    const expected = message.trim().replace(/\[FIRSTNAME\]/gi, firstName);
+    return !!expected && googleChromeDmScreenshotContainsText(screenshotText, expected);
+  });
+}
+
 /** Only call an inbox empty when the screenshot clearly shows Facebook's new-thread notice. */
 export function classifyGoogleChromeDmHistoryScreenshot(
   screenshotText: string,
