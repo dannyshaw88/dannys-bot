@@ -5142,10 +5142,20 @@ export async function runGoogleChromeDm(
       ? page.off.bind(page)
       : typeof page.removeListener === "function" ? page.removeListener.bind(page) : null;
     if (typeof page.on !== "function" || !removePageListener) return () => {};
-    const pending = new Map<any, { startedAt: number; method: string; type: string; category: string }>();
+    const pending = new Map<any, {
+      startedAt: number;
+      headersAt?: number;
+      status?: number;
+      method: string;
+      type: string;
+      category: string;
+    }>();
     const slow: Array<{ method: string; type: string; category: string; status: number | string; ms: number }> = [];
+    let headersReceived = 0;
     let completed = 0;
     let failed = 0;
+    let maxHeaderMs = 0;
+    let maxCompleteMs = 0;
     const describe = (request: any) => {
       try {
         const url = new URL(request.url());
@@ -5169,10 +5179,24 @@ export async function runGoogleChromeDm(
       const request = response.request?.();
       const info = pending.get(request);
       if (!info) return;
+      headersReceived++;
+      info.headersAt = Date.now();
+      info.status = Number(response.status?.() ?? 0);
+      const ms = Date.now() - info.startedAt;
+      maxHeaderMs = Math.max(maxHeaderMs, ms);
+      const status = info.status;
+      if (ms >= 500 || status >= 400) {
+        slow.push({ method: info.method, type: info.type, category: info.category, status, ms });
+      }
+    };
+    const onRequestFinished = (request: any) => {
+      const info = pending.get(request);
+      if (!info) return;
       pending.delete(request);
       completed++;
       const ms = Date.now() - info.startedAt;
-      const status = Number(response.status?.() ?? 0);
+      maxCompleteMs = Math.max(maxCompleteMs, ms);
+      const status = info.status ?? 0;
       if (ms >= 500 || status >= 400) {
         slow.push({ method: info.method, type: info.type, category: info.category, status, ms });
       }
@@ -5182,16 +5206,18 @@ export async function runGoogleChromeDm(
       if (!info) return;
       pending.delete(request);
       failed++;
+      const ms = Date.now() - info.startedAt;
       slow.push({
         method: info.method,
         type: info.type,
         category: info.category,
         status: String(request.failure?.()?.errorText ?? "failed").slice(0, 80),
-        ms: Date.now() - info.startedAt,
+        ms,
       });
     };
     page.on("request", onRequest);
     page.on("response", onResponse);
+    page.on("requestfinished", onRequestFinished);
     page.on("requestfailed", onRequestFailed);
     let stopped = false;
     const cleanup = () => {
@@ -5199,16 +5225,63 @@ export async function runGoogleChromeDm(
       stopped = true;
       removePageListener("request", onRequest);
       removePageListener("response", onResponse);
+      removePageListener("requestfinished", onRequestFinished);
       removePageListener("requestfailed", onRequestFailed);
       activeChatTraceCleanups.delete(cleanup);
       log(
-        `[googleChromeDm:${profileId}] Message chat network trace: ${completed} Facebook document/fetch/XHR responses, ` +
-        `${failed} failed, ${pending.size} still pending; slow/errors=${JSON.stringify(slow.slice(0, 20))}`,
+        `[googleChromeDm:${profileId}] Message chat network trace: ${headersReceived} responses received, ` +
+        `${completed} bodies fully downloaded, ${failed} failed, ${pending.size} still downloading; ` +
+        `max-to-headers=${maxHeaderMs}ms, max-full-response=${maxCompleteMs}ms; ` +
+        `pending=${JSON.stringify([...pending.values()].map(info => ({
+          method: info.method, type: info.type, category: info.category,
+          elapsedMs: Date.now() - info.startedAt, headersReceived: info.headersAt !== undefined,
+        })).slice(0, 20))}; slow/errors=${JSON.stringify(slow.slice(0, 20))}`,
         "browser",
       );
     };
     activeChatTraceCleanups.add(cleanup);
     return cleanup;
+  };
+  const captureChatRenderProbe = async (
+    expectedName: string,
+    stage: string,
+    previousMetrics: Record<string, number> | null,
+  ): Promise<Record<string, number> | null> => {
+    const diagnosticPage = session.page as any;
+    let metrics: Record<string, number> | null = null;
+    let composerState: any = null;
+    try {
+      if (typeof diagnosticPage.metrics === "function") {
+        metrics = await diagnosticPage.metrics();
+      }
+    } catch {}
+    try {
+      composerState = await session.page.evaluate(diagnoseGoogleChromeDmComposer, expectedName);
+    } catch {}
+    const deltaMs = (key: string) => {
+      const current = metrics?.[key];
+      const previous = previousMetrics?.[key];
+      return typeof current === "number" && typeof previous === "number"
+        ? Math.round((current - previous) * 1000)
+        : null;
+    };
+    log(
+      `[googleChromeDm:${profileId}] Chat render probe ${stage}: ` +
+      `composer=${JSON.stringify(composerState)}; renderer=` +
+      `${JSON.stringify(metrics ? {
+        taskDeltaMs: deltaMs("TaskDuration"),
+        scriptDeltaMs: deltaMs("ScriptDuration"),
+        layoutDeltaMs: deltaMs("LayoutDuration"),
+        styleDeltaMs: deltaMs("RecalcStyleDuration"),
+        heapMB: typeof metrics.JSHeapUsedSize === "number"
+          ? Math.round(metrics.JSHeapUsedSize / (1024 * 1024))
+          : null,
+        nodes: metrics.Nodes ?? null,
+        frames: metrics.Frames ?? null,
+      } : null)}`,
+      "browser",
+    );
+    return metrics;
   };
   const profileKey = (value: string) => {
     try {
