@@ -3,9 +3,37 @@ import { spawn } from "node:child_process";
 export type GoogleChromeDmScreenshotHistory = "existing" | "empty" | "unknown";
 
 /** Run local OCR against a screenshot held only in memory. */
-export async function recognizeGoogleChromeDmScreenshot(image: Uint8Array, timeoutMs = 8_000): Promise<string> {
+export async function recognizeGoogleChromeDmScreenshot(
+  image: Uint8Array,
+  timeoutMs = 8_000,
+  upscale = 1,
+): Promise<string> {
   if (!image?.byteLength || image.byteLength > 12 * 1024 * 1024) {
     throw new Error("The browser screenshot was empty or too large to inspect.");
+  }
+  if (!Number.isFinite(upscale) || upscale < 1 || upscale > 4) {
+    throw new Error("Screenshot OCR upscale must be between 1× and 4×.");
+  }
+  let ocrImage: Uint8Array = Buffer.from(image);
+  if (upscale > 1) {
+    const sharp = (await import("sharp")).default;
+    const pipeline = sharp(ocrImage);
+    const metadata = await pipeline.metadata();
+    if (!metadata.width || !metadata.height ||
+        metadata.width * metadata.height * upscale * upscale > 24_000_000) {
+      throw new Error("The conversation screenshot is too large to upscale safely for OCR.");
+    }
+    ocrImage = await pipeline
+      .resize({
+        width: Math.round(metadata.width * upscale),
+        height: Math.round(metadata.height * upscale),
+        kernel: "lanczos3",
+      })
+      .grayscale()
+      .normalize()
+      .sharpen()
+      .png()
+      .toBuffer();
   }
   const process = spawn("tesseract", ["stdin", "stdout", "-l", "eng", "--psm", "6"], {
     stdio: ["pipe", "pipe", "pipe"],
@@ -33,7 +61,7 @@ export async function recognizeGoogleChromeDmScreenshot(image: Uint8Array, timeo
         ));
       });
     });
-    process.stdin.end(Buffer.from(image));
+    process.stdin.end(ocrImage);
     return await completed;
   } finally {
     clearTimeout(timer);
@@ -64,7 +92,13 @@ export function classifyGoogleChromeDmHistoryScreenshot(
 
   const notice = /when you send a message.{0,100}public info/;
   const noticeMatch = text.match(notice);
-  const withoutNotice = text.replace(notice, " ");
+  // In a fresh Messenger thread, OCR often invents words from the tiny compose
+  // toolbar below Facebook's new-conversation notice. Only text above that
+  // notice can be conversation history; text below it belongs to the compose UI.
+  const conversationText = noticeMatch
+    ? text.slice(0, noticeMatch.index)
+    : text;
+  const withoutNotice = conversationText.replace(notice, " ");
   const withoutName = withoutNotice.split(name).join(" ");
   const withoutProfileSummary = withoutName
     .replace(/\b\d+(?:[.,]\d+)?\s*[kmb]?\s+people follow this\b/gi, " ")

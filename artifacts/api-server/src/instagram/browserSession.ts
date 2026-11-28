@@ -5466,7 +5466,7 @@ export async function runGoogleChromeDm(
       if (!image?.byteLength) throw new Error("The conversation screenshot could not be captured.");
       const screenshotMs = Date.now() - stageStartedAt;
       stageStartedAt = Date.now();
-      const text = await recognizeGoogleChromeDmScreenshot(image);
+      const text = await recognizeGoogleChromeDmScreenshot(image, 8_000, 2);
       log(
         `[googleChromeDm:${profileId}] Chat screenshot timing: settle=${settleMs}ms, bounds=${boundsMs}ms, ` +
         `panel=${bounds.width}x${bounds.height}, capture=${screenshotMs}ms, ` +
@@ -5906,8 +5906,7 @@ export async function runGoogleChromeDm(
           );
           break;
         }
-        if (screenshotHistory === "unknown" ||
-            (screenshotHistory === "empty" && history !== "empty")) {
+        if (screenshotHistory === "unknown") {
           result.failed++;
           log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: screenshot/history did not prove a rendered empty thread`, "browser");
           emit(
@@ -5917,6 +5916,13 @@ export async function runGoogleChromeDm(
             "fail",
           );
           break;
+        }
+        if (screenshotHistory === "empty" && history === false) {
+          log(
+            `[googleChromeDm:${profileId}] ${expectedProfileKey}: the screenshot clearly shows Facebook's ` +
+            `new-conversation notice; continuing despite the chat-panel DOM history being unavailable`,
+            "browser",
+          );
         }
         if (pendingAttempt) {
           clearGoogleChromeDmPendingContacts(historyFile, senderAccount, [candidate.url]);

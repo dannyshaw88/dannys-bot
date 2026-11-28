@@ -73,7 +73,7 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
     "only a clearly rendered new-thread screenshot proves an empty conversation",
   );
   assert.equal(
-    classify("Messenger Haven rose When you send a message, Haven rose will see your public info. Hello there Aa", "Haven rose"),
+    classify("Messenger Haven rose Hello there When you send a message, Haven rose will see your public info. Aa", "Haven rose"),
     "existing",
     "any readable conversation text prevents a send",
   );
@@ -87,11 +87,19 @@ const { waitForGoogleChromeDmFollowers: waitFollowers } = await import(`data:tex
   );
   assert.equal(
     classify(
-      "Messenger Ele Meko 1.3K people follow this Model When you send a message, Ele Meko will see your public info. Hello there Aa",
+      "Messenger Ele Meko Hello there 1.3K people follow this Model When you send a message, Ele Meko will see your public info. Aa",
       "Ele Meko",
     ),
     "existing",
-    "actual message text beside the new-thread notice still prevents a send",
+    "actual message text above the new-thread notice still prevents a send",
+  );
+  assert.equal(
+    classify(
+      "Ele Meko 1.3K people follow this Model When you send a message, Ele Meko will see your public info. VNN Aa ® W",
+      "Ele Meko",
+    ),
+    "empty",
+    "OCR noise from the composer toolbar below a clear new-thread notice is not old message text",
   );
   assert.equal(
     classify("Messenger Haven rose Aa Close chat", "Haven rose"),
@@ -711,6 +719,10 @@ const dispatcherScreenshotModule = {
     const name = current?.name ?? "Haven rose";
     if (kind === "viewport-screenshot") return name;
     events.push("chat-ocr");
+    if (screenshotHistoryOverride === "empty-once") {
+      screenshotHistoryOverride = "";
+      return `${name} When you send a message, ${name} will see your public info. Aa Close chat`;
+    }
     if (screenshotHistoryOverride === "existing") {
       return `${name} Screenshot-visible previous message Aa Close chat`;
     }
@@ -845,6 +857,40 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(scrollLocations.length, scrollLocationsBeforeSkip, "never scroll after conflicting chat evidence");
   screenshotHistoryOverride = "";
   backLocationOverride = "";
+  fixtureCandidates = [
+    { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
+    { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
+  ];
+}
+{
+  fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=914", name: "Screenshot Empty" }];
+  screenshotHistoryOverride = "empty-once";
+  historyVerdict = false;
+  events.length = 0; waits = 0;
+  const screenshotEmpty = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 1,
+  });
+  assert.equal(screenshotEmpty.sent, 1,
+    `a clear screenshot of Facebook's new-conversation notice is enough when DOM history is unavailable: ${JSON.stringify({ screenshotEmpty, events, logs: globalThis.__chromeDmFixture.browserLogs.slice(-12) })}`);
+  assert(events.includes("composer") && events.includes("send"),
+    "type only after clicking the selected chat's verified composer");
+
+  fixtureCandidates = [{ url: "https://www.facebook.com/profile.php?id=915", name: "Existing Thread" }];
+  screenshotHistoryOverride = "empty";
+  historyVerdict = "existing";
+  events.length = 0; waits = 0;
+  const existingThread = await runGoogleChromeDm(10_000_000, {
+    url: "https://www.facebook.com/profile.php?id=999&sk=followers",
+    message: "Local fixture only", amount: 1,
+  });
+  assert.equal(existingThread.sent, 0,
+    "DOM-confirmed message rows still block sending when the screenshot looks empty");
+  assert(!events.includes("composer") && !events.includes("send"),
+    "never type into or send from a conversation with existing message rows");
+
+  screenshotHistoryOverride = "";
+  historyVerdict = "empty";
   fixtureCandidates = [
     { url: "https://www.facebook.com/profile.php?id=123", name: "Test Recipient" },
     { url: "https://www.facebook.com/profile.php?id=456", name: "Second Recipient" },
