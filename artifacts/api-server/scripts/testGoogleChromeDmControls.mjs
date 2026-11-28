@@ -576,6 +576,7 @@ const message = { click: async () => {
   };
   emitPageEvent("request", request);
   emitPageEvent("response", { request: () => request, status: () => 200 });
+  emitPageEvent("requestfinished", request);
 } };
 let waits = 0;
 let location = "";
@@ -600,6 +601,10 @@ let fixtureCandidates = [
 ];
 latestCandidates = fixtureCandidates;
 const page = {
+  metrics: async () => ({
+    TaskDuration: 2, ScriptDuration: 1, LayoutDuration: 0.1,
+    RecalcStyleDuration: 0.1, JSHeapUsedSize: 20 * 1024 * 1024, Nodes: 100, Frames: 1,
+  }),
   on: (event, listener) => {
     const listeners = pageListeners.get(event) ?? new Set();
     listeners.add(listener);
@@ -786,8 +791,18 @@ const result = await runGoogleChromeDm(10_000_000, {
 assert.equal(result.sent, 1, JSON.stringify({ result, events, logs: globalThis.__chromeDmFixture.browserLogs }));
 assert.equal(result.failed, 0);
 assert(globalThis.__chromeDmFixture.browserLogs.some(line =>
-  line.includes("Message chat network trace: 1 Facebook document/fetch/XHR responses, 0 failed, 0 still pending")),
-"record Facebook request timings after the Message click");
+  line.includes("Message chat network trace: 1 responses received, 1 bodies fully downloaded, 0 failed, 0 still downloading")),
+"record complete Facebook response downloads after the Message click");
+for (const stage of [
+  "before-configured-url", "configured-url-domcontentloaded", "initial-followers-collected",
+  "before-profile-navigation", "profile-domcontentloaded", "before-message-click",
+  "message-click-plus-30s", "message-click-plus-60s", "chat-screenshot-completed",
+  "composer-typed", "send-clicked", "followers-return-domcontentloaded", "followers-return-settled",
+]) {
+  assert(globalThis.__chromeDmFixture.browserLogs.some(line =>
+    line.includes(`Workflow render probe ${stage}:`) && line.includes('"taskDeltaMs"')),
+  `record renderer workload at ${stage}`);
+}
 assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "history", "composer", "send", "render", "chat-ocr", "close"]);
 assert(viewportScreenshotCount - viewportScreenshotsBefore >= 3, "capture list, profile, and restored-list screenshots");
 assert.equal(chatScreenshotCount - chatScreenshotsBefore, 2, "capture the chat before and after sending");

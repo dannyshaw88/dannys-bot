@@ -160,3 +160,9 @@ Facebook's empty-thread panel can include a profile preview such as “1.3K peop
 **Why:** The latest chat showed Facebook's empty-thread notice but OCR treated its profile preview as an old conversation and skipped without typing; a broad URL check could also accept another profile's Followers page.
 
 **How to apply:** Strip only the known profile-preview text around the explicit new-thread notice, require settled DOM history to confirm emptiness, keep real message rows as “existing,” and log the confirmed return URL before the fixed wait.
+
+The user reported that manual scrolling, profile visits, and chat opens load almost instantly in the same browser, while the macro makes the whole workflow lag.
+
+**Why:** This manual-versus-macro comparison is the user's confirmed reproduction condition; adding more fixed waits does not diagnose it.
+
+**How to apply:** Investigate automation-specific navigation, scans, screenshots, and preview throttling. Distinguish delayed preview frames from a slow renderer, and measure complete downloads rather than response headers before attributing delays to Facebook.

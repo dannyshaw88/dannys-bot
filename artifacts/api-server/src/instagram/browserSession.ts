@@ -4187,7 +4187,10 @@ async function _doStartScreencast(profileId: number, _retry = 0): Promise<void> 
       sv => sv.screencastCdp !== null && sv.ws?.readyState === WebSocket.OPEN,
     ).length;
     const sessionNow = sessions.get(profileId);
-    const idleMs = sessionNow ? Date.now() - sessionNow.lastActivityAt : 0;
+    // Macro input bypasses the manual input handler's activity stamp. Keep its
+    // preview at the active rate so render progress is not hidden by idle ACKs.
+    const macroActive = activeGoogleChromeDmRuns.has(profileId);
+    const idleMs = macroActive ? 0 : sessionNow ? Date.now() - sessionNow.lastActivityAt : 0;
     const idleBase = idleMs < 3_000 ? 0 : idleMs < 30_000 ? 1500 : 5000;
     const jitter = Math.floor(Math.random() * 80);
     const ackDelayMs = Math.max(100, nActive * 100) + idleBase + jitter;
@@ -5136,7 +5139,7 @@ export async function runGoogleChromeDm(
     if (isStopped()) result.stopped = true;
   };
   const activeChatTraceCleanups = new Set<() => void>();
-  const startChatNetworkTrace = () => {
+  const startChatNetworkTrace = (label = "Message chat") => {
     const page = session.page as any;
     const removePageListener = typeof page.off === "function"
       ? page.off.bind(page)
@@ -5159,9 +5162,9 @@ export async function runGoogleChromeDm(
     const describe = (request: any) => {
       try {
         const url = new URL(request.url());
-        if (!/(^|\.)facebook\.com$|(^|\.)messenger\.com$|(^|\.)facebook\.net$/i.test(url.hostname)) return null;
+        if (!/(^|\.)facebook\.com$|(^|\.)messenger\.com$|(^|\.)facebook\.net$|(^|\.)fbcdn\.net$/i.test(url.hostname)) return null;
         const type = String(request.resourceType?.() ?? "unknown");
-        if (!["document", "fetch", "xhr"].includes(type)) return null;
+        if (!["document", "fetch", "xhr", "script", "stylesheet", "image", "font"].includes(type)) return null;
         const path = url.pathname.toLowerCase();
         const category = /graphql/u.test(path) ? "graphql"
           : /messenger|messages|mercury/u.test(path) ? "messenger"
@@ -5185,7 +5188,7 @@ export async function runGoogleChromeDm(
       const ms = Date.now() - info.startedAt;
       maxHeaderMs = Math.max(maxHeaderMs, ms);
       const status = info.status;
-      if (ms >= 500 || status >= 400) {
+      if ((ms >= 500 || status >= 400) && slow.length < 40) {
         slow.push({ method: info.method, type: info.type, category: info.category, status, ms });
       }
     };
@@ -5197,7 +5200,7 @@ export async function runGoogleChromeDm(
       const ms = Date.now() - info.startedAt;
       maxCompleteMs = Math.max(maxCompleteMs, ms);
       const status = info.status ?? 0;
-      if (ms >= 500 || status >= 400) {
+      if ((ms >= 500 || status >= 400) && slow.length < 40) {
         slow.push({ method: info.method, type: info.type, category: info.category, status, ms });
       }
     };
@@ -5207,7 +5210,7 @@ export async function runGoogleChromeDm(
       pending.delete(request);
       failed++;
       const ms = Date.now() - info.startedAt;
-      slow.push({
+      if (slow.length < 40) slow.push({
         method: info.method,
         type: info.type,
         category: info.category,
@@ -5229,7 +5232,7 @@ export async function runGoogleChromeDm(
       removePageListener("requestfailed", onRequestFailed);
       activeChatTraceCleanups.delete(cleanup);
       log(
-        `[googleChromeDm:${profileId}] Message chat network trace: ${headersReceived} responses received, ` +
+        `[googleChromeDm:${profileId}] ${label} network trace: ${headersReceived} responses received, ` +
         `${completed} bodies fully downloaded, ${failed} failed, ${pending.size} still downloading; ` +
         `max-to-headers=${maxHeaderMs}ms, max-full-response=${maxCompleteMs}ms; ` +
         `pending=${JSON.stringify([...pending.values()].map(info => ({
@@ -5242,11 +5245,10 @@ export async function runGoogleChromeDm(
     activeChatTraceCleanups.add(cleanup);
     return cleanup;
   };
-  const captureChatRenderProbe = async (
-    expectedName: string,
-    stage: string,
-    previousMetrics: Record<string, number> | null,
-  ): Promise<Record<string, number> | null> => {
+  let previousRenderMetrics: Record<string, number> | null = null;
+  let previousProbeAt = Date.now();
+  const captureWorkflowProbe = async (stage: string, expectedName?: string): Promise<void> => {
+    const probeStartedAt = Date.now();
     const diagnosticPage = session.page as any;
     let metrics: Record<string, number> | null = null;
     let composerState: any = null;
@@ -5256,17 +5258,20 @@ export async function runGoogleChromeDm(
       }
     } catch {}
     try {
-      composerState = await session.page.evaluate(diagnoseGoogleChromeDmComposer, expectedName);
+      if (expectedName) {
+        composerState = await session.page.evaluate(diagnoseGoogleChromeDmComposer, expectedName);
+      }
     } catch {}
     const deltaMs = (key: string) => {
       const current = metrics?.[key];
-      const previous = previousMetrics?.[key];
-      return typeof current === "number" && typeof previous === "number"
+      const previous = previousRenderMetrics?.[key];
+      return typeof current === "number" && typeof previous === "number" && current >= previous
         ? Math.round((current - previous) * 1000)
         : null;
     };
     log(
-      `[googleChromeDm:${profileId}] Chat render probe ${stage}: ` +
+      `[googleChromeDm:${profileId}] Workflow render probe ${stage}: ` +
+      `elapsedSincePreviousMs=${probeStartedAt - previousProbeAt}, probeMs=${Date.now() - probeStartedAt}; ` +
       `composer=${JSON.stringify(composerState)}; renderer=` +
       `${JSON.stringify(metrics ? {
         taskDeltaMs: deltaMs("TaskDuration"),
@@ -5281,7 +5286,8 @@ export async function runGoogleChromeDm(
       } : null)}`,
       "browser",
     );
-    return metrics;
+    previousRenderMetrics = metrics;
+    previousProbeAt = probeStartedAt;
   };
   const profileKey = (value: string) => {
     try {
@@ -5307,9 +5313,12 @@ export async function runGoogleChromeDm(
     for (const key of readGoogleChromeDmPendingContacts(historyFile, senderAccount)) pendingContacts.add(key);
     const importedUrls = (options.alreadyMessagedUrls ?? []).filter(value => googleChromeDmRecipientKey(value));
     recordGoogleChromeDmContacts(historyFile, senderAccount, importedUrls);
+    startChatNetworkTrace("Full workflow");
+    await captureWorkflowProbe("before-configured-url");
     emit(`Opening configured page: ${targetUrl.href}`);
     session.navProtectedUntil = Date.now() + 35_000;
     await session.page.goto(targetUrl.href, { waitUntil: "domcontentloaded", timeout: 25_000 });
+    await captureWorkflowProbe("configured-url-domcontentloaded");
     await waitAtFixedCheckpoint(30, "after the configured URL loads");
     if (isStopped()) return result;
     const mainReady = await session.page.waitForFunction(() => {
@@ -5410,6 +5419,7 @@ export async function runGoogleChromeDm(
     const processed = new Set<string>();
     const filterCounts = { girlsOnly: 0, excludedName: 0, alreadyMessaged: 0 };
     let candidates = await waitForGoogleChromeDmFollowers(collectEligibleProfiles, isStopped);
+    await captureWorkflowProbe("initial-followers-collected");
     let scrollPasses = 0;
     let needsMessageDelay = false;
     const followersUrl = new URL(targetUrl.href);
@@ -5487,6 +5497,7 @@ export async function runGoogleChromeDm(
         throw new Error("The configured Followers URL could not be restored.");
       }
       log(`[googleChromeDm:${profileId}] Configured Followers URL restored before the return wait`, "browser");
+      await captureWorkflowProbe("followers-return-domcontentloaded");
       await waitAtFixedCheckpoint(60, "after returning to the configured Followers URL");
       if (isStopped()) {
         log(`[googleChromeDm:${profileId}] Stop requested during the return wait; browser remains on the configured Followers URL`, "browser");
@@ -5494,6 +5505,7 @@ export async function runGoogleChromeDm(
       }
       const restored = await loadSettledViewport();
       candidates = restored.rows;
+      await captureWorkflowProbe("followers-return-settled");
       emit("Followers viewport restored, settled, and screenshot-captured before continuing.");
     };
     const initialImage = await captureRenderedViewport();
@@ -5531,6 +5543,7 @@ export async function runGoogleChromeDm(
           break;
         }
         const scrollState = await session.page.evaluate(scrollGoogleChromeDmFollowers);
+        await captureWorkflowProbe("followers-scroll");
         if (!scrollState.scrolled) {
           log(
             `[googleChromeDm:${profileId}] Followers list reached its rendered end after ${scrollPasses} scrolls; ` +
@@ -5544,6 +5557,7 @@ export async function runGoogleChromeDm(
         if (isStopped()) break;
         const settled = await loadSettledViewport();
         candidates = settled.rows;
+        await captureWorkflowProbe("followers-scroll-settled");
         log(
           `[googleChromeDm:${profileId}] Scroll ${scrollPasses} settled and screenshot-confirmed; ` +
           `${candidates.length} profiles visible, ${result.totalEligible} eligible so far`,
@@ -5584,6 +5598,7 @@ export async function runGoogleChromeDm(
       }
 
       const navigationStartedAt = Date.now();
+      await captureWorkflowProbe("before-profile-navigation");
       let navigationFailure = "";
       try {
         await session.page.goto(candidate.url, { waitUntil: "domcontentloaded", timeout: 30_000 });
@@ -5618,6 +5633,7 @@ export async function runGoogleChromeDm(
         };
       }).catch(() => null);
       log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: profile navigation returned after ${navigationElapsed}ms; timing=${JSON.stringify(navigationTiming)}${navigationFailure ? "; navigation timed out but URL matched" : ""}`, "browser");
+      await captureWorkflowProbe("profile-domcontentloaded");
       await waitAtFixedCheckpoint(60, "after the selected profile loads");
       if (isStopped()) break;
 
@@ -5668,14 +5684,17 @@ export async function runGoogleChromeDm(
             break;
           }
           stopChatNetworkTrace ??= startChatNetworkTrace();
+          await captureWorkflowProbe("before-message-click");
           await messageButton.click();
           messageButtonClicked = true;
           messageClickedAt = Date.now();
           log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: Message control clicked after ${Date.now() - messageButtonWaitStartedAt}ms (${messageButtonAttempts} lookup attempt${messageButtonAttempts === 1 ? "" : "s"})`, "browser");
           await waitAtFixedCheckpoint(30, "after clicking Message");
           if (isStopped()) break;
+          await captureWorkflowProbe("message-click-plus-30s", candidate.name);
           await waitAtFixedCheckpoint(30, "additional time for the Message chat to finish loading");
           if (isStopped()) break;
+          await captureWorkflowProbe("message-click-plus-60s", candidate.name);
         } catch (error: any) {
           stopChatNetworkTrace?.();
           stopChatNetworkTrace = null;
@@ -5804,6 +5823,7 @@ export async function runGoogleChromeDm(
         const screenshotStartedAt = Date.now();
         const screenshot = await captureChatScreenshot(composer);
         const screenshotHistory = classifyGoogleChromeDmHistoryScreenshot(screenshot.text, candidate.name);
+        await captureWorkflowProbe("chat-screenshot-completed");
         log(
           `[googleChromeDm:${profileId}] ${expectedProfileKey}: chat screenshot/OCR finished ` +
           `${Date.now() - screenshotStartedAt}ms after capture began ` +
@@ -5902,6 +5922,7 @@ export async function runGoogleChromeDm(
           break;
         }
         await composer.type(message, { delay: 0 });
+        await captureWorkflowProbe("composer-typed");
         const typedTextHandle = await session.page.waitForFunction((element: any, expectedText: string) => {
           if (!element?.isConnected) return false;
           const actual = String(element.innerText || element.textContent || element.value || "")
@@ -5944,6 +5965,7 @@ export async function runGoogleChromeDm(
         log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: clicking Send in the matching conversation`, "browser");
         sendMayHaveBeenTriggered = true;
         await sendElement.click();
+        await captureWorkflowProbe("send-clicked");
         await sendButtonHandle!.dispose();
 
         log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: waiting for the exact outgoing message to render in the conversation`, "browser");
