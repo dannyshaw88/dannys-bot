@@ -5693,9 +5693,6 @@ export async function runGoogleChromeDm(
           await waitAtFixedCheckpoint(30, "after clicking Message");
           if (isStopped()) break;
           await captureWorkflowProbe("message-click-plus-30s", candidate.name);
-          await waitAtFixedCheckpoint(30, "additional time for the Message chat to finish loading");
-          if (isStopped()) break;
-          await captureWorkflowProbe("message-click-plus-60s", candidate.name);
         } catch (error: any) {
           stopChatNetworkTrace?.();
           stopChatNetworkTrace = null;
@@ -5746,7 +5743,12 @@ export async function runGoogleChromeDm(
         emit(`The selected profile's Message button did not become safely clickable within 30 seconds; no message was entered. ${messageButtonFailure}`, "fail");
         break;
       }
-      log(`[googleChromeDm:${profileId}] ${expectedProfileKey}: waiting for the recipient's composer`, "browser");
+      log(
+        `[googleChromeDm:${profileId}] ${expectedProfileKey}: polling for the recipient's composer ` +
+        `for up to 30 seconds after the initial Message wait`,
+        "browser",
+      );
+      emit("Checking for the selected user's chat; continuing as soon as its composer is ready (up to 30 more seconds).");
       if (isStopped()) {
         result.stopped = true;
         break;
@@ -5754,16 +5756,19 @@ export async function runGoogleChromeDm(
 
       let composerHandle: any;
       const composerWaitStartedAt = Date.now();
+      const composerReadyDeadline = composerWaitStartedAt + 30_000;
       try {
         composerHandle = await session.page.waitForFunction(
-          findGoogleChromeDmComposer, { timeout: 15_000, polling: 200 }, candidate.name,
+          findGoogleChromeDmComposer,
+          { timeout: Math.max(1, composerReadyDeadline - Date.now()), polling: 200 },
+          candidate.name,
         );
       } catch {
         stopChatNetworkTrace?.();
         result.failed++;
         log(
-          `[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient composer was not found ` +
-          `${Date.now() - composerWaitStartedAt}ms after lookup began ` +
+          `[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient composer was not found within ` +
+          `${Date.now() - composerWaitStartedAt}ms of the additional readiness window ` +
           `(${Date.now() - messageClickedAt}ms after Message click).`,
           "browser",
         );
@@ -5788,7 +5793,12 @@ export async function runGoogleChromeDm(
       const composerRecheckStartedAt = Date.now();
       try {
         composerHandle = await session.page.waitForFunction(
-          findGoogleChromeDmComposer, { timeout: 15_000, polling: 200 }, candidate.name,
+          findGoogleChromeDmComposer,
+          {
+            timeout: Math.max(1, Math.min(15_000, composerReadyDeadline - Date.now())),
+            polling: 200,
+          },
+          candidate.name,
         );
       } catch {
         stopChatNetworkTrace?.();
@@ -5796,7 +5806,7 @@ export async function runGoogleChromeDm(
         log(
           `[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient composer recheck failed ` +
           `${Date.now() - composerRecheckStartedAt}ms after lookup began ` +
-          `(${Date.now() - messageClickedAt}ms after Message click).`,
+          `(${Date.now() - messageClickedAt}ms after Message click; readiness deadline reached).`,
           "browser",
         );
         emit("The selected user's message field could not be confirmed; no text was entered.");
@@ -5812,10 +5822,11 @@ export async function runGoogleChromeDm(
       }
       log(
         `[googleChromeDm:${profileId}] ${expectedProfileKey}: recipient-specific composer confirmed ` +
-        `${Date.now() - composerWaitStartedAt}ms after lookup began ` +
+        `${Date.now() - composerWaitStartedAt}ms after the initial 30-second wait ` +
         `(${Date.now() - messageClickedAt}ms after Message click).`,
         "browser",
       );
+      await captureWorkflowProbe("message-chat-ready", candidate.name);
 
       let sendMayHaveBeenTriggered = false;
       try {

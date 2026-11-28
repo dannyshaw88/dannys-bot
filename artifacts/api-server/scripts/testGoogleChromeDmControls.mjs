@@ -556,6 +556,7 @@ let detachNextMessageClick = false;
 let notClickableNextMessageClick = false;
 let delayedMessageButtonWaits = 0;
 let messageButtonAvailableAfterTimeouts = 0;
+const composerWaitTimeouts = [];
 const message = { click: async () => {
   if (notClickableNextMessageClick) {
     notClickableNextMessageClick = false;
@@ -655,7 +656,7 @@ const page = {
     return fixtureCandidates;
   },
   evaluateHandle: async () => wrap(message),
-  waitForFunction: async (fn, _options, ...args) => {
+  waitForFunction: async (fn, options, ...args) => {
     if (fn === findMessageButton) {
       if (delayedMessageButtonWaits < messageButtonAvailableAfterTimeouts) {
         delayedMessageButtonWaits++;
@@ -665,11 +666,13 @@ const page = {
       }
       return wrap(message);
     }
-    if (globalThis.__chromeDmFixture.composerUnavailable &&
-        fn === globalThis.__chromeDmFixture.composerModule.findGoogleChromeDmComposer) {
-      throw new Error("Composer fixture did not render");
+    if (fn === globalThis.__chromeDmFixture.composerModule.findGoogleChromeDmComposer) {
+      composerWaitTimeouts.push(options?.timeout);
+      if (globalThis.__chromeDmFixture.composerUnavailable) {
+        throw new Error("Composer fixture did not render");
+      }
+      return wrap(editor);
     }
-    if (fn === globalThis.__chromeDmFixture.composerModule.findGoogleChromeDmComposer) return wrap(editor);
     if (fn === inspectSent) {
       events.push("render");
       return wrap(messageRendered && editor.innerText === "");
@@ -784,6 +787,7 @@ const viewportScreenshotsBefore = viewportScreenshotCount;
 const chatScreenshotsBefore = chatScreenshotCount;
 const followersReturnsBefore = followersReturnCount;
 checkpointWaits.length = 0;
+composerWaitTimeouts.length = 0;
 const result = await runGoogleChromeDm(10_000_000, {
   url: "https://www.facebook.com/profile.php?id=999&sk=followers",
   message: "Local fixture only", amount: 1,
@@ -796,7 +800,7 @@ assert(globalThis.__chromeDmFixture.browserLogs.some(line =>
 for (const stage of [
   "before-configured-url", "configured-url-domcontentloaded", "initial-followers-collected",
   "before-profile-navigation", "profile-domcontentloaded", "before-message-click",
-  "message-click-plus-30s", "message-click-plus-60s", "chat-screenshot-completed",
+  "message-click-plus-30s", "message-chat-ready", "chat-screenshot-completed",
   "composer-typed", "send-clicked", "followers-return-domcontentloaded", "followers-return-settled",
 ]) {
   assert(globalThis.__chromeDmFixture.browserLogs.some(line =>
@@ -807,7 +811,10 @@ assert.deepEqual(events, ["navigate", "navigate", "message", "chat-ocr", "histor
 assert(viewportScreenshotCount - viewportScreenshotsBefore >= 3, "capture list, profile, and restored-list screenshots");
 assert.equal(chatScreenshotCount - chatScreenshotsBefore, 2, "capture the chat before and after sending");
 assert.equal(followersReturnCount - followersReturnsBefore, 1, "restore the follower page before ending the run");
-assert.deepEqual(checkpointWaits, [30, 60, 30, 30, 60], "wait the requested fixed intervals, including the additional chat-load pause after Message");
+assert.deepEqual(checkpointWaits, [30, 60, 30, 60],
+  "keep the initial 30-second Message pause, then poll readiness instead of idling for another 30 seconds");
+assert.equal(composerWaitTimeouts[0], 30_000,
+  "poll for the recipient composer for at most 30 seconds after the initial pause");
 assert.equal(editor.isConnected, false);
 assert.equal(gaps.length, 0, "no delay before first or after last recipient");
 {
@@ -912,8 +919,8 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(incremental.sent, 2);
   assert.deepEqual(sendScrollPasses, [0, 1], "send from the current viewport before scrolling for the next user");
   assert.equal(scrollPasses, 1, "scroll exactly once between the two users");
-  assert.deepEqual(checkpointWaits, [30, 60, 30, 30, 60, 30, 60, 30, 30, 60],
-    "wait after the configured URL, each profile, each Message click, the scroll, and each return");
+  assert.deepEqual(checkpointWaits, [30, 60, 30, 60, 30, 60, 30, 60],
+    "keep the initial Message pause and profile/return timing while readiness polling replaces the second pause");
   assert(scrollLocations.every(url => url === followersLocation), "scroll only while the configured Followers URL is active");
   assert(incremental.attemptedUrls[0].endsWith("id=910"));
   assert(incremental.attemptedUrls[1].endsWith("id=911"));
@@ -965,6 +972,7 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
 {
   globalThis.__chromeDmFixture.composerUnavailable = true;
   globalThis.__chromeDmFixture.browserLogs.length = 0;
+  composerWaitTimeouts.length = 0;
   events.length = 0; waits = 0;
   const noComposer = await runGoogleChromeDm(10_000_000, {
     url: "https://www.facebook.com/profile.php?id=999&sk=followers",
@@ -973,6 +981,8 @@ assert.equal(gaps.length, 0, "no delay before first or after last recipient");
   assert.equal(noComposer.attempted, 1, "stop after the first composer timeout instead of opening the remaining chats");
   assert.equal(noComposer.failed, 1);
   assert.deepEqual(events, ["navigate", "navigate", "message"]);
+  assert.equal(composerWaitTimeouts[0], 30_000,
+    "bound the additional readiness polling window to 30 seconds");
   assert(globalThis.__chromeDmFixture.browserLogs.some(line =>
     line.includes("Stopping to avoid opening more chats") &&
     line.includes("visibleEditors=0") && line.includes("visibleCloseControls=1")),
